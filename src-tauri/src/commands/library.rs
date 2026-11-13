@@ -88,3 +88,23 @@ pub async fn mods_mark_updates(st: State<'_, AppState>, game: String, ids: Vec<S
     let db = st.db.clone();
     blocking(move || library::mark_updates(&*lock(&db)?, &game, &ids)).await
 }
+
+/// Copy an image file into the mod's folder as its preview.
+#[tauri::command]
+pub async fn mod_set_preview(st: State<'_, AppState>, game: String, id: String, path: String) -> Result<ModEntry> {
+    let db = st.db.clone();
+    blocking(move || library::set_preview_file(&*lock(&db)?, &game, &id, std::path::Path::new(&path))).await
+}
+
+/// Save image bytes (a paste or a drop from a browser) as the mod's preview. `ext` is png, jpg, webp or gif.
+#[tauri::command]
+pub async fn mod_set_preview_data(st: State<'_, AppState>, game: String, id: String, data: Vec<u8>, ext: String) -> Result<ModEntry> {
+    let db = st.db.clone();
+    blocking(move || library::set_preview(&*lock(&db)?, &game, &id, &data, &ext)).await
+}
+
+#[tauri::command]
+pub async fn mod_clear_preview(st: State<'_, AppState>, game: String, id: String) -> Result<ModEntry> {
+    let db = st.db.clone();
+    blocking(move || library::clear_preview(&*lock(&db)?, &game, &id)).await
+}

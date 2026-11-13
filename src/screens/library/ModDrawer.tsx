@@ -1,13 +1,15 @@
 // A mod's details in a drawer: big preview, name (edit in place), character, tags, notes, source, folder, then the
 // mod's keys and options from MODTOOLS, then Remove. Owner: LIBRARY area.
-import { useEffect, useId, useState } from "react";
-import { errorText, library, shell, type Character, type GameId, type ModEntry } from "../../lib/api";
-import { Badge, Button, Drawer, Row, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { dialogs, errorText, library, shell, type Character, type GameId, type ModEntry } from "../../lib/api";
+import { inTauri } from "../../lib/tauri";
+import { Badge, Button, Drawer, IconButton, Row, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { ModInsides } from "../modtools/ModInsides";
 import { publish } from "./data";
-import { Preview, type NsfwMode } from "./Preview";
+import { Preview, previewChanged, type NsfwMode } from "./Preview";
 import type { MetaPatch } from "../../lib/api/library";
 
 export function ModDrawer({ game, mod, chars, nsfw, onClose, onToggle, onRemove, onUpdate }: {
@@ -20,6 +22,7 @@ export function ModDrawer({ game, mod, chars, nsfw, onClose, onToggle, onRemove,
   const [tag, setTag] = useState("");
   const [reveal, setReveal] = useState(false);
   const listId = useId();
+  const pic = usePreviewSetter(game, mod);
   // follow the mod when it changes elsewhere (a toggle, an undo)
   useEffect(() => { setName(mod.name); }, [mod.name]);
   useEffect(() => { setCharacter(mod.character ?? ""); }, [mod.character]);
@@ -46,8 +49,17 @@ export function ModDrawer({ game, mod, chars, nsfw, onClose, onToggle, onRemove,
         <span className="grow" />
         <Button variant="ghost" onClick={onClose}>Close</Button>
       </>}>
-      <div className="mod-drawer-hero">
+      <div ref={pic.heroRef} className={`mod-drawer-hero${pic.over ? " is-drop" : ""}`}
+        onDragOver={pic.onDragOver} onDragLeave={() => pic.setOver(false)} onDrop={pic.onDrop}>
         <Preview className="mod-drawer-img" src={mod.preview} blur={blurred} icon="mods" alt={mod.name} />
+        <div className="mod-drawer-picact">
+          <Button size="sm" icon="image" busy={pic.busy} onClick={() => void pic.pick()}
+            title="Pick an image for this mod. You can also drop one here or paste one with Ctrl+V">
+            {mod.customPreview ? "Change preview" : "Set preview"}
+          </Button>
+          {mod.customPreview && <IconButton size="sm" variant="secondary" icon="x" label="Remove custom preview" disabled={pic.busy} onClick={() => void pic.clear()} />}
+        </div>
+        {pic.over && <span className="mod-drawer-drop" aria-hidden="true">Drop to use as the preview</span>}
         {blurred && <Button size="sm" className="mod-drawer-reveal" icon="eye" onClick={() => setReveal(true)}>Show</Button>}
         <div className="mod-drawer-badges">
           {mod.updateAvailable && mod.source && <Button size="sm" variant="primary" icon="update" onClick={() => onUpdate(mod)}>Get the update</Button>}
@@ -112,4 +124,94 @@ export function ModDrawer({ game, mod, chars, nsfw, onClose, onToggle, onRemove,
       <ModInsides mod={mod} />
     </Drawer>
   );
+}
+
+const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "gif"];
+const extOfPath = (p: string) => p.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() ?? "";
+const extOfType = (type: string) => ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[type] ?? null;
+const NOT_AN_IMAGE = "Use a PNG, JPG, WebP or GIF image";
+
+/** Setting the mod's own preview: pick a file, drop one on the preview (Tauri gives paths, the browser gives
+ *  files) or paste one while the drawer is open. */
+function usePreviewSetter(game: GameId, mod: ModEntry) {
+  const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const modRef = useRef(mod);
+  modRef.current = mod;
+
+  const run = async (work: () => Promise<ModEntry>, done: string) => {
+    setBusy(true);
+    try {
+      const e = await work();
+      previewChanged(e.preview);
+      publish(game, { changed: [e], removed: [], notes: [] });
+      toast(done);
+    } catch (e) { toast(errorText(e), true); }
+    finally { setBusy(false); }
+  };
+  const fromPath = (path: string) => {
+    if (!IMAGE_EXTS.includes(extOfPath(path))) { toast(NOT_AN_IMAGE, true); return; }
+    void run(() => library.setPreview(game, modRef.current.id, path), "Preview set");
+  };
+  const fromBlob = (blob: Blob, name = "") => {
+    const ext = extOfType(blob.type) ?? (IMAGE_EXTS.includes(extOfPath(name)) ? extOfPath(name) : null);
+    if (!ext) { toast(NOT_AN_IMAGE, true); return; }
+    void run(async () => library.setPreviewData(game, modRef.current.id, new Uint8Array(await blob.arrayBuffer()), ext), "Preview set");
+  };
+
+  const pick = async () => {
+    if (inTauri()) {
+      const r = await dialogs.pickFiles({ title: "Pick a preview image", extensions: IMAGE_EXTS });
+      if (r?.[0]) fromPath(r[0]);
+      return;
+    }
+    // the browser demo has no file dialog command: a plain file input does the same
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = IMAGE_EXTS.map((x) => `.${x}`).join(",");
+    input.onchange = () => { const f = input.files?.[0]; if (f) fromBlob(f, f.name); };
+    input.click();
+  };
+  const clear = () => run(() => library.clearPreview(game, modRef.current.id), "Removed your preview");
+
+  // paste an image anywhere while the drawer is open (text pastes into a field are left alone)
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const data = e.clipboardData;
+      const file = Array.from(data?.items ?? []).find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
+      if (!file) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, textarea, [contenteditable]") && data?.types.includes("text/plain")) return;
+      e.preventDefault();
+      fromBlob(file, file.name);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [game]);
+
+  // drops in the app arrive as paths through the window's drop handler
+  useEffect(() => addDropTarget({
+    el: () => heroRef.current,
+    accepts: (paths) => paths.length === 1 && IMAGE_EXTS.includes(extOfPath(paths[0]!)),
+    onOver: setOver,
+    onDrop: (paths) => fromPath(paths[0]!),
+  }), [game]);
+
+  // drops in the browser demo carry the file itself
+  const onDragOver = (e: DragEvent) => {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setOver(true);
+  };
+  const onDrop = (e: DragEvent) => {
+    const f = e.dataTransfer.files[0];
+    setOver(false);
+    if (!f) return;
+    e.preventDefault();
+    fromBlob(f, f.name);
+  };
+
+  return { busy, over, setOver, heroRef, pick, clear, onDragOver, onDrop };
 }

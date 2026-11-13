@@ -1,7 +1,7 @@
 // Profiles: saved loadouts for the current game (which mods are on and their options). Switch, edit, duplicate,
 // save what is on now, export, delete. Owner: LIBRARY area (docs/spec.md, "Profiles").
 import { useRef, useState, type CSSProperties } from "react";
-import { errorText, profiles, type Profile } from "../../lib/api";
+import { errorText, hotkeys, profiles, type Profile } from "../../lib/api";
 import { emitApp, useGame } from "../../lib/store";
 import { Badge, Button, Confirm, Empty, IconButton, Menu, PageHeader, Skeleton, timeAgo } from "../../ui/kit";
 import { Popover } from "../../ui/Popover";
@@ -49,6 +49,7 @@ export function Profiles() {
   const remove = (p: Profile) => run(p.id, async () => {
     await profiles.remove(p.id);
     profilesChanged(gid);
+    if (p.hotkey) void hotkeys.sync().catch(() => {});
     toast(p.active ? `Deleted ${p.name}. The next profile is active now, with the same mods on` : `Deleted ${p.name}`);
   });
 
@@ -77,7 +78,7 @@ export function Profiles() {
                   <ProfileIcon profile={p} chars={chars} size={44} />
                   <span className="profile-card-t">
                     <span className="profile-card-name">{p.name}</span>
-                    <span className="profile-card-sub">{p.modCount === 1 ? "1 mod on" : `${p.modCount} mods on`}{p.updatedAt ? ` · changed ${timeAgo(p.updatedAt)}` : ""}</span>
+                    <span className="profile-card-sub">{p.modCount === 1 ? "1 mod on" : `${p.modCount} mods on`}{p.updatedAt ? ` · changed ${timeAgo(p.updatedAt)}` : ""}{p.hotkey ? ` · ${p.hotkey}` : ""}</span>
                   </span>
                   {p.active && <Badge tone="accent" icon="check">Active</Badge>}
                 </span>

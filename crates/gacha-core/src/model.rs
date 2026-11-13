@@ -81,6 +81,13 @@ pub struct Sidecar {
     pub nsfw: bool,
     /// A preview image's file name inside the mod folder (preview.jpg) or a remote URL.
     pub preview: Option<String>,
+    /// The preview the user picked, copied into the mod folder (preview.png). It wins over every other image.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_preview: Option<String>,
+    /// Preview files that were there before the user's own, renamed so it wins (preview-original.jpg). Removing the
+    /// custom preview puts them back.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub preview_backups: Vec<String>,
 }
 
 pub const SIDECAR_FILE: &str = ".gachamod.json";
@@ -122,6 +129,9 @@ pub struct ModEntry {
     pub conflicts: u32,
     /// A newer version is on GameBanana (set by the UI's update check through `mods_mark_updates`).
     pub update_available: bool,
+    /// The preview is one the user picked (library::set_preview).
+    #[serde(default)]
+    pub custom_preview: bool,
 }
 
 /// What changed after a library action, so the UI can update in place and offer undo.
@@ -164,6 +174,8 @@ pub struct Profile {
     pub mod_count: u32,
     pub created_at: i64,
     pub updated_at: i64,
+    /// In-game hotkey that switches to this profile, like "Ctrl+Alt+1" (hotkeys.rs).
+    pub hotkey: Option<String>,
 }
 
 /// Fields of a profile the user can change. Missing fields stay as they are; `Some(None)` is not used, an empty
@@ -176,6 +188,8 @@ pub struct ProfilePatch {
     pub color: Option<String>,
     pub banner: Option<String>,
     pub description: Option<String>,
+    /// An in-game hotkey like "Ctrl+Alt+1"; an empty string clears it.
+    pub hotkey: Option<String>,
 }
 
 /// Events the backend emits. Names are the Tauri event names.

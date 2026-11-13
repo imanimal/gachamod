@@ -249,7 +249,7 @@ fn sidecar_of(m: &ModEntry) -> Sidecar {
     let mut s = library::read_sidecar(Path::new(&m.path)).unwrap_or_else(|| Sidecar {
         format: 1, id: m.id.clone(), name: m.name.clone(), character: m.character.clone(), source: m.source.clone(),
         version: m.version.clone(), installed_at: m.installed_at, tags: m.tags.clone(), notes: m.notes.clone(),
-        favorite: m.favorite, nsfw: m.nsfw, preview: None,
+        favorite: m.favorite, nsfw: m.nsfw, preview: None, ..Default::default()
     });
     if s.id.is_empty() { s.id = m.id.clone(); }
     if s.name.is_empty() { s.name = m.name.clone(); }
@@ -682,7 +682,7 @@ fn make_profile(db: &Shared, z: &mut zip::ZipArchive<File>, names: &[(usize, Str
         }
     }
     let p = created.ok_or_else(|| Error::Conflict(format!("A profile named {base} already exists")))?;
-    let patch = crate::model::ProfilePatch { name: None, icon: pp.icon.clone(), color: pp.color.clone(), banner, description: pp.description.clone() };
+    let patch = crate::model::ProfilePatch { name: None, icon: pp.icon.clone(), color: pp.color.clone(), banner, description: pp.description.clone(), hotkey: None };
     crate::profiles::update(&db, p.id, &patch)?;
     crate::profiles::activate(&db, p.id)?;
     Ok(p.id)

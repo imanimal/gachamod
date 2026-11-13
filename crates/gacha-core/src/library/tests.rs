@@ -389,3 +389,53 @@ fn scan_of_a_thousand_mods_is_quick() {
     eprintln!("1000 mods: first scan {adopt:?}, rescan {rescan:?}");
     assert!(rescan < std::time::Duration::from_secs(4), "rescan took {rescan:?}");
 }
+
+#[test]
+fn custom_preview_wins_and_keeps_the_old_one() {
+    let t = Tree::new("preview");
+    let dir = t.add("Coca Cola");
+    fs::write(dir.join("preview.jpg"), b"old jpg").unwrap();
+    fs::write(dir.join("a shot.png"), b"other").unwrap();
+    let picked = t.root.join("picked.PNG");
+    fs::write(&picked, b"new png").unwrap();
+    let db = t.db();
+    let id = scan(&db, "zzz").unwrap()[0].id.clone();
+    let d = db.lock().unwrap();
+    assert!(get(&d, "zzz", &id).unwrap().preview.unwrap().ends_with("preview.jpg"));
+    assert!(matches!(set_preview_file(&d, "zzz", &id, &t.root.join("notes.txt")), Err(Error::Invalid(_))));
+
+    let e = set_preview_file(&d, "zzz", &id, &picked).unwrap();
+    assert!(e.custom_preview);
+    assert!(e.preview.as_deref().unwrap().ends_with("preview.png"));
+    assert_eq!(fs::read(dir.join("preview.png")).unwrap(), b"new png");
+    // the old preview is kept under a new name, and the picked file stays where it was
+    assert_eq!(fs::read(dir.join("preview-original.jpg")).unwrap(), b"old jpg");
+    assert!(!dir.join("preview.jpg").exists());
+    assert!(picked.exists());
+
+    // a preview that shows up later (an update) doesn't beat the user's own, through a rescan too
+    fs::write(dir.join("preview.gif"), b"later").unwrap();
+    drop(d);
+    let e = scan(&db, "zzz").unwrap().into_iter().find(|m| m.id == id).unwrap();
+    assert!(e.custom_preview);
+    assert!(e.preview.as_deref().unwrap().ends_with("preview.png"));
+    let d = db.lock().unwrap();
+
+    // a second custom preview replaces gachamod's copy and keeps the later file
+    let e = set_preview(&d, "zzz", &id, b"pasted", "webp").unwrap();
+    assert!(e.preview.as_deref().unwrap().ends_with("preview.webp"));
+    assert!(!dir.join("preview.png").exists());
+    assert_eq!(fs::read(dir.join("preview-original.gif")).unwrap(), b"later");
+    assert_eq!(read_sidecar(&dir).unwrap().preview_backups.len(), 2);
+
+    // removing it puts the kept files back
+    let e = clear_preview(&d, "zzz", &id).unwrap();
+    assert!(!e.custom_preview);
+    assert!(!dir.join("preview.webp").exists());
+    assert_eq!(fs::read(dir.join("preview.jpg")).unwrap(), b"old jpg");
+    assert_eq!(fs::read(dir.join("preview.gif")).unwrap(), b"later");
+    assert!(!dir.join("preview-original.jpg").exists());
+    let sc = read_sidecar(&dir).unwrap();
+    assert!(sc.custom_preview.is_none() && sc.preview_backups.is_empty());
+    assert!(e.preview.unwrap().contains("preview."));
+}

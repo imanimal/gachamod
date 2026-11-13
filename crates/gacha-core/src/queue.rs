@@ -52,7 +52,8 @@ pub enum ItemState {
     Installing,
     /// The archive held several mods; the UI asks (event variants-needed) and answers with queue_choose.
     NeedsChoice { candidates: Vec<Candidate> },
-    Done { mod_ids: Vec<String> },
+    // rename_all above renames variants only, so fields inside a variant need their own name.
+    Done { #[serde(rename = "modIds", alias = "mod_ids")] mod_ids: Vec<String> },
     Failed { message: String },
     Cancelled,
 }
@@ -222,6 +223,14 @@ pub fn record_download(db: &Db, item: &QueueItem, path: &str, size: u64, md5: &s
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn done_state_uses_the_ui_field_name() {
+        let s = serde_json::to_value(ItemState::Done { mod_ids: vec!["a".into()] }).unwrap();
+        assert_eq!(s, serde_json::json!({ "state": "done", "modIds": ["a"] }));
+        let old: ItemState = serde_json::from_str(r#"{"state":"done","mod_ids":["b"]}"#).unwrap();
+        assert_eq!(old, ItemState::Done { mod_ids: vec!["b".into()] });
+    }
 
     fn req(file_id: u64) -> QueueRequest {
         QueueRequest {

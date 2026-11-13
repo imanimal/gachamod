@@ -1,8 +1,9 @@
 // Profiles for the screens that show them (Profiles, the sidebar switch): the list, a bus so both stay in step, the
 // game's character portraits for "char:<Name>" icons, and switching with Undo. Owner: LIBRARY area.
 import { useCallback, useEffect, useState } from "react";
-import { characters, errorText, profiles, type Character, type GameId, type Profile } from "../../lib/api";
+import { characters, errorText, library, profiles, type Character, type GameId, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
+import { held } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
 import { publish, summarize } from "../library/data";
 
@@ -23,7 +24,9 @@ export function useProfiles(game: GameId | undefined) {
   useEffect(() => {
     const f = (g: GameId) => { if (g === game) reload(); };
     subs.add(f);
-    return () => { subs.delete(f); };
+    // the backend's library-changed covers switches made by an in-game hotkey
+    const off = held(library.onChanged((p) => f(p.game)));
+    return () => { subs.delete(f); off(); };
   }, [game, reload]);
   // a new game's list replaces the old one only when it arrives
   useEffect(() => { setList(null); }, [game]);

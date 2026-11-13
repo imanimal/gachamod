@@ -1,0 +1,41 @@
+/* themes/ww.css: "Solaris", the Wuthering Waves menu look. Rules it follows are in docs/theme-ww.md.
+   Part 1 (ww-kit.css): tokens, textures and every kit class. Part 2 (ww-shell.css): the window. Part 3
+   (ww-screens.css): screen classes. This file pulls them in, in that order, and adds the font, the scrollbars, the
+   keyframes and the other accents. No game art or fonts: shapes are CSS and inline SVG.
+
+   The look in one paragraph: flat sheets over a night sky, each one ink (see-through black) or paper (light grey).
+   Anything you press takes the opposite tone of the sheet under it. What is picked turns white. Gold is thin: a
+   line, a number, a small diamond. Corners are 3 px, hairlines end in diamonds. */
+@import "/src/styles/themes/ww-kit.css";
+@import "/src/styles/themes/ww-shell.css";
+@import "/src/styles/themes/ww-screens.css";
+
+@font-face { font-family: "Lato"; font-weight: 400; font-display: swap; src: url("../fonts/lato-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Lato"; font-weight: 700; font-display: swap; src: url("../fonts/lato-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Lato"; font-weight: 900; font-display: swap; src: url("../fonts/lato-latin-900-normal.woff2") format("woff2"); }
+
+/* scrollbars: a 1 px line with a 3 px thumb, white on ink and gold on paper */
+[data-theme="ww"] ::-webkit-scrollbar { width: 9px; height: 9px; }
+[data-theme="ww"] ::-webkit-scrollbar-thumb { background: rgb(255 255 255 / .8); border-radius: 0; border: 3px solid transparent; background-clip: padding-box; min-height: 36px; }
+[data-theme="ww"] ::-webkit-scrollbar-thumb:hover { background: #fff; border-width: 2px; background-clip: padding-box; }
+[data-theme="ww"] ::-webkit-scrollbar-thumb:active { background: var(--gold-hi); background-clip: padding-box; }
+[data-theme="ww"] ::-webkit-scrollbar-track:vertical { background: linear-gradient(90deg, transparent 4px, rgb(255 255 255 / .2) 4px 5px, transparent 5px); }
+[data-theme="ww"] ::-webkit-scrollbar-track:horizontal { background: linear-gradient(180deg, transparent 4px, rgb(255 255 255 / .2) 4px 5px, transparent 5px); }
+[data-theme="ww"] :is(.dialog, .dialog *)::-webkit-scrollbar-thumb { background: #b59a56; background-clip: padding-box; }
+[data-theme="ww"] :is(.dialog, .dialog *)::-webkit-scrollbar-track:vertical { background: linear-gradient(90deg, transparent 4px, rgb(0 0 0 / .18) 4px 5px, transparent 5px); }
+[data-theme="ww"] ::selection { background: var(--gold-line); color: #101113; }
+
+@keyframes wwRise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes wwSlide { from { opacity: 0; transform: translateX(36px); } }
+@keyframes wwToast { from { opacity: 0; transform: translateX(24px); } }
+@keyframes wwView { from { opacity: 0; transform: translateY(5px); } }
+@keyframes wwPick { from { opacity: .4; transform: scaleX(.94); } }
+@keyframes wwDriftA { to { transform: translate(-420px, 420px); } }
+@keyframes wwDriftB { to { transform: translate(-640px, 320px); } }
+@keyframes wwSpin { to { transform: rotate(360deg); } }
+@keyframes wwGlint { 50% { opacity: .35; } }
+
+/* other accents for Solaris (data-accent on the root). Gold is the default. */
+[data-theme="ww"][data-accent="glacio"] { --gold: #6fd0f2; --gold-hi: #b5e9fb; --gold-line: #9cc3d2; --gold-dk: #1f6f8c; }
+[data-theme="ww"][data-accent="havoc"] { --gold: #e26aa5; --gold-hi: #f6b6d4; --gold-line: #cfa2b8; --gold-dk: #94285c; }
+[data-theme="ww"][data-accent="aero"] { --gold: #5fe0b0; --gold-hi: #b3f3da; --gold-line: #9ccdb9; --gold-dk: #1c7a58; }

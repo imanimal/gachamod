@@ -2,6 +2,7 @@
 //! `gacha-core`. Commands are grouped by area (docs/spec.md); an area adds its new commands only inside its own block.
 
 mod commands;
+mod hotkeys;
 mod runner;
 mod state;
 
@@ -50,6 +51,8 @@ pub fn run() {
             hand_to_ui(app, opened_from_args(argv));
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(hotkeys::plugin())
+        .manage(hotkeys::Held::default())
         .manage(Pending::default())
         .setup(|app| {
             // GACHAMOD_DATA moves the app's own data (database, trash, downloads) elsewhere: a portable copy or a test run.
@@ -65,7 +68,9 @@ pub fn run() {
             let handle = app.handle().clone();
             gacha_core::devtools::watch(app.state::<state::AppState>().db.clone(), move |g, r| {
                 let _ = handle.emit(events::GAME_STATE, serde_json::json!({ "game": g, "running": r }));
+                hotkeys::on_game_state(&handle, r);
             });
+            commands::app::start_daily_check(app.handle().clone());
             #[cfg(not(debug_assertions))]
             if let Ok(exe) = std::env::current_exe() { let _ = gacha_core::platform::register_free(&exe); }
             Ok(())
@@ -93,12 +98,16 @@ pub fn run() {
             commands::library::characters_list,
             commands::library::characters_sync,
             commands::library::mods_mark_updates,
+            commands::library::mod_set_preview,
+            commands::library::mod_set_preview_data,
+            commands::library::mod_clear_preview,
             commands::profiles::profiles_list,
             commands::profiles::profile_create,
             commands::profiles::profile_update,
             commands::profiles::profile_delete,
             commands::profiles::profile_activate,
             commands::profiles::profile_capture,
+            hotkeys::hotkeys_sync,
             // ── MODTOOLS ──
             commands::modtools::mod_inspect,
             commands::modtools::mod_set_var,
@@ -139,6 +148,12 @@ pub fn run() {
             commands::system::integrations_get,
             commands::system::integration_register,
             commands::system::app_data_dir,
+            commands::app::settings_export,
+            commands::app::settings_import_preview,
+            commands::app::settings_import,
+            commands::app::settings_import_undo,
+            commands::app::app_update_check,
+            commands::app::app_update_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gachamod");

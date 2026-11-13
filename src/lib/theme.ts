@@ -20,6 +20,24 @@ export const THEMES: ThemeInfo[] = [
       { id: "orange", name: "Orange", color: "#ff7a1c" }, { id: "lime", name: "Lime", color: "#d6f900" }, { id: "yellow", name: "Yellow", color: "#ffd21a" },
       { id: "cyan", name: "Cyan", color: "#35d3ff" }, { id: "pink", name: "Pink", color: "#ff6aa9" },
     ] },
+  { id: "gi", name: "Teyvat", description: "Genshin Impact's menus: cream paper pages over a night sky, gold rules", schemes: ["dark"],
+    accents: [
+      { id: "gold", name: "Gold", color: "#d3bc8e" }, { id: "anemo", name: "Anemo", color: "#74c2a8" },
+      { id: "hydro", name: "Hydro", color: "#4cc2f1" }, { id: "pyro", name: "Pyro", color: "#ef7938" },
+      { id: "electro", name: "Electro", color: "#af8ef3" }, { id: "dendro", name: "Dendro", color: "#a5c83b" },
+      { id: "cryo", name: "Cryo", color: "#9fd6e3" },
+    ] },
+  { id: "hsr", name: "Astral Express", description: "Honkai: Star Rail's menus", schemes: ["dark"] },
+  { id: "ww", name: "Solaris", description: "Wuthering Waves' menus: dark glass under a night sky, paper rows, gold", schemes: ["dark"],
+    accents: [
+      { id: "gold", name: "Gold", color: "#fdd02c" }, { id: "glacio", name: "Glacio", color: "#6fd0f2" },
+      { id: "havoc", name: "Havoc", color: "#e26aa5" }, { id: "aero", name: "Aero", color: "#5fe0b0" },
+    ] },
+  { id: "ef", name: "Talos-II", description: "Arknights: Endfield's menus: a light sheet on a charcoal stage, signal yellow", schemes: ["dark"],
+    accents: [
+      { id: "signal", name: "Signal", color: "#ffee00" }, { id: "orange", name: "Orange", color: "#ff8a1f" },
+      { id: "lime", name: "Lime", color: "#c5e03a" }, { id: "cyan", name: "Cyan", color: "#3fd0f0" },
+    ] },
 ];
 
 /** gachamod's own colour, used when no game is set up. */

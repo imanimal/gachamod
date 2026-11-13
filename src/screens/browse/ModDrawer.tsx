@@ -8,6 +8,7 @@ import { toast } from "../../ui/toast";
 import { errorText, shell, type GameState, type ModEntry, type QueueItem, type QueueSnapshot } from "../../lib/api";
 import { imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, type GbFile, type GbMod, type GbUpdate } from "../../lib/gamebanana";
 import { go } from "../../lib/store";
+import { Comments } from "./Comments";
 import { Lightbox } from "./Lightbox";
 import type { NsfwMode } from "./Browse";
 
@@ -141,6 +142,8 @@ export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
               ))}
             </section>
           )}
+
+          <Comments key={mod.id} modId={mod.id} url={url} onLink={openLink} />
         </div>
       )}
       {lightbox !== null && mod && <Lightbox images={mod.images} start={lightbox} onClose={closeLightbox} />}

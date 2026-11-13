@@ -47,3 +47,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .onboard-card .row { flex-wrap: wrap; }
 
 .set-accents { display: flex; gap: .55rem; align-items: center; }
+.set-import ul { margin: .4rem 0 .6rem; padding-left: 1.2rem; display: grid; gap: .2rem; }
+.set-import ul.mono { font-size: .85em; word-break: break-all; }
+.set-update { margin-bottom: 1rem; }
+.set-update .progress { margin-top: .4rem; }

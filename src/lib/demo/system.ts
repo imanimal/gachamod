@@ -1,6 +1,6 @@
 // Demo handlers for the SYSTEM area's commands (lib/api/system.ts). Owner: SYSTEM area.
 import { demoEmit, registerDemo } from "../tauri";
-import type { DevStatus, GamePaths, Integration, LaunchConfig, XxmiStatus } from "../api/system";
+import type { DevStatus, GamePaths, ImportSummary, Integration, LaunchConfig, UpdateCheck, XxmiStatus } from "../api/system";
 import type { GameState } from "../api/types";
 import { demoDb, demoWait } from "./db";
 
@@ -142,5 +142,35 @@ export function registerSystemDemo() {
       if (i) { i.ours = true; i.owner = null; }
       return integrationsState;
     },
+    // settings file: the browser has no file dialogs, so these only answer if called directly
+    settings_export: () => ({ games: demoDb.games.length, profiles: 2, settings: demoDb.settings.size }),
+    settings_import_preview: (): ImportSummary => demoImport(""),
+    settings_import: async (): Promise<ImportSummary> => { await demoWait(300); return demoImport("demo-backup.json"); },
+    settings_import_undo: () => ({}),
+    // updates: a pretend newer release so the About section has something to show
+    app_update_check: async (): Promise<UpdateCheck> => {
+      await demoWait(500);
+      const tag = "v0.2.0";
+      return {
+        current: "0.1.0-demo", reachable: true, available: true,
+        release: {
+          version: "0.2.0", name: "gachamod 0.2.0", url: "https://github.com/imanimal/gachamod/releases", notes: "Settings export and import. Update check.",
+          publishedAt: null, asset: { name: "gachamod_0.2.0_x64-setup.exe", url: `https://github.com/imanimal/gachamod/releases/download/${tag}/gachamod_0.2.0_x64-setup.exe`, size: 9_400_000 },
+        },
+      };
+    },
+    app_update_install: async ({ asset }) => {
+      const total = (asset as { size: number }).size;
+      for (let done = 0; done <= total; done += total / 10) { demoEmit("app-update-progress", { done, total }); await demoWait(150); }
+      throw { kind: "invalid", message: "The demo can't install updates. The app would start the installer and close now" };
+    },
   });
+}
+
+function demoImport(backup: string): ImportSummary {
+  return {
+    appVersion: "0.1.0", exportedAt: Math.floor(Date.now() / 1000) - 86_400, settings: 4, games: ["Zenless Zone Zero"],
+    newProfiles: ["Summer (ZZZ)"], replacedProfiles: ["Default (ZZZ)"], skippedPaths: ["Genshin Impact game folder: D:\\Games\\Genshin Impact Game"],
+    missingMods: 2, ui: {}, backup,
+  };
 }

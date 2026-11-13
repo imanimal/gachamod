@@ -106,6 +106,7 @@
 .nogame { max-width: 32rem; margin: 18vh auto 0; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1rem; align-items: flex-start; }
 .nogame h1 { font-family: var(--font-display); font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; }
 .nogame p { color: var(--text-2); }
+.crash-msg { max-width: 100%; padding: .6rem .8rem; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--bad); font-family: var(--font-mono); font-size: .8rem; white-space: pre-wrap; }
 
 /* drop zone */
 .dropzone { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--scrim); backdrop-filter: blur(4px); pointer-events: none; animation: fadeIn 140ms ease-out; }

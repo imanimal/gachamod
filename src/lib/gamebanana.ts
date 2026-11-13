@@ -433,6 +433,51 @@ export async function modUpdates(id: number): Promise<GbUpdate[]> {
   }
 }
 
+export interface GbComment {
+  id: number;
+  author: GbUser | null;
+  added: number;
+  /** Raw HTML from GameBanana: always pass it through sanitizeHtml before showing it. */
+  html: string;
+  replies: number;
+  pinned: boolean;
+  /** Labels GameBanana puts on the post, like "Submitter". */
+  labels: string[];
+}
+export interface GbCommentPage { items: GbComment[]; total: number; complete: boolean }
+
+function parseComment(raw: unknown): GbComment | null {
+  const o = obj(raw);
+  const id = num(o?._idRow);
+  // status "0" is a live post; others are trashed or held ("[trashed]" with no poster)
+  if (!o || id === null || String(o._nStatus ?? "0") !== "0") return null;
+  const html = str(o._sText);
+  if (!html) return null;
+  return {
+    id, html, author: parseUser(o._aPoster), added: num(o._tsDateAdded) ?? 0, replies: num(o._nReplyCount) ?? 0,
+    pinned: (num(o._iPinLevel) ?? 0) > 0, labels: arr(o._aLabels).filter((l): l is string => typeof l === "string"),
+  };
+}
+
+async function commentPage(url: string, signal?: AbortSignal): Promise<GbCommentPage> {
+  return cached(url, MIN5, async () => {
+    const o = obj(await getJson(url, signal));
+    const meta = obj(o?._aMetadata);
+    const items = arr(o?._aRecords).map(parseComment).filter((c): c is GbComment => !!c);
+    return { items, total: num(meta?._nRecordCount) ?? items.length, complete: meta?._bIsComplete === true };
+  });
+}
+
+/** A mod's comments, 15 a page (GameBanana ignores other page sizes). `popular` matches the site's default order. */
+export function modComments(id: number, page: number, sort: "popular" | "newest" = "popular", signal?: AbortSignal): Promise<GbCommentPage> {
+  return commentPage(`${GB}/Mod/${id}/Posts?_nPage=${page}&_nPerpage=15&_sSort=${sort}`, signal);
+}
+
+/** Replies to one comment, oldest first, 15 a page. */
+export function commentReplies(postId: number, page: number, signal?: AbortSignal): Promise<GbCommentPage> {
+  return commentPage(`${GB}/Post/${postId}/Posts?_nPage=${page}&_nPerpage=15`, signal);
+}
+
 /** The game's character categories with portrait icons (cached a day). Empty for games without one. */
 export async function characterList(game: GameId): Promise<GbCategoryRef[]> {
   return charsQuiet(charCatFor(game));

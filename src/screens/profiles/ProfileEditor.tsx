@@ -1,11 +1,12 @@
 // Editing a profile: name, description, icon (an emoji or a character portrait), colour and banner (a mod preview, a
 // link to an image, or a picture on this PC). Owner: LIBRARY area.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { dialogs, errorText, library, profiles, type Character, type GameId, type ModEntry, type Profile } from "../../lib/api";
+import { dialogs, errorText, hotkeys, library, profiles, type Character, type GameId, type ModEntry, type Profile } from "../../lib/api";
 import { Button, Dialog, Tabs, TextField } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Preview } from "../library/Preview";
 import { profilesChanged } from "./data";
+import { HotkeyField } from "./HotkeyField";
 import { ProfileIcon } from "./ProfileIcon";
 
 const EMOJIS = ["⭐", "🔥", "🌙", "☀️", "🌸", "🌊", "⚡", "❄️", "🍀", "🎀", "💎", "🗡️", "🛡️", "🎮", "🎧", "🎵", "📸", "🏖️", "🎃", "🎄",
@@ -21,6 +22,8 @@ export function ProfileEditor({ game, profile, chars, onClose }: { game: GameId;
   const [icon, setIcon] = useState(profile.icon ?? "");
   const [color, setColor] = useState(profile.color ?? "");
   const [banner, setBanner] = useState(profile.banner ?? "");
+  const [hotkey, setHotkey] = useState(profile.hotkey ?? "");
+  const [taken, setTaken] = useState<string | null>(null);
   const [iconTab, setIconTab] = useState<IconTab>(profile.icon?.startsWith("char:") ? "character" : "emoji");
   const [bannerTab, setBannerTab] = useState<BannerTab>(profile.banner && /^https?:/.test(profile.banner) && !profile.banner.includes("/img/ss/mods/") ? "link" : "mods");
   const [link, setLink] = useState(profile.banner && /^https?:/.test(profile.banner) ? profile.banner : "");
@@ -49,8 +52,12 @@ export function ProfileEditor({ game, profile, chars, onClose }: { game: GameId;
   const save = async () => {
     setSaving(true);
     try {
-      await profiles.update(profile.id, { name: name.trim() || profile.name, description, icon, color, banner });
+      await profiles.update(profile.id, { name: name.trim() || profile.name, description, icon, color, banner, hotkey });
       profilesChanged(game);
+      // another app holding the combo keeps the editor open with the field marked
+      const list = hotkey !== (profile.hotkey ?? "") ? await hotkeys.sync().catch(() => []) : [];
+      const t = hotkey ? list.find((x) => x.combo === hotkey) : undefined;
+      if (t) { setTaken(t.reason); toast(t.reason, true); return; }
       onClose();
     } catch (e) { toast(errorText(e), true); }
     finally { setSaving(false); }
@@ -74,6 +81,8 @@ export function ProfileEditor({ game, profile, chars, onClose }: { game: GameId;
       <div className="profile-editor-fields">
         <TextField label="Name" value={name} onChange={setName} placeholder="Weekend outfits" />
         <TextField label="Description" multiline rows={2} value={description} onChange={setDescription} placeholder="What this loadout is for" />
+        <HotkeyField label="In-game hotkey" value={hotkey} onChange={(v) => { setHotkey(v); setTaken(null); }} taken={taken}
+          hint="Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1" />
       </div>
 
       <section className="profile-editor-sec">

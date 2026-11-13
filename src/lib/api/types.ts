@@ -69,6 +69,8 @@ export interface ModEntry {
   hasKeys: boolean;
   conflicts: number;
   updateAvailable: boolean;
+  /** The preview is one the user picked (library.setPreview). Missing on rows from before it existed. */
+  customPreview?: boolean;
 }
 
 export interface ModChange { changed: ModEntry[]; removed: string[]; notes: string[] }
@@ -94,9 +96,12 @@ export interface Profile {
   modCount: number;
   createdAt: number;
   updatedAt: number;
+  /** In-game hotkey that switches to this profile, like "Ctrl+Alt+1". */
+  hotkey: string | null;
 }
 
-export interface ProfilePatch { name?: string; icon?: string; color?: string; banner?: string; description?: string }
+/** `hotkey: ""` clears it. */
+export interface ProfilePatch { name?: string; icon?: string; color?: string; banner?: string; description?: string; hotkey?: string }
 
 /** Event names (model.rs, events). */
 export const EVENTS = {

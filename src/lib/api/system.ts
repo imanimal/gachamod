@@ -80,3 +80,48 @@ export const about = {
   /** The app's data folder (database, trash, downloads). */
   dataDir: () => call<string>("app_data_dir"),
 };
+
+// ── settings file (commands/app.rs) ──
+
+export interface ImportSummary {
+  appVersion: string; exportedAt: number;
+  /** Settings whose value changes. */
+  settings: number;
+  /** Games whose folders, rail visibility, theme or settings change. */
+  games: string[];
+  newProfiles: string[];
+  replacedProfiles: string[];
+  /** Paths in the file that aren't on this PC, skipped. */
+  skippedPaths: string[];
+  /** Mods named in profiles that this PC doesn't have. */
+  missingMods: number;
+  /** The window's own choices to apply (theme picks, colours, text size). */
+  ui: Record<string, string>;
+  /** The backup taken before applying (empty in a preview). */
+  backup: string;
+}
+
+export const settingsFile = {
+  /** Write the settings file. `ui`: the window's own stored choices. */
+  export: (path: string, profiles: boolean, ui: Record<string, string>) =>
+    call<{ games: number; profiles: number; settings: number }>("settings_export", { path, profiles, ui }),
+  preview: (path: string) => call<ImportSummary>("settings_import_preview", { path }),
+  /** Back up the current settings (with `ui`), then apply the file. */
+  import: (path: string, ui: Record<string, string>) => call<ImportSummary>("settings_import", { path, ui }),
+  /** Put back the settings from before an import; resolves to the window's choices from then. */
+  undo: (backup: string) => call<Record<string, string>>("settings_import_undo", { backup }),
+};
+
+// ── gachamod's own updates (commands/app.rs) ──
+
+export interface UpdateAsset { name: string; url: string; size: number }
+export interface Release { version: string; name: string; url: string; notes: string; publishedAt: string | null; asset: UpdateAsset | null }
+export interface UpdateCheck { current: string; reachable: boolean; available: boolean; release: Release | null }
+
+export const appUpdate = {
+  /** Never fails: no answer from GitHub is `reachable: false`. */
+  check: () => call<UpdateCheck>("app_update_check"),
+  /** Download the installer, start it and quit the app. */
+  install: (asset: UpdateAsset) => call<void>("app_update_install", { asset }),
+  onProgress: (cb: (p: { done: number; total: number | null }) => void) => listen<{ done: number; total: number | null }>("app-update-progress", cb),
+};

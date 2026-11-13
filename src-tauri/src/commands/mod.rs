@@ -1,4 +1,5 @@
 //! Tauri commands, one file per area (docs/spec.md, "Areas"). Each command is a thin wrapper over gacha-core.
+pub mod app;
 pub mod common;
 pub mod library;
 pub mod modtools;

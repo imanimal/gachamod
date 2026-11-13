@@ -49,7 +49,11 @@ CREATE TABLE IF NOT EXISTS profile_vars (
     PRIMARY KEY (profile_id, mod_id, ini, var)
 );
 ";
-pub fn migrate(_db: &Db) -> Result<()> { Ok(()) }
+pub fn migrate(db: &Db) -> Result<()> {
+    // in-game hotkey per profile, like "Ctrl+Alt+1" (hotkeys.rs)
+    if !db.has_column("profiles", "hotkey")? { db.conn.execute("ALTER TABLE profiles ADD COLUMN hotkey TEXT", [])?; }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,12 +67,12 @@ pub struct SwitchReport {
 /// The setting that remembers a profile whose values still need writing (the game was running at the switch).
 fn pending_key(game: &str) -> String { format!("{game}.profileVarsPending") }
 
-const COLS: &str = "id, game, name, icon, color, banner, description, active, created_at, updated_at";
+const COLS: &str = "id, game, name, icon, color, banner, description, active, created_at, updated_at, hotkey";
 
 fn read_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Profile> {
     Ok(Profile {
         id: r.get(0)?, game: r.get(1)?, name: r.get(2)?, icon: r.get(3)?, color: r.get(4)?, banner: r.get(5)?, description: r.get(6)?,
-        active: r.get::<_, i64>(7)? != 0, mod_count: 0, created_at: r.get(8)?, updated_at: r.get(9)?,
+        active: r.get::<_, i64>(7)? != 0, mod_count: 0, created_at: r.get(8)?, updated_at: r.get(9)?, hotkey: r.get(10)?,
     })
 }
 
@@ -172,7 +176,9 @@ pub fn create(db: &Db, game: &str, name: &str, copy_from: Option<i64>) -> Result
 
 pub fn update(db: &Db, id: i64, patch: &ProfilePatch) -> Result<Profile> {
     let p = get(db, id)?;
-    let text = |s: &Option<String>, old: &Option<String>| match s {
+    // a bad combo fails before anything is saved
+    if let Some(h) = patch.hotkey.as_deref().map(str::trim).filter(|h| !h.is_empty()) { crate::hotkeys::normalize(h)?; }
+    let text =|s: &Option<String>, old: &Option<String>| match s {
         Some(v) => { let t = v.trim(); (!t.is_empty()).then(|| t.to_string()) }
         None => old.clone(),
     };
@@ -183,6 +189,7 @@ pub fn update(db: &Db, id: i64, patch: &ProfilePatch) -> Result<Profile> {
     db.conn.execute("UPDATE profiles SET name = ?1, icon = ?2, color = ?3, banner = ?4, description = ?5 WHERE id = ?6", params![
         name, text(&patch.icon, &p.icon), text(&patch.color, &p.color), text(&patch.banner, &p.banner), text(&patch.description, &p.description), id,
     ])?;
+    if let Some(h) = &patch.hotkey { crate::hotkeys::set_for_profile(db, id, Some(h))?; }
     get(db, id)
 }
 

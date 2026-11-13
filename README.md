@@ -39,11 +39,20 @@ You need Rust, Node 20 or newer, and the Tauri prerequisites for Windows (WebVie
 
 ```
 npm install
-npm run tauri dev
+npm run app
 ```
 
-`npm run dev` runs the interface in a browser at http://localhost:1420 with made-up local data and the real
-GameBanana. `npm run tauri build` makes an installer.
+`npm run app` is the one to leave running while you work. It opens the real app against your real games, and it
+picks up changes on its own:
+
+- Anything under `src` (screens, styles, themes) shows in the open window within a second, without a restart.
+- Anything in Rust (`crates/gacha-core`, `src-tauri`) rebuilds only what changed and restarts the window, usually
+  in under a minute.
+
+`npm run app:attach` does the same but uses a dev server that is already running on port 1420. `npm run dev` runs
+the interface alone in a browser at http://localhost:1420 with made-up local data and the real GameBanana.
+`npm run tauri build` makes a release build and an installer; that one is slow and only needed to hand the app
+to someone else.
 
 ## Licence
 

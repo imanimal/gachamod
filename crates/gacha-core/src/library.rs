@@ -344,9 +344,11 @@ fn dir_facts(dir: &Path) -> Facts {
     f
 }
 
-/// preview.(png|jpg|jpeg|webp|gif) in the mod root, else the sidecar's preview (a file there or a URL), else the
-/// first image in the mod root.
-fn pick_preview(dir: &Path, files: &[String], own: Option<&str>) -> Option<String> {
+/// The user's own preview (set_preview) when its file is there, else preview.(png|jpg|jpeg|webp|gif) in the mod root,
+/// else the sidecar's preview (a file there or a URL), else the first image in the mod root.
+fn pick_preview(dir: &Path, files: &[String], sc: &Sidecar) -> Option<String> {
+    if let Some(full) = custom_preview_path(dir, sc) { return Some(full.to_string_lossy().into_owned()); }
+    let own = sc.preview.as_deref();
     let mut images: Vec<&String> = files.iter().filter(|f| is_image(f)).collect();
     images.sort_by_key(|f| f.to_ascii_lowercase());
     if let Some(p) = images.iter().find(|f| f.to_ascii_lowercase().starts_with("preview.")) {
@@ -406,7 +408,8 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         size_bytes: facts.size,
         file_count: facts.files,
         ini_count: if qf.ini_count > 0 { qf.ini_count } else { facts.inis },
-        preview: pick_preview(&dir, &facts.root_files, sc.preview.as_deref()),
+        preview: pick_preview(&dir, &facts.root_files, sc),
+        custom_preview: custom_preview_path(&dir, sc).is_some(),
         tags: sc.tags.clone(),
         notes: sc.notes.clone(),
         favorite: sc.favorite,
@@ -415,6 +418,13 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         conflicts: 0,
         update_available: false,
     }
+}
+
+/// The user's own preview file inside `dir`, when the sidecar names one and it is still there.
+fn custom_preview_path(dir: &Path, sc: &Sidecar) -> Option<PathBuf> {
+    let rel = sc.custom_preview.as_deref().and_then(safe_rel)?;
+    let full = dir.join(rel);
+    full.is_file().then_some(full)
 }
 
 // ── finding mods ──
@@ -851,6 +861,103 @@ pub fn update_meta(db: &Db, game: &str, id: &str, patch: &MetaPatch) -> Result<M
     e.version = sc.version.clone();
     save_row(db, &e)?;
     Ok(e)
+}
+
+// ── the user's own preview ──
+
+const PREVIEW_EXTS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif"];
+/// Previews bigger than this are refused (a pasted screenshot is a few MB).
+const PREVIEW_MAX: usize = 25 * 1024 * 1024;
+
+/// The image type of a file name or a bare extension ("PNG", "photo.jpeg"), lowercased, when gachamod shows it.
+pub fn preview_ext(name_or_ext: &str) -> Option<String> {
+    let l = name_or_ext.trim().to_ascii_lowercase();
+    let ext = l.rsplit_once('.').map(|(_, e)| e).unwrap_or(&l);
+    PREVIEW_EXTS.contains(&ext).then(|| ext.to_string())
+}
+
+/// The mod's sidecar, or one built from its row when the folder has none yet.
+fn sidecar_of_entry(dir: &Path, e: &ModEntry) -> Sidecar {
+    let mut sc = read_sidecar(dir).unwrap_or_else(|| Sidecar {
+        format: 1, id: e.id.clone(), name: e.name.clone(), character: e.character.clone(), source: e.source.clone(), version: e.version.clone(),
+        installed_at: e.installed_at, tags: e.tags.clone(), notes: e.notes.clone(), favorite: e.favorite, nsfw: e.nsfw, ..Default::default()
+    });
+    sc.id = e.id.clone();
+    sc
+}
+
+fn root_files(dir: &Path) -> Vec<String> {
+    fs::read_dir(dir).map(|rd| rd.flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .map(|e| e.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default()
+}
+
+/// Write the sidecar and refresh the row's preview after a preview change.
+fn save_preview(db: &Db, game: &str, mut e: ModEntry, dir: &Path, sc: &Sidecar) -> Result<ModEntry> {
+    write_sidecar(dir, sc)?;
+    e.preview = pick_preview(dir, &root_files(dir), sc);
+    e.custom_preview = custom_preview_path(dir, sc).is_some();
+    save_row(db, &e)?;
+    finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
+    Ok(e)
+}
+
+/// Make `bytes` (an image of type `ext`) the mod's preview: copied in as `preview.<ext>`, which wins over every
+/// other image. Preview files already there are kept, renamed to `preview-original.<ext>` (clear_preview puts them
+/// back). Setting another custom preview replaces the last one gachamod copied in.
+pub fn set_preview(db: &Db, game: &str, id: &str, bytes: &[u8], ext: &str) -> Result<ModEntry> {
+    let ext = preview_ext(ext).ok_or_else(|| Error::Invalid("Use a PNG, JPG, WebP or GIF image".into()))?;
+    if bytes.is_empty() { return Err(Error::Invalid("That image is empty".into())); }
+    if bytes.len() > PREVIEW_MAX { return Err(Error::Invalid("That image is over 25 MB. Pick a smaller one".into())); }
+    let e = get(db, game, id)?;
+    let dir = PathBuf::from(&e.path);
+    if !dir.is_dir() { return Err(Error::Invalid("That mod's folder isn't there anymore. Rescan to refresh the list".into())); }
+    let mut sc = sidecar_of_entry(&dir, &e);
+    // the last custom preview is gachamod's own copy: replace it
+    if let Some(old) = custom_preview_path(&dir, &sc) { fs::remove_file(old)?; }
+    sc.custom_preview = None;
+    // keep every other preview.* file under a new name so the new one wins
+    let mut found: Vec<String> = root_files(&dir).into_iter().filter(|f| is_image(f) && f.to_ascii_lowercase().starts_with("preview.")).collect();
+    found.sort();
+    for f in found {
+        let fext = preview_ext(&f).unwrap_or_else(|| "png".into());
+        let mut to = dir.join(format!("preview-original.{fext}"));
+        let mut n = 2;
+        while to.exists() { to = dir.join(format!("preview-original ({n}).{fext}")); n += 1; }
+        fs::rename(dir.join(&f), &to)?;
+        sc.preview_backups.push(name_of(&to));
+    }
+    let name = format!("preview.{ext}");
+    fs::write(dir.join(&name), bytes)?;
+    sc.custom_preview = Some(name);
+    save_preview(db, game, e, &dir, &sc)
+}
+
+/// set_preview from an image file anywhere on disk (the file is copied, never moved).
+pub fn set_preview_file(db: &Db, game: &str, id: &str, src: &Path) -> Result<ModEntry> {
+    let ext = preview_ext(&name_of(src)).ok_or_else(|| Error::Invalid("Use a PNG, JPG, WebP or GIF image".into()))?;
+    let len = fs::metadata(src)?.len();
+    if len as usize > PREVIEW_MAX { return Err(Error::Invalid("That image is over 25 MB. Pick a smaller one".into())); }
+    let bytes = fs::read(src)?;
+    set_preview(db, game, id, &bytes, &ext)
+}
+
+/// Remove the user's own preview and put back the preview files set_preview renamed.
+pub fn clear_preview(db: &Db, game: &str, id: &str) -> Result<ModEntry> {
+    let e = get(db, game, id)?;
+    let dir = PathBuf::from(&e.path);
+    let mut sc = sidecar_of_entry(&dir, &e);
+    if let Some(p) = custom_preview_path(&dir, &sc) { fs::remove_file(p)?; }
+    sc.custom_preview = None;
+    for b in std::mem::take(&mut sc.preview_backups) {
+        let Some(rel) = safe_rel(&b) else { continue };
+        let from = dir.join(rel);
+        if !from.is_file() { continue; }
+        let to = dir.join(format!("preview.{}", preview_ext(&b).unwrap_or_else(|| "png".into())));
+        // another preview arrived meanwhile (an update): leave the old one under its kept name
+        if to.exists() { continue; }
+        fs::rename(&from, &to)?;
+    }
+    save_preview(db, game, e, &dir, &sc)
 }
 
 /// A group path from the UI cleaned for Windows: parts trimmed, characters Windows forbids dropped, no "..".

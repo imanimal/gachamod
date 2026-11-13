@@ -1,0 +1,16 @@
+/* themes/gi.css: "Teyvat", the Genshin Impact menu look. Rules it follows are in docs/theme-gi.md.
+   This file: fonts and the parts list. gi-kit.css: tokens, textures and every kit class. Part 2 (gi-shell.css): the window. Part 3
+   (gi-screens.css): screen classes. No game art or fonts: shapes are CSS and inline SVG.
+
+   The look in one paragraph: two materials trade places. Warm cream and a blue grey slate. A control takes
+   the material its surface lacks: cream pills on slate and on the evening sky, slate pills on cream. Icons
+   sit in a dark round cap at the left end of a pill. Thin gold lines with diamond ends and four-point sparkles
+   decorate; there are no thick outlines or hard shadows. */
+@import "/src/styles/themes/gi-kit.css";
+@import "/src/styles/themes/gi-shell.css";
+@import "/src/styles/themes/gi-screens.css";
+
+@font-face { font-family: "Laila"; font-weight: 400; font-display: swap; src: url("../fonts/laila-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Laila"; font-weight: 500; font-display: swap; src: url("../fonts/laila-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Laila"; font-weight: 600; font-display: swap; src: url("../fonts/laila-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Laila"; font-weight: 700; font-display: swap; src: url("../fonts/laila-latin-700-normal.woff2") format("woff2"); }

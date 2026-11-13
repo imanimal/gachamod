@@ -7,6 +7,7 @@ import { Dialog, IconButton } from "./ui/kit";
 import { Toasts, toast } from "./ui/toast";
 import { GameBadge } from "./ui/GameBadge";
 import { DropZone } from "./ui/DropZone";
+import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop, Glyphs, SideDeco } from "./ui/Deco";
 import { app as appApi, games as gamesApi, settings as settingsApi } from "./lib/api";
 import { held, inTauri, windowAction } from "./lib/tauri";
@@ -187,10 +188,12 @@ export function App() {
         <div className="side-foot">{game && <PlayButton />}</div>
       </aside>
 
-      <main className="view" key={`${game?.id}-${view}`}>{screen}</main>
+      <main className="view" key={`${game?.id}-${view}`}>
+        <ErrorBoundary where={view === "settings" ? "Settings" : NAV.find((n) => n.id === view)?.label ?? "This screen"}>{screen}</ErrorBoundary>
+      </main>
 
-      {games.length > 0 && <OnlineOverlays />}
-      {games.length > 0 && <ModtoolsOverlays />}
+      {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
+      {games.length > 0 && <ErrorBoundary where="Mod tools" quiet><ModtoolsOverlays /></ErrorBoundary>}
       {onboard && <Onboarding onDone={() => setOnboard(false)} />}
       <DropZone />
       {help && (

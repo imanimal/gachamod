@@ -39,6 +39,13 @@ export const library = {
   trashRestore: (id: number) => call<ModChange>("trash_restore", { id }),
   trashPurge: (id: number | null) => call<number>("trash_purge", { id }),
   markUpdates: (game: GameId, ids: string[]) => call<void>("mods_mark_updates", { game, ids }),
+  /** Copy an image file into the mod's folder as preview.<ext>. Older preview files are kept under another name. */
+  setPreview: (game: GameId, id: string, path: string) => call<ModEntry>("mod_set_preview", { game, id, path }),
+  /** The same from image bytes (a paste, or a drop in the browser). `ext` is png, jpg, webp or gif. */
+  setPreviewData: (game: GameId, id: string, data: Uint8Array, ext: string) =>
+    call<ModEntry>("mod_set_preview_data", { game, id, data: Array.from(data), ext }),
+  /** Remove the user's own preview and put the kept files back. */
+  clearPreview: (game: GameId, id: string) => call<ModEntry>("mod_clear_preview", { game, id }),
   onChanged: (cb: (p: { game: GameId }) => void) => listen<{ game: GameId }>(EVENTS.libraryChanged, cb),
 };
 
@@ -54,4 +61,13 @@ export const profiles = {
   remove: (id: number) => call<void>("profile_delete", { id }),
   activate: (id: number) => call<SwitchReport>("profile_activate", { id }),
   capture: (id: number) => call<Profile>("profile_capture", { id }),
+};
+
+/** A hotkey Windows wouldn't give the app because another app holds it. */
+export interface HotkeyTaken { combo: string; reason: string }
+
+/** In-game hotkeys that switch profiles. Settings: "hotkeys.enabled" ("0" is off), "hotkeys.next", "hotkeys.prev". */
+export const hotkeys = {
+  /** Register every hotkey again after a change. Returns the ones another app holds. */
+  sync: () => call<HotkeyTaken[]>("hotkeys_sync"),
 };

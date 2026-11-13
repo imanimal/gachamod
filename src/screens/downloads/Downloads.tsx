@@ -110,7 +110,7 @@ export function Downloads() {
         </div>
         <div className="dl-act">
           {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)}>Pick</Button>}
-          {i.state === "done" && i.modIds[0] && (
+          {i.state === "done" && i.modIds?.[0] && (
             <Button size="sm" icon="mods" onClick={() => go({ view: "library", modId: i.modIds[0] })} disabled={!!other}
               title={other ? `Switch to ${gameName(i.req.game)} to see it` : "Open it in Mods"}>Show in Mods</Button>
           )}

@@ -1,12 +1,14 @@
 //! gachamod core: everything that is not UI. The Tauri app in `src-tauri` is a thin layer of commands over it.
 //! Areas and who owns them are listed in docs/spec.md.
 
+pub mod app_update;
 pub mod archive;
 pub mod db;
 pub mod devtools;
 pub mod download;
 pub mod error;
 pub mod games;
+pub mod hotkeys;
 pub mod imm;
 pub mod ini;
 pub mod install;
@@ -17,6 +19,7 @@ pub mod pack;
 pub mod platform;
 pub mod profiles;
 pub mod queue;
+pub mod settings_file;
 pub mod xxmi;
 
 pub use error::{Error, Result};

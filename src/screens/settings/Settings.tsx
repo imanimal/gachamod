@@ -10,6 +10,8 @@ import { consumeRoute, currentGame, refreshGames, setGames, useGame, useGames, u
 import { THEMES, accentPick, setAccentPick, setMotion, setScheme, setThemePick, themePick, useTheme, type SchemeChoice } from "../../lib/theme";
 import { SIZES, getTextSize, setTextSize } from "../../lib/zoom";
 import "./settings.css";
+import { HotkeysSection } from "./HotkeysSection";
+import { TransferSection, UpdateRow } from "./SettingsTransfer";
 
 export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releases";
 
@@ -29,7 +31,9 @@ export function Settings() {
       <XxmiSection />
       <AppearanceSection />
       <ModsSection />
+      <HotkeysSection />
       <IntegrationsSection />
+      <TransferSection />
       <AboutSection />
     </div>
   );
@@ -350,6 +354,7 @@ function AboutSection() {
         <span className="muted">Data folder</span>
         <span>{dir ? <button type="button" className="set-folder-p mono" onClick={() => shell.openPath(dir).catch((e) => toast(errorText(e), true))} title="Open it">{dir}</button> : "…"}</span>
       </div>
+      <UpdateRow />
       <p className="hint set-note">Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.
         Fonts: Manrope, Rubik, Anton and JetBrains Mono, under the SIL Open Font License.</p>
     </Panel>

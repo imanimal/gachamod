@@ -118,6 +118,8 @@ const members = new Map<number, Map<string, boolean>>();
 let nextProfile = 1;
 let nextTrash = 1;
 const trash: Array<TrashEntry & { mod: ModEntry }> = [];
+/** The preview a mod had before the user set their own (mod id to preview). */
+const keptPreview = new Map<string, string | null>();
 
 const err = (message: string, kind = "invalid") => ({ kind, message });
 const mods = (game: string) => demoDb.mods.get(game) ?? [];
@@ -142,7 +144,7 @@ function capture(p: Profile) {
 
 function newProfile(game: string, name: string, extra: Partial<Profile> = {}): Profile {
   const t = demoNow();
-  return { id: nextProfile++, game, name, icon: null, color: null, banner: null, description: null, active: false, modCount: 0, createdAt: t, updatedAt: t, ...extra };
+  return { id: nextProfile++, game, name, icon: null, color: null, banner: null, description: null, active: false, modCount: 0, createdAt: t, updatedAt: t, hotkey: null, ...extra };
 }
 
 function freeName(game: string, name: string, except?: number) {
@@ -294,6 +296,32 @@ export function registerLibraryDemo() {
       if (p.version !== undefined) m.version = text(p.version);
       return { ...m };
     },
+    // the browser has no files to copy: a pasted or dropped image becomes a blob URL, the old preview is remembered
+    mod_set_preview: () => { throw err("Picking a file needs the app. Paste or drop an image here instead"); },
+    mod_set_preview_data: async ({ game, id, data, ext }) => {
+      await demoWait(120);
+      const g = String(game);
+      const m = findMod(g, String(id));
+      const type = String(ext) === "jpg" ? "image/jpeg" : `image/${String(ext)}`;
+      if (!m.customPreview) keptPreview.set(m.id, m.preview);
+      else if (m.preview?.startsWith("blob:")) URL.revokeObjectURL(m.preview);
+      m.preview = URL.createObjectURL(new Blob([new Uint8Array(data as number[])], { type }));
+      m.customPreview = true;
+      onChange(g, { changed: [{ ...m }], removed: [], notes: [] });
+      return { ...m };
+    },
+    mod_clear_preview: ({ game, id }) => {
+      const g = String(game);
+      const m = findMod(g, String(id));
+      if (m.customPreview) {
+        if (m.preview?.startsWith("blob:")) URL.revokeObjectURL(m.preview);
+        m.preview = keptPreview.get(m.id) ?? null;
+        keptPreview.delete(m.id);
+        m.customPreview = false;
+        onChange(g, { changed: [{ ...m }], removed: [], notes: [] });
+      }
+      return { ...m };
+    },
     mod_move: ({ game, id, group }) => {
       const g = String(game);
       const m = findMod(g, String(id));
@@ -383,6 +411,12 @@ export function registerLibraryDemo() {
       p.color = text(q.color, p.color);
       p.banner = text(q.banner, p.banner);
       p.description = text(q.description, p.description);
+      if (q.hotkey !== undefined) {
+        const h = q.hotkey.trim();
+        if (h && !/(^|\+)(Ctrl|Alt|Win)\+/.test(h)) throw err(`${h} needs Ctrl, Alt or Win with it`);
+        if (h) for (const o of profilesOf(p.game)) if (o.hotkey === h) o.hotkey = null;
+        p.hotkey = h || null;
+      }
       return stamp(p);
     },
     profile_delete: ({ id }) => {
@@ -411,6 +445,11 @@ export function registerLibraryDemo() {
       const b = setEnabled(p.game, ons, true, false);
       const running = demoDb.games.find((g) => g.id === p.game)?.running ?? false;
       return { profile: stamp(p), change: { changed: [...a.changed, ...b.changed], removed: [], notes: [...a.notes, ...b.notes] }, varsPending: running };
+    },
+    // pretend another app holds Ctrl+Alt+T, so the "taken" mark can be seen in the browser
+    hotkeys_sync: () => {
+      const all = [...demoDb.profiles.values()].flat().map((p) => p.hotkey);
+      return all.includes("Ctrl+Alt+T") ? [{ combo: "Ctrl+Alt+T", reason: "Ctrl+Alt+T is used by another app. Pick another key" }] : [];
     },
     profile_capture: ({ id }) => {
       const p = findProfile(Number(id));

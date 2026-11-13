@@ -11,18 +11,18 @@ const xx = (code: string) => `C:\\Users\\Player\\AppData\\Roaming\\XXMI Launcher
 
 export const demoDb = {
   games: [
-    game({ id: "gi", name: "Genshin Impact", short: "Genshin", importer: "GIMI", gamebananaId: 8552, gbCharacterCategory: 18140, accent: "#d3bc8e",
+    game({ id: "gi", name: "Genshin Impact", short: "Genshin", importer: "GIMI", gamebananaId: 8552, gbCharacterCategory: 18140, accent: "#d3bc8e", theme: "gi",
       installed: true, gameDir: "C:\\Program Files\\HoYoPlay\\games\\Genshin Impact Game", importerDir: xx("GIMI"), modsDir: `${xx("GIMI")}\\Mods`, viaXxmi: true,
       importerVersion: "8.7.8", importerLatest: "8.8.1", shown: true }),
-    game({ id: "hsr", name: "Honkai: Star Rail", short: "Star Rail", importer: "SRMI", gamebananaId: 18366, gbCharacterCategory: 22832, accent: "#a596f5" }),
+    game({ id: "hsr", name: "Honkai: Star Rail", short: "Star Rail", importer: "SRMI", gamebananaId: 18366, gbCharacterCategory: 22832, accent: "#a596f5", theme: "hsr" }),
     game({ id: "zzz", name: "Zenless Zone Zero", short: "ZZZ", importer: "ZZMI", gamebananaId: 19567, gbCharacterCategory: 30305, accent: "#ff7a1c", theme: "zzz",
       installed: true, gameDir: "C:\\Program Files\\HoYoPlay\\games\\ZenlessZoneZero Game", importerDir: xx("ZZMI"), modsDir: `${xx("ZZMI")}\\Mods`, viaXxmi: true,
       importerVersion: "1.5.0", importerLatest: "1.5.0", shown: true }),
-    game({ id: "ww", name: "Wuthering Waves", short: "WuWa", importer: "WWMI", gamebananaId: 20357, gbCharacterCategory: 29524, accent: "#e9d58a",
+    game({ id: "ww", name: "Wuthering Waves", short: "WuWa", importer: "WWMI", gamebananaId: 20357, gbCharacterCategory: 29524, accent: "#e9d58a", theme: "ww",
       installed: true, gameDir: "C:\\Program Files\\Wuthering Waves\\Wuthering Waves Game", importerDir: xx("WWMI"), modsDir: `${xx("WWMI")}\\Mods`, viaXxmi: true,
       importerVersion: "0.9.8", importerLatest: "0.9.8", shown: true }),
     game({ id: "hi3", name: "Honkai Impact 3rd", short: "HI3", importer: "HIMI", gamebananaId: 10349, gbCharacterCategory: 23620, accent: "#59c3f5" }),
-    game({ id: "ef", name: "Arknights: Endfield", short: "Endfield", importer: "EFMI", gamebananaId: 21842, gbCharacterCategory: 42770, accent: "#f2e33a",
+    game({ id: "ef", name: "Arknights: Endfield", short: "Endfield", importer: "EFMI", gamebananaId: 21842, gbCharacterCategory: 42770, accent: "#f2e33a", theme: "ef",
       installed: true, gameDir: "C:\\Program Files\\GRYPHLINK\\games\\EndField Game", importerDir: xx("EFMI"), modsDir: `${xx("EFMI")}\\Mods`, viaXxmi: true,
       importerVersion: "1.2.3", importerLatest: "1.2.3", shown: true }),
     game({ id: "pgr", name: "Punishing: Gray Raven", short: "PGR", importer: "3DMigoto", gamebananaId: 19942, gbCharacterCategory: 35542, accent: "#e8433d" }),

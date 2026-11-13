@@ -60,22 +60,22 @@ pub struct GameDef {
 
 pub static GAMES: &[GameDef] = &[
     GameDef { id: "gi", name: "Genshin Impact", short: "Genshin", importer: "GIMI", xxmi: true, gamebanana_id: 8552, gb_character_category: Some(18140),
-        accent: "#d3bc8e", theme: "default", exe_names: &["GenshinImpact.exe", "YuanShen.exe"], process_names: &["GenshinImpact.exe", "YuanShen.exe"],
+        accent: "#d3bc8e", theme: "gi", exe_names: &["GenshinImpact.exe", "YuanShen.exe"], process_names: &["GenshinImpact.exe", "YuanShen.exe"],
         folder_names: &["Genshin Impact Game"], folder_children: &["GenshinImpact_Data", "YuanShen_Data"], steam_app: None },
     GameDef { id: "hsr", name: "Honkai: Star Rail", short: "Star Rail", importer: "SRMI", xxmi: true, gamebanana_id: 18366, gb_character_category: Some(22832),
-        accent: "#a596f5", theme: "default", exe_names: &["StarRail.exe"], process_names: &["StarRail.exe"],
+        accent: "#a596f5", theme: "hsr", exe_names: &["StarRail.exe"], process_names: &["StarRail.exe"],
         folder_names: &["Star Rail Games"], folder_children: &["StarRail_Data"], steam_app: None },
     GameDef { id: "zzz", name: "Zenless Zone Zero", short: "ZZZ", importer: "ZZMI", xxmi: true, gamebanana_id: 19567, gb_character_category: Some(30305),
         accent: "#ff7a1c", theme: "zzz", exe_names: &["ZenlessZoneZero.exe", "ZenlessZoneZeroBeta.exe"], process_names: &["ZenlessZoneZero.exe", "ZenlessZoneZeroBeta.exe"],
         folder_names: &["ZenlessZoneZero Game"], folder_children: &["ZenlessZoneZero_Data"], steam_app: Some(4162040) },
     GameDef { id: "ww", name: "Wuthering Waves", short: "WuWa", importer: "WWMI", xxmi: true, gamebanana_id: 20357, gb_character_category: Some(29524),
-        accent: "#e9d58a", theme: "default", exe_names: &["Wuthering Waves.exe"], process_names: &["Client-Win64-Shipping.exe"],
+        accent: "#e9d58a", theme: "ww", exe_names: &["Wuthering Waves.exe"], process_names: &["Client-Win64-Shipping.exe"],
         folder_names: &["Wuthering Waves Game"], folder_children: &["Client", "Engine"], steam_app: Some(3513350) },
     GameDef { id: "hi3", name: "Honkai Impact 3rd", short: "HI3", importer: "HIMI", xxmi: true, gamebanana_id: 10349, gb_character_category: Some(23620),
         accent: "#59c3f5", theme: "default", exe_names: &["BH3.exe"], process_names: &["BH3.exe"],
         folder_names: &["Honkai Impact 3rd game"], folder_children: &["BH3_Data"], steam_app: Some(1671200) },
     GameDef { id: "ef", name: "Arknights: Endfield", short: "Endfield", importer: "EFMI", xxmi: true, gamebanana_id: 21842, gb_character_category: Some(42770),
-        accent: "#f2e33a", theme: "default", exe_names: &["Endfield.exe"], process_names: &["Endfield.exe"],
+        accent: "#f2e33a", theme: "ef", exe_names: &["Endfield.exe"], process_names: &["Endfield.exe"],
         folder_names: &["EndField Game"], folder_children: &["Endfield_Data"], steam_app: Some(4732690) },
     // community 3DMigoto loaders, not in XXMI: the user points at the loader's folder (it holds d3dx.ini and Mods).
     // Exe names marked TODO in docs/spec.md are best guesses; SYSTEM confirms or leaves them for the user to set.
