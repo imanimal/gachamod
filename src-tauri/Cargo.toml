@@ -1,0 +1,24 @@
+[package]
+name = "gachamod"
+description = "gachamod, a mod manager for 3DMigoto model importer games"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "gachamod_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gacha-core = { path = "../crates/gacha-core" }
+tauri = { version = "2", features = ["image-png", "protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-dialog = "2"
+url = "2"
+reqwest = { version = "0.12", default-features = false }

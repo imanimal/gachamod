@@ -1,0 +1,72 @@
+/* Profiles screen, editor and the sidebar switch: layout only. Owner: LIBRARY area.
+   --p-color is the profile's own colour (user data, set inline); everything else comes from theme tokens. */
+
+/* the ten preset colours a profile can pick (data, read by ProfileEditor through getComputedStyle) */
+.profile-swatches {
+  --swatch-1: #8b5cf6; --swatch-2: #3b82f6; --swatch-3: #06b6d4; --swatch-4: #10b981; --swatch-5: #84cc16;
+  --swatch-6: #eab308; --swatch-7: #f97316; --swatch-8: #ef4444; --swatch-9: #ec4899; --swatch-10: #64748b;
+}
+
+/* cards */
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .7rem; }
+.profile-card-skel { height: 15rem; border-radius: var(--radius); }
+.profile-card { display: flex; flex-direction: column; }
+.profile-card-main { display: flex; flex-direction: column; text-align: left; color: inherit; flex: 1; }
+.profile-card-main:disabled { cursor: progress; }
+.profile-card.is-active .profile-card-main { cursor: default; }
+.profile-card-banner { height: 8.5rem; width: 100%; }
+.profile-card-stripe, .profile-editor-stripe { display: block; height: .3rem; background: var(--p-color, var(--line-2)); }
+.profile-card-head { display: flex; align-items: center; gap: .7rem; padding: 0 .9rem; margin-top: -1.4rem; position: relative; }
+.profile-card-head .profile-icon { box-shadow: 0 0 0 3px var(--surface); background: var(--surface-2); }
+.profile-card-t { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-top: 1.4rem; }
+.profile-card-head .badge { margin-top: 1.4rem; }
+.profile-card-name { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-card-sub { color: var(--text-3); font-size: .85em; }
+.profile-card-desc { padding: .5rem .9rem 0; color: var(--text-2); font-size: .92em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.profile-card-a { display: flex; align-items: center; gap: .3rem; padding: .7rem .9rem .8rem; }
+
+.profile-icon.is-emoji { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+
+/* editor */
+.profile-editor-top { position: relative; margin-bottom: 2.2rem; }
+.profile-editor-banner { height: 8rem; width: 100%; border-radius: var(--radius) var(--radius) 0 0; }
+.profile-editor-top .profile-icon { position: absolute; left: 1rem; bottom: -1.8rem; box-shadow: 0 0 0 3px var(--surface); background: var(--surface-2); }
+.profile-editor-fields { display: flex; flex-direction: column; gap: .8rem; }
+.profile-editor-sec { display: flex; flex-direction: column; gap: .6rem; margin-top: 1.2rem; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: .3rem; }
+.emoji-btn { height: 2.6rem; border-radius: var(--radius-sm); font-size: 1.35rem; background: var(--surface-2); }
+.emoji-btn:first-child { font-size: .9rem; color: var(--text-3); }
+.emoji-btn.on, .portrait-btn.on, .banner-btn.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.portrait-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr)); gap: .4rem; max-height: 14rem; overflow: auto; }
+.portrait-btn { aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: var(--surface-2); padding: .15rem; }
+.portrait-btn img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.profile-swatches { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+.swatch { width: 2rem; height: 2rem; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line-2); }
+.swatch[aria-checked="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatch-1 { background: var(--swatch-1); } .swatch-2 { background: var(--swatch-2); } .swatch-3 { background: var(--swatch-3); }
+.swatch-4 { background: var(--swatch-4); } .swatch-5 { background: var(--swatch-5); } .swatch-6 { background: var(--swatch-6); }
+.swatch-7 { background: var(--swatch-7); } .swatch-8 { background: var(--swatch-8); } .swatch-9 { background: var(--swatch-9); }
+.swatch-10 { background: var(--swatch-10); }
+.swatch-custom { position: relative; overflow: hidden; cursor: pointer; background: var(--surface-2); }
+.swatch-custom input { position: absolute; inset: -.5rem; width: 3rem; height: 3rem; border: 0; padding: 0; cursor: pointer; }
+.banner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr)); gap: .45rem; max-height: 15rem; overflow: auto; }
+.banner-btn { border-radius: var(--radius-sm); overflow: hidden; }
+.banner-btn-img { aspect-ratio: 16 / 9; width: 100%; }
+.banner-link { display: flex; gap: .5rem; align-items: flex-end; }
+.banner-link .field { flex: 1; }
+.banner-clear { align-self: flex-start; }
+
+/* sidebar switch (the sidebar is about 13rem wide) */
+.pswitch { padding: 0 .1rem; }
+.pswitch-btn { display: flex; align-items: center; gap: .55rem; width: 100%; min-width: 0; height: 2.6rem; padding: 0 .6rem 0 .4rem; border-radius: var(--radius-sm);
+  background: var(--surface-2); box-shadow: inset .2rem 0 0 var(--p-color, transparent), inset 0 0 0 1px var(--line); text-align: left; }
+.pswitch-btn:hover, .pswitch-btn.on { box-shadow: inset .2rem 0 0 var(--p-color, transparent), inset 0 0 0 1px var(--line-2); }
+.pswitch-ph { width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--surface); flex: none; }
+.pswitch-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pswitch-chev { color: var(--text-3); transform: rotate(90deg); }
+.pswitch-btn .spin { width: 1rem; height: 1rem; }
+.pswitch-menu { max-height: 22rem; overflow: auto; }
+.pswitch-item { display: flex; align-items: center; gap: .5rem; }
+.pswitch-dot { width: .5rem; height: .5rem; border-radius: 50%; flex: none; background: var(--p-color, var(--line-2)); }
+.pswitch-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pswitch-check { color: var(--accent); }

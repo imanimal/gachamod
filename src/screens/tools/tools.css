@@ -1,0 +1,26 @@
+/* Tools screen layout. Colours are theme tokens only. Owner: SYSTEM area. */
+.tools .panel { scroll-margin-top: 1rem; }
+.tools-ext { scroll-margin-top: 1rem; }
+.tools-ext:empty { display: none; }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem 1.2rem; }
+.tools-hooks { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem 1.2rem; margin: 1.2rem 0; }
+.tools-hook { display: flex; flex-direction: column; gap: .5rem; }
+.tools-extras { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .8rem 1.2rem; margin-bottom: 1.2rem; }
+.tools-extras .sub-h { grid-column: 1 / -1; font-size: .95rem; }
+.tools-other { margin-bottom: 1.2rem; }
+.tools-other summary { cursor: pointer; color: var(--text-2); margin-bottom: .6rem; }
+.tools-other > :not(summary) { margin-bottom: .6rem; }
+.tools-switches { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: 1rem 1.2rem; }
+.tools-loglevel { max-width: 16rem; margin-top: 1.2rem; }
+.tools-saved { font-size: .85em; color: var(--ok); opacity: 0; transition: opacity var(--dur) var(--ease); }
+.tools-saved.show { opacity: 1; }
+.tools-blocked { display: flex; align-items: center; gap: .8rem; padding: .6rem .8rem; margin-bottom: 1rem; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--text); }
+.tools-blocked span { flex: 1; }
+.tools-open { margin-bottom: 1rem; }
+.tools-dev { display: flex; flex-direction: column; }
+.tools-dev-row { display: flex; align-items: center; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid var(--line); }
+.tools-dev-row > span { flex: 1; display: flex; flex-direction: column; }
+.tools-log { margin-top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+.tools-log-text { margin: 0; max-height: 20rem; overflow: auto; padding: .8rem; border-radius: var(--radius-sm); background: var(--bg-2);
+  border: 1px solid var(--line); font-size: .82em; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }

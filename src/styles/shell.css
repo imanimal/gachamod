@@ -1,0 +1,130 @@
+/* shell.css: the window layout (App.tsx): title bar, game rail, sidebar, view, drop zone, in the Default look.
+   themes/zzz.css restyles the same classes for New Eridu. Owner: THEME area. */
+.app {
+  height: 100vh; display: grid; grid-template-columns: 72px 236px minmax(0, 1fr); grid-template-rows: 40px minmax(0, 1fr);
+  grid-template-areas: "title title title" "rail side view"; background: var(--bg); position: relative; overflow: clip; /* clip, not hidden: focus and scrollIntoView must never scroll the window frame */
+}
+
+/* title bar: the window's drag area (decorations are off) */
+.titlebar { grid-area: title; position: relative; display: flex; align-items: center; gap: .5rem; padding-left: 1.05rem; background: var(--bg-2); box-shadow: inset 0 -1px 0 var(--line); }
+.brand { display: flex; align-items: center; gap: .55rem; font-family: var(--font-display); font-weight: 800; letter-spacing: -.01em; font-size: .98rem; }
+.brand-mark { width: 20px; height: 20px; flex: none; background: center / contain no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect x='8' y='8' width='240' height='240' rx='64' fill='%2316141f'/%3E%3Cpath d='M50 150A78 78 0 0 0 206 150Z' fill='%23f4f2ff'/%3E%3Cpath d='M50 136A78 78 0 0 1 206 136Z' fill='%238b7cff' transform='rotate(-16 50 136)'/%3E%3C/svg%3E"); }
+.crumb { display: flex; align-items: center; gap: .5rem; margin-left: 1.3rem; color: var(--text-3); font-size: .88em; font-weight: 600; min-width: 0; white-space: nowrap; }
+.crumb-game::after { content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 0 .1em .6rem; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); opacity: .6; }
+.crumb-view { color: var(--text); }
+.sp { flex: 1; align-self: stretch; }
+.titlebar > .ibtn { color: var(--text-3); }
+.winkeys { display: flex; align-self: stretch; margin-left: .3rem; }
+.wk { width: 46px; display: grid; place-items: center; color: var(--text-2); transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.wk .i { width: 15px; height: 15px; }
+.wk:hover { background: var(--hover); color: var(--text); }
+.wk-x:hover { background: #e81123; color: #fff; }
+
+/* game rail */
+.rail { grid-area: rail; display: flex; flex-direction: column; justify-content: space-between; gap: .75rem; padding: .85rem 0; background: var(--bg-2); box-shadow: inset -1px 0 0 var(--line); overflow: hidden auto; scrollbar-width: none; }
+.rail-games { display: flex; flex-direction: column; align-items: center; gap: .55rem; }
+.rail-g { position: relative; display: block; border-radius: 16px; padding: 3px; transition: transform var(--dur) var(--ease-spring); }
+.rail-g::before { content: ""; position: absolute; left: -11px; top: 50%; width: 4px; height: 0; border-radius: 0 4px 4px 0; background: var(--g-accent, var(--accent)); transform: translateY(-50%); transition: height var(--dur) var(--ease-spring); }
+.rail-g:hover::before { height: 16px; }
+.rail-g.on::before { height: 34px; }
+.rail-g:hover { transform: translateY(-1px); }
+.rail-g:active { transform: scale(.95); }
+.rail-g .gbadge { transition: border-radius var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.rail-g:hover .gbadge { border-radius: 16px; }
+.rail-g.on .gbadge { border-radius: 16px; box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--g-accent, var(--accent)); }
+.rail-g.running::after { content: ""; position: absolute; right: 0; bottom: 0; width: 13px; height: 13px; border-radius: 50%; background: var(--ok); border: 2.5px solid var(--bg-2); animation: runDot 2s ease-in-out infinite; }
+.rail-add, .rail-k { width: 44px; height: 44px; margin: 0 auto; display: grid; place-items: center; border-radius: 13px; color: var(--text-3); transition: color var(--dur) var(--ease), background-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.rail-add { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.rail-add:hover { color: var(--accent-ink); box-shadow: inset 0 0 0 1.5px var(--accent); background: var(--accent-soft); }
+.rail-k:hover, .rail-k.on { color: var(--text); background: var(--surface-2); }
+.rail-k.on { color: var(--accent-ink); }
+.rail-foot { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+
+/* game badge (ui/GameBadge.tsx): GameBanana's icon, or the short name on the game's colour */
+.gbadge { position: relative; display: grid; place-items: center; flex: none; overflow: hidden; border-radius: 13px; line-height: 1;
+  background: linear-gradient(145deg, color-mix(in srgb, #fff 22%, var(--g-accent)), var(--g-accent) 55%, color-mix(in srgb, #000 22%, var(--g-accent)));
+  color: var(--g-on, #000); font-family: var(--font-display); font-weight: 800; letter-spacing: -.02em; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.gbadge img { width: 100%; height: 100%; object-fit: cover; }
+.gbadge.has-img { background: var(--img-bg); }
+.gbadge-t { font-size: calc(var(--gb-size, 44px) * .36); }
+.gbadge[data-len="3"] .gbadge-t { font-size: calc(var(--gb-size, 44px) * .31); }
+.gbadge[data-len="4"] .gbadge-t { font-size: calc(var(--gb-size, 44px) * .26); }
+
+/* sidebar */
+.side { grid-area: side; display: flex; flex-direction: column; gap: .8rem; padding: .9rem .75rem .85rem; overflow: hidden auto; scrollbar-width: thin;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, var(--bg)), var(--bg) 18rem); box-shadow: inset -1px 0 0 var(--line); }
+.side-nav { display: flex; flex-direction: column; gap: 2px; }
+.nv { position: relative; display: flex; align-items: center; gap: .75rem; height: 2.45rem; padding: 0 .75rem; border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; text-align: left;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.nv .i { color: var(--text-3); transition: color var(--dur-fast) var(--ease); }
+.nv:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.nv:hover:not(:disabled) .i { color: var(--text-2); }
+.nv.on { background: var(--accent-soft); color: var(--text); }
+.nv.on .i { color: var(--accent-ink); }
+.nv::before { content: ""; position: absolute; left: 0; top: 50%; width: 3px; height: 0; border-radius: 0 3px 3px 0; background: var(--accent); transform: translateY(-50%); transition: height var(--dur) var(--ease-spring); }
+.nv.on::before { height: 1.2rem; }
+.nv:disabled { opacity: .4; }
+.nv-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-b { min-width: 1.35rem; height: 1.35rem; padding: 0 .38rem; display: grid; place-items: center; border-radius: 99px; font-size: .74em; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--accent); color: var(--on-accent); }
+.nv-b.t-bad { background: var(--bad); color: var(--on-bad); }
+.nv-b.t-warn { background: var(--warn); color: #000; }
+.nv-b.t-ok { background: var(--ok); color: #000; }
+.nv-b.t-run { position: relative; width: .6rem; min-width: 0; height: .6rem; padding: 0; margin-right: .35rem; background: var(--accent); animation: pulse 1.3s ease-in-out infinite; }
+.nv-b.t-run::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--accent); opacity: 0; animation: ping 1.3s var(--ease-out) infinite; }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: .5rem; }
+.player { display: flex; align-items: center; gap: .65rem; padding: .45rem; border-radius: var(--radius); min-width: 0; }
+.player-n { font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the Play button (screens/home/PlayButton.tsx): .play [.play-big .running .starting] holds button.play-btn (a primary lg
+   Button, or a secondary .play-setup one) and .play-more-w > .ibtn.play-more */
+.play { position: relative; display: flex; align-items: stretch; gap: 3px; }
+.play .play-btn { flex: 1; min-width: 0; }
+.play-more-w { display: flex; }
+.play-btn.btn { position: relative; height: 3.3rem; font-size: 1.12em; font-weight: 800; letter-spacing: .01em; border-radius: var(--radius); overflow: hidden; }
+.play-btn.btn .btn-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.play-btn.btn-primary { box-shadow: inset 0 1px 0 rgb(255 255 255 / .3), inset 0 -2px 0 rgb(0 0 0 / .15), 0 10px 28px -10px var(--accent), 0 2px 6px rgb(0 0 0 / .25); }
+.play-btn.btn-primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / .35) 45%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+.play-btn.btn-primary:hover:not(:disabled)::after { transform: translateX(120%); transition: transform 650ms var(--ease-out); }
+.play-btn.btn-primary > .i:first-child { width: 1.25em; height: 1.25em; fill: currentColor; stroke-width: 1.5; }
+.play-btn.btn:disabled { opacity: .6; }
+.play-btn.btn.busy { opacity: 1; }
+.play-btn.play-setup { box-shadow: inset 0 0 0 1px var(--line-2); }
+.play .play-more { height: auto; width: 2.6rem; border-radius: var(--radius-sm) var(--radius) var(--radius) var(--radius-sm); }
+.play:has(.play-more) .play-btn.btn { border-radius: var(--radius) var(--radius-sm) var(--radius-sm) var(--radius); }
+/* running: disabled, shows the time; keep it bright and give it a live dot */
+.play.running .play-btn:disabled { opacity: 1; color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, var(--surface-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 40%, transparent); }
+.play.running .play-btn > .i:first-child { fill: none; animation: pulse 1.6s var(--ease) infinite; }
+.play.running .play-btn.btn { padding-inline: .8rem; gap: .45rem; font-size: 1em; }
+.play.running .play-more { color: var(--text); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.play-big .play-btn.btn { height: 3.6rem; font-size: 1.2em; }
+
+/* the view */
+.view { grid-area: view; position: relative; overflow: hidden auto; scroll-behavior: smooth; animation: viewIn var(--dur-slow) var(--ease-out);
+  background: radial-gradient(70rem 24rem at 75% -10rem, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%) no-repeat local, var(--bg); }
+.page { padding: 1rem 1.2rem 2rem; display: flex; flex-direction: column; gap: .9rem; min-height: 100%; }
+.nogame { max-width: 32rem; margin: 18vh auto 0; padding: 0 1.5rem; display: flex; flex-direction: column; gap: 1rem; align-items: flex-start; }
+.nogame h1 { font-family: var(--font-display); font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; }
+.nogame p { color: var(--text-2); }
+
+/* drop zone */
+.dropzone { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--scrim); backdrop-filter: blur(4px); pointer-events: none; animation: fadeIn 140ms ease-out; }
+.dropzone-card { display: flex; flex-direction: column; align-items: center; gap: .55rem; max-width: 27rem; padding: 2.2rem 2rem; text-align: center; border: 2px dashed var(--accent); border-radius: var(--radius-lg);
+  background: var(--surface); box-shadow: var(--shadow-lg), 0 0 0 8px var(--accent-soft); animation: popIn var(--dur-slow) var(--ease-spring); }
+.dropzone-card .i { width: 2.6rem; height: 2.6rem; color: var(--accent-ink); animation: bob 1.2s ease-in-out infinite; }
+.dropzone-card strong { font-family: var(--font-display); font-size: 1.35rem; font-weight: 800; }
+.dropzone-card span { color: var(--text-2); }
+
+.keys-list { display: grid; grid-template-columns: auto 1fr; gap: .45rem 1rem; align-items: center; }
+.keys-list > div { display: contents; }
+.keys-list kbd { justify-self: start; }
+.sub-h { margin: 1.1rem 0 .55rem; font-size: .95rem; font-weight: 750; }
+
+@keyframes viewIn { from { opacity: 0; transform: translateY(6px); } }
+@keyframes pulse { 50% { opacity: .35; } }
+@keyframes ping { 0% { opacity: .7; transform: scale(.5); } 100% { opacity: 0; transform: scale(1.4); } }
+@keyframes runDot { 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 35%, transparent); } }
+@keyframes bob { 50% { transform: translateY(-4px); } }
+
+/* decoration (ui/Deco.tsx): off unless a theme turns it on */
+.backdrop, .side-deco, .glyphs { display: none; }

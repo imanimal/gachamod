@@ -1,0 +1,86 @@
+/* base.css: reset, the token names every theme sets, and text defaults. Owner: THEME area.
+   Screens use only these tokens (never raw colours), so every theme restyles them (docs/spec.md, "Themes").
+   Themes set them on [data-theme="<id>"] (and :root for the default), so any element can carry its own
+   data-theme and data-scheme and show that theme inside it (Settings' theme previews do this).
+
+   Tokens:
+   --bg, --bg-2            window background, a deeper layer (rail, wells)
+   --surface, --surface-2  panels and cards, raised or hovered surfaces
+   --surface-3             a third layer (a hovered row on --surface-2, a pressed key)
+   --raised                something lifted out of a well (the selected part of a Segmented)
+   --line, --line-2        hairlines, stronger borders
+   --text, --text-2, --text-3   primary, secondary, faint text
+   --accent, --on-accent   the one bright colour (current view, primary buttons), text on it
+   --accent-soft           accent at low alpha for selected backgrounds
+   --accent-ink            accent for text and icons drawn on surfaces (readable in light and dark)
+   --accent-2              a second highlight (New Eridu's yellow; the default theme's is a cooler tint)
+   --ok, --warn, --bad, --info   status colours
+   --on-bad                text on a --bad fill
+   --ring                  keyboard and controller focus ring
+   --hover                 neutral wash for hovered rows and ghost buttons
+   --radius, --radius-sm, --radius-lg   corner sizes
+   --radius-xs, --radius-pill   tiny corners (kbd, tags), capsules
+   --shadow, --shadow-lg   card and floating shadows
+   --scrim                 behind dialogs
+   --tex                   a decorative background layer for heroes and wells (none, or New Eridu's hatch);
+                           use as `background: var(--tex), var(--surface)`
+   --img-bg                behind images while they load
+   --font, --font-display, --font-mono
+   --font-num              numbers in stats and counters (tabular figures)
+   --fs                    base text size (lib/zoom.ts changes it)
+   --ease, --dur           motion
+   --ease-out, --ease-spring   a plain ease-out, an overshoot for things that pop in
+   --dur-fast, --dur-slow  short hover feedback, entering panels
+   --game-accent           the current game's brand colour (set by lib/theme.ts, with --game-on-accent for text on
+                           it and --game-accent-dk, a darker shade that reads on white) */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+html { --fs: 14px; font-size: var(--fs); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.45; overflow: hidden; user-select: none; }
+/* a nested theme (a preview) re-reads its own tokens */
+[data-theme] { font-family: var(--font); color: var(--text); }
+:is(input, textarea, select, button) { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+button:disabled { cursor: default; }
+img { display: block; max-width: 100%; }
+a { color: var(--accent-ink); text-underline-offset: 2px; }
+h1, h2, h3, h4, p { margin: 0; }
+code, kbd, pre { font-family: var(--font-mono); }
+::selection { background: var(--accent); color: var(--on-accent); }
+input, textarea, .selectable, .selectable * { user-select: text; }
+input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
+
+/* focus: a ring for keyboard and controller users only (lib/keys.ts and lib/gamepad.ts set html.kbd and html.pad) */
+:focus { outline: none; }
+:focus-visible, html.kbd :focus { outline: 2px solid var(--ring); outline-offset: 2px; }
+html.pad :focus { outline-width: 3px; outline-offset: 3px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--ring) 22%, transparent); }
+html.kbd :is(input, textarea, select):focus { outline-offset: 0; }
+
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 16%, transparent); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; min-height: 40px; }
+::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text) 30%, transparent); }
+::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+/* reduced motion: from Settings (lib/theme.ts sets data-motion) or the system. Loading indicators keep moving. */
+html:is([data-motion="reduced"], [data-motion="0"]) *, html:is([data-motion="reduced"], [data-motion="0"]) *::before, html:is([data-motion="reduced"], [data-motion="0"]) *::after {
+  animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 1ms !important; scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+html:is([data-motion="reduced"], [data-motion="0"]) :is(.spin, .progress.indet .progress-bar, .skel, .nv-b.t-run) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
+@media (prefers-reduced-motion: reduce) {
+  html :is(.spin, .progress.indet .progress-bar, .skel, .nv-b.t-run) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
+}
+
+.i { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--text-3); }
+.mono { font-family: var(--font-mono); }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.grow { flex: 1; }
+.row { display: flex; align-items: center; gap: .5rem; }
+.stack { display: flex; flex-direction: column; gap: .75rem; }
+.hint { color: var(--text-3); font-size: .86em; }

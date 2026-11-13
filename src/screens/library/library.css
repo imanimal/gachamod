@@ -1,0 +1,81 @@
+/* Mods screen layout. Owner: LIBRARY area. Colours come only from theme tokens; the theme styles the kit classes. */
+
+.library-search { min-width: 16rem; }
+.library-filters, .library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
+.library-filters .field { min-width: 11rem; }
+.library-chars { flex-wrap: nowrap; overflow-x: auto; padding: .2rem .15rem; scrollbar-width: none; }
+.library-chars .char-chip { flex: none; }
+
+.library-bulk { position: fixed; left: calc(50% + 9rem); bottom: 1.1rem; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.library-bulk-n { font-weight: 700; margin-right: .5rem; }
+
+/* the grid: kit .cards gives the columns */
+.mod-grid { --card-min: 11.2rem; }
+.mod-grid.is-loading { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.2rem, 1fr)); gap: .6rem; }
+.mod-card-skel { height: 12.5rem; border-radius: var(--radius); }
+.mod-grid.is-list { display: flex; flex-direction: column; gap: .35rem; }
+
+/* one mod */
+.mod-card { content-visibility: auto; contain-intrinsic-size: auto 12.5rem; }
+.mod-card-hit { display: flex; flex-direction: column; width: 100%; text-align: left; color: inherit; }
+.mod-card-hit:focus-visible { outline-offset: -2px; }
+.mod-card-img { aspect-ratio: 16 / 10; width: 100%; }
+.mod-card-body { display: flex; flex-direction: column; gap: .05rem; padding: .4rem 3.3rem .45rem .6rem; min-width: 0; }
+.mod-card-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-card-char, .mod-card-meta { color: var(--text-3); font-size: .86em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-card-badges { position: absolute; top: .45rem; left: .45rem; right: 2.4rem; display: flex; gap: .3rem; flex-wrap: wrap; pointer-events: none; }
+.mod-card-badges > * { pointer-events: auto; }
+.mod-card-update { cursor: pointer; }
+.mod-card-fav { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border-radius: 99px; background: var(--surface); color: var(--accent); }
+/* the switch sits at the bottom right of the text; the "..." key shows over the picture on hover or focus */
+.mod-card-foot { display: contents; }
+.mod-card-foot .toggle { position: absolute; right: .55rem; bottom: .6rem; }
+.mod-card-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; }
+.mod-card:hover .mod-card-more, .mod-card-more:focus-visible, .mod-card:focus-within .mod-card-more { opacity: 1; }
+.mod-card.is-off .mod-card-img { opacity: .55; filter: grayscale(.6); }
+.mod-card.is-off .mod-card-name { color: var(--text-2); }
+
+/* list rows */
+.mod-card.is-row { flex-direction: row; align-items: center; contain-intrinsic-size: auto 3.6rem; }
+.mod-card.is-row .mod-card-hit { flex-direction: row; align-items: center; gap: .8rem; flex: 1; min-width: 0; padding: .35rem; }
+.mod-card.is-row .mod-card-img { width: 4.6rem; aspect-ratio: 16 / 10; border-radius: var(--radius-sm); flex: none; }
+.mod-card.is-row .mod-card-body { padding: 0; flex: 1; }
+.mod-card.is-row .mod-card-badges { position: static; flex-wrap: nowrap; margin: 0 .5rem; }
+.mod-card.is-row .mod-card-foot { display: flex; align-items: center; gap: .4rem; flex: none; padding-right: .4rem; }
+.mod-card.is-row .mod-card-foot .toggle, .mod-card.is-row .mod-card-more { position: static; opacity: 1; }
+
+/* preview images everywhere in this area */
+.mod-img { position: relative; display: block; overflow: hidden; background: var(--bg-2); }
+.mod-img img { width: 100%; height: 100%; object-fit: cover; }
+.mod-img.is-blurred img { filter: blur(1.2rem); transform: scale(1.1); }
+.mod-img-none { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 2rem; }
+/* no picture: the character's portrait over a big faint name */
+.mod-img-stand { overflow: hidden; background: color-mix(in srgb, var(--accent) 9%, var(--bg-2)); }
+.mod-img .mod-img-portrait { position: relative; width: 46%; height: auto; aspect-ratio: 1; border-radius: 50%; object-fit: cover; }
+.mod-img-ghost { position: absolute; left: -.2rem; right: -.2rem; bottom: -.35rem; font-family: var(--font-display); font-size: 2.1rem; font-weight: 800; line-height: .9; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: var(--text); opacity: .09; }
+
+/* details drawer */
+.mod-drawer-hero { position: relative; margin: -.25rem 0 1rem; }
+.mod-drawer-img { aspect-ratio: 16 / 9; width: 100%; border-radius: var(--radius); }
+.mod-drawer-reveal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.mod-drawer-badges { position: absolute; left: .6rem; bottom: .6rem; display: flex; gap: .4rem; flex-wrap: wrap; }
+.mod-drawer-fields { display: flex; flex-direction: column; gap: .9rem; }
+.mod-drawer-char input { width: 100%; }
+.mod-drawer-taglist { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.mod-tag .i { width: .9em; height: .9em; }
+.mod-drawer-tagin { flex: 1; min-width: 8rem; height: 2rem; padding: 0 .6rem; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); }
+.mod-drawer-flags { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.mod-drawer-facts { display: flex; flex-direction: column; gap: .4rem; margin: 1.2rem 0; padding-top: 1rem; border-top: 1px solid var(--line); }
+.mod-drawer-facts .kv-v { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.mod-drawer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: .9em; }
+.link-btn { display: inline-flex; align-items: center; gap: .3rem; color: var(--accent); }
+.link-btn:hover { text-decoration: underline; }
+
+/* recently removed */
+.trash-hint { margin-bottom: .8rem; }
+.trash-loading { display: flex; justify-content: center; padding: 2rem; }
+.trash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.trash-item { display: flex; align-items: center; gap: .6rem; padding: .55rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); }
+.trash-item-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.trash-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trash-item .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

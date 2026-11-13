@@ -1,0 +1,111 @@
+// Shared shapes that cross from Rust (crates/gacha-core/src/model.rs and friends). camelCase, as serde sends them.
+// Change a shape only together with its Rust twin (docs/spec.md, "Shared contract").
+
+export interface ApiError { kind: string; message: string }
+export const errorText = (e: unknown): string =>
+  typeof e === "object" && e && "message" in e ? String((e as ApiError).message) : String(e);
+export const errorKind = (e: unknown): string =>
+  typeof e === "object" && e && "kind" in e ? String((e as ApiError).kind) : "unknown";
+
+export type GameId = string;
+
+export interface GameState {
+  id: GameId;
+  name: string;
+  short: string;
+  /** "GIMI", "SRMI", "ZZMI", "WWMI", "HIMI", "EFMI", or "3DMigoto" for community loaders. */
+  importer: string;
+  /** XXMI Launcher supports this game's importer. */
+  xxmi: boolean;
+  gamebananaId: number;
+  /** GameBanana category whose children are the characters. */
+  gbCharacterCategory: number | null;
+  accent: string;
+  theme: string;
+  installed: boolean;
+  gameDir: string | null;
+  importerDir: string | null;
+  modsDir: string | null;
+  viaXxmi: boolean;
+  importerVersion: string | null;
+  importerLatest: string | null;
+  shown: boolean;
+  running: boolean;
+  modCount: number;
+  enabledCount: number;
+}
+
+export interface ModSource {
+  site: "gamebanana" | string;
+  modId: number;
+  fileId: number | null;
+  url: string;
+  submitter: string | null;
+  fileName: string | null;
+  remoteUpdated: number | null;
+}
+
+export interface ModEntry {
+  id: string;
+  game: GameId;
+  name: string;
+  folder: string;
+  relPath: string;
+  path: string;
+  enabled: boolean;
+  character: string | null;
+  group: string | null;
+  source: ModSource | null;
+  version: string | null;
+  installedAt: number;
+  sizeBytes: number;
+  fileCount: number;
+  iniCount: number;
+  preview: string | null;
+  tags: string[];
+  notes: string | null;
+  favorite: boolean;
+  nsfw: boolean;
+  hasKeys: boolean;
+  conflicts: number;
+  updateAvailable: boolean;
+}
+
+export interface ModChange { changed: ModEntry[]; removed: string[]; notes: string[] }
+
+export interface Character {
+  name: string;
+  gbCategoryId: number | null;
+  icon: string | null;
+  modCount: number;
+  enabledCount: number;
+}
+
+export interface Profile {
+  id: number;
+  game: GameId;
+  name: string;
+  /** An emoji, or "char:<Character name>". */
+  icon: string | null;
+  color: string | null;
+  banner: string | null;
+  description: string | null;
+  active: boolean;
+  modCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProfilePatch { name?: string; icon?: string; color?: string; banner?: string; description?: string }
+
+/** Event names (model.rs, events). */
+export const EVENTS = {
+  libraryChanged: "library-changed",
+  queue: "queue",
+  variantsNeeded: "variants-needed",
+  gameState: "game-state",
+  deepLink: "deep-link",
+  openFile: "open-file",
+  toast: "toast",
+  packProgress: "pack-progress",
+} as const;

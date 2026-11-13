@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="default" data-scheme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>gachamod</title>
+    <script>
+      // Apply the last game's theme before first paint (lib/theme.ts does the same once the game list loads).
+      (function () {
+        var r = document.documentElement;
+        var g = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+        var game = g("gm.game") || "";
+        var pick = g("gm.theme." + game);
+        var theme = pick && pick !== "auto" ? pick : game === "zzz" ? "zzz" : "default";
+        var c = g("gm.scheme") || "dark";
+        var s = c === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : c;
+        if (theme === "zzz") s = "dark";
+        r.setAttribute("data-theme", theme);
+        r.setAttribute("data-scheme", s);
+        r.setAttribute("data-game", game);
+        r.setAttribute("data-accent", g("gm.accent." + theme) || "");
+        r.setAttribute("data-motion", g("gm.motion") === "0" ? "reduced" : "full");
+        try {
+          var p = JSON.parse(g("gm.paint") || "null");
+          if (p && p.game === game && p.vars) for (var k in p.vars) r.style.setProperty(k, p.vars[k]);
+        } catch (e) { /* no saved colours yet */ }
+      })();
+    </script>
+    <style>
+      /* first frame before the stylesheets load */
+      html { background: #0c0e13; }
+      html[data-scheme="light"] { background: #f3f4f7; }
+      html[data-theme="zzz"] { background: #000; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

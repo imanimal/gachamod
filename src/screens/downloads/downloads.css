@@ -1,0 +1,14 @@
+/* Downloads: the queue rows. Layout only; colours are theme tokens. */
+
+.dl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+.dl-item { display: flex; align-items: center; gap: .9rem; padding: .6rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); }
+.dl-thumb { flex: none; display: grid; place-items: center; width: 4.5rem; aspect-ratio: 16 / 10; border-radius: var(--radius-xs); overflow: hidden; background: var(--img-bg); color: var(--text-3); }
+.dl-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.dl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
+.dl-name { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.dl-t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-c { color: var(--accent-ink); font-size: .86em; white-space: nowrap; }
+.dl-line { font-family: var(--font-num); overflow-wrap: anywhere; }
+.dl-bad { color: var(--bad); }
+.dl-act { flex: none; display: flex; align-items: center; gap: .35rem; }
+.dl-item.is-done .dl-thumb, .dl-item.is-cancelled .dl-thumb { opacity: .75; }

@@ -1,0 +1,24 @@
+/* fonts.css: bundled fonts, latin subset, OFL licences beside the files in fonts/. Owner: THEME area.
+   Manrope: Default theme text. Rubik (with italics): New Eridu text. Anton: New Eridu condensed headings.
+   JetBrains Mono: code, hashes and logs in every theme. */
+@font-face { font-family: "Manrope"; font-weight: 400; font-display: swap; src: url("./fonts/manrope-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-weight: 500; font-display: swap; src: url("./fonts/manrope-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-weight: 600; font-display: swap; src: url("./fonts/manrope-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-weight: 700; font-display: swap; src: url("./fonts/manrope-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Manrope"; font-weight: 800; font-display: swap; src: url("./fonts/manrope-latin-800-normal.woff2") format("woff2"); }
+
+@font-face { font-family: "Rubik"; font-weight: 400; font-display: swap; src: url("./fonts/rubik-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-weight: 500; font-display: swap; src: url("./fonts/rubik-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-weight: 600; font-display: swap; src: url("./fonts/rubik-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-weight: 700; font-display: swap; src: url("./fonts/rubik-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-weight: 800; font-display: swap; src: url("./fonts/rubik-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-weight: 900; font-display: swap; src: url("./fonts/rubik-latin-900-normal.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-style: italic; font-weight: 600; font-display: swap; src: url("./fonts/rubik-latin-600-italic.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-style: italic; font-weight: 700; font-display: swap; src: url("./fonts/rubik-latin-700-italic.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-style: italic; font-weight: 800; font-display: swap; src: url("./fonts/rubik-latin-800-italic.woff2") format("woff2"); }
+@font-face { font-family: "Rubik"; font-style: italic; font-weight: 900; font-display: swap; src: url("./fonts/rubik-latin-900-italic.woff2") format("woff2"); }
+
+@font-face { font-family: "Anton"; font-weight: 400; font-display: swap; src: url("./fonts/anton-latin-400-normal.woff2") format("woff2"); }
+
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("./fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-display: swap; src: url("./fonts/jetbrains-mono-latin-700-normal.woff2") format("woff2"); }
