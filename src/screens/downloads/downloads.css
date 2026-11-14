@@ -12,3 +12,10 @@
 .dl-bad { color: var(--bad); }
 .dl-act { flex: none; display: flex; align-items: center; gap: .35rem; }
 .dl-item.is-done .dl-thumb, .dl-item.is-cancelled .dl-thumb { opacity: .75; }
+.dl-t-link { min-width: 0; text-align: left; }
+.dl-t-link:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+.dl-group + .dl-group { margin-top: .9rem; }
+.dl-group-h { margin: 0 0 .4rem; font-size: .86em; font-weight: 700; color: var(--text-2); }
+.dl-elsewhere { text-align: center; margin-top: .6rem; }
+.dl-more { color: var(--accent-ink); font-weight: 600; }
+.dl-more:hover { text-decoration: underline; }

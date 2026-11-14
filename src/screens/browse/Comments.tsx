@@ -1,8 +1,9 @@
 // A GameBanana mod's comments in the Browse drawer: loaded only once the section scrolls into view, 15 at a time,
-// replies on request. Reading only; replying happens on GameBanana. Owner: ONLINE area.
+// replies on request. Reading only; replying happens on GameBanana. Owner: BROWSE area.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { Avatar, Badge, Button, Skeleton, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
+import { CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { errorText, shell } from "../../lib/api";
 import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, type GbCommentPage } from "../../lib/gamebanana";
@@ -47,7 +48,7 @@ export function Comments({ modId, url, onLink }: { modId: number; url: string; o
   useEffect(() => {
     const el = ref.current;
     if (!el || seen) return;
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); } }, { rootMargin: "200px" });
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); } }, { rootMargin: "600px" });
     io.observe(el);
     return () => io.disconnect();
   }, [seen]);
@@ -90,8 +91,7 @@ function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: b
       <div className="gb-comment-main">
         <div className="gb-comment-h">
           {c.author
-            ? <button type="button" className="link-btn gb-comment-who" title={`${name} on GameBanana`}
-                onClick={() => void shell.openUrl(c.author!.url).catch((e) => toast(errorText(e), true))}>{name}</button>
+            ? <CreatorLink id={c.author.id} name={name} className="gb-comment-who" />
             : <strong>{name}</strong>}
           {c.labels.includes("Submitter") && <Badge tone="accent">Author</Badge>}
           {c.pinned && !reply && <Badge icon="pin">Pinned</Badge>}

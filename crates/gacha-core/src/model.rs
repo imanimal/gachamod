@@ -88,6 +88,10 @@ pub struct Sidecar {
     /// custom preview puts them back.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub preview_backups: Vec<String>,
+    /// Which folder of the downloaded archive this mod is, when the archive held several (the install's candidate
+    /// key, "" for the archive's root). A shared link list uses it to pick the same one again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
 }
 
 pub const SIDECAR_FILE: &str = ".gachamod.json";

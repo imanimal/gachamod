@@ -1,5 +1,7 @@
-// App-wide state: the games, the current game, the current view and its parameters. Tiny external stores used with
-// useSyncExternalStore, so any screen can read them without prop drilling. Owner: skeleton.
+// App-wide state: the games, the current game, the current page with back and forward, nav badges and events
+// between areas. Tiny external stores used with useSyncExternalStore, so any screen can read them without prop
+// drilling. Owner: skeleton.
+import type { AiTask } from "./ai";
 import { useSyncExternalStore } from "react";
 import { games as gamesApi, type GameId, type GameState } from "./api";
 
@@ -18,8 +20,11 @@ function store<T>(initial: T) {
 
 const gameList = store<GameState[]>([]);
 const LAST_GAME = "gm.game";
-const readLast = () => { try { return localStorage.getItem(LAST_GAME); } catch { return null; } };
-const current = store<GameId | null>(readLast());
+const ONLY_GAME = "gm.onlyGame";
+const readKey = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+/** One-game mode: the game the app opens on and the only one the everyday UI offers. */
+const only = store<GameId | null>(readKey(ONLY_GAME) as GameId | null);
+const current = store<GameId | null>((only.get() ?? readKey(LAST_GAME)) as GameId | null);
 
 export const useGames = () => useSyncExternalStore(gameList.sub, gameList.get);
 /** The shown games, in registry order. */
@@ -32,10 +37,52 @@ export function useGame(): GameState | null {
   return list.find((g) => g.id === id) ?? null;
 }
 export const currentGame = (): GameState | null => gameList.get().find((g) => g.id === current.get()) ?? null;
+export const allGames = (): GameState[] => gameList.get();
 
-export function setGame(id: GameId) {
+// ── one-game mode ──
+
+/** The game picked in one-game mode, while it is shown; null when the mode is off. */
+export function onlyGame(): GameState | null {
+  const id = only.get();
+  return (id && gameList.get().find((g) => g.id === id && g.shown)) || null;
+}
+export function useOnlyGame(): GameState | null {
+  const id = useSyncExternalStore(only.sub, only.get);
+  return useGames().find((g) => g.id === id && g.shown) ?? null;
+}
+/** Turn one-game mode on for a game (null turns it off). The other games stay set up and searchable. */
+export function setOnlyGame(id: GameId | null) {
+  only.set(id);
+  try { if (id) localStorage.setItem(ONLY_GAME, id); else localStorage.removeItem(ONLY_GAME); } catch { /* storage unavailable */ }
+}
+/** The games the everyday UI offers (the sidebar's switcher, the game menus, Ctrl+Tab): every shown game, or in
+ *  one-game mode that game plus the one open now when you went to another. */
+function daily(list: GameState[], onlyId: GameId | null, cur: GameId | null): GameState[] {
+  const shown = list.filter((g) => g.shown);
+  if (!onlyId || !shown.some((g) => g.id === onlyId)) return shown;
+  return shown.filter((g) => g.id === onlyId || g.id === cur);
+}
+export const dailyGames = () => daily(gameList.get(), only.get(), current.get());
+export function useDailyGames(): GameState[] {
+  const list = useGames();
+  const onlyId = useSyncExternalStore(only.sub, only.get);
+  const cur = useGameId();
+  return daily(list, onlyId, cur);
+}
+
+function writeGame(id: GameId) {
   current.set(id);
   try { localStorage.setItem(LAST_GAME, id); } catch { /* storage unavailable */ }
+}
+
+/** Switch games. It is a step in the page history, so Back returns to the game you came from. The view stays; its
+ *  game-specific details (a character, a mod) are dropped. */
+export function setGame(id: GameId) {
+  if (current.get() === id) return;
+  const r = route.get();
+  const keep: Route = { view: r.view };
+  if (r.view === "settings" || r.view === "tools") { if (r.section) keep.section = r.section; }
+  push({ game: id, route: keep });
 }
 
 /** Replace the game list (after detect, a path change ...). Picks a current game when none is valid. */
@@ -43,8 +90,12 @@ export function setGames(list: GameState[]) {
   gameList.set(list);
   const id = current.get();
   if (!id || !list.some((g) => g.id === id && g.shown)) {
-    const first = list.find((g) => g.shown) ?? list[0];
-    if (first) setGame(first.id);
+    const first = list.find((g) => g.id === only.get() && g.shown) ?? list.find((g) => g.shown) ?? list[0];
+    if (first) {
+      writeGame(first.id);
+      const e = entries[at];
+      if (e) e.game = first.id;
+    }
   }
 }
 
@@ -59,42 +110,154 @@ export function patchGame(id: GameId, patch: Partial<GameState>) {
   gameList.set(gameList.get().map((g) => (g.id === id ? { ...g, ...patch } : g)));
 }
 
-// ── navigation ──
+// ── pages, with back and forward ──
 
-export type View = "home" | "library" | "characters" | "browse" | "downloads" | "profiles" | "tools" | "settings";
-export const VIEWS: View[] = ["home", "library", "characters", "browse", "downloads", "profiles", "tools", "settings"];
+export type View = "home" | "library" | "characters" | "browse" | "downloads" | "profiles" | "tools" | "settings" | "extensions";
+/** The views in the sidebar (and LB/RB order). Extensions is reached from Settings and search, so it isn't here. */
+export const VIEWS: View[] = ["home", "browse", "characters", "library", "profiles", "downloads", "tools", "settings"];
 
-/** Where to go. Optional fields are read by the target screen (docs/spec.md, "Navigation"). */
+/** A page. Optional fields are read by the target screen (docs/spec.md, "Navigation"). Every field is part of the
+ *  page, so Back and Forward bring the same thing back (an open character, an open mod, a creator's page). */
 export interface Route {
   view: View;
-  /** library: open this mod's drawer. browse: open this GameBanana mod's page (a number). */
+  /** library: this mod's details (a library id). browse: this GameBanana mod's page (a number). */
   modId?: string | number;
-  /** library and browse: filter to this character. */
+  /** characters: this character's page. library and browse: only this character. */
   character?: string;
-  /** browse: start with this search text. */
+  /** library and browse: start with this search text. */
   search?: string;
   /** settings and tools: scroll to the section with this id. */
   section?: string;
+  /** browse: this GameBanana member's page (creator id). */
+  user?: number;
+  /** profiles: this profile's page, with its mods. */
+  profile?: number;
+  /** A tab on the page ("archive" in Mods, "online" or "ext:<extension id>" on a character's page, "all" in
+   *  Downloads, "installed" in Extensions). */
+  tab?: string;
+  /** extensions: this extension's own page. */
+  ext?: string;
 }
 
+interface Entry { game: GameId | null; route: Route; scroll?: number }
+
 const LAST_VIEW = "gm.view";
-const route = store<Route>((() => {
-  try { const v = localStorage.getItem(LAST_VIEW) as View | null; if (v && VIEWS.includes(v)) return { view: v }; } catch { /* storage unavailable */ }
+const firstRoute = (): Route => {
+  try { const v = localStorage.getItem(LAST_VIEW) as View | null; if (v && (VIEWS.includes(v) || v === "extensions")) return { view: v }; } catch { /* storage unavailable */ }
   return { view: "home" };
-})());
+};
+const entries: Entry[] = [{ game: current.get(), route: firstRoute() }];
+let at = 0;
+const route = store<Route>(entries[0]!.route);
+const nav = store({ back: false, forward: false, n: 0 });
+/** Set while a page comes back from history, so the shell restores its scroll position. */
+let restoring: number | undefined;
+
+const sameRoute = (a: Route, b: Route) => {
+  const ka = Object.keys(a).filter((k) => a[k as keyof Route] !== undefined).sort();
+  const kb = Object.keys(b).filter((k) => b[k as keyof Route] !== undefined).sort();
+  return ka.length === kb.length && ka.every((k, i) => k === kb[i] && a[k as keyof Route] === b[k as keyof Route]);
+};
+const clean = (r: Route): Route => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined && v !== "")) as unknown as Route;
+
+function show() {
+  const e = entries[at]!;
+  if (e.game && e.game !== current.get()) writeGame(e.game);
+  route.set(e.route);
+  nav.set({ back: at > 0, forward: at < entries.length - 1, n: nav.get().n + 1 });
+  try { localStorage.setItem(LAST_VIEW, e.route.view); } catch { /* storage unavailable */ }
+}
+
+function push(e: Entry) {
+  const cur = entries[at];
+  if (cur && cur.game === e.game && sameRoute(cur.route, e.route)) return;
+  if (cur) cur.scroll = scrollOfView();
+  entries.splice(at + 1);
+  entries.push(e);
+  if (entries.length > 120) entries.shift();
+  at = entries.length - 1;
+  restoring = undefined;
+  show();
+}
+
+const scrollOfView = () => (document.querySelector(".app .view") as HTMLElement | null)?.scrollTop ?? 0;
 
 export const useRoute = () => useSyncExternalStore(route.sub, route.get);
+export const currentRoute = () => route.get();
+/** Whether Back and Forward have somewhere to go. */
+export const useNav = () => useSyncExternalStore(nav.sub, nav.get);
+
+/** Go to a page (a new step in the history). */
 export function go(to: Route | View) {
-  const r = typeof to === "string" ? { view: to } : to;
+  const r = clean(typeof to === "string" ? { view: to } : to);
+  push({ game: current.get(), route: r });
+}
+
+/** Change the current page without a new history step (a filter, a closed drawer). */
+export function replaceRoute(to: Route) {
+  const r = clean(to);
+  const e = entries[at];
+  if (e && sameRoute(e.route, r)) return;
+  if (e) e.route = r; else entries.push({ game: current.get(), route: r });
   route.set(r);
   try { localStorage.setItem(LAST_VIEW, r.view); } catch { /* storage unavailable */ }
 }
-/** Clear one-shot route params once a screen used them (so going back to the view doesn't reopen the drawer). */
+
+/** Set some fields of the current page in place (`undefined` clears one). */
+export function patchRoute(p: Partial<Route>) { replaceRoute({ ...route.get(), ...p }); }
+
+export function back() {
+  if (at <= 0) return false;
+  entries[at]!.scroll = scrollOfView();
+  at--;
+  restoring = entries[at]!.scroll;
+  show();
+  return true;
+}
+export function forward() {
+  if (at >= entries.length - 1) return false;
+  entries[at]!.scroll = scrollOfView();
+  at++;
+  restoring = entries[at]!.scroll;
+  show();
+  return true;
+}
+
+/** Leave a part of the page (close a drawer, leave a character's page): Back when the step before is the same page
+ *  without it, otherwise drop those fields in place. Keeps the history free of dead ends. */
+export function closeRoute(keys: Array<keyof Route>) {
+  const cur = route.get();
+  const without = { ...cur };
+  for (const k of keys) delete without[k];
+  const prev = entries[at - 1];
+  if (prev && prev.game === current.get() && sameRoute(prev.route, clean(without))) { back(); return; }
+  replaceRoute(without);
+}
+
+/** Clear one-shot fields once a screen used them (Settings' section scroll). No history step. */
 export function consumeRoute(keys: Array<keyof Route>) {
   const r = { ...route.get() };
   let changed = false;
   for (const k of keys) if (k !== "view" && r[k] !== undefined) { delete r[k]; changed = true; }
-  if (changed) route.set(r);
+  if (changed) replaceRoute(r);
+}
+
+/** The scroll position to put back after Back or Forward, once (the shell asks after the page renders). */
+export function takeRestoreScroll(): number | undefined { const s = restoring; restoring = undefined; return s; }
+
+/** The last few pages, newest first, for the history menu on the Back key. */
+export function recentPages(dir: -1 | 1, n = 10): Array<{ index: number; game: GameId | null; route: Route }> {
+  const out: Array<{ index: number; game: GameId | null; route: Route }> = [];
+  for (let i = at + dir; i >= 0 && i < entries.length && out.length < n; i += dir) out.push({ index: i, game: entries[i]!.game, route: entries[i]!.route });
+  return out;
+}
+/** Jump to a page from recentPages. */
+export function goIndex(index: number) {
+  if (index < 0 || index >= entries.length || index === at) return;
+  entries[at]!.scroll = scrollOfView();
+  at = index;
+  restoring = entries[at]!.scroll;
+  show();
 }
 
 // ── nav badges: each area sets its own count ("library": updates, "downloads": active, "tools": problems) ──
@@ -114,8 +277,14 @@ export type AppEvent =
   | { type: "install-paths"; paths: string[] }
   | { type: "export-mods"; game: GameId; modIds: string[] }
   | { type: "export-profile"; game: GameId; profileId: number }
+  /** Share a game's whole library with its profiles ("game"), or every game's ("all"). */
+  | { type: "export-pack"; game: GameId; scope: "game" | "all" }
   | { type: "open-gb-link"; url: string }
-  | { type: "library-refresh"; game: GameId };
+  | { type: "library-refresh"; game: GameId }
+  /** Open the command palette, optionally with text in it. */
+  | { type: "palette"; text?: string }
+  /** Open the AI helper (lib/ai.ts askAi). */
+  | { type: "ai"; task: AiTask };
 
 export function emitApp(e: AppEvent) { window.dispatchEvent(new CustomEvent("gm-app", { detail: e })); }
 export function onApp(cb: (e: AppEvent) => void): () => void {

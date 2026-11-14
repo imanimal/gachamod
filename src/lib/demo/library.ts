@@ -2,8 +2,8 @@
 // demoDb so other areas' demos see the same library. Mods, previews, submitters and character icons are real
 // GameBanana entries (fetched 2026-11-13), so "Open on GameBanana" leads somewhere. Owner: LIBRARY area.
 import { registerDemo } from "../tauri";
-import type { Character, ModChange, ModEntry, Profile, ProfilePatch } from "../api/types";
-import type { CharacterRef, MetaPatch, SwitchReport, TrashEntry } from "../api/library";
+import type { Character, ForeignImport, ForeignInfo, ModChange, ModEntry, OwnedImport, Profile, ProfilePatch } from "../api/types";
+import type { ArchiveEntry, CharacterRef, MetaPatch, ProfileSnapshot, SwitchReport, TrashEntry } from "../api/library";
 import { demoDb, demoId, demoNow, demoWait } from "./db";
 
 const SS = "https://images.gamebanana.com/img/ss/mods/";
@@ -85,6 +85,12 @@ const UPDATES = [558182, 583065, 534637, 420426, 573664];
 const CONFLICTS = [534637, 540496];
 const NSFW = [578089];
 const FAVOURITES = [537300, 563440, 482033];
+// removed before the demo starts: [GameBanana mod id, days ago, where it is now]
+const REMOVED: Record<string, Array<[number, number, "trash" | "archive"]>> = {
+  zzz: [[599335, 3, "trash"], [571459, 40, "archive"]],
+  gi: [[476410, 9, "trash"]],
+  ww: [[567381, 26, "archive"]],
+};
 
 const tidy = (s: string) => s.replace(/[<>:"/\\|?*]/g, "").trim();
 const hexId = (n: number) => n.toString(16).padStart(32, "0");
@@ -200,7 +206,7 @@ function toggle(game: string, m: ModEntry, on: boolean): boolean {
   return true;
 }
 
-function setEnabled(game: string, ids: string[], on: boolean, oneSkin: boolean): ModChange {
+export function setEnabled(game: string, ids: string[], on: boolean, oneSkin: boolean): ModChange {
   const list = mods(game);
   const byId = new Map(list.map((m) => [m.id, m]));
   if (ids.length && !ids.some((id) => byId.has(id))) throw err("Those mods aren't in the library anymore. Rescan to refresh the list");
@@ -247,9 +253,22 @@ export function registerLibraryDemo() {
     setMods("zzz", seedMods("zzz", ZZZ));
     setMods("gi", seedMods("gi", GI));
     setMods("ww", seedMods("ww", WW));
+    for (const [game, list] of Object.entries(REMOVED)) {
+      for (const [gbId, days, where] of list) {
+        const m = mods(game).find((x) => x.source?.modId === gbId);
+        if (!m) continue;
+        setMods(game, mods(game).filter((x) => x !== m));
+        const t = { id: nextTrash++, game, modId: m.id, name: m.name, originalRel: m.relPath, size: m.sizeBytes, reason: "removed", removedAt: demoNow() - days * 86400, mod: m };
+        if (where === "trash") trash.push(t);
+        else archived.push(toArchive(t));
+      }
+    }
     demoDb.characters.set("zzz", chars(ZZZ_CHARS));
     demoDb.characters.set("gi", chars(GI_CHARS));
     demoDb.characters.set("ww", chars(WW_CHARS));
+    demoDb.owned.set("gi", new Set(["Raiden Shogun", "Nahida", "Furina", "Zhongli", "Venti"]));
+    demoDb.owned.set("zzz", new Set(["Ellen Joe", "Jane Doe", "Hoshimi Miyabi", "Belle", "Anby Demara", "Lighter"]));
+    demoDb.owned.set("ww", new Set(["Rover Female", "Jinhsi", "Changli", "Verina"]));
     // two profiles per game: what is on now, and a second one
     const second: Record<string, [string, string, string, string]> = {
       zzz: ["Victoria Housekeeping", "🦈", "#3aa7a3", "Ellen, Lycaon's crew and the maid outfits"],
@@ -275,6 +294,7 @@ export function registerLibraryDemo() {
     }
   }
 
+  registerOwnedDemo();
   registerDemo({
     library_list: ({ game }) => mods(String(game)).map((m) => ({ ...m })),
     library_scan: async ({ game }) => { await demoWait(450); return mods(String(game)).map((m) => ({ ...m })); },
@@ -309,6 +329,11 @@ export function registerLibraryDemo() {
       m.customPreview = true;
       onChange(g, { changed: [{ ...m }], removed: [], notes: [] });
       return { ...m };
+    },
+    mod_custom_preview: async ({ game, id }) => {
+      const m = findMod(String(game), String(id));
+      if (!m.customPreview || !m.preview) return new ArrayBuffer(0);
+      return (await fetch(m.preview)).arrayBuffer();
     },
     mod_clear_preview: ({ game, id }) => {
       const g = String(game);
@@ -345,9 +370,10 @@ export function registerLibraryDemo() {
         removed.push(m.id);
       }
       setMods(g, mods(g).filter((m) => !gone.has(m.id)));
+      if (trashDays() === 0) purgeExpired();
       return { changed: [], removed, notes: [] } satisfies ModChange;
     },
-    trash_list: ({ game }) => trash.filter((t) => t.game === game).map(({ mod: _mod, ...t }) => t),
+    trash_list: ({ game }) => { purgeExpired(); return trash.filter((t) => t.game === game).map(({ mod: _mod, ...t }) => t); },
     trash_restore: ({ id }) => {
       const at = trash.findIndex((t) => t.id === Number(id));
       if (at < 0) throw err("That mod's files aren't in the trash anymore");
@@ -360,13 +386,39 @@ export function registerLibraryDemo() {
       return change;
     },
     trash_purge: ({ id }) => {
-      const cutoff = demoNow() - 14 * 86400;
-      const before = trash.length;
-      for (let i = trash.length - 1; i >= 0; i--) {
-        const t = trash[i]!;
-        if (id === null || id === undefined ? t.removedAt < cutoff : t.id === Number(id)) trash.splice(i, 1);
+      if (id === null || id === undefined) return purgeExpired();
+      const at = trash.findIndex((t) => t.id === Number(id));
+      if (at < 0) return 0;
+      purgeOne(at);
+      return 1;
+    },
+    // removed mods: files in the trash first, then details only (LIBRARY's Archive tab)
+    archive_list: ({ game }) => {
+      purgeExpired();
+      const g = game === null || game === undefined ? null : String(game);
+      const until = trashDays() * 86400;
+      const fromTrash: ArchiveEntry[] = trash.filter((t) => g === null || t.game === g).map((t) => ({
+        ...archiveFields(t), key: `t${t.id}`, trashId: t.id, archiveId: null, filesUntil: t.removedAt + until,
+      }));
+      return [...fromTrash, ...archived.filter((a) => g === null || a.game === g)].sort((a, b) => b.removedAt - a.removedAt);
+    },
+    archive_forget: ({ keys }) => {
+      let n = 0;
+      for (const k of (keys as string[]) ?? []) {
+        const id = Number(k.slice(1));
+        const list: Array<{ id?: number; archiveId?: number | null }> = k.startsWith("t") ? trash : archived;
+        const at = k.startsWith("t") ? trash.findIndex((t) => t.id === id) : archived.findIndex((a) => a.archiveId === id);
+        if (at >= 0) { list.splice(at, 1); n++; }
       }
-      return before - trash.length;
+      return n;
+    },
+    mod_fetch_preview: async ({ game, id, url }) => {
+      await demoWait(300);
+      const g = String(game);
+      const m = findMod(g, String(id));
+      if (!m.customPreview) m.preview = String(url);
+      onChange(g, { changed: [{ ...m }], removed: [], notes: [] });
+      return { ...m };
     },
     characters_list: ({ game }) => {
       const g = String(game);
@@ -456,5 +508,213 @@ export function registerLibraryDemo() {
       capture(p);
       return stamp(p);
     },
+    profile_snapshot: ({ id }): ProfileSnapshot => {
+      const p = findProfile(Number(id));
+      return { profile: stamp(p), mods: [...(members.get(p.id) ?? [])].map(([modId, enabled]) => ({ modId, enabled })), vars: [] };
+    },
+    profile_restore: ({ snapshot }) => {
+      const snap = snapshot as ProfileSnapshot;
+      const s = snap.profile;
+      const list = profilesOf(s.game);
+      const taken = [...demoDb.profiles.values()].flat().some((x) => x.id === s.id);
+      const id = !taken && s.id > 0 ? s.id : nextProfile++;
+      nextProfile = Math.max(nextProfile, id + 1);
+      const p: Profile = { ...s, id, name: freeName(s.game, s.name), active: false, modCount: 0 };
+      if (s.active) { for (const x of list) x.active = false; p.active = true; }
+      members.set(id, new Map(snap.mods.map((m) => [m.modId, m.enabled])));
+      list.push(p);
+      list.sort((a, b) => a.createdAt - b.createdAt || a.id - b.id);
+      return stamp(p);
+    },
+    profile_set_mods: async ({ profileId, modIds, enabled }): Promise<SwitchReport> => {
+      await demoWait(120);
+      const p = findProfile(Number(profileId));
+      const known = new Set(mods(p.game).map((m) => m.id));
+      const asked = (modIds as string[] | undefined) ?? [];
+      const ids = asked.filter((m) => known.has(m));
+      if (!ids.length && asked.length) throw err("Those mods aren't in the library anymore. Rescan to refresh the list");
+      let change: ModChange = { changed: [], removed: [], notes: [] };
+      if (p.active) change = setEnabled(p.game, ids, !!enabled, !!enabled && oneSkinOn(p.game));
+      else {
+        const rows = members.get(p.id) ?? new Map<string, boolean>();
+        for (const m of ids) rows.set(m, !!enabled);
+        members.set(p.id, rows);
+        p.updatedAt = demoNow();
+      }
+      return { profile: stamp(p), change, varsPending: false };
+    },
+    profile_members: ({ id }) => {
+      const p = findProfile(Number(id));
+      const rows = members.get(p.id);
+      const ids = new Set(mods(p.game).map((m) => m.id));
+      return rows ? [...rows].filter(([mid, on]) => on && ids.has(mid)).map(([mid]) => mid) : [];
+    },
+  });
+}
+
+// ── the archive: removed mods whose trash files are gone, kept with their settings (backend: library/removed.rs) ──
+
+const archived: ArchiveEntry[] = [];
+let nextArchive = 1;
+function trashDays() {
+  const d = Number(demoDb.settings.get("trash.days") ?? 14);
+  return Number.isFinite(d) ? Math.min(Math.max(Math.round(d), 0), 3650) : 14;
+}
+
+function archiveFields(t: TrashEntry & { mod: ModEntry }) {
+  const m = t.mod;
+  return {
+    game: t.game, modId: t.modId, name: t.name, character: m.character, source: m.source, preview: m.preview, nsfw: m.nsfw, tags: m.tags,
+    favorite: m.favorite, sizeBytes: t.size, removedAt: t.removedAt, reason: t.reason, hasOptions: m.hasKeys,
+  };
+}
+
+function toArchive(t: TrashEntry & { mod: ModEntry }): ArchiveEntry {
+  const id = nextArchive++;
+  return { ...archiveFields(t), key: `a${id}`, trashId: null, archiveId: id, filesUntil: null };
+}
+
+/** Files leave the trash; the details move to the archive unless the mod is in the library again. */
+function purgeOne(at: number) {
+  const [t] = trash.splice(at, 1);
+  if (!t || t.reason === "replaced" || mods(t.game).some((m) => m.id === t.modId)) return;
+  for (let i = archived.length - 1; i >= 0; i--) if (archived[i]!.modId === t.modId) archived.splice(i, 1);
+  archived.push(toArchive(t));
+}
+
+function purgeExpired(): number {
+  const cutoff = demoNow() - trashDays() * 86400;
+  let n = 0;
+  for (let i = trash.length - 1; i >= 0; i--) if (trash[i]!.removedAt <= cutoff) { purgeOne(i); n++; }
+  return n;
+}
+
+/** For a demo install: a removed copy of the same GameBanana mod comes back with its id and details, as the
+ *  backend's install does. Returns the mod to add (the same object when nothing matches). */
+export function demoRestoreRemoved(game: string, m: ModEntry): ModEntry {
+  const gb = m.source?.modId;
+  if (!gb) return m;
+  const at = trash.findIndex((t) => t.game === game && t.reason !== "replaced" && t.mod.source?.modId === gb);
+  const fromTrash = at >= 0 ? trash.splice(at, 1)[0] : undefined;
+  const ai = fromTrash ? -1 : archived.findIndex((a) => a.game === game && a.source?.modId === gb);
+  const old = fromTrash ? archiveFields(fromTrash) : ai >= 0 ? archived.splice(ai, 1)[0] : undefined;
+  if (!old) return m;
+  return { ...m, id: old.modId, name: old.name || m.name, character: old.character ?? m.character, tags: old.tags, favorite: old.favorite, nsfw: m.nsfw || old.nsfw };
+}
+
+// ── owned characters and other managers (owned.rs, managers.rs) ──
+
+const ownedOf = (game: string) => {
+  let s = demoDb.owned.get(game);
+  if (!s) { s = new Set(); demoDb.owned.set(game, s); }
+  return s;
+};
+const normName = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+/** A few of the alias table's names, enough for the demo. The app reads the full tables in gacha-core. */
+const DEMO_AKA: Record<string, string[]> = {
+  "Raiden Shogun": ["Ei", "Raiden", "Baal", "Shougun"], "Kamisato Ayaka": ["Ayaka"], "Kaedehara Kazuha": ["Kazuha"], "Yae Miko": ["Yae", "Miko"],
+  "Aether": ["PlayerBoy"], "Lumine": ["PlayerGirl"], "Anby Demara": ["Anby", "Anbi"], "Hoshimi Miyabi": ["Miyabi"], "Ellen Joe": ["Ellen"],
+  "Jane Doe": ["Jane"], "Nekomiya Mana": ["Nekomata"], "Rover Female": ["Female Rover"], "Rover Male": ["Male Rover"], "Jinhsi": ["Jinxi"],
+};
+const TRAVELER = /^traveler(anemo|geo|electro|dendro|hydro|pyro|cryo)?$/;
+
+function demoNames(text: string): { format: string; game: string | null; names: string[] } {
+  let v: unknown;
+  try { v = JSON.parse(text.replace(/^\uFEFF/, "")); } catch {
+    const names = text.split(/[\n\r,;\t|]/).map((s) => s.trim().replace(/^[-*\u2022]\s*/, "").replace(/^\d+[.)]\s*/, "")).filter(Boolean);
+    return { format: "list of names", game: null, names };
+  }
+  const o = (v ?? {}) as { format?: string; characters?: Array<{ key?: string }> };
+  const byFormat: Record<string, string> = { GOOD: "gi", SROD: "hsr", ZOD: "zzz" };
+  const f = String(o.format ?? "").toUpperCase();
+  if (f === "GACHAMOD") {
+    const g = (o as { game?: unknown }).game;
+    return { format: "gachamod list", game: typeof g === "string" ? g : null, names: ((o.characters ?? []) as unknown[]).filter((x): x is string => typeof x === "string") };
+  }
+  if (byFormat[f]) return { format: f, game: byFormat[f]!, names: (o.characters ?? []).map((c) => String(c.key ?? "")).filter(Boolean) };
+  const names: string[] = [];
+  const walk = (x: unknown, key: string, depth: number) => {
+    if (depth > 10) return;
+    if (Array.isArray(x)) x.forEach((y) => (typeof y === "string" ? names.push(y) : walk(y, key, depth + 1)));
+    else if (x && typeof x === "object") for (const [k, y] of Object.entries(x)) walk(y, k.toLowerCase(), depth + 1);
+    else if (typeof x === "string" && ["name", "key", "character", "charactername"].includes(key)) names.push(x);
+  };
+  walk(v, "", 0);
+  return { format: "JSON file", game: null, names };
+}
+
+function demoResolve(game: string, names: string[]): { found: string[]; unknown: string[] } {
+  const roster = (demoDb.characters.get(game) ?? []).map((c) => c.name);
+  const index = new Map<string, string[]>();
+  for (const n of roster) {
+    index.set(normName(n), [n]);
+    for (const a of DEMO_AKA[n] ?? []) index.set(normName(a), [n]);
+  }
+  if (game === "gi") index.set("traveler", roster.filter((n) => n === "Aether" || n === "Lumine"));
+  const found = new Set<string>();
+  const unknown = new Set<string>();
+  for (const raw of names) {
+    const k = normName(raw);
+    const hit = index.get(TRAVELER.test(k) ? "traveler" : k)
+      ?? [...index.entries()].filter(([key]) => key.length >= 5 && k.includes(key)).map(([, v]) => v).sort((a, b) => b[0]!.length - a[0]!.length)[0];
+    if (hit?.length) hit.forEach((n) => found.add(n));
+    else unknown.add(raw);
+  }
+  return { found: [...found], unknown: [...unknown] };
+}
+
+const foreignDone = new Set<string>();
+const DEMO_FOREIGN: Record<string, ForeignInfo> = {
+  gi: { managers: [{ manager: "JASM", mods: 4 }], fillable: 4 },
+  zzz: { managers: [{ manager: "XX Mod Manager", mods: 3 }, { manager: "FlairX", mods: 1 }], fillable: 4 },
+};
+
+function registerOwnedDemo() {
+  registerDemo({
+    owned_list: ({ game }) => [...ownedOf(String(game))].sort((a, b) => a.localeCompare(b)),
+    owned_set: ({ game, names, owned }) => {
+      const s = ownedOf(String(game));
+      return ((names as string[]) ?? []).filter((n) => (owned ? !s.has(n) && !!s.add(n) : s.delete(n)));
+    },
+    owned_import: async ({ game, text }) => {
+      await demoWait(250);
+      const parsed = demoNames(String(text ?? ""));
+      const g = parsed.game ?? String(game);
+      const { found, unknown } = demoResolve(g, parsed.names);
+      if (!found.length) {
+        throw err(unknown.length ? `None of those names matched a character, for example "${unknown[0]}"`
+          : "Found no characters in that. Try an export from an optimizer (GOOD, SROD, ZOD), an Enka.Network profile or a list of names");
+      }
+      const s = ownedOf(g);
+      const added = found.filter((n) => !s.has(n));
+      added.forEach((n) => s.add(n));
+      const out: OwnedImport = { game: g, format: parsed.format, added, already: found.length - added.length, unknown };
+      return out;
+    },
+    owned_import_file: () => { throw err("The demo can't read files by path. Drop the file on the page instead"); },
+    owned_export: ({ game }) => JSON.stringify({ format: "gachamod", version: 1, game, characters: [...ownedOf(String(game))].sort((a, b) => a.localeCompare(b)) }, null, 2),
+    owned_export_file: () => { throw err("The demo saves the list as a download instead"); },
+    // the demo has no Enka.Network: a few roster characters stand in for the showcase
+    owned_fetch: async ({ game, uid }) => {
+      await demoWait(700);
+      const g = String(game);
+      if (!/^\d{6,10}$/.test(String(uid ?? "").trim())) throw err("A UID is the 9 or 10 digit number on your in-game profile");
+      const show = (demoDb.characters.get(g) ?? []).map((c) => c.name).slice(0, 6);
+      const s = ownedOf(g);
+      const added = show.filter((n) => !s.has(n));
+      added.forEach((n) => s.add(n));
+      const out: OwnedImport = { game: g, format: "Enka.Network profile", added, already: show.length - added.length, unknown: [] };
+      return out;
+    },
+    foreign_detect: ({ game }) => (foreignDone.has(String(game)) ? { managers: [], fillable: 0 } : DEMO_FOREIGN[String(game)] ?? { managers: [], fillable: 0 }),
+    foreign_import: async ({ game }) => {
+      await demoWait(500);
+      const g = String(game);
+      const info = foreignDone.has(g) ? undefined : DEMO_FOREIGN[g];
+      foreignDone.add(g);
+      const out: ForeignImport = { changed: info?.fillable ?? 0, managers: info?.managers.map((m) => m.manager) ?? [], undo: info ? [{ rel: g, sidecar: null }] : [], notes: [] };
+      return out;
+    },
+    foreign_undo: ({ game }) => { foreignDone.delete(String(game)); },
   });
 }

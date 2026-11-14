@@ -439,3 +439,142 @@ fn custom_preview_wins_and_keeps_the_old_one() {
     assert!(sc.custom_preview.is_none() && sc.preview_backups.is_empty());
     assert!(e.preview.unwrap().contains("preview."));
 }
+
+#[test]
+fn profile_set_mods_snapshot_and_restore() {
+    let t = Tree::new("profset");
+    t.add("Ellen Joe/Maid Ellen");
+    t.add("Jane Doe/Gym Jane");
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let (maid, gym) = (by_name(&list, "Maid Ellen").id.clone(), by_name(&list, "Gym Jane").id.clone());
+    let d = db.lock().unwrap();
+    let default = profiles::list(&d, "zzz").unwrap().remove(0);
+    let two = profiles::create(&d, "zzz", "Two", None).unwrap();
+
+    // another profile: only its rows change, no files move
+    let r = profiles::set_mods(&d, two.id, std::slice::from_ref(&maid), false).unwrap();
+    assert!(r.change.changed.is_empty());
+    assert!(t.mods.join("Ellen Joe/Maid Ellen").is_dir());
+    assert_eq!(profiles::members(&d, two.id).unwrap(), vec![gym.clone()]);
+    assert_eq!(profiles::members(&d, default.id).unwrap().len(), 2);
+
+    // the active profile: a normal toggle
+    let r = profiles::set_mods(&d, default.id, std::slice::from_ref(&gym), false).unwrap();
+    assert_eq!(r.change.changed.len(), 1);
+    assert!(t.mods.join("Jane Doe/DISABLED Gym Jane").is_dir());
+    assert_eq!(profiles::members(&d, default.id).unwrap(), vec![maid.clone()]);
+    assert!(profiles::set_mods(&d, two.id, &["nope".into()], true).is_err());
+
+    // delete and put back: same id, name and rows
+    let snap = profiles::snapshot(&d, two.id).unwrap();
+    profiles::delete(&d, two.id).unwrap();
+    let back = profiles::restore(&d, &snap).unwrap();
+    assert_eq!((back.id, back.name.as_str(), back.active), (two.id, "Two", false));
+    assert_eq!(profiles::members(&d, back.id).unwrap(), vec![gym.clone()]);
+    // the active one comes back active, under a free name when another took it
+    let snap = profiles::snapshot(&d, default.id).unwrap();
+    profiles::delete(&d, default.id).unwrap();
+    profiles::update(&d, back.id, &crate::model::ProfilePatch { name: Some("Default".into()), ..Default::default() }).unwrap();
+    let again = profiles::restore(&d, &snap).unwrap();
+    assert!(again.active);
+    assert_eq!(again.name, "Default (2)");
+    assert!(!profiles::get(&d, back.id).unwrap().active);
+}
+
+#[test]
+fn texture_images_are_not_previews() {
+    let t = Tree::new("texprev");
+    let dir = t.add("Velina Airgid/Velina");
+    fs::write(dir.join("mod.ini"), "[ResourceBody]\nfilename = Body.jpg\n").unwrap();
+    fs::write(dir.join("Body.jpg"), "tex").unwrap();
+    fs::write(dir.join("Hair_LightMap.png"), "tex").unwrap();
+    let db = t.db();
+    assert_eq!(scan(&db, "zzz").unwrap()[0].preview, None);
+    fs::write(dir.join("cover.png"), "real").unwrap();
+    assert!(scan(&db, "zzz").unwrap()[0].preview.as_deref().is_some_and(|p| p.ends_with("cover.png")));
+    // a GameBanana picture fetched later wins over the root picture, and keeps a shipped preview.* under another name
+    let id = list(&db.lock().unwrap(), "zzz").unwrap()[0].id.clone();
+    let e = save_fetched_preview(&db.lock().unwrap(), "zzz", &id, b"gb", "jpg").unwrap();
+    assert!(e.preview.as_deref().is_some_and(|p| p.ends_with("preview.jpg")) && !e.custom_preview);
+    let e = save_fetched_preview(&db.lock().unwrap(), "zzz", &id, b"gb2", "png").unwrap();
+    assert!(e.preview.as_deref().is_some_and(|p| p.ends_with("preview.png")));
+    assert_eq!(fs::read(dir.join("preview-original.jpg")).unwrap(), b"gb");
+}
+
+#[test]
+fn other_managers_folders_come_in_with_their_details() {
+    let t = Tree::new("managers");
+    // JASM: Mods/<category>/<lowercase character>/<mod>, its own config and cover
+    let maid = t.add("character/ellen joe/DISABLED_Maid");
+    fs::write(maid.join(".JASM_ModConfig.json"), r#"{"Id":"x","CustomName":"Maid Ellen","Author":"Someone","ModUrl":"https://gamebanana.com/mods/111","ImagePath":".JASM_Cover.png"}"#).unwrap();
+    fs::write(maid.join(".JASM_Cover.png"), "img").unwrap();
+    t.add("character/hoshimi miyabi/Kimono");
+    // a nickname as the only hint
+    t.add("Unagi Swimsuit");
+    // Fairy's Secret Folder: "<Character> - <Skin>/<mod>" and the character's id in category.json
+    let thief = t.add("Jane Doe - Default Outfit/Thief");
+    fs::write(t.mods.join("Jane Doe - Default Outfit/category.json"), r#"{"character_id":"jane_doe","skin_id":"default"}"#).unwrap();
+    fs::write(thief.join(".zmm-meta.json"), r#"{"gb_mod_id":"222","author":"B","tags":["outfit"]}"#).unwrap();
+    // turned off by renaming its ini
+    let police = t.mods.join("Police Uniform");
+    fs::create_dir_all(&police).unwrap();
+    fs::write(police.join("DISABLED_PoliceUniform.ini"), "[TextureOverrideBody]\nhash = 0011aabb\n").unwrap();
+    fs::write(police.join("ZhuYuanBody.ib"), "x").unwrap();
+
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let maid = by_name(&list, "Maid Ellen");
+    assert_eq!((maid.character.as_deref(), maid.enabled), (Some("Ellen Joe"), false));
+    assert_eq!(maid.source.as_ref().map(|s| s.mod_id), Some(111));
+    assert!(maid.preview.as_deref().is_some_and(|p| p.ends_with(".JASM_Cover.png")));
+    assert_eq!(by_name(&list, "Kimono").character.as_deref(), Some("Hoshimi Miyabi"));
+    assert_eq!(by_name(&list, "Unagi Swimsuit").character.as_deref(), Some("Hoshimi Miyabi"));
+    let thief = by_name(&list, "Thief");
+    assert_eq!((thief.character.as_deref(), thief.source.as_ref().map(|s| s.mod_id)), (Some("Jane Doe"), Some(222)));
+    assert_eq!(thief.tags, vec!["outfit"]);
+    let police = by_name(&list, "Police Uniform");
+    assert!(!police.enabled);
+    // the other manager's files stay as they were
+    assert!(t.mods.join("character/ellen joe/DISABLED_Maid/.JASM_ModConfig.json").is_file());
+
+    // turning it on names the ini back
+    let id = police.id.clone();
+    let ch = set_enabled(&db.lock().unwrap(), "zzz", &[id.clone()], true).unwrap();
+    assert!(ch.changed.iter().any(|m| m.id == id && m.enabled));
+    assert!(t.mods.join("Police Uniform/PoliceUniform.ini").is_file());
+    assert!(scan(&db, "zzz").unwrap().iter().any(|m| m.id == id && m.enabled));
+
+    // details added later by the other manager fill the gaps of a known mod, with a way back
+    let kimono = t.mods.join("character/hoshimi miyabi/Kimono");
+    fs::write(kimono.join(".JASM_ModConfig.json"), r#"{"CustomName":"Winter Kimono","ModUrl":"https://gamebanana.com/mods/333"}"#).unwrap();
+    let info = crate::managers::detect(&db, "zzz").unwrap();
+    assert_eq!(info.fillable, 1);
+    let r = crate::managers::import(&db, "zzz").unwrap();
+    assert_eq!(r.changed, 1);
+    let after = super::list(&db.lock().unwrap(), "zzz").unwrap();
+    let k = after.iter().find(|m| m.rel_path.ends_with("Kimono")).unwrap();
+    assert_eq!((k.name.as_str(), k.source.as_ref().map(|s| s.mod_id)), ("Winter Kimono", Some(333)));
+    crate::managers::undo(&db, "zzz", &r.undo).unwrap();
+    let back = super::list(&db.lock().unwrap(), "zzz").unwrap();
+    let k = back.iter().find(|m| m.rel_path.ends_with("Kimono")).unwrap();
+    assert_eq!((k.name.as_str(), k.source.is_none()), ("Kimono", true));
+}
+
+/// Scan a copy of a real Mods folder and print what each mod became. Not run by default: set GACHAMOD_SCAN_DIR (a
+/// scratch copy, the scan writes .gachamod.json files into it), GACHAMOD_SCAN_GAME and GACHAMOD_ROSTERS (a folder
+/// with "<game>.json" GameBanana rosters). Run with `cargo test -p gacha-core scan_a_real_copy -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn scan_a_real_copy() {
+    let (Ok(dir), Ok(game), Ok(rosters)) = (std::env::var("GACHAMOD_SCAN_DIR"), std::env::var("GACHAMOD_SCAN_GAME"), std::env::var("GACHAMOD_ROSTERS")) else { return };
+    let db = Db::memory().unwrap();
+    games::save_paths(&db, &game, &GamePaths { mods_dir: Some(dir.clone()), ..Default::default() }).unwrap();
+    let raw = fs::read_to_string(format!("{rosters}/{game}.json")).unwrap();
+    let list: Vec<(u64, String, u64)> = serde_json::from_str(&raw).unwrap();
+    characters_sync(&db, &game, &list.into_iter().map(|r| CharacterRef { name: r.1, ..Default::default() }).collect::<Vec<_>>()).unwrap();
+    let db: Shared = Arc::new(Mutex::new(db));
+    for m in scan(&db, &game).unwrap() {
+        println!("{:60} -> {:28} on={} name={:?}", m.rel_path, m.character.as_deref().unwrap_or("-"), m.enabled, m.name);
+    }
+}

@@ -34,6 +34,8 @@
   .mod-card.is-row .mod-card-meta { color: #6b6c73; }
   .mod-card.is-row.is-off { background: #c3c4c9; }
   .mod-card.is-row.is-off .mod-card-name { color: #4c4d53; }
+  .mod-card.is-row.is-off :is(.mod-card-char, .qlink-char) { color: #5a3a0e; }
+  .mod-card.is-row.is-off .mod-card-meta { color: #45464c; }
   .mod-card.is-row .mod-card-more { background: none; color: var(--ink); }
   .mod-card.is-row .badge.t-muted { background: rgb(0 0 0 / .1); color: #35363b; box-shadow: none; }
   .mod-card.is-row .mod-card-fav { background: #26262a; }
@@ -148,7 +150,6 @@
   .profile-grid { gap: .5rem; }
   .profile-card { --cell-line: #7d89ab; background: var(--strip); }
   .profile-card-banner { background: var(--rings), linear-gradient(180deg, #2c3246, #454e6b); }
-  .profile-card-stripe, .profile-editor-stripe { height: 2px; }
   .profile-card-head .profile-icon, .profile-editor-top .profile-icon { box-shadow: 0 0 0 2px var(--strip), 0 0 0 3px rgb(255 255 255 / .6); background: #2c3245; }
   .profile-editor-top .profile-icon { box-shadow: 0 0 0 2px #dadcde, 0 0 0 3px rgb(0 0 0 / .4); }
   .profile-editor-banner { border-radius: var(--cut); }
@@ -156,10 +157,10 @@
   .profile-card-sub { color: var(--gold-t); font-weight: 500; font-family: var(--font-num); }
   .profile-card-desc { color: var(--text-2); font-weight: 500; }
   .profile-card.is-active { --cell-line: var(--gold); outline-color: #fff; }
-  .emoji-btn { border-radius: var(--cut-sm); background: var(--row); }
-  .emoji-btn.on, .portrait-btn.on, .banner-btn.on { box-shadow: inset 0 0 0 2px var(--orange); }
-  .portrait-btn { background: var(--row); }
-  .banner-btn { border-radius: var(--cut-sm); }
+  .pe-tile:not(.pe-portrait) { border-radius: var(--cut-sm); background: var(--row); }
+  .pe-emoji.on, .pe-portrait.on, .pe-banner-tile.on { box-shadow: inset 0 0 0 2px var(--orange); }
+  .pe-portrait { background: var(--row); }
+  .pe-banner-tile { border-radius: var(--cut-sm); }
   .swatch[aria-checked="true"] { outline: 2px solid var(--text); }
   .portrait { border: 0; background: var(--img-bg); box-shadow: 0 0 0 1px var(--ctl-line); }
   .portrait.on { outline: 2px solid var(--orange); }
@@ -200,4 +201,49 @@
   .pack-mod-img { border-radius: 2px 8px 2px 2px; }
   .onboard-game, .onboard-card { background: var(--strip); }
   .onboard-card { padding: .8rem .9rem 1rem; }
+}
+
+[data-theme="hsr"] {
+  /* ── home: the quick bar is a cut panel, profile chips are pills, the picked one filled ── */
+  .home-quick { border-radius: var(--cut-lg); }
+  .home-pchip { box-shadow: inset 0 0 0 1px var(--ctl-line); background: var(--ctl-fill); }
+  .home-pchip:hover { box-shadow: inset 0 0 0 1px var(--text-2); }
+  .home-pchip.on { background: var(--ctl-on-bg); color: var(--ctl-on-fg); font-weight: 700; box-shadow: inset 0 0 0 3px var(--ctl-on-bg), inset 0 0 0 4px var(--p-color, var(--gold)); }
+  .home-pchip.on .home-pchip-on { color: var(--ctl-on-fg); }
+  .home-tile { border-radius: var(--cut); }
+  .home-all { border-radius: var(--cut); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--ctl-line); }
+  .home-char { border-radius: var(--cut-sm); }
+  .home-edit-bar { border-radius: var(--cut); }
+
+  /* ── characters: portraits are cells with the cut corner and a gold line when the character has mods ── */
+  .portraits { gap: .5rem; }
+  .portraits > .portrait { border-radius: var(--cut); background: var(--cell); box-shadow: inset 0 -2px 0 var(--gold), 0 2px 8px rgb(0 0 0 / .3); outline: 2px solid transparent; outline-offset: 2px; }
+  .portraits > .portrait.dim { box-shadow: inset 0 -2px 0 #5a5d68, 0 2px 8px rgb(0 0 0 / .3); }
+  .portraits > .portrait:hover { transform: none; filter: brightness(1.1); outline-color: rgb(255 255 255 / .55); box-shadow: inset 0 -2px 0 var(--gold), 0 2px 8px rgb(0 0 0 / .3); }
+  .portraits > .portrait.on { outline-color: #fff; }
+  .portrait-n { font-weight: 700; background: linear-gradient(0deg, rgb(20 22 30 / .9), rgb(20 22 30 / 0)); }
+  .portrait-c { border-radius: 2px 7px 2px 2px; background: var(--gold); color: var(--ink); font-family: var(--font-num); }
+
+  /* ── browse ── */
+  .gb-ch { border-radius: var(--cut-sm); }
+  .gb-ch.on { background: var(--hover); color: var(--text); font-weight: 700; }
+  .gb-ch.on .gb-ch-img { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
+  .gb-ch-all .gb-ch-img { background: var(--well); box-shadow: inset 0 0 0 1px var(--ctl-line); }
+  .gb-prio { background: var(--gold); color: var(--ink); }
+  .gb-card.is-prio { --cell-line: var(--gold); }
+  .gb-creator-name { font-weight: 700; }
+  .gb-creator-stats strong { color: var(--accent-ink); }
+  .gb-nsfw-mark { border-radius: 2px 6px 2px 2px; background: rgb(10 11 18 / .72); color: #c9ccd6; }
+  /* the picture viewer is always the dark stage, so photos read the same in both schemes */
+  .gb-lightbox { background: rgb(8 9 16 / .92); }
+  .gb-lightbox-bar { color: #fff; }
+  .gb-lightbox-cap { color: #c9ccd6; }
+  .gb-comments { border-top: 0; position: relative; }
+  .gb-comments::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9px; color: var(--line-2); background: var(--dot-line); }
+}
+
+[data-theme="hsr"][data-scheme="light"] {
+  .portraits > .portrait:hover { outline-color: rgb(0 0 0 / .45); }
+  .portraits > .portrait.on { outline-color: var(--ink); }
+  .char-panel { background: linear-gradient(180deg, rgb(236 237 240 / .94), rgb(229 230 234 / .95)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .1), 0 10px 30px rgb(30 34 60 / .2); }
 }

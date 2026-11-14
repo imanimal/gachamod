@@ -1,5 +1,5 @@
 // First start: look for games and XXMI, show what was found, offer XXMI or moving mods from IMM. Sets "onboarded".
-// Owner: SYSTEM area.
+// Owner: SETTINGS/AI area.
 import { useEffect, useRef, useState } from "react";
 import { Button, Card, Dialog, Progress, Toggle, plural } from "../../ui/kit";
 import { GameBadge } from "../../ui/GameBadge";
@@ -46,7 +46,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   return (
     <Dialog title="Welcome to gachamod" icon="sparkle" size="lg" className="onboard" onClose={() => finish()} locked={scanning ? "Looking for games" : undefined}
       footer={!scanning && <>
-        <Button variant="ghost" onClick={() => finish(() => go({ view: "settings", section: "games" }))}>Set folders by hand</Button>
+        <Button variant="ghost" onClick={() => finish(() => go({ view: "settings", section: "games" }))} title="Pick each game's folders yourself in Settings">Set folders by hand</Button>
         <Button variant="primary" autoFocus onClick={() => finish()}>Start</Button>
       </>}>
       {scanning ? (
@@ -56,7 +56,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
       ) : (
         <>
-          <p>{found.length ? `Found ${plural(found.length, "game")}. Pick the ones to show in the rail; you can change this in Settings later.`
+          <p>{found.length ? `Found ${plural(found.length, "game")}. Turn on the ones you play: they show in the sidebar, where you switch games. You can change this in Settings.`
             : "No games found yet. Install XXMI Launcher below, or pick a game's folders in Settings."}</p>
           {found.length > 0 && (
             <div className="onboard-games">
@@ -78,14 +78,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <Card className="onboard-card">
               <b>Get XXMI Launcher</b>
               <span className="hint">It loads mods into Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves, Honkai Impact 3rd and Endfield. Install it, open it once, then press Detect again in Settings.</span>
-              <div className="row"><Button icon="external" onClick={() => shell.openUrl(XXMI_RELEASES).catch((e) => toast(errorText(e), true))}>Open the download page</Button></div>
+              <div className="row"><Button icon="external" onClick={() => shell.openUrl(XXMI_RELEASES).catch((e) => toast(errorText(e), true))} title="XXMI Launcher's releases on GitHub">Open the download page</Button></div>
             </Card>
           )}
           {immInfo?.found && immMods > 0 && (
             <Card className="onboard-card">
               <b>Integrated Mod Manager keeps {plural(immMods, "mod")} in its own folders</b>
               <span className="hint">gachamod can move them back into the normal Mods folders, keeping their options and GameBanana links, so both apps aren't fighting over them.</span>
-              <div className="row"><Button icon="swap" onClick={() => finish(() => go({ view: "tools", section: "imm" }))}>Move mods from IMM</Button></div>
+              <div className="row"><Button icon="swap" onClick={() => finish(() => go({ view: "tools", section: "imm" }))} title="Opens Tools, where you pick which games to move">Move mods from IMM</Button></div>
             </Card>
           )}
         </>

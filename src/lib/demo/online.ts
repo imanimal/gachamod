@@ -5,6 +5,7 @@ import { demoEmit, registerDemo } from "../tauri";
 import { EVENTS, type ModEntry } from "../api/types";
 import type { Candidate, InstallOutcome, QueueItem, QueueRequest, QueueSnapshot } from "../api/online";
 import { demoDb, demoId, demoNow } from "./db";
+import { demoRestoreRemoved } from "./library";
 
 let items: QueueItem[] = [];
 let nextId = 1;
@@ -135,7 +136,7 @@ function place(item: QueueItem, keys: string[]): ModEntry[] {
       fileCount: 8 + Math.floor(Math.random() * 30), iniCount: 1, preview: meta.previewUrl ?? null, tags: [], notes: null, favorite: false,
       nsfw: !!meta.nsfw, hasKeys: Math.random() < 0.5, conflicts: 0, updateAvailable: false,
     };
-    return n === 0 && old ? { ...base, id: old.id, name: old.name, folder: old.folder, relPath: old.relPath, path: old.path, enabled: old.enabled, tags: old.tags, notes: old.notes, favorite: old.favorite } : base;
+    return n === 0 && old ? { ...base, id: old.id, name: old.name, folder: old.folder, relPath: old.relPath, path: old.path, enabled: old.enabled, tags: old.tags, notes: old.notes, favorite: old.favorite } : n === 0 ? demoRestoreRemoved(game, base) : base;
   });
   const rest = old ? list.filter((m) => m.id !== old.id) : list;
   demoDb.mods.set(game, [...out, ...rest]);

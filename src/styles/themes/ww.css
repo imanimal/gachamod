@@ -1,4 +1,5 @@
 /* themes/ww.css: "Solaris", the Wuthering Waves menu look. Rules it follows are in docs/theme-ww.md.
+   Dark is the game's own look; light (data-scheme="light") turns the paper sheets into the page.
    Part 1 (ww-kit.css): tokens, textures and every kit class. Part 2 (ww-shell.css): the window. Part 3
    (ww-screens.css): screen classes. This file pulls them in, in that order, and adds the font, the scrollbars, the
    keyframes and the other accents. No game art or fonts: shapes are CSS and inline SVG.
@@ -24,6 +25,11 @@
 [data-theme="ww"] :is(.dialog, .dialog *)::-webkit-scrollbar-thumb { background: #b59a56; background-clip: padding-box; }
 [data-theme="ww"] :is(.dialog, .dialog *)::-webkit-scrollbar-track:vertical { background: linear-gradient(90deg, transparent 4px, rgb(0 0 0 / .18) 4px 5px, transparent 5px); }
 [data-theme="ww"] ::selection { background: var(--gold-line); color: #101113; }
+[data-theme="ww"][data-scheme="light"] ::-webkit-scrollbar-thumb { background: rgb(22 24 27 / .5); background-clip: padding-box; }
+[data-theme="ww"][data-scheme="light"] ::-webkit-scrollbar-thumb:hover { background: #16181b; background-clip: padding-box; }
+[data-theme="ww"][data-scheme="light"] ::-webkit-scrollbar-thumb:active { background: var(--gold-dk); background-clip: padding-box; }
+[data-theme="ww"][data-scheme="light"] ::-webkit-scrollbar-track:vertical { background: linear-gradient(90deg, transparent 4px, rgb(0 0 0 / .15) 4px 5px, transparent 5px); }
+[data-theme="ww"][data-scheme="light"] ::-webkit-scrollbar-track:horizontal { background: linear-gradient(180deg, transparent 4px, rgb(0 0 0 / .15) 4px 5px, transparent 5px); }
 
 @keyframes wwRise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes wwSlide { from { opacity: 0; transform: translateX(36px); } }

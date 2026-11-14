@@ -11,17 +11,17 @@
   --accent-2: #9fb6ff;
   --ok: #4cd38a; --warn: #f2b84b; --bad: #ff6868; --info: #6cb8ff; --on-bad: #fff;
   --ring: color-mix(in oklab, var(--accent) 80%, #fff); --hover: rgb(255 255 255 / .055);
-  --radius: 12px; --radius-sm: 8px; --radius-lg: 18px; --radius-xs: 5px; --radius-pill: 999px;
+  --radius: 10px; --radius-sm: 7px; --radius-lg: 12px; --radius-xs: 4px; --radius-pill: 999px; --stack-gap: .9rem;
   --shadow: 0 1px 2px rgb(0 0 0 / .32);
   --shadow-lg: 0 24px 56px -14px rgb(0 0 0 / .62), 0 8px 18px -6px rgb(0 0 0 / .3);
   --scrim: rgb(4 6 10 / .62);
-  --tex: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%);
+  --tex: none;
   --img-bg: #1a1e27;
   --font: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-display: "Manrope", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
   --font-num: "Manrope", "Segoe UI", system-ui, sans-serif;
-  --ease: cubic-bezier(.2, .8, .2, 1); --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-spring: cubic-bezier(.34, 1.5, .64, 1);
+  --ease: cubic-bezier(.2, .8, .2, 1); --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-spring: cubic-bezier(.25, 1, .5, 1);
   --dur: 180ms; --dur-fast: 110ms; --dur-slow: 280ms;
   color-scheme: dark;
 }
@@ -38,7 +38,7 @@
   --shadow: 0 1px 2px rgb(16 24 40 / .07), 0 1px 3px rgb(16 24 40 / .05);
   --shadow-lg: 0 24px 56px -14px rgb(16 24 40 / .24), 0 8px 18px -6px rgb(16 24 40 / .1);
   --scrim: rgb(16 22 32 / .34);
-  --tex: radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%);
+  --tex: none;
   --img-bg: #e8eaef;
   color-scheme: light;
 }

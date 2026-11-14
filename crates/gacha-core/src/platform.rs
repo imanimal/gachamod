@@ -33,15 +33,28 @@ pub fn command_exe(cmd: &str) -> Option<String> {
     lower.find(".exe").map(|i| c[..i + 4].to_string())
 }
 
-/// Who holds a command: None when it points at `exe` or at nothing, else the holder's file name. A command that
-/// points at a gachamod exe that no longer exists counts as free.
+/// The setting that remembers a user turned one off ("0"), so a start never turns it back on.
+pub fn setting_key(id: &str) -> String { format!("integration.{id}") }
+
+/// The ids the user turned off in Settings.
+pub fn turned_off(db: &crate::db::Db) -> Vec<&'static str> {
+    [SCHEME_ID, FILE_ID].into_iter().filter(|id| db.setting(&setting_key(id)).ok().flatten().as_deref() == Some("0")).collect()
+}
+
+/// An exe path or name that is a copy of gachamod (installed, portable, moved or a dev build).
+fn is_gachamod(target: &str) -> bool {
+    Path::new(target).file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().contains("gachamod"))
+}
+
+/// Who holds a command: None when it points at `exe` or at nothing, else the holder's file name. Another copy of
+/// gachamod counts as free, so the copy opened last handles links and files.
 pub fn holder(cmd: Option<&str>, exe: &Path) -> (bool, Option<String>) {
     let Some(target) = cmd.and_then(command_exe) else { return (false, None) };
     let ours = Path::new(&target).to_string_lossy().eq_ignore_ascii_case(&exe.to_string_lossy());
     if ours { return (true, None); }
+    if is_gachamod(&target) { return (false, None); }
     let name = Path::new(&target).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(target.clone());
-    let stale_gachamod = name.to_lowercase().contains("gachamod") && !Path::new(&target).exists();
-    (false, if stale_gachamod { None } else { Some(name) })
+    (false, Some(name))
 }
 
 #[cfg(windows)]
@@ -62,12 +75,13 @@ mod reg {
         // Explorer's own choice wins over the class when the user picked another app with "Open with"
         if let Ok(k) = RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.gachamod\UserChoice") {
             if let Ok(choice) = k.get_value::<String, _>("ProgId") {
-                if !choice.eq_ignore_ascii_case(&prog) { f_ours = false; f_owner = Some(choice); }
+                let gachamod = choice.to_lowercase().contains("gachamod");
+                if !choice.eq_ignore_ascii_case(&prog) && !gachamod { f_ours = false; f_owner = Some(choice); }
             }
         }
         vec![
-            Integration { id: SCHEME_ID.into(), label: "gachamod links (1-click installs from GameBanana)".into(), supported: true, ours: s_ours, owner: s_owner },
-            Integration { id: FILE_ID.into(), label: ".gachamod files open in gachamod".into(), supported: true, ours: f_ours, owner: f_owner },
+            Integration { id: SCHEME_ID.into(), label: "1-click installs from GameBanana".into(), supported: true, ours: s_ours, owner: s_owner },
+            Integration { id: FILE_ID.into(), label: "Open .gachamod files".into(), supported: true, ours: f_ours, owner: f_owner },
         ]
     }
 
@@ -99,6 +113,40 @@ mod reg {
         Ok(())
     }
 
+    fn points_at_gachamod(root: &RegKey, class: &str) -> bool {
+        read(root, &format!(r"{class}\shell\open\command")).as_deref().and_then(command_exe).is_some_and(|e| is_gachamod(&e))
+    }
+
+    fn delete_tree(root: &RegKey, path: &str) -> Result<()> {
+        match root.delete_subkey_all(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// Remove gachamod's entry. One that another program holds is left alone.
+    pub fn unregister(root: &RegKey, base: &str, id: &str) -> Result<()> {
+        match id {
+            SCHEME_ID => {
+                let class = format!(r"{base}\gachamod");
+                if points_at_gachamod(root, &class) { delete_tree(root, &class)?; }
+            }
+            FILE_ID => {
+                let ext = format!(r"{base}\.gachamod");
+                // the class may be ours or the installer's ("gachamod pack")
+                if let Some(prog) = read(root, &ext) {
+                    let class = format!(r"{base}\{prog}");
+                    if points_at_gachamod(root, &class) {
+                        delete_tree(root, &class)?;
+                        root.open_subkey_with_flags(&ext, winreg::enums::KEY_SET_VALUE)?.delete_value("")?;
+                    }
+                }
+            }
+            other => return Err(Error::Invalid(format!("Unknown integration \"{other}\""))),
+        }
+        Ok(())
+    }
+
     pub fn hkcu() -> RegKey { RegKey::predef(HKEY_CURRENT_USER) }
 
     pub fn notify_shell() {
@@ -115,32 +163,125 @@ pub fn integrations(exe: &Path) -> Result<Vec<Integration>> {
     { let _ = exe; Ok(vec![]) }
 }
 
-/// Point one integration (by id) at this exe.
-pub fn register(exe: &Path, id: &str) -> Result<Vec<Integration>> {
+/// Turn one integration (by id) on or off. On points it at this exe, taking it from another program; off removes
+/// gachamod's entry. The caller saves the choice under `setting_key(id)`.
+pub fn set(exe: &Path, id: &str, on: bool) -> Result<Vec<Integration>> {
     #[cfg(windows)]
     {
-        reg::register(&reg::hkcu(), CLASSES, exe, id)?;
+        let root = reg::hkcu();
+        if on { reg::register(&root, CLASSES, exe, id)? } else { reg::unregister(&root, CLASSES, id)? }
         reg::notify_shell();
         integrations(exe)
     }
     #[cfg(not(windows))]
-    { let _ = (exe, id); Err(Error::Invalid("Links and file types are Windows only".into())) }
+    { let _ = (exe, id, on); Err(Error::Invalid("Links and file types are Windows only".into())) }
 }
 
-/// Register everything that nobody else holds. Called on start (release builds); never takes one from another program.
-pub fn register_free(exe: &Path) -> Result<()> {
+/// Register everything that is free or held by another copy of gachamod, except what the user turned off.
+/// Called on every start; never takes one from another program.
+pub fn register_free(exe: &Path, off: &[&str]) -> Result<()> {
     #[cfg(windows)]
     {
         let root = reg::hkcu();
         let mut any = false;
         for i in reg::status(&root, CLASSES, exe) {
-            if !i.ours && i.owner.is_none() { reg::register(&root, CLASSES, exe, &i.id)?; any = true; }
+            if !i.ours && i.owner.is_none() && !off.contains(&i.id.as_str()) { reg::register(&root, CLASSES, exe, &i.id)?; any = true; }
         }
         if any { reg::notify_shell(); }
     }
     #[cfg(not(windows))]
-    let _ = exe;
+    let _ = (exe, off);
     Ok(())
+}
+
+// ── exe icons ──
+
+/// An exe's icon at `size` px as PNG bytes (Windows only; None elsewhere or when the exe has no icon).
+pub fn exe_icon_png(exe: &Path, size: u32) -> Option<Vec<u8>> {
+    #[cfg(windows)]
+    {
+        let (w, h, px) = icon::rgba(exe, size as i32)?;
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, w, h);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut wr = enc.write_header().ok()?;
+            wr.write_image_data(&px).ok()?;
+            wr.finish().ok()?;
+        }
+        Some(out)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (exe, size);
+        None
+    }
+}
+
+#[cfg(windows)]
+mod icon {
+    use std::os::windows::ffi::OsStrExt;
+    use std::path::Path;
+    use windows_sys::Win32::Graphics::Gdi::{
+        DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, PrivateExtractIconsW, HICON, ICONINFO};
+
+    /// The first icon of an exe at `size` px: (width, height, RGBA pixels, top row first).
+    pub fn rgba(exe: &Path, size: i32) -> Option<(u32, u32, Vec<u8>)> {
+        let wide: Vec<u16> = exe.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut h: HICON = std::ptr::null_mut();
+        let mut id = 0u32;
+        // SAFETY: `wide` is a NUL-terminated path; one icon handle is written to `h`
+        let n = unsafe { PrivateExtractIconsW(wide.as_ptr(), 0, size, size, &mut h, &mut id, 1, 0) };
+        if n == 0 || n == u32::MAX || h.is_null() { return None; }
+        // SAFETY: `h` is a valid icon handle until DestroyIcon
+        let out = unsafe { pixels(h) };
+        unsafe { DestroyIcon(h) };
+        out
+    }
+
+    /// A bitmap's pixels as a 32-bit top-down BI_RGB DIB (BGRA).
+    unsafe fn bits(dc: HDC, bmp: HBITMAP) -> Option<(i32, i32, Vec<u8>)> {
+        let mut bm: BITMAP = std::mem::zeroed();
+        if GetObjectW(bmp, std::mem::size_of::<BITMAP>() as i32, &mut bm as *mut BITMAP as *mut _) == 0 { return None; }
+        let (w, h) = (bm.bmWidth, bm.bmHeight);
+        if w <= 0 || h <= 0 || w > 1024 || h > 2048 { return None; }
+        let mut info: BITMAPINFO = std::mem::zeroed();
+        info.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        info.bmiHeader.biWidth = w;
+        info.bmiHeader.biHeight = -h;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+        let mut buf = vec![0u8; (w as usize) * (h as usize) * 4];
+        let lines = GetDIBits(dc, bmp, 0, h as u32, buf.as_mut_ptr() as *mut _, &mut info, DIB_RGB_COLORS);
+        (lines > 0).then_some((w, h, buf))
+    }
+
+    unsafe fn pixels(icon: HICON) -> Option<(u32, u32, Vec<u8>)> {
+        let mut ii: ICONINFO = std::mem::zeroed();
+        if GetIconInfo(icon, &mut ii) == 0 { return None; }
+        let dc = GetDC(std::ptr::null_mut());
+        let color = if ii.hbmColor.is_null() { None } else { bits(dc, ii.hbmColor) };
+        let mask = if ii.hbmMask.is_null() { None } else { bits(dc, ii.hbmMask) };
+        ReleaseDC(std::ptr::null_mut(), dc);
+        if !ii.hbmColor.is_null() { DeleteObject(ii.hbmColor); }
+        if !ii.hbmMask.is_null() { DeleteObject(ii.hbmMask); }
+        let (w, h, mut px) = color?;
+        if !px.chunks_exact(4).any(|p| p[3] != 0) {
+            // an old-style icon without alpha: the mask's white pixels are the see-through ones
+            match mask {
+                Some((mw, mh, m)) if mw == w && mh >= h => {
+                    for (i, p) in px.chunks_exact_mut(4).enumerate() { p[3] = if m[i * 4] == 0 { 255 } else { 0 }; }
+                }
+                _ => { for p in px.chunks_exact_mut(4) { p[3] = 255; } }
+            }
+        }
+        for p in px.chunks_exact_mut(4) { p.swap(0, 2); }
+        Some((w as u32, h as u32, px))
+    }
 }
 
 #[cfg(test)]
@@ -154,9 +295,21 @@ mod tests {
         let me = Path::new(r"C:\Apps\gachamod\gachamod.exe");
         assert_eq!(holder(Some(r#""C:\APPS\gachamod\gachamod.exe" "%1""#), me), (true, None));
         assert_eq!(holder(Some(r#""C:\Tools\Other.exe" "%1""#), me), (false, Some("Other.exe".into())));
-        // a gachamod that was moved or removed doesn't block a new one
+        // another copy of gachamod (moved, removed, a dev build) doesn't block this one
         assert_eq!(holder(Some(r#""Z:\gone\gachamod.exe" "%1""#), me), (false, None));
+        assert_eq!(holder(Some(r#""D:\src\gachamod\target\debug\gachamod.exe" "%1""#), me), (false, None));
         assert_eq!(holder(None, me), (false, None));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn takes_an_exe_icon() {
+        let root = std::env::var_os("SystemRoot").map(std::path::PathBuf::from).unwrap_or_else(|| r"C:\Windows".into());
+        let png = exe_icon_png(&root.join("explorer.exe"), 256).expect("explorer.exe has an icon");
+        assert_eq!(&png[1..4], b"PNG");
+        // width and height from the IHDR chunk
+        assert_eq!(u32::from_be_bytes(png[16..20].try_into().unwrap()), 256);
+        assert!(exe_icon_png(&root.join("no-such-file.exe"), 256).is_none());
     }
 
     #[cfg(windows)]
@@ -174,6 +327,14 @@ mod tests {
         let other = reg::status(&root, &base, Path::new(r"C:\Else\gachamod.exe"));
         assert!(!other.iter().find(|i| i.id == SCHEME_ID).unwrap().ours);
         assert!(reg::register(&root, &base, exe, "nope").is_err());
+        // off removes both, and leaves another program's entry alone
+        reg::unregister(&root, &base, SCHEME_ID).unwrap();
+        reg::unregister(&root, &base, FILE_ID).unwrap();
+        assert!(reg::status(&root, &base, exe).iter().all(|i| !i.ours && i.owner.is_none()));
+        let other = Path::new(r"C:\Tools\Other.exe");
+        reg::register(&root, &base, other, SCHEME_ID).unwrap();
+        reg::unregister(&root, &base, SCHEME_ID).unwrap();
+        assert_eq!(reg::status(&root, &base, exe)[0].owner.as_deref(), Some("Other.exe"));
         let _ = root.delete_subkey_all(&base);
         assert!(root.open_subkey(&base).is_err());
     }

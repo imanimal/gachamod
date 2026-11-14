@@ -83,6 +83,32 @@ export interface Character {
   enabledCount: number;
 }
 
+/** What an owned-characters import did (owned.rs). */
+export interface OwnedImport {
+  /** The game the characters went to. A file that clearly belongs to one game (a GOOD export) goes there. */
+  game: GameId;
+  /** What the file was read as, like "GOOD", "Enka.Network profile" or "list of names". */
+  format: string;
+  /** Newly marked as owned. Undo clears these. */
+  added: string[];
+  /** Found but already marked. */
+  already: number;
+  /** Names that matched no character. */
+  unknown: string[];
+}
+
+/** Other mod managers' details found in a Mods folder (managers.rs): JASM, XXMM, FlairX, EMMM and others. */
+export interface ForeignInfo {
+  managers: Array<{ manager: string; mods: number }>;
+  /** Mods whose details an import would add to (name, character, link, picture). */
+  fillable: number;
+}
+
+/** A mod's details before an import changed them. Only for passing back to Undo. */
+export interface SidecarBack { rel: string; sidecar: unknown }
+
+export interface ForeignImport { changed: number; managers: string[]; undo: SidecarBack[]; notes: string[] }
+
 export interface Profile {
   id: number;
   game: GameId;
@@ -113,4 +139,5 @@ export const EVENTS = {
   openFile: "open-file",
   toast: "toast",
   packProgress: "pack-progress",
+  gbAccount: "gb-account",
 } as const;

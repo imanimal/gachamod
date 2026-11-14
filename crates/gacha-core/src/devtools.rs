@@ -208,26 +208,37 @@ pub fn watch(db: Shared, on_state: impl Fn(&str, bool) + Send + 'static) {
     if spawned.is_err() { /* no watcher: reloads stay manual, nothing else depends on it */ }
 }
 
-/// Bring the game window forward and press F10 (3DMigoto's reload_config) so changed mods load without a restart.
-pub fn reload_in_game(game: &str) -> Result<()> {
+/// Bring the running game's window to the front (keys sent after this reach it). `then` finishes the error text
+/// ("press F10").
+fn focus(game: &str, then: &str) -> Result<()> {
     let g = crate::games::require_def(game)?;
     let pids = crate::launch::game_pids(&crate::launch::processes(), game);
     if pids.is_empty() { return Err(Error::Invalid(format!("{} isn't running", g.name))); }
     let Some(w) = win::main_window(&pids) else {
-        return Err(Error::Invalid(format!("Couldn't find {}'s window. Click the game and press F10", g.name)));
+        return Err(Error::Invalid(format!("Couldn't find {}'s window. Click the game and {then}", g.name)));
     };
+    if win::foreground_in(&pids) { return Ok(()); }
     win::bring_forward(w);
     std::thread::sleep(Duration::from_millis(300));
     if !win::foreground_in(&pids) {
-        return Err(Error::Invalid(format!("Windows didn't let gachamod bring {} to the front. Click the game and press F10", g.name)));
+        return Err(Error::Invalid(format!("Windows didn't let gachamod bring {} to the front. Click the game and {then}", g.name)));
     }
+    Ok(())
+}
+
+/// Bring the game to the front for a key tap (live switching).
+pub(crate) fn focus_game(game: &str) -> Result<()> { focus(game, "try again") }
+
+/// Bring the game window forward and press F10 (3DMigoto's reload_config) so changed mods load without a restart.
+pub fn reload_in_game(game: &str) -> Result<()> {
+    focus(game, "press F10")?;
     win::press_f10();
     with_pending(|p| { p.remove(game); });
     Ok(())
 }
 
 #[cfg(windows)]
-mod win {
+pub(crate) mod win {
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
     use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -273,13 +284,13 @@ mod win {
         (!s.found.is_null()).then_some(s.found)
     }
 
-    fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
+    pub fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
         // SAFETY: MapVirtualKeyW is a pure lookup.
         let scan = unsafe { MapVirtualKeyW(vk as u32, MAPVK_VK_TO_VSC) } as u16;
         INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: vk, wScan: scan, dwFlags: if up { KEYEVENTF_KEYUP } else { 0 }, time: 0, dwExtraInfo: 0 } } }
     }
 
-    fn send(inputs: &[INPUT]) {
+    pub fn send(inputs: &[INPUT]) {
         // SAFETY: a valid slice of INPUT structs and its size.
         unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
     }
@@ -314,7 +325,7 @@ mod win {
 }
 
 #[cfg(not(windows))]
-mod win {
+pub(crate) mod win {
     pub type Win = usize;
     pub fn foreground_in(_pids: &[u32]) -> bool { false }
     pub fn main_window(_pids: &[u32]) -> Option<Win> { None }

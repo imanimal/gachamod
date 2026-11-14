@@ -316,3 +316,101 @@ pub fn members(db: &Db, id: i64) -> Result<Vec<String>> {
     let v = st.query_map(params![id, p.game], |r| r.get::<_, String>(0))?.collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(v)
 }
+
+/// One mod's place in a profile, for snapshots.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotMod { pub mod_id: String, pub enabled: bool }
+
+/// One saved option value of a mod in a profile, for snapshots.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotVar { pub mod_id: String, pub ini: String, pub var: String, pub value: String }
+
+/// Everything about a profile, to put it back after a delete or an edit (undo). Mirrors `ProfileSnapshot` in
+/// src/lib/api/library.ts.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ProfileSnapshot {
+    pub profile: Profile,
+    pub mods: Vec<SnapshotMod>,
+    pub vars: Vec<SnapshotVar>,
+}
+
+/// A profile with all its rows, including those of removed mods (they come back with a reinstall).
+pub fn snapshot(db: &Db, id: i64) -> Result<ProfileSnapshot> {
+    let profile = get(db, id)?;
+    let mods = {
+        let mut st = db.conn.prepare("SELECT mod_id, enabled FROM profile_mods WHERE profile_id = ?1 ORDER BY mod_id")?;
+        let v = st.query_map([id], |r| Ok(SnapshotMod { mod_id: r.get(0)?, enabled: r.get::<_, i64>(1)? != 0 }))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        v
+    };
+    let vars = {
+        let mut st = db.conn.prepare("SELECT mod_id, ini, var, value FROM profile_vars WHERE profile_id = ?1 ORDER BY mod_id, ini, var")?;
+        let v = st.query_map([id], |r| Ok(SnapshotVar { mod_id: r.get(0)?, ini: r.get(1)?, var: r.get(2)?, value: r.get(3)? }))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        v
+    };
+    Ok(ProfileSnapshot { profile, mods, vars })
+}
+
+/// Put a profile back from a snapshot: the same id when it is free, its name (numbered when another profile took it),
+/// look, hotkey, mods with their on/off flags and saved values. A profile that was active is marked active again
+/// without changing any files (deleting it didn't change them either). Returns the profile.
+pub fn restore(db: &Db, snap: &ProfileSnapshot) -> Result<Profile> {
+    let s = &snap.profile;
+    games::require_def(&s.game)?;
+    let name = free_name(db, &s.game, &s.name, None)?;
+    let id_free = s.id > 0 && db.conn.query_row("SELECT 1 FROM profiles WHERE id = ?1", [s.id], |_| Ok(())).optional()?.is_none();
+    let t = now();
+    let (created, updated) = (if s.created_at > 0 { s.created_at } else { t }, if s.updated_at > 0 { s.updated_at } else { t });
+    let tx = db.conn.unchecked_transaction()?;
+    if id_free {
+        tx.execute("INSERT INTO profiles (id, game, name, icon, color, banner, description, active, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9)",
+            params![s.id, s.game, name, s.icon, s.color, s.banner, s.description, created, updated])?;
+    } else {
+        tx.execute("INSERT INTO profiles (game, name, icon, color, banner, description, active, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8)",
+            params![s.game, name, s.icon, s.color, s.banner, s.description, created, updated])?;
+    }
+    let id = tx.last_insert_rowid();
+    // rows a deleted profile left behind under a reused id are not this one's
+    tx.execute("DELETE FROM profile_mods WHERE profile_id = ?1", [id])?;
+    tx.execute("DELETE FROM profile_vars WHERE profile_id = ?1", [id])?;
+    for m in &snap.mods {
+        tx.execute("INSERT OR REPLACE INTO profile_mods (profile_id, mod_id, enabled) VALUES (?1, ?2, ?3)", params![id, m.mod_id, m.enabled as i64])?;
+    }
+    for v in &snap.vars {
+        tx.execute("INSERT OR REPLACE INTO profile_vars (profile_id, mod_id, ini, var, value) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, v.mod_id, v.ini, v.var, v.value])?;
+    }
+    if s.active { tx.execute("UPDATE profiles SET active = (id = ?1) WHERE game = ?2", params![id, s.game])?; }
+    tx.commit()?;
+    if let Some(h) = s.hotkey.as_deref().filter(|h| !h.trim().is_empty()) { let _ = crate::hotkeys::set_for_profile(db, id, Some(h)); }
+    get(db, id)
+}
+
+/// Put mods in a profile turned on, or (with `on` false) keep them listed but off, without switching to it. For the
+/// active profile this is a normal toggle (files renamed, one skin per character); for another profile only its rows
+/// change. Ids that aren't mods of the profile's game are skipped.
+pub fn set_mods(db: &Db, id: i64, mod_ids: &[String], on: bool) -> Result<SwitchReport> {
+    let p = get(db, id)?;
+    let known: std::collections::HashSet<String> = library::list(db, &p.game)?.into_iter().map(|m| m.id).collect();
+    let ids: Vec<String> = mod_ids.iter().filter(|m| known.contains(*m)).cloned().collect();
+    if ids.is_empty() && !mod_ids.is_empty() {
+        return Err(Error::Invalid("Those mods aren't in the library anymore. Rescan to refresh the list".into()));
+    }
+    let mut change = ModChange::default();
+    if p.active {
+        change = library::set_enabled(db, &p.game, &ids, on)?;
+    } else {
+        let tx = db.conn.unchecked_transaction()?;
+        for m in &ids {
+            tx.execute("INSERT INTO profile_mods (profile_id, mod_id, enabled) VALUES (?1, ?2, ?3)
+                        ON CONFLICT(profile_id, mod_id) DO UPDATE SET enabled = excluded.enabled", params![id, m, on as i64])?;
+        }
+        tx.execute("UPDATE profiles SET updated_at = ?1 WHERE id = ?2", params![now(), id])?;
+        tx.commit()?;
+    }
+    Ok(SwitchReport { profile: get(db, id)?, change, vars_pending: false })
+}

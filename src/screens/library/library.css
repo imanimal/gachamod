@@ -1,13 +1,19 @@
 /* Mods screen layout. Owner: LIBRARY area. Colours come only from theme tokens; the theme styles the kit classes. */
 
 .library-search { min-width: 16rem; }
+/* the action row always has its own line under the title, so the Installed/Trash switch at its start sits in the same
+   place on both pages at any window width */
+.library > .page-h .page-h-a { flex-basis: 100%; }
+.library > .page-h .library-search { flex: 0 1 24rem; }
 .library-filters, .library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
 .library-filters .field { min-width: 11rem; }
 .library-chars { flex-wrap: nowrap; overflow-x: auto; padding: .2rem .15rem; scrollbar-width: none; }
 .library-chars .char-chip { flex: none; }
 
-.library-bulk { position: fixed; left: calc(50% + 9rem); bottom: 1.1rem; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
-.library-bulk-n { font-weight: 700; margin-right: .5rem; }
+
+/* the shared grid (ModGrid): the bulk bar floats at the bottom of the view while there is a selection */
+.mod-grid-wrap { display: flex; flex-direction: column; gap: .8rem; min-height: 100%; }
+.mod-bulk { flex-wrap: wrap; justify-content: center; max-width: 100%; gap: .3rem; }
 
 /* the grid: kit .cards gives the columns */
 .mod-grid { --card-min: 11.2rem; }
@@ -32,6 +38,10 @@
 .mod-card-foot .toggle { position: absolute; right: .55rem; bottom: .6rem; }
 .mod-card-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; }
 .mod-card:hover .mod-card-more, .mod-card-more:focus-visible, .mod-card:focus-within .mod-card-more { opacity: 1; }
+/* on the picture it gets the .on-img plate (kit.css). Kept low (:where) so a game theme's own filled button wins */
+:where(.mod-card:not(.is-row)) .mod-card-more { color: var(--text); background: color-mix(in srgb, var(--surface) 86%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2); box-shadow: inset 0 0 0 1px var(--line-2), 0 2px 8px rgb(0 0 0 / .35); }
+:where(.mod-card:not(.is-row)) .mod-card-more:hover:not(:disabled) { color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px var(--accent), 0 2px 10px rgb(0 0 0 / .4); }
 .mod-card.is-off .mod-card-img { opacity: .55; filter: grayscale(.6); }
 .mod-card.is-off .mod-card-name { color: var(--text-2); }
 
@@ -71,14 +81,57 @@
 .link-btn { display: inline-flex; align-items: center; gap: .3rem; color: var(--accent); }
 .link-btn:hover { text-decoration: underline; }
 
-/* recently removed */
-.trash-hint { margin-bottom: .8rem; }
-.trash-loading { display: flex; justify-content: center; padding: 2rem; }
-.trash-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
-.trash-item { display: flex; align-items: center; gap: .6rem; padding: .55rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); }
-.trash-item-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.trash-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trash-item .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* health mark on a card: a game update broke it */
+.mod-card-health { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border-radius: 99px; background: var(--warn); color: var(--bg); }
+.mod-card-health.is-bad { background: var(--bad); color: var(--on-bad); }
+.mod-card-health .i { width: .9em; height: .9em; }
+.mod-card-char .qlink { text-decoration: none; }
+.mod-card-char .qlink:hover { text-decoration: underline; }
+
+/* drawer additions */
+.mod-drawer-who { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; margin: -.4rem 0 .9rem; }
+.mod-drawer-health { margin-bottom: 1rem; }
+.mod-drawer-health-t { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
+.mod-drawer-health-a { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .2rem; }
+.mod-drawer-adult { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.mod-drawer-sec:empty { display: none; }
+.mod-drawer-sec { display: flex; flex-direction: column; gap: var(--stack-gap); margin-top: 1.2rem; scroll-margin-top: 1rem; }
+
+/* archive */
+.archive { display: flex; flex-direction: column; gap: .9rem; }
+.archive-top { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+.archive-hint { flex: 1 1 22rem; max-width: 48rem; }
+.archive-grid { --tile-min: 13.5rem; }
+.archive-img { position: absolute; inset: 0; }
+.archive-card .tile-sub .qlink { text-decoration: none; }
+.archive-a { display: flex; gap: .4rem; margin-top: .45rem; }
+
+/* small windows from the menus (LibDialogs.tsx) */
+.lib-ask { display: flex; flex-direction: column; gap: .7rem; }
+.lib-ask .field input { width: 100%; }
+.lib-ask-picks { display: flex; flex-wrap: wrap; gap: .35rem; }
+.lib-ask-picks .chip .portrait { flex: none; margin-left: -.5rem; }
+.lib-ask-picks .chip .i { width: .85em; height: .85em; }
+.lib-ask-now { display: flex; justify-content: center; }
+.lib-ask-url { display: flex; align-items: flex-end; gap: .5rem; }
+.lib-ask-url .field { flex: 1; }
+.lib-ask-previews { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; }
+.lib-ask-prev { aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.lib-ask-prev:hover { box-shadow: 0 0 0 2px var(--accent); }
+.lib-ask-prev .mod-img { width: 100%; height: 100%; }
 .mod-drawer-hero.is-drop .mod-drawer-img { outline: 2px dashed var(--accent); outline-offset: 2px; }
-.mod-drawer-picact { position: absolute; right: .6rem; top: .6rem; display: flex; gap: .35rem; }
+.mod-drawer-picact { position: absolute; right: .6rem; top: .6rem; display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
 .mod-drawer-drop { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--radius); background: var(--scrim); color: var(--text); font-weight: 600; pointer-events: none; }
+
+/* a long name wraps to a second line on a card before it is cut */
+.mod-card:not(.is-row) .mod-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+
+/* the 3D view in a mod's details: taller than the picture, since characters stand */
+.mod-viewer-wrap { display: flex; flex-direction: column; gap: .4rem; }
+.mod-viewer { position: relative; aspect-ratio: 4 / 3; width: 100%; border-radius: var(--radius); overflow: hidden; background: var(--surface-2); outline-offset: 2px; touch-action: none; }
+.mod-viewer:focus-visible { outline: 2px solid var(--accent); }
+.mod-viewer-canvas { position: absolute; inset: 0; display: block; cursor: grab; }
+.mod-viewer-canvas:active { cursor: grabbing; }
+.mod-viewer.is-wait { display: grid; place-items: center; }
+.mod-viewer-msg { display: inline-flex; align-items: center; gap: .5rem; max-width: 80%; text-align: center; color: var(--text-2); }
+.mod-viewer-note { margin: 0; }

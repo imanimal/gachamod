@@ -1,7 +1,8 @@
 // GameBanana's public API (apiv11, no key, CORS allowed), called straight from the UI in Tauri and in the browser demo.
-// Owner: ONLINE area (docs/spec.md, "Browse"; API notes in docs/research.md, section 2).
+// Owner: BROWSE area (docs/spec.md, "Downloads and Browse"; API notes in docs/research.md, section 2).
 // Every function caches in memory (and sessionStorage/localStorage where noted) and never throws for a missing
 // optional field. The signatures below are the contract other areas compile against: keep them.
+import { useEffect, useState } from "react";
 import type { GameId, ModEntry } from "./api";
 import { queue, type QueueItem, type QueueRequest } from "./api/online";
 import { currentGame } from "./store";
@@ -34,7 +35,19 @@ export interface GbCard {
   updated: number;
   nsfw: boolean;
   version: string | null;
+  /** Comments on GameBanana (_nPostCount). */
+  comments?: number;
+  /** GameBanana featured it at some point. */
+  featured?: boolean;
+  /** The game it belongs to (lists across games, like a creator's page). */
+  game?: { id: number; name: string } | null;
+  /** What sort of mod it is (kindOf). */
+  kind?: GbKind;
 }
+
+/** "outfit": character outfits and model edits. "texture": recolors, makeup, face and texture-only edits. "tool":
+ *  shaders, effect removers, camera and other fixes. "other": NPCs, Bangboo, objects and the rest. */
+export type GbKind = "outfit" | "texture" | "weapon" | "tool" | "ui" | "other";
 
 export interface GbFile {
   id: number;
@@ -66,10 +79,15 @@ export interface GbMod extends GbCard {
 
 export interface GbUpdate { id: number; name: string; version: string | null; added: number; changes: Array<{ cat: string; text: string }>; text: string }
 
-export type GbSort = "popular" | "newest" | "updated" | "downloads" | "likes" | "views";
+/** "popular" and "downloads" are most downloaded of all time; "week" and "month" are the most liked mods added in
+ *  the last 7 or 30 days (gathered from the newest pages, GameBanana has no such sort). */
+export type GbSort = "popular" | "newest" | "updated" | "downloads" | "likes" | "views" | "week" | "month";
 
 export interface ListQuery {
+  /** 0 lists every game (a creator's mods everywhere). */
   gbGameId: number;
+  /** Only this member's mods. */
+  submitterId?: number | null;
   page: number;
   /** Up to 50 for lists; search returns 15 per page whatever this says. */
   perPage?: number;
@@ -224,6 +242,59 @@ function matchCharacter(cat: GbCategoryRef | null, chars: GbCategoryRef[]): stri
   return chars.find((c) => c.name.trim().toLowerCase() === n)?.name ?? null;
 }
 
+// ── what sort of mod: from the category, the name and the "Software Used" tags creators add ──
+//
+// Checked against 1,600 of the newest mods of zzz, gi, hsr and ww. GameBanana only knows the category (Skins, UI,
+// Other/Misc ...), so inside Skins the name decides between an outfit and a texture edit: "Danica Darker Recolor",
+// "Claret Eye Recolour", "arlecchino makeup" and "Tanned Xiao" are texture edits; "Velina - Deathblow (New
+// skirt+color)" and "Purple Sister over Remielle" are outfits. A part added with "+" ("Rina Thicc + Makeup",
+// "Cozy Winter Freminet (+ Serpent Spine Recolour)") doesn't count, and a mod whose only software tags are paint
+// programs (no Blender) is a texture edit.
+
+const K_TEXTURE = /\b(tex|re-?colou?r(s|ed)?|re-?textur(e|es|ed)|textures|make-?up|face ?(mod|edit)|refined face|eye-?lash(es)?|lipstick|nail polish|skin ?tone|shadow ?maps?|(sun-?)?tanned|tan|palette)\b/i;
+const K_OUTFIT = /\b(over|outfits?|dress(es)?|skirts?|suits?|swimsuits?|bikinis?|maid|uniforms?|costumes?|clothes|clothing|jackets?|coats?|hoodie|armou?r|bunny|lingerie|kimono|cosplay|nude|naked|thicc|thick|body|mashup|modbash|drip|\w*wear|bodysuit|capes?|gowns?|robes?|fat|slim|skinny|buff(ed)?|beef(y|ier)?|hefty|curvy|pear-shaped|petite|muscular|chubby|toggles?)\b/i;
+const K_SOFT = /\b(colou?rs?|colou?red|eyes?|hair ?colou?r|shader|shading|tint)\b/i;
+const K_HUE = "(black|white|pink|red|blue|green|purple|teal|gold|golden|silver|brown|dark|darker|pale|paler)";
+const K_HUED = new RegExp(`\\b(but|to|in)\\s+${K_HUE}\\b|\\(\\s*${K_HUE}\\s*\\)|\\b${K_HUE}\\s+(hair|skin|eyes|version|ver)\\b|\\bless pale\\b`, "i");
+const K_TOOL = /\b(fix(es|ed)?|remov(e|er|al)|fx|reshade|shaders?|camera|lib|library|toggler|filter|map\+?|outlines?|bloom|sharpen|x-?ray|downsizer|script|fps|censor|tools?|utility|cursor|screenshot)\b/i;
+const K_PAINT = /paint|photoshop|gimp|sai\b|krita|clip studio|medibang|substance|procreate/i;
+const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The sort of mod (GbKind). `root` is the top category ("Skins", "UI", "Other/Misc"), `category` the most exact
+ *  one ("Vesna", "Swords"), `software` the creator's "Software Used" tags. */
+export function kindOf(m: { name: string; root: string | null; category: string | null; isCharacter: boolean; software?: string[] }): GbKind {
+  const root = m.root ?? "", cat = m.category ?? "";
+  if (/^\s*ui\s*$|interface|\bhud\b/i.test(root)) return "ui";
+  // "(1.7 Fix)" and "[1.2 FIXED]" are version notes, not what the mod is
+  if (/other|misc/i.test(root)) return K_TOOL.test(m.name.replace(/\([^)]*\)|\[[^\]]*\]/g, " ")) ? "tool" : "other";
+  if (/bangboo|npc|entit|object|gadget|creature|enem|waverider|cutscene/i.test(`${root} ${cat}`)) return "other";
+  if (/^\s*(swords?|claymores?|polearms?|bows?|catalysts?|weapons?|w-engines?|light ?cones?)\s*$/i.test(cat) || /weapon/i.test(root)) return "weapon";
+  if (!/skin|character|playable|agent|resonator/i.test(root) && !m.isCharacter) return root ? "other" : "outfit";
+  // "+ Makeup" and "(+ ...)" are extras on top of the mod
+  const core = m.name.replace(/\(\s*\+[^)]*\)|\[\s*\+[^\]]*\]|\s\+\s.*$/g, " ");
+  if (K_TEXTURE.test(core) && !/\bover\b|mashup|modbash/i.test(core)) return "texture";
+  if (K_OUTFIT.test(core)) return "outfit";
+  // the character's own name says nothing ("Burnice White", "Black Swan")
+  let rest = core;
+  for (const w of cat.split(/\s+/)) if (w.length > 2) rest = rest.replace(new RegExp(`\\b${escapeRe(w)}\\b`, "gi"), " ");
+  if (K_SOFT.test(rest) || K_HUED.test(rest)) return "texture";
+  const sw = m.software ?? [];
+  if (sw.length && sw.some((t) => K_PAINT.test(t)) && sw.every((t) => K_PAINT.test(t) || /notepad|sublime|text|code/i.test(t))) return "texture";
+  return "outfit";
+}
+
+/** The "Software Used" tags of a record (strings like "Software Used: Blender", or {_sTitle, _sValue}). */
+function softwareTags(raw: unknown): string[] {
+  const out: string[] = [];
+  for (const t of arr(raw)) {
+    const o = obj(t);
+    const text = typeof t === "string" ? t : o ? `${str(o._sTitle) ?? ""}: ${str(o._sValue) ?? ""}` : "";
+    const m = /^\s*software used\s*:\s*(.+)$/i.exec(text);
+    if (m) out.push(m[1]!.trim());
+  }
+  return out;
+}
+
 function parseCard(raw: unknown, chars: GbCategoryRef[]): GbCard | null {
   const o = obj(raw);
   const id = num(o?._idRow), name = str(o?._sName);
@@ -232,12 +303,14 @@ function parseCard(raw: unknown, chars: GbCategoryRef[]): GbCard | null {
   const category = parseCategory(o._aSubCategory) ?? parseCategory(o._aCategory) ?? parseCategory(o._aRootCategory);
   const visibility = str(o._sInitialVisibility);
   const added = num(o._tsDateAdded) ?? 0;
+  const g = obj(o._aGame), gid = num(g?._idRow);
+  const character = matchCharacter(category, chars);
   return {
     id, name, url: str(o._sProfileUrl) ?? `https://gamebanana.com/mods/${id}`,
     image: parseImages(o._aPreviewMedia)[0] ?? null,
     submitter: parseUser(o._aSubmitter),
     category,
-    character: matchCharacter(category, chars),
+    character,
     likes: num(o._nLikeCount) ?? 0,
     views: num(o._nViewCount) ?? 0,
     downloads: num(o._nDownloadCount),
@@ -245,6 +318,14 @@ function parseCard(raw: unknown, chars: GbCategoryRef[]): GbCard | null {
     updated: num(o._tsDateUpdated) ?? num(o._tsDateModified) ?? added,
     nsfw: o._bHasContentRatings === true || visibility === "warn" || visibility === "hide",
     version: str(o._sVersion),
+    comments: num(o._nPostCount) ?? 0,
+    featured: o._bWasFeatured === true,
+    game: g && gid !== null ? { id: gid, name: str(g._sName) ?? "" } : null,
+    kind: kindOf({
+      name, category: category?.name ?? null, isCharacter: !!character,
+      root: str(obj(o._aRootCategory)?._sName) ?? str(obj(o._aSuperCategory)?._sName) ?? null,
+      software: softwareTags(o._aTags),
+    }),
   };
 }
 
@@ -293,22 +374,80 @@ function charCatForGb(gbGameId: number): number | null {
   return Object.values(CHAR_CATS).find((c) => c.gb === gbGameId)?.cat ?? null;
 }
 
+// The character list is never built into the app: it is GameBanana's character categories, kept in localStorage.
+// A kept list is used at once and fetched again in the background once it is a day old (stale while revalidate),
+// and sooner when a mod names a character category the kept list lacks (a character added since). Screens that
+// show the list hear about a new one through onCharacters / useCharacterList.
+
+const DAY = 86_400_000;
+const charLive = new Map<number, GbCategoryRef[]>();
+const charFetching = new Map<number, Promise<GbCategoryRef[]>>();
+const charTried = new Map<number, number>();
+const charSubs = new Set<(cat: number) => void>();
+
+const charKey = (cat: number) => `gm.gb.chars.${Object.entries(CHAR_CATS).find(([, v]) => v.cat === cat)?.[0] ?? cat}`;
+
+function storeRead<T>(key: string): { at: number; value: T } | null {
+  try { const raw = localStorage.getItem(key); return raw ? (JSON.parse(raw) as { at: number; value: T }) : null; } catch { return null; }
+}
+
+function fetchChars(cat: number): Promise<GbCategoryRef[]> {
+  const running = charFetching.get(cat);
+  if (running) return running;
+  charTried.set(cat, Date.now());
+  const p = getJson(`${GB}/Mod/Categories?_idCategoryRow=${cat}&_sSort=a_to_z&_bShowEmpty=true`).then((raw) => {
+    const list = arr(raw).map(parseCategory).filter((c): c is GbCategoryRef => !!c);
+    if (list.length) {
+      const before = charLive.get(cat);
+      charLive.set(cat, list);
+      storeSet("local", charKey(cat), list);
+      const changed = !before || before.length !== list.length || before.some((c, i) => c.id !== list[i]?.id || c.icon !== list[i]?.icon);
+      if (changed) charSubs.forEach((f) => f(cat));
+    }
+    return list.length ? list : charLive.get(cat) ?? [];
+  }).finally(() => charFetching.delete(cat));
+  charFetching.set(cat, p);
+  return p;
+}
+
 async function charsForCat(cat: number | null): Promise<GbCategoryRef[]> {
   if (!cat) return [];
-  const game = Object.entries(CHAR_CATS).find(([, v]) => v.cat === cat)?.[0] ?? String(cat);
-  const key = `gm.gb.chars.${game}`;
-  const stored = storeGet<GbCategoryRef[]>("local", key, 86_400_000);
-  if (stored) return stored;
-  return cached(`chars:${cat}`, 86_400_000, async () => {
-    const raw = await getJson(`${GB}/Mod/Categories?_idCategoryRow=${cat}&_sSort=a_to_z&_bShowEmpty=true`);
-    const list = arr(raw).map(parseCategory).filter((c): c is GbCategoryRef => !!c);
-    if (list.length) storeSet("local", key, list);
-    return list;
-  });
+  const live = charLive.get(cat);
+  if (live) {
+    if (Date.now() - (charTried.get(cat) ?? 0) > DAY) void fetchChars(cat).catch(() => {});
+    return live;
+  }
+  const kept = storeRead<GbCategoryRef[]>(charKey(cat));
+  if (kept?.value?.length) {
+    charLive.set(cat, kept.value);
+    charTried.set(cat, kept.at);
+    if (Date.now() - kept.at > DAY) void fetchChars(cat).catch((e) => console.warn("GameBanana characters:", e));
+    return kept.value;
+  }
+  return fetchChars(cat);
+}
+
+/** A mod named this character category: fetch the list again when it doesn't have it (at most every 10 minutes). */
+function noteCharCategory(cat: number | null, ref: GbCategoryRef | null) {
+  if (!cat || !ref) return;
+  const list = charLive.get(cat);
+  if (!list || list.some((c) => c.id === ref.id)) return;
+  if (Date.now() - (charTried.get(cat) ?? 0) < 10 * 60_000) return;
+  void fetchChars(cat).catch(() => {});
 }
 
 async function charsQuiet(cat: number | null): Promise<GbCategoryRef[]> {
   try { return await charsForCat(cat); } catch (e) { console.warn("GameBanana characters:", e); return []; }
+}
+
+/** Hear when a game's character list changes (a new character on GameBanana). */
+export function onCharacters(cb: (game: GameId) => void): () => void {
+  const f = (cat: number) => {
+    const g = Object.entries(CHAR_CATS).find(([, v]) => v.cat === cat)?.[0] ?? (currentGame()?.gbCharacterCategory === cat ? currentGame()!.id : null);
+    if (g) cb(g as GameId);
+  };
+  charSubs.add(f);
+  return () => { charSubs.delete(f); };
 }
 
 // ── the API ──
@@ -338,40 +477,123 @@ export async function gameInfo(gbGameId: number): Promise<GbGameInfo | null> {
 const INDEX_SORT: Record<GbSort, string> = {
   popular: "Generic_MostDownloaded", downloads: "Generic_MostDownloaded", newest: "Generic_Newest",
   updated: "Generic_LatestUpdated", likes: "Generic_MostLiked", views: "Generic_MostViewed",
+  week: "Generic_Newest", month: "Generic_Newest",
 };
-const SEARCH_ORDER: Partial<Record<GbSort, string>> = { newest: "date", updated: "udate" };
+const SEARCH_ORDER: Partial<Record<GbSort, string>> = { newest: "date", updated: "udate", week: "date", month: "date", likes: "popularity", views: "popularity" };
+const WINDOW_DAYS: Partial<Record<GbSort, number>> = { week: 7, month: 30 };
 
-/** A page of mods for a game, newest/popular/etc., optionally in one category or matching text. */
-export async function listMods(q: ListQuery): Promise<ListResult> {
-  const page = Math.max(1, Math.floor(q.page || 1));
+/** Likes, plus views and comments in like-sized units (a mod gets roughly one like per 80 to 100 views). */
+/** A tool on GameBanana (a fixer, a script). */
+export interface GbTool { id: number; name: string; url: string; added: number; submitter: string | null }
+
+/** A game's newest tools on GameBanana (Tools > Fixes looks for new fixers here). Kept for an hour. */
+export function gameTools(gbGameId: number): Promise<GbTool[]> {
+  return cached(`tools:${gbGameId}`, 3_600_000, async () => {
+    const body = obj(await getJson(`${GB}/Tool/Index?_nPage=1&_nPerpage=50&_aFilters[Generic_Game]=${gbGameId}&_sSort=Generic_Newest`));
+    return arr(body?._aRecords).flatMap((raw): GbTool[] => {
+      const o = obj(raw);
+      const id = num(o?._idRow), name = str(o?._sName);
+      if (!o || !id || !name) return [];
+      return [{ id, name, url: https(str(o._sProfileUrl)) ?? `https://gamebanana.com/tools/${id}`, added: num(o._tsDateAdded) ?? 0, submitter: str(obj(o._aSubmitter)?._sName) }];
+    });
+  });
+}
+
+export const attention = (c: Pick<GbCard, "likes" | "views" | "comments">) => c.likes + c.views / 100 + (c.comments ?? 0) / 2;
+
+/** One page straight from GameBanana (no week/month gathering). */
+async function rawPage(q: ListQuery, sort: GbSort, page: number): Promise<ListResult> {
   const search = q.search?.trim() ?? "";
-  const sort = q.sort ?? "popular";
   let url: string;
   let perPage: number;
   if (search) {
     perPage = 15;
-    url = `${GB}/Util/Search/Results?_sModelName=Mod&_sOrder=${SEARCH_ORDER[sort] ?? "best_match"}&_idGameRow=${q.gbGameId}&_sSearchString=${encodeURIComponent(search)}&_nPage=${page}`;
+    url = `${GB}/Util/Search/Results?_sModelName=Mod&_sOrder=${SEARCH_ORDER[sort] ?? "best_match"}${q.gbGameId ? `&_idGameRow=${q.gbGameId}` : ""}&_sSearchString=${encodeURIComponent(search)}&_nPage=${page}`;
   } else {
     perPage = Math.min(50, Math.max(1, q.perPage ?? 30));
-    url = `${GB}/Mod/Index?_nPage=${page}&_nPerpage=${perPage}&_aFilters[Generic_Game]=${q.gbGameId}&_sSort=${INDEX_SORT[sort]}`;
+    url = `${GB}/Mod/Index?_nPage=${page}&_nPerpage=${perPage}&_sSort=${INDEX_SORT[sort]}`;
+    if (q.gbGameId) url += `&_aFilters[Generic_Game]=${q.gbGameId}`;
     if (q.categoryId) url += `&_aFilters[Generic_Category]=${q.categoryId}`;
+    if (q.submitterId) url += `&_aFilters[Generic_Submitter]=${q.submitterId}`;
   }
   const result = await cached(`list:${url}`, MIN5, async () => {
-    const [raw, chars] = await Promise.all([getJson(url, q.signal), charsQuiet(charCatForGb(q.gbGameId))]);
+    const charCat = q.gbGameId ? charCatForGb(q.gbGameId) : null;
+    const [raw, chars] = await Promise.all([getJson(url, q.signal), charsQuiet(charCat)]);
     const o = obj(raw);
     const meta = obj(o?._aMetadata);
     const records = arr(o?._aRecords);
-    const items = records.map((r) => parseCard(r, chars)).filter((c): c is GbCard => !!c);
+    const items: GbCard[] = [];
+    for (const r of records) {
+      const c = parseCard(r, chars);
+      if (!c) continue;
+      items.push(c);
+      // a character category under a root character category (zzz, ww) that the kept list lacks: a new character
+      if (charCat && c.category && !c.character && catIdFromUrl(obj(obj(r)?._aRootCategory)?._sProfileUrl) === charCat) noteCharCategory(charCat, c.category);
+    }
     const total = num(meta?._nRecordCount) ?? items.length;
     const complete = meta?._bIsComplete === true || records.length === 0 || page * perPage >= total;
     return { items, total, complete } satisfies ListResult;
   });
-  // search can't filter by category on GameBanana's side
-  if (search && q.categoryId) {
-    const id = q.categoryId;
-    return { ...result, items: result.items.filter((c) => c.category?.id === id) };
+  // search can't filter by category or member on GameBanana's side
+  if (search && (q.categoryId || q.submitterId)) {
+    const cat = q.categoryId, who = q.submitterId;
+    return { ...result, items: result.items.filter((c) => (!cat || c.category?.id === cat) && (!who || c.submitter?.id === who)) };
   }
   return result;
+}
+
+/** Mods added in the last `days`, most attention first: newest pages until the window ends (at most 10). */
+async function windowList(q: ListQuery, days: number): Promise<GbCard[]> {
+  const key = `win:${q.gbGameId}:${q.categoryId ?? ""}:${q.submitterId ?? ""}:${q.search ?? ""}:${days}`;
+  return cached(key, MIN5, async () => {
+    const since = Date.now() / 1000 - days * 86400;
+    const out: GbCard[] = [];
+    for (let p = 1; p <= 10; p++) {
+      const r = await rawPage({ ...q, perPage: 50 }, "newest", p);
+      out.push(...r.items.filter((c) => c.added >= since));
+      const oldest = r.items.reduce((m, c) => Math.min(m, c.added), Infinity);
+      if (r.complete || oldest < since || !r.items.length) break;
+    }
+    const seen = new Set<number>();
+    return out.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true))).sort((a, b) => attention(b) - attention(a));
+  });
+}
+
+/** A page of mods for a game, newest/popular/etc., optionally in one category, by one member or matching text. */
+export async function listMods(q: ListQuery): Promise<ListResult> {
+  const page = Math.max(1, Math.floor(q.page || 1));
+  const sort = q.sort ?? "popular";
+  const days = WINDOW_DAYS[sort];
+  if (!days) return rawPage(q, sort, page);
+  const all = await windowList(q, days);
+  const per = q.search?.trim() ? 15 : Math.min(50, Math.max(1, q.perPage ?? 30));
+  const items = all.slice((page - 1) * per, page * per);
+  return { items, total: all.length, complete: page * per >= all.length };
+}
+
+const SORT_CMP: Partial<Record<GbSort, (a: GbCard, b: GbCard) => number>> = {
+  newest: (a, b) => b.added - a.added,
+  updated: (a, b) => b.updated - a.updated,
+  likes: (a, b) => b.likes - a.likes,
+  views: (a, b) => b.views - a.views,
+};
+
+/** Mods by any of these members in one game, merged and sorted (up to 50 newest-or-best each, in one go). For "only
+ *  creators you follow" and Home's strip. Members GameBanana fails to answer for are skipped. */
+export async function listByCreators(ids: number[], q: Omit<ListQuery, "page" | "submitterId">): Promise<ListResult> {
+  const sort = q.sort ?? "newest";
+  const days = WINDOW_DAYS[sort];
+  const fetchSort: GbSort = days ? "newest" : sort;
+  const lists = await Promise.allSettled(ids.slice(0, 60).map((id) => rawPage({ ...q, page: 1, search: undefined, perPage: 50, submitterId: id }, fetchSort, 1)));
+  if (lists.length && lists.every((l) => l.status === "rejected")) throw (lists[0] as PromiseRejectedResult).reason;
+  let items = lists.flatMap((l) => (l.status === "fulfilled" ? l.value.items : []));
+  const text = q.search?.trim().toLowerCase();
+  if (text) { const words = text.split(/\s+/); items = items.filter((c) => words.every((w) => `${c.name} ${c.character ?? ""} ${c.category?.name ?? ""}`.toLowerCase().includes(w))); }
+  if (days) { const since = Date.now() / 1000 - days * 86400; items = items.filter((c) => c.added >= since); }
+  const seen = new Set<number>();
+  items = items.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+  items.sort(SORT_CMP[sort] ?? ((a, b) => attention(b) - attention(a)));
+  return { items, total: items.length, complete: true };
 }
 
 /** Everything about one mod (Mod/<id>/ProfilePage). */
@@ -388,6 +610,7 @@ export async function modPage(id: number, signal?: AbortSignal): Promise<GbMod |
     const category = parseCategory(o._aCategory) ?? card.category;
     const superCategory = parseCategory(o._aSuperCategory);
     const character = (superCategory && charCat && superCategory.id === charCat && category ? category.name : null) ?? matchCharacter(category, chars);
+    if (superCategory && charCat && superCategory.id === charCat) noteCharCategory(charCat, category);
     const images = parseImages(o._aPreviewMedia);
     const files = [
       ...arr(o._aFiles).map((f) => parseFile(f, false)),
@@ -483,6 +706,23 @@ export async function characterList(game: GameId): Promise<GbCategoryRef[]> {
   return charsQuiet(charCatFor(game));
 }
 
+/** characterList as React state, updated when GameBanana adds a character. */
+export function useCharacterList(game: GameId | null | undefined): GbCategoryRef[] {
+  const [list, setList] = useState<GbCategoryRef[]>(() => {
+    const cat = game ? charCatFor(game) : null;
+    return (cat && charLive.get(cat)) || [];
+  });
+  useEffect(() => {
+    if (!game) { setList([]); return; }
+    let live = true;
+    const load = () => characterList(game).then((l) => { if (live) setList(l); });
+    void load();
+    const off = onCharacters((g) => { if (g === game) void load(); });
+    return () => { live = false; off(); };
+  }, [game]);
+  return list;
+}
+
 /** The game's top-level mod categories (Skins, UI, Other ...). */
 export async function categories(gbGameId: number): Promise<GbCategoryRef[]> {
   if (!gbGameId) return [];
@@ -495,6 +735,272 @@ export async function categories(gbGameId: number): Promise<GbCategoryRef[]> {
     console.warn("GameBanana categories:", e);
     return [];
   }
+}
+
+// ── members (creators) ──
+
+export interface GbMemberStats { id: number; points: number; subs: number }
+export interface GbMember extends GbMemberStats {
+  name: string;
+  avatar: string | null;
+  url: string;
+  /** GameBanana's rank by points (1 is the top). */
+  rank: number | null;
+  title: string | null;
+  joined: number | null;
+  submissions: number | null;
+}
+
+const MEMBER_KEY = "gm.gb.members";
+const MEMBER_TTL = 3 * DAY;
+type KeptStats = Record<string, { p: number; s: number; at: number }>;
+let keptStats: KeptStats | null = null;
+function statsTable(): KeptStats {
+  if (keptStats) return keptStats;
+  keptStats = storeRead<KeptStats>(MEMBER_KEY)?.value ?? {};
+  return keptStats;
+}
+function saveStats() {
+  const t = statsTable();
+  const ids = Object.keys(t);
+  if (ids.length > 4000) for (const id of ids.sort((a, b) => t[a]!.at - t[b]!.at).slice(0, ids.length - 3000)) delete t[id];
+  storeSet("local", MEMBER_KEY, t);
+}
+
+/** Points and subscriber counts for members, kept 3 days (Member/Multi, 50 a request). Missing ones are left out. */
+export async function memberStats(ids: number[], signal?: AbortSignal): Promise<Map<number, GbMemberStats>> {
+  const t = statsTable();
+  const now = Date.now();
+  const out = new Map<number, GbMemberStats>();
+  const need: number[] = [];
+  for (const id of new Set(ids.filter((i) => i > 0))) {
+    const k = t[String(id)];
+    if (k && now - k.at < MEMBER_TTL) out.set(id, { id, points: k.p, subs: k.s });
+    else need.push(id);
+  }
+  for (let i = 0; i < need.length; i += 50) {
+    try {
+      const raw = obj(await getJson(`${GB}/Member/Multi?_csvRowIds=${need.slice(i, i + 50).join(",")}&_csvProperties=_idRow,_nPoints,_nSubscriberCount`, signal));
+      for (const v of Object.values(raw ?? {})) {
+        const o = obj(v);
+        const id = num(o?._idRow);
+        if (!o || id === null) continue;
+        const s = { id, points: Math.max(0, num(o._nPoints) ?? 0), subs: Math.max(0, num(o._nSubscriberCount) ?? 0) };
+        out.set(id, s);
+        t[String(id)] = { p: s.points, s: s.subs, at: now };
+      }
+    } catch (e) {
+      if (isAbort(e)) throw e;
+      console.warn("GameBanana members:", e);
+    }
+  }
+  if (need.length) saveStats();
+  return out;
+}
+
+const thumbCache = new Map<number, string | null>();
+
+/** A small picture per mod (Mod/Multi, 50 a request), for lists of mods that only have their link. Mods GameBanana
+ *  doesn't answer for are left out. */
+export async function modThumbs(ids: number[], signal?: AbortSignal): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const need: number[] = [];
+  for (const id of new Set(ids.filter((i) => i > 0))) {
+    if (!thumbCache.has(id)) need.push(id);
+    const t = thumbCache.get(id);
+    if (t) out.set(id, t);
+  }
+  for (let i = 0; i < need.length; i += 50) {
+    try {
+      const raw = await getJson(`${GB}/Mod/Multi?_csvRowIds=${need.slice(i, i + 50).join(",")}&_csvProperties=_idRow,_aPreviewMedia`, signal);
+      for (const v of arr(raw)) {
+        const o = obj(v);
+        const id = num(o?._idRow);
+        if (!o || id === null) continue;
+        const url = imageAt(parseImages(o._aPreviewMedia)[0], 220) ?? null;
+        thumbCache.set(id, url);
+        if (url) out.set(id, url);
+      }
+    } catch (e) {
+      if (isAbort(e)) throw e;
+      console.warn("GameBanana pictures:", e);
+    }
+  }
+  return out;
+}
+
+/** A member's profile (Member/<id>/ProfilePage). */
+export async function memberProfile(id: number, signal?: AbortSignal): Promise<GbMember | null> {
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return cached(`member:${id}`, 10 * 60_000, async () => {
+    const o = obj(await getJson(`${GB}/Member/${id}/ProfilePage`, signal));
+    const name = str(o?._sName);
+    if (!o || !name) return null;
+    const core = obj(o._aCoreStats);
+    const m: GbMember = {
+      id, name,
+      avatar: https(str(o._sHdAvatarUrl)) ?? https(str(o._sAvatarUrl)),
+      url: str(o._sProfileUrl) ?? `https://gamebanana.com/members/${id}`,
+      points: Math.max(0, num(o._nPoints) ?? num(core?._nPoints) ?? 0),
+      subs: Math.max(0, num(o._nSubscriberCount) ?? num(core?._nCurrentSubscribers) ?? 0),
+      rank: num(o._nPointsRank),
+      title: str(o._sUserTitle),
+      joined: num(o._tsJoinDate),
+      submissions: num(core?._nCurrentSubmissions),
+    };
+    statsTable()[String(id)] = { p: m.points, s: m.subs, at: Date.now() };
+    saveStats();
+    return m;
+  });
+}
+
+/** A member's id from their name: the submitter of `modId` when it matches, else GameBanana's member search. */
+export async function findMember(name: string, modId?: number | null): Promise<GbUser | null> {
+  const want = name.trim().toLowerCase();
+  if (modId) {
+    try {
+      const m = await modPage(modId);
+      if (m?.submitter && (!want || m.submitter.name.toLowerCase() === want)) return m.submitter;
+    } catch { /* try the search */ }
+  }
+  if (!want) return null;
+  return cached(`findmember:${want}`, 30 * 60_000, async () => {
+    const o = obj(await getJson(`${GB}/Util/Search/Results?_sModelName=Member&_sOrder=best_match&_sSearchString=${encodeURIComponent(name.trim())}&_nPage=1`));
+    const users = arr(o?._aRecords).map((r) => parseUser(r)).filter((u): u is GbUser => !!u);
+    return users.find((u) => u.name.toLowerCase() === want) ?? null;
+  });
+}
+
+// ── the High quality filter ──
+//
+// High quality shows about the top fifth of a game's outfits, judged for their age. Measured on the 1,600 newest mods
+// of zzz, gi, hsr and ww (November 2026):
+//
+//   A       attention = likes + views / 100 + comments / 2           (views and comments in like-sized units)
+//   shape   how much of its attention a mod has at `age` days: a third in the first day, about 70% after a week, all
+//           of it by three weeks, then a slow climb for years:
+//           (0.7 (1 - e^(-age / 0.9)) + 0.3 (1 - e^(-age / 14))) * sqrt(1 + age / 365)
+//   r       A / shape, the attention a mod is on track for
+//   bar     the 80th percentile of r over the game's outfits aged 3 to 60 days among its newest 200 mods (kept a
+//           day); `median` is the 50th. Another type picked (tools, UI ...) is measured among its own kind
+//   T       the creator's record: the median r of their mods in this game aged 3 days or more (kept 3 days), or the
+//           game's median when they have fewer than two; at most 1.5 bar, so a big name can't carry a mod nobody
+//           liked
+//   est     (A + 0.25 T) / (shape + 0.25), times 1.2 when GameBanana featured it
+//
+// A mod passes when est >= bar. Early on the record carries most of the weight: a new mod by a creator whose mods
+// usually land in the top fifth shows within the hour, one by a creator whose mods don't (none above 100 likes in
+// zzz, say) waits until its own numbers say otherwise. After a month the record is worth a fifth. Only outfits pass
+// unless another type is picked, and mods by creators the user prioritized always pass. About 20% of outfits pass
+// in each game measured.
+
+/** est / bar: a mod passes at 1 or more. */
+export const HQ_PASS = 1;
+
+export interface HqBar { bar: number; median: number }
+const HQ_DEFAULT: HqBar = { bar: 300, median: 120 };
+const HQ_K = 0.25;
+
+/** How much of its attention a mod has at `age` days (see above). */
+export function hqShape(age: number): number {
+  const a = Math.max(0, age);
+  return (0.7 * (1 - Math.exp(-a / 0.9)) + 0.3 * (1 - Math.exp(-a / 14))) * Math.sqrt(1 + a / 365);
+}
+const ageDays = (c: Pick<GbCard, "added">, now: number) => Math.max(0, now - c.added) / 86400;
+const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]!; };
+
+/** The attention a mod is on track for (r above). `now` in unix seconds. */
+export function hqOnTrack(c: Pick<GbCard, "likes" | "views" | "comments" | "added">, now = Date.now() / 1000): number {
+  return attention(c) / Math.max(0.05, hqShape(ageDays(c, now)));
+}
+
+/** A mod's High quality score, est / bar (it passes at HQ_PASS). `record` is the creator's record (T), null when not
+ *  known. `now` in unix seconds. */
+export function hqScore(c: Pick<GbCard, "likes" | "views" | "comments" | "added" | "featured">, bar: HqBar, record: number | null | undefined, now = Date.now() / 1000): number {
+  const s = hqShape(ageDays(c, now));
+  const T = Math.min(record ?? bar.median, bar.bar * 1.5);
+  const est = ((attention(c) + HQ_K * T) / (s + HQ_K)) * (c.featured ? 1.2 : 1);
+  return est / Math.max(1, bar.bar);
+}
+
+/** The game's top category that holds a type of mod: Skins (the character one when there are several) for outfits,
+ *  recolors and weapons, Other/Misc for tools, UI for UI. Null when the game has none or the type spans several. */
+export function kindCategory(kind: GbKind | null | undefined, cats: GbCategoryRef[]): number | null {
+  if (!kind || kind === "other") return null;
+  const find = (re: RegExp, not?: RegExp) => cats.filter((c) => re.test(c.name) && !(not && not.test(c.name)));
+  if (kind === "ui") return find(/^\s*ui\s*$/i)[0]?.id ?? null;
+  if (kind === "tool") return find(/other|misc/i)[0]?.id ?? null;
+  const skins = find(/skin/i, /bangboo|npc|weapon/i);
+  return (skins.find((c) => /character/i.test(c.name)) ?? skins[0])?.id ?? null;
+}
+
+/** The game's bar and median for a type of mod (see above; outfits unless another type is given), kept a day. Each
+ *  type is measured among its own kind, from its top category's newest 200 mods; a type with too few mods to measure
+ *  uses the outfits' bar. */
+export async function hqBar(gbGameId: number, signal?: AbortSignal, kind: GbKind = "outfit"): Promise<HqBar> {
+  const key = `gm.gb.hqbar.${gbGameId}${kind === "outfit" ? "" : `.${kind}`}`;
+  const kept = storeGet<HqBar>("local", key, DAY);
+  if (kept && kept.bar > 0 && kept.median > 0) return kept;
+  return cached(`hqbar:${gbGameId}:${kind}`, DAY, async () => {
+    const now = Date.now() / 1000;
+    const categoryId = kind === "outfit" ? null : kindCategory(kind, await categories(gbGameId));
+    const cards: GbCard[] = [];
+    for (let p = 1; p <= 4; p++) {
+      const r = await rawPage({ gbGameId, categoryId, page: p, perPage: 50, signal }, "newest", p);
+      cards.push(...r.items);
+      if (r.complete) break;
+    }
+    const onTrack = (keep: (c: GbCard, age: number) => boolean) => cards.filter((c) => keep(c, ageDays(c, now))).map((c) => hqOnTrack(c, now));
+    let pool = onTrack((c, a) => c.kind === kind && a >= 3 && a <= 60);
+    if (pool.length < 25) pool = onTrack((c, a) => c.kind === kind && a >= 3);
+    if (kind !== "outfit" && pool.length < 10) return hqBar(gbGameId, signal, "outfit");
+    if (pool.length < 25) pool = onTrack((_, a) => a >= 3);
+    const b: HqBar = pool.length >= 8 ? { bar: Math.max(1, pct(pool, 0.8)), median: Math.max(1, pct(pool, 0.5)) } : HQ_DEFAULT;
+    storeSet("local", key, b);
+    return b;
+  });
+}
+
+const RECORD_KEY = "gm.gb.records";
+type Records = Record<string, { r: number | null; at: number }>;
+let recordsKept: Records | null = null;
+const recordTable = (): Records => (recordsKept ??= storeRead<Records>(RECORD_KEY)?.value ?? {});
+
+/** A creator's record in one game (T above): null when they have fewer than two mods there aged 3 days or more. */
+export async function creatorRecord(gbGameId: number, memberId: number, signal?: AbortSignal): Promise<number | null> {
+  const k = `${gbGameId}:${memberId}`;
+  const hit = recordTable()[k];
+  if (hit && Date.now() - hit.at < MEMBER_TTL) return hit.r;
+  return cached(`record:${k}`, MIN5, async () => {
+    const r = await rawPage({ gbGameId, submitterId: memberId, page: 1, perPage: 50, signal }, "newest", 1);
+    const now = Date.now() / 1000;
+    const xs = r.items.filter((c) => ageDays(c, now) >= 3).map((c) => hqOnTrack(c, now));
+    const v = xs.length >= 2 ? pct(xs, 0.5) : null;
+    const t = recordTable();
+    t[k] = { r: v, at: Date.now() };
+    const keys = Object.keys(t);
+    if (keys.length > 3000) for (const old of keys.sort((a, b) => t[a]!.at - t[b]!.at).slice(0, keys.length - 2500)) delete t[old];
+    storeSet("local", RECORD_KEY, t);
+    return v;
+  });
+}
+
+/** The cards that pass High quality, in the same order: outfits only, or `kind` when one is picked. `prio`: member
+ *  ids whose mods (of that kind) always pass. */
+export async function filterHq(cards: GbCard[], gbGameId: number, prio: Set<number>, signal?: AbortSignal, kind?: GbKind | null): Promise<GbCard[]> {
+  const want = kind ?? "outfit";
+  const typed = cards.filter((c) => (c.kind ?? "outfit") === want);
+  if (!typed.length) return typed;
+  const bar = await hqBar(gbGameId, signal, want).catch((e) => { if (isAbort(e)) throw e; return HQ_DEFAULT; });
+  const now = Date.now() / 1000;
+  // the record decides only young mods: look it up where it could change the answer, for at most 16 creators a call
+  const undecided = (c: GbCard) => hqScore(c, bar, 0, now) < HQ_PASS && hqScore(c, bar, bar.bar * 3, now) >= HQ_PASS;
+  const need = [...new Set(typed.filter((c) => c.submitter && !prio.has(c.submitter.id) && undecided(c)).map((c) => c.submitter!.id))].slice(0, 16);
+  const rec = new Map<number, number | null>();
+  await Promise.all(need.map(async (id) => {
+    try { rec.set(id, await creatorRecord(gbGameId, id, signal)); } catch (e) { if (isAbort(e)) throw e; }
+  }));
+  return typed.filter((c) => (c.submitter && prio.has(c.submitter.id)) || hqScore(c, bar, c.submitter ? rec.get(c.submitter.id) : null, now) >= HQ_PASS);
 }
 
 // ── updates ──
@@ -608,8 +1114,12 @@ export function fileIdFromLink(url: string): number | null {
 
 // ── description HTML ──
 
-const KEEP = new Set(["p", "br", "b", "strong", "i", "em", "u", "s", "a", "img", "ul", "ol", "li", "h1", "h2", "h3", "h4", "blockquote", "span", "div", "hr", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption"]);
+const KEEP = new Set(["p", "br", "b", "strong", "i", "em", "u", "s", "a", "img", "ul", "ol", "li", "h1", "h2", "h3", "h4", "blockquote", "span", "div", "hr", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "pre", "code", "sup", "sub", "small", "mark"]);
 const DROP = new Set(["script", "style", "noscript", "template", "object", "embed", "svg", "math", "form", "input", "button", "select", "textarea", "link", "meta", "head", "title", "audio", "video", "canvas"]);
+/** Tags written another way. */
+const RENAME: Record<string, string> = { del: "s", strike: "s", ins: "u", h5: "h4", h6: "h4", center: "div", font: "span", big: "strong", tt: "code", kbd: "code", figure: "div", figcaption: "small", section: "div", article: "div" };
+/** GameBanana's colour classes ("RedColor") as CSS colours; the page keeps them readable in light and dark. */
+const GB_COLORS: Record<string, string> = { red: "#e5484d", green: "#30a46c", blue: "#3e8ed0", purple: "#8e4ec6", orange: "#f76b15", yellow: "#e2b203", pink: "#d6409f", grey: "#8b8d98", gray: "#8b8d98", brown: "#a18072", cyan: "#05a2c2", teal: "#12a594", white: "#ededed", black: "#1c1c1c" };
 
 function safeUrl(raw: string | null): string | null {
   if (!raw) return null;
@@ -619,13 +1129,36 @@ function safeUrl(raw: string | null): string | null {
   } catch { return null; }
 }
 
+/** A colour from markup, only in shapes that can't carry anything else (#hex, rgb() numbers, a colour word). */
+function safeColor(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (/^#[0-9a-f]{3,8}$/.test(v)) return v;
+  if (/^[0-9a-f]{6}$/.test(v)) return `#${v}`;
+  if (/^rgba?\(\s*[\d.]+%?\s*,?\s*[\d.]+%?\s*,?\s*[\d.]+%?\s*([,/]\s*[\d.]+%?\s*)?\)$/.test(v)) return v;
+  if (/^[a-z]{3,20}$/.test(v) && !["inherit", "initial", "unset", "revert", "currentcolor", "transparent"].includes(v)) return GB_COLORS[v] ?? v;
+  return null;
+}
+
 function youtubeId(src: string | null): string | null {
-  const m = src ? /(?:youtube(?:-nocookie)?\.com\/embed\/|youtu\.be\/|youtube\.com\/watch\?v=)([\w-]{6,})/i.exec(src) : null;
+  const m = src ? /(?:youtube(?:-nocookie)?\.com\/(?:embed\/|shorts\/|watch\?(?:.*&)?v=)|youtu\.be\/)([\w-]{6,})/i.exec(src) : null;
   return m ? m[1]! : null;
 }
 
-/** Description HTML with everything unsafe removed (see docs/spec.md). Links keep their text and carry the address
- *  in data-href (no href); the page opens them with shell.openUrl. */
+/** Where a GameBanana link points inside the app: a member's page or a mod's page. */
+export function gbLinkTarget(url: string): { member: number } | { mod: number } | null {
+  const m = /^https:\/\/(?:www\.)?gamebanana\.com\/(members|mods)\/(\d+)(?:[/?#]|$)/i.exec(url);
+  if (!m) return null;
+  return m[1]!.toLowerCase() === "members" ? { member: Number(m[2]) } : { mod: Number(m[2]) };
+}
+
+/** Description HTML with everything unsafe removed and GameBanana's own markup made portable (docs/spec.md):
+ *  - links keep their text and carry the address in data-href (no href); the page opens them (GameBanana mod and
+ *    member links inside the app, others in the browser)
+ *  - colours (font color, style color, "RedColor" classes) become class "gb-fc" with --gbc, which the page clamps to a
+ *    lightness that reads in the current scheme
+ *  - spoilers become class "gb-spoiler" (hidden until clicked), centred blocks class "gb-center"
+ *  - YouTube embeds become a link card with the video's thumbnail; other iframes are dropped
+ *  - images keep only an https src (class "gb-dimg"; the page opens them in the lightbox) */
 export function sanitizeHtml(html: string): string {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -635,27 +1168,30 @@ export function sanitizeHtml(html: string): string {
       if (n.nodeType === Node.TEXT_NODE) { to.appendChild(doc.createTextNode(n.textContent ?? "")); continue; }
       if (n.nodeType !== Node.ELEMENT_NODE) continue;
       const el = n as Element;
-      const tag = el.tagName.toLowerCase();
-      if (DROP.has(tag)) continue;
-      if (tag === "iframe") {
+      const raw = el.tagName.toLowerCase();
+      if (DROP.has(raw)) continue;
+      if (raw === "iframe") {
         const id = youtubeId(el.getAttribute("src"));
         if (!id) continue;
-        const a = doc.createElement("a");
+        const a = doc.createElement("span");
         a.setAttribute("data-href", `https://www.youtube.com/watch?v=${id}`);
         a.setAttribute("class", "gb-yt");
-        a.setAttribute("title", "Play on YouTube");
+        a.setAttribute("title", "Watch on YouTube");
         a.setAttribute("role", "link");
         a.setAttribute("tabindex", "0");
         const img = doc.createElement("img");
         img.setAttribute("src", `https://img.youtube.com/vi/${id}/hqdefault.jpg`);
-        img.setAttribute("alt", "YouTube video");
+        img.setAttribute("alt", "");
         img.setAttribute("loading", "lazy");
         img.setAttribute("decoding", "async");
-        a.appendChild(img);
+        const label = doc.createElement("span");
+        label.setAttribute("class", "gb-yt-t");
+        label.textContent = "Watch on YouTube";
+        a.append(img, label);
         to.appendChild(a);
         continue;
       }
-      if (/^h[56]$/.test(tag)) { const h = doc.createElement("h4"); copy(el, h); to.appendChild(h); continue; }
+      const tag = RENAME[raw] ?? raw;
       if (!KEEP.has(tag)) { copy(el, to); continue; }
       if (tag === "img") {
         const src = safeUrl(el.getAttribute("src") ?? el.getAttribute("data-src"));
@@ -663,18 +1199,28 @@ export function sanitizeHtml(html: string): string {
         const img = doc.createElement("img");
         img.setAttribute("src", src);
         img.setAttribute("alt", el.getAttribute("alt") ?? "");
+        img.setAttribute("class", "gb-dimg");
         img.setAttribute("loading", "lazy");
         img.setAttribute("decoding", "async");
         to.appendChild(img);
         continue;
       }
       const clean = doc.createElement(tag);
+      const classes: string[] = [];
+      const cls = ` ${el.getAttribute("class") ?? ""} `;
+      if (raw === "center" || (el.getAttribute("align") ?? "").toLowerCase() === "center") classes.push("gb-center");
+      if (/\sSpoiler\s/.test(cls)) { classes.push("gb-spoiler"); clean.setAttribute("tabindex", "0"); clean.setAttribute("role", "button"); clean.setAttribute("title", "Spoiler: click to show"); }
+      // a colour: <font color>, style="color: ...", or GameBanana's colour classes
+      const styleColor = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(el.getAttribute("style") ?? "")?.[1];
+      const classColor = /\s([A-Z][a-z]+)Color\s/.exec(cls)?.[1];
+      const color = safeColor(raw === "font" ? el.getAttribute("color") : null) ?? safeColor(styleColor) ?? (classColor ? GB_COLORS[classColor.toLowerCase()] ?? null : null);
+      if (color) { classes.push("gb-fc"); clean.setAttribute("style", `--gbc: ${color}`); }
       if (tag === "a") {
         const href = safeUrl(el.getAttribute("href"));
         if (href) {
           clean.setAttribute("data-href", href);
           clean.setAttribute("title", href);
-          clean.setAttribute("class", "gb-link");
+          classes.push("gb-link");
           clean.setAttribute("role", "link");
           clean.setAttribute("tabindex", "0");
         }
@@ -682,6 +1228,8 @@ export function sanitizeHtml(html: string): string {
       if (tag === "td" || tag === "th") {
         for (const k of ["colspan", "rowspan"]) { const v = el.getAttribute(k); if (v && /^\d{1,2}$/.test(v)) clean.setAttribute(k, v); }
       }
+      if (tag === "ol") { const v = el.getAttribute("start"); if (v && /^\d{1,4}$/.test(v)) clean.setAttribute("start", v); }
+      if (classes.length) clean.setAttribute("class", classes.join(" "));
       copy(el, clean);
       to.appendChild(clean);
     }

@@ -35,6 +35,8 @@ export const demoDb = {
   /** Mods per game id. Seeded by LIBRARY's demo (demo/library.ts). */
   mods: new Map<string, ModEntry[]>(),
   characters: new Map<string, Character[]>(),
+  /** Characters marked as owned, per game (LIBRARY). */
+  owned: new Map<string, Set<string>>(),
   profiles: new Map<string, Profile[]>(),
   settings: new Map<string, string>(),
 };

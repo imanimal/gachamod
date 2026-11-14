@@ -1,0 +1,534 @@
+//! Mod fixes after a game update. An update changes the hashes (and sometimes the buffer layouts) that mods target,
+//! and the community's fixers rewrite the mods. `data/fixes/<game>.json` holds those fixers' hash tables and rules
+//! (docs/fixers.md says what each field means). This finds installed mods that still use a hash an update replaced
+//! and swaps it for the new one: the old line stays as a comment and the files get a backup, so Undo puts them back.
+//!
+//! Only hash swaps are done here. When a mod also needs a buffer rewrite or moved index ranges (a rule's trigger hash
+//! is in it), the hash swap alone would leave it broken, so it is marked as needing the fixer that does the whole job
+//! and left alone. Owner: FIXES area.
+
+use crate::aliases::Matcher;
+use crate::backups::{self, Backup};
+use crate::db::Db;
+use crate::error::{Error, Result};
+use crate::keys::{ModBackup, ModSkip};
+use crate::model::ModEntry;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+const DATA: &[(&str, &str)] = &[
+    ("zzz", include_str!("../data/fixes/zzz.json")),
+    ("ww", include_str!("../data/fixes/ww.json")),
+    ("hsr", include_str!("../data/fixes/hsr.json")),
+    ("gi", include_str!("../data/fixes/gi.json")),
+    ("ef", include_str!("../data/fixes/ef.json")),
+];
+
+/// The comment a swapped hash line keeps: `; hash = <old> (before <version>, changed by gachamod)`.
+const MARK: &str = "changed by gachamod";
+
+// ── what the app shows ──
+
+/// A community fixer the data comes from, or one the app links to.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Source {
+    pub id: String,
+    pub name: String,
+    pub author: String,
+    pub url: String,
+    pub license: String,
+    /// When the data was checked against the fixer ("2026-11-13").
+    pub checked: String,
+    /// What the app took from it ("data and rules", "NOT used ...").
+    pub used: String,
+}
+
+/// A fixer to run by hand: its name and page.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolLink { pub name: String, pub url: String }
+
+/// What a game update did to one installed mod. Mods with nothing known wrong are left out.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModHealth {
+    pub mod_id: String,
+    pub name: String,
+    pub enabled: bool,
+    /// "broken" (hashes gachamod can swap), "unfixable" (needs a fixer gachamod can't run) or "fixed" (gachamod
+    /// swapped its hashes and nothing else is known wrong).
+    pub status: String,
+    /// One line each: "Uses Belle's Body Blend hash from before 1.1".
+    pub reasons: Vec<String>,
+    /// The oldest game version a broken hash comes from.
+    pub since: Option<String>,
+    /// The fixer to run for an "unfixable" mod.
+    pub tool: Option<ToolLink>,
+    /// How many hash lines a fix would change.
+    pub swaps: u32,
+}
+
+/// What the fix data holds for a game, for Tools > Fixes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FixInfo {
+    pub game: String,
+    /// The newest game version the data knows ("3.3"; HSR says "unknown ...").
+    pub current_version: String,
+    /// Hash pairs gachamod can swap.
+    pub pairs: u32,
+    pub sources: Vec<Source>,
+}
+
+/// The result of fixing several mods: one backup per changed mod (Undo restores them) and why others were left.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixAll { pub changed: Vec<ModBackup>, pub skipped: Vec<ModSkip> }
+
+// ── the data ──
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RawFile { current_version: String, sources: Vec<Source>, versions: Vec<RawBlock> }
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RawBlock { version: String, hashes: Vec<RawPair>, rules: Vec<Value> }
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct RawPair { old: String, new: String, character: String, part: String, kind: String, also: Vec<String>, current: bool }
+
+/// One `old -> new` pair. `rank` orders the versions: chains only move to later ones, so a hash that came back in a
+/// later version can't loop.
+#[derive(Debug, Clone)]
+struct Step { new: String, rank: usize, version: String, character: String, also: Vec<String>, part: String, kind: String }
+
+/// A change that needs more than a hash swap, and how to spot a mod that needs it.
+#[derive(Debug, Clone)]
+struct Rule {
+    character: String,
+    /// Old hashes: a mod that has one needs this change.
+    triggers: Vec<String>,
+    /// Old `match_first_index` / `match_index_count` values for the rule's character (WW): (key prefix, values).
+    lines: Option<(String, Vec<String>)>,
+    version: String,
+    tool: String,
+}
+
+struct Index {
+    current_version: String,
+    sources: Vec<Source>,
+    steps: HashMap<String, Vec<Step>>,
+    /// Hashes the newest table lists as live (ZZZ): never broken.
+    current: HashSet<String>,
+    rules: Vec<Rule>,
+    pairs: u32,
+}
+
+fn hex8(s: &str) -> Option<String> {
+    let s = s.trim().trim_start_matches("0x").to_ascii_lowercase();
+    (s.len() == 8 && s.chars().all(|c| c.is_ascii_hexdigit())).then_some(s)
+}
+
+fn strings(v: Option<&Value>) -> Vec<String> {
+    match v {
+        Some(Value::String(s)) => vec![s.clone()],
+        Some(Value::Array(a)) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
+        _ => vec![],
+    }
+}
+
+impl Index {
+    fn build(text: &str) -> Index {
+        let raw: RawFile = serde_json::from_str(text).unwrap_or_default();
+        let mut ranks: Vec<String> = Vec::new();
+        let mut idx = Index {
+            current_version: raw.current_version, sources: raw.sources, steps: HashMap::new(),
+            current: HashSet::new(), rules: Vec::new(), pairs: 0,
+        };
+        for b in &raw.versions {
+            if !ranks.contains(&b.version) { ranks.push(b.version.clone()); }
+        }
+        for b in raw.versions {
+            let rank = ranks.iter().position(|v| *v == b.version).unwrap_or(0);
+            for p in b.hashes {
+                let (Some(old), Some(new)) = (hex8(&p.old), hex8(&p.new)) else { continue };
+                if old == new { continue; }
+                if p.current { idx.current.insert(new.clone()); }
+                idx.pairs += 1;
+                idx.steps.entry(old).or_default().push(Step {
+                    new, rank, version: b.version.clone(), character: p.character, also: p.also, part: p.part, kind: p.kind,
+                });
+            }
+            for r in b.rules {
+                let get = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+                let mut triggers: Vec<String> = strings(r.get("trigger_hash")).iter().chain(&strings(r.get("blend_hash"))).filter_map(|h| hex8(h)).collect();
+                if let Some(Value::Object(m)) = r.get("position_to_blend") { triggers.extend(m.keys().filter_map(|h| hex8(h))); }
+                // WW line value changes: only the index ranges with large old values, which can't be anything else
+                let mut lines = None;
+                let prefix = get("line_prefix");
+                if matches!(prefix.as_str(), "match_first_index" | "match_index_count") {
+                    let olds: Vec<String> = r.get("replacements").and_then(Value::as_array).into_iter().flatten()
+                        .flat_map(|x| strings(x.get("old"))).collect();
+                    if !olds.is_empty() && olds.iter().all(|o| o.parse::<u64>().is_ok_and(|n| n >= 1000)) { lines = Some((prefix, olds)); }
+                }
+                if triggers.is_empty() && lines.is_none() { continue; }
+                idx.rules.push(Rule { character: get("character"), triggers, lines, version: b.version.clone(), tool: get("tool") });
+            }
+        }
+        // a trigger only counts when it is an old hash: a live one would flag every mod of that character
+        let olds: HashSet<String> = idx.steps.keys().cloned().collect();
+        for r in &mut idx.rules { r.triggers.retain(|h| olds.contains(h)); }
+        idx.rules.retain(|r| !r.triggers.is_empty() || r.lines.is_some());
+        idx
+    }
+
+    fn get(game: &str) -> Option<&'static Index> {
+        static ALL: OnceLock<HashMap<&'static str, Index>> = OnceLock::new();
+        ALL.get_or_init(|| DATA.iter().map(|(g, t)| (*g, Index::build(t))).collect()).get(game)
+    }
+
+    /// A fixer's name from its link: a known source's name, else the repository's ("ZZZ Mod Fixer").
+    fn tool_link(&self, url: &str) -> ToolLink {
+        if let Some(s) = self.sources.iter().find(|s| !s.url.is_empty() && url.trim_end_matches('/').eq_ignore_ascii_case(s.url.trim_end_matches('/'))) {
+            return ToolLink { name: s.name.clone(), url: url.into() };
+        }
+        let last = url.trim_end_matches('/').rsplit('/').next().unwrap_or_default();
+        let name = if url.contains("github.com/") && !last.is_empty() { last.replace(['-', '_'], " ") } else { "the fixer on GameBanana".into() };
+        ToolLink { name, url: url.into() }
+    }
+}
+
+// ── matching a mod ──
+
+/// Which roster character a data name means ("Ellen Campus", "AemeathMecha"), cached per scan.
+struct Who<'a> { m: &'a Matcher, cache: HashMap<String, Option<String>> }
+
+impl<'a> Who<'a> {
+    fn new(m: &'a Matcher) -> Self { Who { m, cache: HashMap::new() } }
+    fn of(&mut self, name: &str) -> Option<String> {
+        if let Some(c) = self.cache.get(name) { return c.clone(); }
+        let r = self.m.exact(name).or_else(|| self.m.best(&[name]));
+        self.cache.insert(name.into(), r.clone());
+        r
+    }
+    fn is(&mut self, data_name: &str, character: &str) -> bool {
+        self.of(data_name).is_some_and(|c| c.eq_ignore_ascii_case(character))
+    }
+}
+
+/// The first step of a chain a mod's hash is on, and where the chain ends.
+#[derive(Debug, Clone)]
+struct Hop { new: String, version: String, character: String, part: String }
+
+/// Where `h` ends up after every update the data knows, for a mod of `character` (None: unknown). None when it isn't
+/// an outdated hash for this mod, or when the data can't say which way it went.
+fn resolve(idx: &Index, h: &str, character: Option<&str>, who: &mut Who) -> Option<Hop> {
+    if idx.current.contains(h) || !idx.steps.contains_key(h) { return None; }
+    let mut ok = |s: &Step| match character {
+        Some(c) => who.is(&s.character, c) || s.also.iter().any(|a| who.is(a, c)),
+        // without a character only mesh hashes are safe: textures are shared and move differently per character
+        None => s.kind != "texture",
+    };
+    let mut seen: Vec<String> = vec![h.to_string()];
+    let mut cur = h.to_string();
+    let mut rank: Option<usize> = None;
+    let mut first: Option<Hop> = None;
+    for _ in 0..64 {
+        // the next update after the current one, from any hash on the chain so far (a newer source may map an earlier
+        // hash straight to a later target: prefer that over stopping)
+        let mut cands: Vec<(&String, &Step)> = Vec::new();
+        for v in &seen {
+            for s in idx.steps.get(v).into_iter().flatten() {
+                if rank.is_none_or(|r| s.rank > r) && ok(s) { cands.push((v, s)); }
+            }
+        }
+        let Some(low) = cands.iter().map(|(_, s)| s.rank).min() else { break };
+        cands.retain(|(_, s)| s.rank == low);
+        let mut targets: BTreeSet<&str> = cands.iter().map(|(_, s)| s.new.as_str()).collect();
+        if targets.len() > 1 {
+            // two answers for the same update: the one from the hash the chain is on now, if that settles it
+            let here: BTreeSet<&str> = cands.iter().filter(|(v, _)| **v == cur).map(|(_, s)| s.new.as_str()).collect();
+            if here.len() != 1 { return None; }
+            targets = here;
+        }
+        let next = targets.into_iter().next()?.to_string();
+        let step = cands.iter().map(|(_, s)| *s).find(|s| s.new == next)?;
+        first.get_or_insert_with(|| Hop { new: String::new(), version: step.version.clone(), character: step.character.clone(), part: step.part.clone() });
+        rank = Some(low);
+        if !seen.contains(&next) { seen.push(next.clone()); }
+        cur = next;
+    }
+    let mut hop = first?;
+    if cur == h { return None; }
+    hop.new = cur;
+    Some(hop)
+}
+
+/// What is wrong with one mod folder: the swaps a fix makes (old -> hop) and the fixers it needs instead.
+#[derive(Debug, Default)]
+struct Check { swaps: Vec<(String, Hop)>, needs: Vec<(String, ToolLink)>, since_rank: Option<(usize, String)> }
+
+fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) -> Check {
+    let facts = crate::ini::quick_facts(dir);
+    let mut c = Check::default();
+    let has: HashSet<&str> = facts.hashes.iter().map(String::as_str).collect();
+    for h in &facts.hashes {
+        // a mod that already has the new hash was fixed by adding a section (the GI 4.1 fix does that): the old one
+        // left beside it is harmless, and swapping it would make two sections for one hash
+        if let Some(hop) = resolve(idx, h, character, who).filter(|hop| !has.contains(hop.new.as_str())) { c.swaps.push((h.clone(), hop)); }
+    }
+    let mut texts: Option<Vec<String>> = None;
+    for r in &idx.rules {
+        let hit = if !r.triggers.is_empty() {
+            // the trigger is an old hash of this mod's character, and the mod doesn't have its new hash yet
+            r.triggers.iter().any(|t| has.contains(t.as_str()) && resolve(idx, t, character, who).is_some_and(|hop| !has.contains(hop.new.as_str())))
+        } else if let (Some((prefix, olds)), Some(ch)) = (&r.lines, character) {
+            who.is(&r.character, ch) && texts.get_or_insert_with(|| ini_texts(dir)).iter().any(|t| has_line(t, prefix, olds))
+        } else { false };
+        if !hit { continue; }
+        let tool = idx.tool_link(&r.tool);
+        let who_s = if r.character.is_empty() || r.character.starts_with("all") || r.character.starts_with("see ") { String::new() } else { format!("{}'s ", r.character) };
+        let why = format!("Needs {} for {who_s}{} change", tool.name, r.version);
+        if !c.needs.iter().any(|(w, _)| *w == why) { c.needs.push((why, tool)); }
+    }
+    for (_, hop) in &c.swaps {
+        let rank = idx.steps.values().flatten().find(|s| s.version == hop.version).map(|s| s.rank).unwrap_or(0);
+        if c.since_rank.as_ref().is_none_or(|(r, _)| rank < *r) { c.since_rank = Some((rank, hop.version.clone())); }
+    }
+    c
+}
+
+fn ini_texts(dir: &Path) -> Vec<String> {
+    crate::ini::mod_inis(dir).into_iter()
+        .filter(|(p, _)| std::fs::metadata(p).is_ok_and(|m| m.len() < 4 * 1024 * 1024))
+        .filter_map(|(p, _)| std::fs::read(p).ok().map(|b| crate::ini::decode(&b)))
+        .collect()
+}
+
+/// A live `<prefix>... = <one of olds>` line.
+fn has_line(text: &str, prefix: &str, olds: &[String]) -> bool {
+    text.lines().any(|l| {
+        let t = l.trim();
+        if t.starts_with(';') { return false; }
+        let Some((k, v)) = t.split_once('=') else { return false };
+        k.trim().to_ascii_lowercase().starts_with(prefix) && olds.iter().any(|o| o == v.trim())
+    })
+}
+
+fn reasons(c: &Check) -> Vec<String> {
+    let mut out: Vec<String> = c.needs.iter().map(|(w, _)| w.clone()).collect();
+    let mut seen = HashSet::new();
+    for (_, hop) in &c.swaps {
+        let part = if hop.part.is_empty() { String::new() } else { format!("{} ", hop.part) };
+        let line = format!("Uses {}'s {part}hash from before {}", hop.character, hop.version);
+        if seen.insert(line.clone()) { out.push(line); }
+    }
+    out
+}
+
+fn health_of(m: &ModEntry, c: &Check, fixed: &HashSet<String>) -> Option<ModHealth> {
+    let since = c.since_rank.as_ref().map(|(_, v)| v.clone());
+    let base = ModHealth {
+        mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, reasons: reasons(c), since, swaps: c.swaps.len() as u32,
+        ..Default::default()
+    };
+    if let Some((_, tool)) = c.needs.first() {
+        return Some(ModHealth { status: "unfixable".into(), tool: Some(tool.clone()), ..base });
+    }
+    if !c.swaps.is_empty() { return Some(ModHealth { status: "broken".into(), ..base }); }
+    fixed.contains(&m.id).then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], ..base })
+}
+
+fn matcher(game: &str, mods: &[ModEntry]) -> Matcher {
+    let roster: Vec<String> = mods.iter().filter_map(|m| m.character.clone()).collect::<BTreeSet<_>>().into_iter().collect();
+    Matcher::new(game, &roster)
+}
+
+fn fixed_key(game: &str) -> String { format!("fixes.fixed.{game}") }
+
+fn mods_of(db: &Db, game: &str) -> Result<Vec<ModEntry>> {
+    match crate::library::list(db, game) { Ok(l) => Ok(l), Err(Error::Todo(_)) => Ok(Vec::new()), Err(e) => Err(e) }
+}
+
+// ── the API ──
+
+/// The fixers and data the app has for a game.
+pub fn info(game: &str) -> FixInfo {
+    let Some(idx) = Index::get(game) else { return FixInfo { game: game.into(), ..Default::default() } };
+    FixInfo { game: game.into(), current_version: idx.current_version.clone(), pairs: idx.pairs, sources: idx.sources.clone() }
+}
+
+/// Mods of a game (on or off) that a game update broke, or that gachamod fixed.
+pub fn health(db: &Db, game: &str) -> Result<Vec<ModHealth>> {
+    let Some(idx) = Index::get(game) else { return Ok(vec![]) };
+    let mods = mods_of(db, game)?;
+    let fixed: HashSet<String> = db.setting_json::<Vec<String>>(&fixed_key(game))?.unwrap_or_default().into_iter().collect();
+    let mt = matcher(game, &mods);
+    let mut who = Who::new(&mt);
+    let mut out = Vec::new();
+    for m in &mods {
+        let dir = Path::new(&m.path);
+        if !dir.is_dir() { continue; }
+        let c = check_dir(idx, dir, m.character.as_deref(), &mut who);
+        if let Some(h) = health_of(m, &c, &fixed) { out.push(h); }
+    }
+    Ok(out)
+}
+
+/// Swap the outdated hashes in one mod folder. Returns the backup, or None when there was nothing to swap.
+fn fix_dir(db: &Db, game: &str, m: &ModEntry, c: &Check) -> Result<Option<Backup>> {
+    if c.swaps.is_empty() { return Ok(None); }
+    let dir = PathBuf::from(&m.path);
+    let plan: HashMap<&str, &Hop> = c.swaps.iter().map(|(o, h)| (o.as_str(), h)).collect();
+    let mut docs: Vec<(String, PathBuf, crate::keys::Doc)> = Vec::new();
+    for (abs, rel) in crate::ini::mod_inis(&dir) {
+        let Ok(raw) = std::fs::read(&abs) else { continue };
+        let mut doc = crate::keys::Doc::from_bytes(&raw);
+        if swap_doc(&mut doc, &plan) > 0 { docs.push((rel, abs, doc)); }
+    }
+    if docs.is_empty() { return Ok(None); }
+    let files: Vec<String> = docs.iter().map(|(r, ..)| r.clone()).collect();
+    let n = c.swaps.len();
+    let label = format!("Fixed {} for the game update ({})", m.name, if n == 1 { "1 hash".into() } else { format!("{n} hashes") });
+    let b = backups::take(db, game, &m.id, &dir, &files, &label)?;
+    for (_, abs, doc) in &docs { std::fs::write(abs, doc.to_bytes())?; }
+    Ok(Some(b))
+}
+
+/// Replace live `hash = old` lines of TextureOverride sections, keeping each old line above as a comment.
+fn swap_doc(doc: &mut crate::keys::Doc, plan: &HashMap<&str, &Hop>) -> usize {
+    let mut edits: Vec<(usize, String, String)> = Vec::new();
+    let mut in_override = false;
+    for (i, line) in doc.lines.iter().enumerate() {
+        if let Some(h) = crate::keys::header_name(line) { in_override = h.to_ascii_lowercase().starts_with("textureoverride"); continue; }
+        if !in_override { continue; }
+        let Some((k, v)) = crate::keys::kv(line) else { continue };
+        if k != "hash" { continue; }
+        let Some(old) = hex8(v) else { continue };
+        let Some(hop) = plan.get(old.as_str()) else { continue };
+        let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+        edits.push((i, format!("{indent}; hash = {old} (before {}, {MARK})", hop.version), crate::keys::with_value(line, &hop.new)));
+    }
+    for (i, comment, new) in edits.iter().rev() {
+        doc.lines[*i] = new.clone();
+        doc.insert(*i, comment.clone());
+    }
+    edits.len()
+}
+
+/// Fix these mods (the ones with hashes gachamod can swap). Each changed mod gets its own backup.
+pub fn fix(shared: &crate::db::Shared, game: &str, ids: &[String]) -> Result<FixAll> {
+    let lock = || shared.lock().map_err(|_| Error::Db("The local database is stuck. Restart gachamod".into()));
+    let Some(idx) = Index::get(game) else { return Ok(FixAll::default()) };
+    let mods = { mods_of(&*lock()?, game)? };
+    let mt = matcher(game, &mods);
+    let mut who = Who::new(&mt);
+    let mut out = FixAll::default();
+    let mut any_on = false;
+    for id in ids {
+        let Some(m) = mods.iter().find(|m| m.id == *id) else { continue };
+        let skip = |reason: String| ModSkip { mod_id: m.id.clone(), name: m.name.clone(), reason };
+        let dir = Path::new(&m.path);
+        if !dir.is_dir() { out.skipped.push(skip("Its folder isn't there any more".into())); continue; }
+        let c = check_dir(idx, dir, m.character.as_deref(), &mut who);
+        if let Some((why, _)) = c.needs.first() { out.skipped.push(skip(why.clone())); continue; }
+        if c.swaps.is_empty() { continue; }
+        match fix_dir(&*lock()?, game, m, &c) {
+            Ok(Some(backup)) => { any_on |= m.enabled; out.changed.push(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }); }
+            Ok(None) => {}
+            Err(e) => out.skipped.push(skip(e.to_string())),
+        }
+    }
+    if !out.changed.is_empty() {
+        let d = lock()?;
+        let mut fixed: Vec<String> = d.setting_json::<Vec<String>>(&fixed_key(game))?.unwrap_or_default();
+        for c in &out.changed { if !fixed.contains(&c.mod_id) { fixed.push(c.mod_id.clone()); } }
+        if fixed.len() > 5000 { fixed.drain(..fixed.len() - 5000); }
+        d.set_setting_json(&fixed_key(game), &fixed)?;
+    }
+    if any_on { crate::devtools::mark_changed(game); }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn idx() -> &'static Index { Index::get("zzz").unwrap() }
+
+    #[test]
+    fn data_loads_for_every_game() {
+        for (g, _) in DATA {
+            let i = Index::get(g).unwrap();
+            assert!(!i.sources.is_empty(), "{g} has no sources");
+        }
+        assert!(idx().pairs > 500);
+        assert!(Index::get("ww").unwrap().pairs > 1000);
+    }
+
+    #[test]
+    fn a_chain_ends_at_the_newest_hash_and_needs_the_character() {
+        let mt = Matcher::new("zzz", &["Belle".to_string(), "Ellen Joe".to_string()]);
+        let mut who = Who::new(&mt);
+        let hop = resolve(idx(), "d7ca821f", Some("Belle"), &mut who).expect("Belle's old body blend hash");
+        assert_ne!(hop.new, "d7ca821f");
+        assert_eq!(hop.character, "Belle");
+        // another character's mod with the same hash is left alone
+        assert!(resolve(idx(), "d7ca821f", Some("Ellen Joe"), &mut who).is_none());
+        // a hash the data never saw
+        assert!(resolve(idx(), "12345678", Some("Belle"), &mut who).is_none());
+    }
+
+    #[test]
+    fn swaps_keep_the_old_line_and_the_rest_of_the_file() {
+        let hop = Hop { new: "c92a17d8".into(), version: "1.1".into(), character: "Belle".into(), part: "Body Blend".into() };
+        let plan: HashMap<&str, &Hop> = [("d7ca821f", &hop)].into_iter().collect();
+        let text = "[TextureOverrideBelleBlend]\r\nhash = d7ca821f\r\nvb2 = ResourceBlend\r\n\r\n[ResourceBlend]\r\nhash = d7ca821f\r\n;hash = d7ca821f\r\n";
+        let mut doc = crate::keys::Doc::from_bytes(text.as_bytes());
+        assert_eq!(swap_doc(&mut doc, &plan), 1);
+        let out = String::from_utf8(doc.to_bytes()).unwrap();
+        assert_eq!(out, "[TextureOverrideBelleBlend]\r\n; hash = d7ca821f (before 1.1, changed by gachamod)\r\nhash = c92a17d8\r\nvb2 = ResourceBlend\r\n\r\n[ResourceBlend]\r\nhash = d7ca821f\r\n;hash = d7ca821f\r\n");
+        // a second run finds nothing
+        assert_eq!(swap_doc(&mut doc, &plan), 0);
+    }
+
+    #[test]
+    fn a_mod_with_a_buffer_change_is_left_for_its_fixer() {
+        let dir = std::env::temp_dir().join(format!("gachamod-fixes-{}", crate::library::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Ellen's 1.1 texcoord hash needs a stride change, which only ZZZ Mod Fixer does
+        std::fs::write(dir.join("mod.ini"), "[TextureOverrideEllenTexcoord]\nhash = 9cddb082\n").unwrap();
+        let mt = Matcher::new("zzz", &["Ellen Joe".to_string()]);
+        let mut who = Who::new(&mt);
+        let c = check_dir(idx(), &dir, Some("Ellen Joe"), &mut who);
+        assert!(!c.needs.is_empty(), "the stride rule should fire");
+        assert!(c.needs[0].1.url.contains("github.com"));
+        let m = ModEntry { id: "x".into(), ..Default::default() };
+        assert_eq!(health_of(&m, &c, &HashSet::new()).unwrap().status, "unfixable");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod real {
+    /// `GACHAMOD_REAL_DB=<path to a copy of gachamod.sqlite> cargo test -p gacha-core real_library -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn real_library() {
+        let Some(p) = std::env::var_os("GACHAMOD_REAL_DB") else { return };
+        let db = crate::db::Db::open(std::path::Path::new(&p)).unwrap();
+        for g in ["zzz", "ww", "hsr", "gi", "ef"] {
+            let mods = super::mods_of(&db, g).map(|m| m.len()).unwrap_or(0);
+            let t = std::time::Instant::now();
+            let h = super::health(&db, g).unwrap_or_default();
+            println!("{g}: {mods} mods, {} flagged in {:?}", h.len(), t.elapsed());
+            for r in h.iter().take(12) { println!("  {} [{}] {:?} {:?}", r.name, r.status, r.reasons.iter().take(3).collect::<Vec<_>>(), r.tool.as_ref().map(|t| &t.name)); }
+        }
+    }
+}

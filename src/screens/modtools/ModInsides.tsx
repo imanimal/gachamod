@@ -1,18 +1,23 @@
-// The "Keys and options" part of a mod's drawer: key bindings, variables with pickers, problems, conflicts, readmes.
-// Owner: MODTOOLS area. LIBRARY's mod drawer renders it.
+// The "Keys and options" part of a mod's drawer: options with pickers, problems, conflicts, readmes. The keys themselves are
+// edited by ui/KeyEditor.tsx above it. Owner: MODTOOLS area. LIBRARY's mod drawer renders it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emitApp, useGame } from "../../lib/store";
-import { errorKind, errorText, modtools, type KeyBinding, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
-import { Badge, Button, IconButton, Kbd, Panel, Segmented, Select, Skeleton, Toggle, plural, type Tone } from "../../ui/kit";
+import { errorKind, errorText, modtools, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
+import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, plural, type Tone } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
 import { turnOff } from "./toolsBadge";
+import { FixButton } from "./FixButton";
+import { onKeysChanged } from "../../ui/KeyEditor";
 import "./modtools.css";
 
 const varKey = (v: { ini: string; var: string }) => `${v.ini}|${v.var}`;
 
 export const severityTone = (s: string): Tone => (s === "bad" ? "bad" : s === "warn" ? "warn" : "info");
-export const severityLabel = (s: string) => (s === "bad" ? "Broken" : s === "warn" ? "Check" : "Note");
+export const severityLabel = (s: string) => (s === "bad" ? "Broken" : s === "warn" ? "Warning" : "Note");
+export const severityHint = (s: string) => (s === "bad"
+  ? "Part of the mod won't show, or shows wrong, in game"
+  : s === "warn" ? "The mod works, but this part may not, or only in some cases" : "Doesn't change how the mod looks in game");
 
 export function ModInsides({ mod }: { mod: ModEntry }) {
   const game = useGame();
@@ -29,9 +34,11 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
     setFailed(null);
     modtools.inspect(mod.game, mod.id)
       .then((d) => { if (live) setData(d); })
-      .catch((e) => { if (live) { setData(null); setFailed(errorKind(e) === "todo" ? "Keys and options show here once the library is ready." : errorText(e)); } });
+      .catch((e) => { if (live) { setData(null); setFailed(errorKind(e) === "todo" ? "Toggles and options show here once the library is ready." : errorText(e)); } });
     return () => { live = false; };
   }, [mod.game, mod.id, mod.enabled, reload]);
+  // a fix or its Undo changed this mod's files
+  useEffect(() => onKeysChanged((g, id) => { if (g === mod.game && id === mod.id) setReload((n) => n + 1); }), [mod.game, mod.id]);
 
   const shown = data && data.modId === mod.id ? data : null;
   if (failed) return <p className="mi mi-failed muted">{failed}</p>;
@@ -47,14 +54,13 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
   return (
     <div className="mi">
       {shown.keys.length === 0 && options.length === 0 && (
-        <p className="mi-none muted">This mod has no keys or options.</p>
+        <p className="mi-none muted">This mod has no toggles or options.</p>
       )}
       {options.length > 0 && (
         <Options mod={mod} vars={options} running={running} stillCurrent={() => current.current === mod.id}
           onSaved={(v, value) => setData((d) => d && d.modId === mod.id ? { ...d, vars: d.vars.map((x) => varKey(x) === varKey(v) ? { ...x, current: value } : x) } : d)} />
       )}
-      {shown.keys.length > 0 && <Keys keys={shown.keys} vars={shown.vars} />}
-      {shown.problems.length > 0 && <Problems problems={shown.problems} />}
+      {shown.problems.length > 0 && <Problems mod={mod} problems={shown.problems} onFixed={() => setReload((n) => n + 1)} />}
       {shown.conflicts.length > 0 && (
         <Conflicts mod={mod} data={shown} onDone={() => { emitApp({ type: "library-refresh", game: mod.game }); setReload((n) => n + 1); }} />
       )}
@@ -124,58 +130,25 @@ function Options({ mod, vars, running, stillCurrent, onSaved }:
   );
 }
 
-// ── keys ──
-
-function does(k: KeyBinding, labels: Map<string, string>): string {
-  const name = (v: string) => labels.get(v) ?? v;
-  const vars = k.vars.map((v) => name(v.var));
-  if (vars.length === 0) return k.kind === "hold" ? "Does something while held" : "Does something in game";
-  const list = vars.length === 1 ? vars[0]! : `${vars.slice(0, -1).join(", ")} and ${vars[vars.length - 1]}`;
-  switch (k.kind) {
-    case "cycle": return `Changes ${list}`;
-    case "toggle": return `Turns ${list} on or off`;
-    case "hold": return `Changes ${list} while held`;
-    default: return `Sets ${list}`;
-  }
-}
-
-function Keys({ keys, vars }: { keys: KeyBinding[]; vars: VarInfo[] }) {
-  const labels = new Map(vars.map((v) => [v.var, v.label]));
-  return (
-    <Panel title="Keys" icon="keyboard" className="mi-panel mi-keys" count={keys.length}>
-      <ul className="mi-key-list">
-        {keys.map((k) => {
-          const cycle = k.vars.find((v) => v.values.length > 1);
-          return (
-            <li key={`${k.ini}|${k.section}`} className="mi-key-row" title={`[${k.section}] in ${k.ini}${k.condition ? `, only when ${k.condition}` : ""}`}>
-              <span className="mi-key-chips">
-                {(k.labels.length ? k.labels : [k.label]).map((l, i) => <Kbd key={`${l}-${i}`}>{l}</Kbd>)}
-                {k.back && <span className="mi-key-back hint">Back <Kbd>{k.back}</Kbd></span>}
-              </span>
-              <span className="mi-key-what">{does(k, labels)}</span>
-              {cycle && (
-                <span className="mi-key-vals" aria-label="Values">
-                  {cycle.values.map((v, i) => <span key={`${v}-${i}`} className="mi-val badge t-muted">{v}</span>)}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </Panel>
-  );
-}
-
 // ── problems and conflicts ──
 
-function Problems({ problems }: { problems: Problem[] }) {
+function Problems({ mod, problems, onFixed }: { mod: ModEntry; problems: Problem[]; onFixed: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  const run = async (key: string, job: () => Promise<unknown>) => {
+    setBusy(key);
+    try { await job(); } finally { if (live.current) setBusy(null); }
+  };
+  const m = { modId: mod.id, name: mod.name, enabled: mod.enabled, source: mod.source, problems };
   return (
     <Panel title="Problems" icon="warn" className="mi-panel mi-problems" count={problems.length}>
       <ul className="mi-prob-list">
         {problems.map((p, i) => (
           <li key={`${p.kind}-${i}`} className={`mi-prob mi-prob-${p.severity}`}>
-            <Badge tone={severityTone(p.severity)}>{severityLabel(p.severity)}</Badge>
+            <Badge tone={severityTone(p.severity)} title={severityHint(p.severity)}>{severityLabel(p.severity)}</Badge>
             <span className="mi-prob-t">{p.detail}</span>
+            {p.fix && <FixButton game={mod.game} m={m} fix={p.fix} busyKey={`f${i}`} busy={busy} run={run} onDone={onFixed} />}
           </li>
         ))}
       </ul>

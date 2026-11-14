@@ -89,11 +89,30 @@ pub static GAMES: &[GameDef] = &[
         accent: "#b9a77a", theme: "default", exe_names: &["dwrg.exe"], process_names: &["dwrg.exe"], folder_names: &[], folder_children: &[], steam_app: None },
     GameDef { id: "ss", name: "Stella Sora", short: "Stella", importer: "3DMigoto", xxmi: false, gamebanana_id: 23629, gb_character_category: None,
         accent: "#7fb7ff", theme: "default", exe_names: &["StellaSora.exe"], process_names: &["StellaSora.exe"], folder_names: &[], folder_children: &[], steam_app: Some(4813850) },
-    GameDef { id: "at", name: "Action Taimanin", short: "Taimanin", importer: "3DMigoto", xxmi: false, gamebanana_id: 26307, gb_character_category: None,
+    GameDef { id: "at", name: "Action Taimanin", short: "Taimanin", importer: "3DMigoto", xxmi: false, gamebanana_id: 26307, gb_character_category: Some(51169),
         accent: "#c05cff", theme: "default", exe_names: &["ActionTaimanin.exe"], process_names: &["ActionTaimanin.exe"], folder_names: &[], folder_children: &[], steam_app: Some(1335200) },
 ];
 
 pub fn def(id: &str) -> Option<&'static GameDef> { GAMES.iter().find(|g| g.id == id) }
+
+/// The game's own icon as a PNG at `<data>/icons/<game>.png`, taken from its exe at 256 px and taken again when the
+/// exe changes (an update). None when the game folder or exe isn't known, or off Windows.
+pub fn icon(db: &Db, data_dir: &Path, id: &str) -> Result<Option<PathBuf>> {
+    let g = require_def(id)?;
+    let Some(dir) = paths(db, id)?.game_dir.map(PathBuf::from) else { return Ok(None) };
+    let Some(exe) = crate::launch::game_exe(g, &dir) else { return Ok(None) };
+    let modified = std::fs::metadata(&exe).and_then(|m| m.modified()).ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
+    let stamp = format!("{}|{modified}", exe.display());
+    let key = format!("{id}.iconStamp");
+    let out = data_dir.join("icons").join(format!("{id}.png"));
+    if out.is_file() && db.setting(&key)?.as_deref() == Some(stamp.as_str()) { return Ok(Some(out)); }
+    let Some(png) = crate::platform::exe_icon_png(&exe, 256) else { return Ok(None) };
+    std::fs::create_dir_all(out.parent().unwrap_or(data_dir))?;
+    std::fs::write(&out, png)?;
+    db.set_setting(&key, &stamp)?;
+    Ok(Some(out))
+}
 
 pub fn require_def(id: &str) -> Result<&'static GameDef> {
     def(id).ok_or_else(|| Error::Invalid(format!("Unknown game \"{id}\"")))

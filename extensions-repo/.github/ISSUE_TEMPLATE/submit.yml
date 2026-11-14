@@ -1,0 +1,27 @@
+name: Submit an extension or theme
+description: Ask for a package to be listed in gachamod.
+title: "Submit: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Attach the .zip gachamod made for you (Extensions, More, Share a package; or Settings, Custom themes, Share).
+        Extensions run code, so each one is read before it's listed. Updates go the same way: attach the new zip.
+  - type: input
+    id: name
+    attributes:
+      label: Name
+    validations:
+      required: true
+  - type: textarea
+    id: package
+    attributes:
+      label: Package
+      description: Drag the .zip here.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: What changed in an update, other apps it works with, anything a reviewer should know.

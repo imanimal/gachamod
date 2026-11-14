@@ -1,5 +1,6 @@
-// Profiles for the screens that show them (Profiles, the sidebar switch): the list, a bus so both stay in step, the
-// game's character portraits for "char:<Name>" icons, and switching with Undo. Owner: LIBRARY area.
+// Profiles for the screens that show them (Profiles, Home, the sidebar): the list, a bus so they stay in step, the
+// last list per game (for menus and search, which are built at once), the game's character portraits for
+// "char:<Name>" icons, and switching with Undo. Owner: HOME/PROFILES area.
 import { useCallback, useEffect, useState } from "react";
 import { characters, errorText, library, profiles, type Character, type GameId, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
@@ -8,8 +9,21 @@ import { toast } from "../../ui/toast";
 import { publish, summarize } from "../library/data";
 
 const subs = new Set<(game: GameId) => void>();
+const lastLists = new Map<GameId, Profile[]>();
 /** Tell every profile list for this game to reload. */
-export function profilesChanged(game: GameId) { subs.forEach((f) => f(game)); }
+export function profilesChanged(game: GameId) { lastLists.delete(game); subs.forEach((f) => f(game)); }
+
+/** The list loaded last for a game (null before any), and a fresh one on the way. */
+export function knownProfiles(game: GameId): Profile[] | null {
+  const l = lastLists.get(game);
+  if (!l) void loadProfiles(game).catch(() => {});
+  return l ?? null;
+}
+export async function loadProfiles(game: GameId): Promise<Profile[]> {
+  const l = await profiles.list(game);
+  lastLists.set(game, l);
+  return l;
+}
 
 export function useProfiles(game: GameId | undefined) {
   const [list, setList] = useState<Profile[] | null>(null);
@@ -18,7 +32,7 @@ export function useProfiles(game: GameId | undefined) {
   useEffect(() => {
     if (!game) { setList(null); return; }
     let live = true;
-    profiles.list(game).then((l) => { if (live) setList(l); }).catch((e) => { if (live) { setList((x) => x ?? []); toast(errorText(e), true); } });
+    loadProfiles(game).then((l) => { if (live) setList(l); }).catch((e) => { if (live) { setList((x) => x ?? []); toast(errorText(e), true); } });
     return () => { live = false; };
   }, [game, tick]);
   useEffect(() => {

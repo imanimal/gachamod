@@ -28,10 +28,11 @@ function xxmiStatus(): XxmiStatus {
 }
 
 const EXTRAS: Record<string, Record<string, unknown>> = {
-  gi: { unlock_fps: true, unlock_fps_value: 120, disable_dcr: true, enable_hdr: false },
+  gi: { configure_game: true, unlock_fps: true, unlock_fps_value: 120, enable_hdr: false },
   hsr: { unlock_fps: false },
-  ww: { unlock_fps: false, disable_wounded_fx: true, force_max_lod_bias: false, resource_tier: "HD", mesh_lod_distance_lod_base_fov: 165 },
-  hi3: { unlock_fps: false, unlock_fps_value: 120, disable_dcr: true, enable_hdr: false },
+  zzz: { configure_game: true },
+  ww: { configure_game: true, unlock_fps: false, disable_wounded_fx: true, force_max_lod_bias: false, resource_tier: "HD", mesh_lod_distance_lod_base_fov: 165 },
+  hi3: { unlock_fps: false, unlock_fps_value: 120, enable_hdr: false },
 };
 
 const configs = new Map<string, LaunchConfig>();
@@ -81,13 +82,15 @@ const LOG = [
 let shaderCache = 412_337_152;
 let frameDumps = 1_843_200_000;
 const integrationsState: Integration[] = [
-  { id: "scheme:gachamod", label: "gachamod links (1-click installs from GameBanana)", supported: true, ours: true, owner: null },
-  { id: "file:.gachamod", label: ".gachamod files open in gachamod", supported: true, ours: false, owner: null },
+  { id: "scheme:gachamod", label: "1-click installs from GameBanana", supported: true, ours: true, owner: null },
+  { id: "file:.gachamod", label: "Open .gachamod files", supported: true, ours: true, owner: null },
 ];
 
 export function registerSystemDemo() {
   registerDemo({
     games_list: () => gamesNow(),
+    // the demo has no exe to read: the UI falls back to its own badge
+    game_icon: () => null,
     games_detect: async () => { await demoWait(900); return gamesNow(); },
     game_set_paths: ({ game, paths }) => {
       const p = paths as GamePaths;
@@ -136,11 +139,11 @@ export function registerSystemDemo() {
     },
     dev_wipe_user_config: () => undefined,
     app_data_dir: () => ROOT.replace("XXMI Launcher", "gachamod"),
-    integrations_get: () => integrationsState,
-    integration_register: ({ id }) => {
+    integrations_get: () => integrationsState.map((i) => ({ ...i })),
+    integration_set: ({ id, on }) => {
       const i = integrationsState.find((x) => x.id === id);
-      if (i) { i.ours = true; i.owner = null; }
-      return integrationsState;
+      if (i) { i.ours = !!on; i.owner = null; }
+      return integrationsState.map((x) => ({ ...x }));
     },
     // settings file: the browser has no file dialogs, so these only answer if called directly
     settings_export: () => ({ games: demoDb.games.length, profiles: 2, settings: demoDb.settings.size }),

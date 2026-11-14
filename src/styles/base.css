@@ -32,12 +32,27 @@
    --ease-out, --ease-spring   a plain ease-out, an overshoot for things that pop in
    --dur-fast, --dur-slow  short hover feedback, entering panels
    --game-accent           the current game's brand colour (set by lib/theme.ts, with --game-on-accent for text on
-                           it and --game-accent-dk, a darker shade that reads on white) */
+                           it and --game-accent-dk, a darker shade that reads on white)
+   --d                     spacing factor from data-density (compact .86, cozy 1, roomy 1.15): kit sizes multiply by it
+
+   Layout attributes on <html> (lib/theme.ts applyLayout(), used by custom themes): data-density, data-corners here;
+   data-sidebar and data-nav in shell.css. */
 
 *, *::before, *::after { box-sizing: border-box; }
+
+/* density and corners: these beat a theme's own values (a theme sets tokens on [data-theme], one attribute) */
+:root { --d: 1; }
+:root[data-density="compact"] { --d: .86; }
+:root[data-density="roomy"] { --d: 1.15; }
+:root:root[data-corners="sharp"], :root[data-corners="sharp"] [data-theme] { --radius: 3px; --radius-sm: 2px; --radius-lg: 4px; --radius-xs: 2px; }
+:root:root[data-corners="round"], :root[data-corners="round"] [data-theme] { --radius: 18px; --radius-sm: 13px; --radius-lg: 26px; --radius-xs: 7px; }
 html, body, #root { height: 100%; margin: 0; }
 html { --fs: 14px; font-size: var(--fs); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.45; overflow: hidden; user-select: none; }
+/* Window-size rules use `@container app (…rem)`, not @media px: rem follows the text size setting (lib/zoom.ts), so
+   20px text in a 1000px window gets the same layout as 14px text in a 700px one. Screens can also ask about their own
+   width with `@container view` (shell.css). Neither makes a containing block, so fixed menus still use the window. */
+body { container: app / size; }
 /* a nested theme (a preview) re-reads its own tokens */
 [data-theme] { font-family: var(--font); color: var(--text); }
 :is(input, textarea, select, button) { font: inherit; color: inherit; letter-spacing: inherit; }

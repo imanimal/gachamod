@@ -55,18 +55,24 @@ pub struct MigotoConfig {
     pub hunting: bool,
     pub dump_shaders: bool,
     pub mute_warnings: bool,
-    /// "DISABLED", "ERROR", "WARNING", "INFO", "DEBUG" (XXMI's log_level), or the d3dx.ini logging switch.
+    /// "DISABLED", "WARNING", "INFO", "DEBUG" (XXMI's log_level), or empty outside XXMI.
     pub log_level: String,
     pub calls_logging: bool,
     pub debug_logging: bool,
+    /// XXMI only: it rewrites the importer's [Rendering] keys in d3dx.ini on each start. The right values differ per
+    /// game (texture_hash is 1 for WWMI, 0 for the rest), so outside XXMI this is never read or written.
     pub enforce_rendering: bool,
 }
 
-/// XXMI importer keys shown as game extras when the importer's config has them.
+/// XXMI importer keys shown as game extras when the importer's config has them. GIMI and HIMI still carry
+/// `disable_dcr` but XXMI no longer reads it: `configure_game` is what turns dynamic character resolution off.
 pub const EXTRA_KEYS: &[&str] = &[
-    "unlock_fps", "unlock_fps_value", "disable_dcr", "enable_hdr", "disable_wounded_fx", "force_max_lod_bias", "resource_tier",
+    "configure_game", "unlock_fps", "unlock_fps_value", "enable_hdr", "disable_wounded_fx", "force_max_lod_bias", "resource_tier",
     "mesh_lod_distance_lod_base_fov",
 ];
+
+/// Importers where XXMI acts on `configure_game` (the others have the key but ignore it).
+const CONFIGURES_GAME: &[&str] = &["GIMI", "WWMI", "ZZMI"];
 
 const XXMI_SIGNED: &str = "XXMI Launcher signs this command. Set it in XXMI Launcher";
 const XXMI_MISSING: &str = "Your XXMI Launcher version doesn't have this option";
@@ -81,6 +87,7 @@ pub fn config(db: &Db, game: &str) -> Result<LaunchConfig> {
     let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
     let xxmi_cfg = if g.xxmi && paths.via_xxmi { crate::xxmi::importer_config(root.as_deref(), g.importer).ok() } else { None };
     let mut c = merge_config(own, xxmi_cfg.as_ref(), close_on_launch(db, game));
+    if !CONFIGURES_GAME.contains(&g.importer) { c.extras.remove("configure_game"); }
     if !c.xxmi_available {
         let text = games::importer_dir(db, game).ok().and_then(|d| std::fs::read_to_string(d.join("d3dx.ini")).ok());
         match text {
@@ -101,7 +108,7 @@ pub fn migoto_from_d3dx(text: &str) -> MigotoConfig {
         log_level: String::new(),
         calls_logging: on("Logging", "calls"),
         debug_logging: on("Logging", "debug"),
-        enforce_rendering: on("Rendering", "texture_hash"),
+        enforce_rendering: false,
     }
 }
 
@@ -242,7 +249,6 @@ fn apply_migoto_to_d3dx(importer: &Path, m: &MigotoConfig) -> Result<()> {
         (m.mute_warnings != prev.mute_warnings, "Logging", "show_warnings", if m.mute_warnings { "0" } else { "1" }),
         (m.calls_logging != prev.calls_logging, "Logging", "calls", if m.calls_logging { "1" } else { "0" }),
         (m.debug_logging != prev.debug_logging, "Logging", "debug", if m.debug_logging { "1" } else { "0" }),
-        (m.enforce_rendering != prev.enforce_rendering, "Rendering", "texture_hash", if m.enforce_rendering { "1" } else { "0" }),
     ] {
         if changed { out = ini_set(&out, sec, key, val); }
     }
@@ -525,5 +531,7 @@ mod tests {
         assert_eq!(ini_get(&b, "LOGGING", "debug").as_deref(), Some("0"));
         let m = migoto_from_d3dx(&b);
         assert!(m.calls_logging && !m.debug_logging && !m.hunting);
+        // texture_hash differs per game, so a plain d3dx.ini never reports enforce_rendering
+        assert!(!migoto_from_d3dx("[Rendering]\ntexture_hash = 1\n").enforce_rendering);
     }
 }

@@ -1,5 +1,34 @@
-/* Settings and onboarding layout. Colours are theme tokens only. Owner: SYSTEM area. */
-.settings .panel { scroll-margin-top: 1rem; }
+/* Settings and onboarding layout. Colours are theme tokens only. Owner: SETTINGS/AI area. */
+.settings .panel, .settings [id^="set-"] { scroll-margin-top: 1rem; }
+.set-layout { display: grid; grid-template-columns: 12.5rem minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+.set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; padding-top: .2rem; overflow: hidden auto; scrollbar-width: thin; }
+.set-nav-i { display: flex; align-items: center; gap: .6rem; padding: .42rem .7rem; border-radius: var(--radius-sm); color: var(--text-2);
+  text-align: left; font-size: .93em; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.set-nav-i .i { width: 1.05rem; height: 1.05rem; flex: none; opacity: .8; }
+.set-nav-i:hover { background: var(--hover); color: var(--text); }
+.set-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
+.set-main { min-width: 0; display: flex; flex-direction: column; gap: var(--stack-gap); }
+.set-ext { display: flex; flex-direction: column; gap: var(--stack-gap); }
+.set-ext:empty { display: none; }
+@container view (max-width: 46rem) {
+  .set-layout { grid-template-columns: minmax(0, 1fr); }
+  .set-nav { position: static; flex-direction: row; flex-wrap: wrap; max-height: none !important; overflow: visible; }
+}
+.set-tip { text-decoration: underline dotted var(--text-3); text-underline-offset: 3px; cursor: help; }
+.set-row.set-row-col { flex-direction: column; align-items: stretch; gap: .6rem; }
+.set-ai-bots, .set-ai-jobs { display: flex; flex-wrap: wrap; gap: .4rem; }
+.set-game-note { margin-top: .2rem; }
+.set-flash { animation: setFlash 1.6s var(--ease-out); border-radius: var(--radius-sm); }
+@keyframes setFlash { 0%, 30% { background: var(--accent-soft); } 100% { background: transparent; } }
+/* a section picked in the list: an accent ring around it that fades (outline, so no theme's panel look changes) */
+.set-ring { outline: 2px solid transparent; outline-offset: 3px; animation: setRing 1.8s var(--ease-out); }
+@keyframes setRing { 0%, 35% { outline-color: var(--accent-ink); } 100% { outline-color: transparent; } }
+/* reduced motion: the highlight still shows, it just goes away without fading */
+[data-motion="reduced"] :is(.set-flash, .set-ring) { animation-timing-function: steps(1, end); }
+.set-creators .sub-h { margin-top: .6rem; }
+.set-creator-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .3rem .8rem; }
+.set-creator { display: flex; align-items: center; gap: .55rem; padding: .25rem 0; min-width: 0; }
+.set-creator .qlink { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-note { margin: .2rem 0 .8rem; }
 .settings .sub-h { margin: 1.4rem 0 .3rem; font-size: .95rem; }
 .set-games { display: flex; flex-direction: column; }
@@ -33,10 +62,13 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-pergame { margin-top: 1rem; display: flex; flex-direction: column; gap: .3rem; }
 .set-pergame-h, .set-pergame-r { display: grid; grid-template-columns: 1fr 10rem 10rem; align-items: center; gap: .5rem; }
 .set-pergame-h { font-size: .85em; color: var(--text-3); }
+.set-pergame-h span[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .set-pergame-r { padding: .3rem 0; }
 
 /* onboarding */
 .onboard .dialog-b { display: flex; flex-direction: column; gap: 1rem; }
+/* a short window scrolls the body; its cards never squash and cut off their buttons */
+.onboard .dialog-b > * { flex-shrink: 0; }
 .onboard-scan { display: flex; flex-direction: column; align-items: center; gap: .8rem; padding: 2.5rem 1rem; text-align: center; }
 .onboard-scan .progress { width: 60%; }
 .onboard-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .8rem; }
@@ -51,3 +83,44 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-import ul.mono { font-size: .85em; word-break: break-all; }
 .set-update { margin-bottom: 1rem; }
 .set-update .progress { margin-top: .4rem; }
+
+/* custom themes: cards with a menu button, and the editor under them */
+.ctheme { position: relative; display: flex; min-width: 0; }
+.ctheme > .card { flex: 1; min-width: 0; }
+.ctheme-more { position: absolute; top: .85rem; right: .85rem; background: var(--surface); box-shadow: var(--shadow); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.ctheme:hover .ctheme-more, .ctheme:focus-within .ctheme-more { opacity: 1; }
+.ctheme-intro { margin: 0 0 .8rem; }
+.ctheme-row { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.ctheme-ed { display: flex; flex-direction: column; gap: .85rem; padding: .9rem 1rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.ctheme-ed-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr); gap: .8rem; align-items: end; }
+.ctheme-line { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; }
+.ctheme-line > .field-l { min-width: 8.5rem; margin: 0; }
+.ctheme-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: .55rem 1.2rem; }
+.ctheme-colors { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ctheme-color { display: inline-flex; align-items: center; gap: .15rem; padding: .2rem .25rem .2rem .3rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: .9em; }
+.ctheme-color.set { box-shadow: inset 0 0 0 1px var(--accent); }
+.ctheme-color label { display: inline-flex; align-items: center; gap: .45rem; padding-right: .35rem; cursor: pointer; }
+.ctheme-color input[type="color"] { width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; cursor: pointer; }
+.ctheme-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.ctheme-color input[type="color"]::-webkit-color-swatch { border: 1px solid var(--line-2); border-radius: var(--radius-xs); }
+.ctheme-adv summary { cursor: pointer; width: fit-content; font-weight: 650; color: var(--text-2); }
+.ctheme-adv[open] > summary { margin-bottom: .55rem; }
+.ctheme-adv details { margin-top: .6rem; }
+.ctheme-tokens { display: grid; gap: .1rem; margin: .45rem 0 0; font-size: .84em; }
+.ctheme-tokens > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: .8rem; }
+.ctheme-tokens dt { font-family: var(--font-mono); color: var(--text-2); }
+.ctheme-tokens dd { margin: 0; color: var(--text-3); }
+.ctheme-err { color: var(--bad); }
+.ctheme-probs { margin: 0; padding-left: 1.1rem; font-size: .86em; color: var(--warn); display: grid; gap: .15rem; }
+.ctheme-ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.ctheme-ed-foot .hint { margin-right: auto; }
+
+/* The Default theme's page header scrolls away, which left a header-sized gap above the section list (it sticks where
+   it starts so it never moves). On Settings the header stays, like in the game themes. */
+[data-theme="default"] .settings > .page-h { position: sticky; top: 0; z-index: 6; margin: -1rem -1.2rem 0; padding: 1rem 1.2rem .7rem; background: var(--bg);
+  box-shadow: 0 1px 0 var(--line); }
+
+/* Settings > GameBanana account */
+.acct-user { gap: .6rem; }
+.acct-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
+.acct-user .hint { display: block; }

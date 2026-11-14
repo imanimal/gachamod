@@ -1,0 +1,29 @@
+{
+  "game": "ef",
+  "current_version": "1.2 (EFMI 1.2.0 and XXMI 0.8.5 are what the newest fixer asks for)",
+  "generated": "2026-11-13",
+  "note": "Arknights: Endfield has fixers but none with open data. The one that matters is by Gustav0_ and is CC BY-NC-ND 4.0, so nothing was copied from it. The file lists sources, what the fixers are known to change and where to watch for new ones. There are no hash pairs here.",
+  "sources": [
+    {"id":"gustav0-efmi-fix-11","name":"EFMI - Version 1.1 Fix","author":"Gustav0_ (XXMI team)","url":"https://gamebanana.com/tools/22185","license":"CC BY-NC-ND 4.0","checked":"2026-11-13","used":"NOT used. 1064 likes, 190k views, updated 2026-03-28. Files: source_f.zip (140 KB source with data per character) and efmi_fix_f.exe."},
+    {"id":"katthedev-ef-fix-tool","name":"Mod Fix Tool Version 1.1 Unofficial (obsolete)","author":"KatTheDev","url":"https://gamebanana.com/tools/22128","license":"CC BY-NC-ND 4.0","checked":"2026-11-13","used":"NOT used. Marked obsolete by its author; 145 MB rar, characters Akekuri, Avywenna, Endmin, Fluorite, Gilberta, Laevatain, Last Rite, Perlica, Xaihi, Yvonne."},
+    {"id":"aksell94-ae12-batch-fixer","name":"AE12 Mod Batch Fixer","author":"Aksell94","url":"https://gamebanana.com/tools/22472","license":"CC BY-NC-ND 4.0","checked":"2026-11-13","used":"NOT used. Windows batch patcher: updates outdated ShaderOverride blocks, applies PS-T slot fixes, detects cross-IB cases, backs up outside the Mods folder, writes a report."},
+    {"id":"wudunyakusya-endfield-mod-repair","name":"Endfield Mod Repair","author":"WuDunYaKuSya","url":"https://github.com/WuDunYaKuSya/Endfield-Mod-Repair","license":"none stated; releases only (zip builds), no source in the repository","checked":"2026-11-13","used":"NOT used. v1.3 matches whole configs by model buffer and skeleton shader fingerprints and applies one of 15 per mod profiles; unknown mods are left alone."}
+  ],
+  "versions": [
+    {
+      "version": "1.1",
+      "source": "gustav0-efmi-fix-11",
+      "hashes": [
+      ],
+      "rules": [
+        {"kind":"other","character":"all operators (mods made with EFMI-Tools only)","detail":"From the GameBanana post: every scope in the ini must now carry a match_index_count to be valid (XXMI 0.8.5 DLL needs it), and new shader and buffer hashes exist only in EFMI 1.2.0+ and XXMI 0.8.0+, so the mod ini hashes are updated per character. Texture LODs are more aggressive in 1.1, so mods without RabbitFX can flicker. The script keeps backups and has --restore. Its data is embedded per character in the source; the exact hash list and edits are unknown to us. Cannot fix: custom ini files, mods already patched by an unofficial fix (revert first), mods not made with EFMI-Tools, non character mods.","auto":false,"binary":false,"tool":"https://gamebanana.com/tools/22185"},
+        {"kind":"other","character":"all operators","detail":"Detection hint for installed mods, unverified: the post calls them \"scopes\" and does not say which ini section that is, most likely the TextureOverride sections that have match_first_index. If so, an ini whose such sections lack a match_index_count line is an older mod that will not load with XXMI 0.8.5+, and a plain text check can show it as \"may be broken\". Adding the count needs the index buffer size, so do not auto edit it.","auto":false,"binary":false,"tool":"https://gamebanana.com/tools/22185"}
+      ]
+    }
+  ],
+  "upstream": [
+    {"source":"gustav0-efmi-fix-11","url":"https://gamebanana.com/apiv11/Tool/22185/ProfilePage","format":"json (GameBanana API)","notes":"Poll _aFiles[]._tsDateAdded. A newer file than 2026-03-28 means a new EFMI fix; show the \"new fixer\" notice and open the page. The Tool/Index list for game 21842 sorted by Generic_MostLiked shows other new fixers."}
+  ],
+  "conflicts": [
+  ]
+}

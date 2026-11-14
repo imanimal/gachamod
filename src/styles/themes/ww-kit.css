@@ -30,7 +30,7 @@
   --rule: var(--dia) left center / 7px 7px no-repeat, var(--dia) right center / 7px 7px no-repeat, linear-gradient(var(--line-2), var(--line-2)) center / calc(100% - 16px) 1px no-repeat;
 
   /* ink: the root, and dark tiles that sit on paper */
-  &, :is(.card, .tile, .popover, .apptip, .toast, .badge, .mod-img, .codeblock, .hero, .lightbox, .gallery-main, .floatbar) {
+  &, :is(.card, .tile, .home-tile, .portraits > .portrait, .popover, .apptip, .toast, .badge, .mod-img, .codeblock, .hero, .lightbox, .gallery-main, .floatbar) {
     --bg: #07080d; --bg-2: #04050a; --surface: #1d1f25; --surface-2: #272a32; --surface-3: #31343e; --raised: #3a3d48;
     --line: rgb(255 255 255 / .085); --line-2: rgb(206 185 156 / .34);
     --text: #ebe6e2; --text-2: #b9bcc4; --text-3: #7f8492;
@@ -42,12 +42,12 @@
     --key: #e2e2e0; --key-hi: #f6f6f4; --key-fg: #16181b; --key-lines: var(--contour-ink);
     --key2: rgb(22 25 36 / .82); --key2-hi: rgb(46 51 68 / .92); --key2-fg: #ebe6e2; --key2-line: rgb(126 134 170 / .42);
     --pick: #f4f4f2; --pick-fg: #101113; --pick-line: transparent; --knob: #fff; --track: rgb(255 255 255 / .16); --gold-ink: var(--gold-hi); --gold-fill: var(--gold);
-    --wm: var(--compass-w);
+    --wm: var(--compass-w); --img-bg: #262628;
   }
-  --radius: 4px; --radius-sm: 3px; --radius-lg: 6px; --radius-xs: 2px; --radius-pill: 999px;
+  --radius: 4px; --radius-sm: 3px; --radius-lg: 6px; --radius-xs: 2px; --radius-pill: 999px; --stack-gap: .8rem;
   --shadow: 0 2px 8px rgb(0 0 0 / .32); --shadow-lg: 0 18px 50px rgb(0 0 0 / .6), 0 2px 10px rgb(0 0 0 / .4);
   --scrim: rgb(7 9 16 / .58);
-  --tex: var(--contour) left center / auto 100% no-repeat; --img-bg: #262628;
+  --tex: var(--contour) left center / auto 100% no-repeat;
   --font: "Lato", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-display: "Lato", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; --font-num: "Lato", "Segoe UI", sans-serif;
@@ -324,4 +324,58 @@
   .prose a, a { color: var(--gold-ink); }
   .prose blockquote { border-left: 2px solid var(--gold-line); }
   .prose code { border-radius: 2px; background: var(--sheet-2); }
+}
+
+/* ── light: the game's paper sheets become the page. Ink stays on item tiles, badges, tips and toasts; menus, the
+   palette, drawers and float bars turn to paper. Keys on paper are white cards, and the picked one turns black. ── */
+[data-theme="ww"][data-scheme="light"] {
+  /* light is light all through: the tiles turn to paper too (only small badges on pictures stay ink) */
+  --tile: #e6e6e3; --tile-strip: #f6f6f4;
+  &, :is(.popover, .palette, .drawer, .floatbar, .card, .tile, .home-tile, .portraits > .portrait) {
+    --bg: #e4e4e1; --bg-2: #d6d6d3; --surface: #f4f4f2; --surface-2: #e6e6e3; --surface-3: #d8d8d5; --raised: #fff;
+    --line: rgb(0 0 0 / .1); --line-2: rgb(70 60 40 / .32);
+    --text: #16181b; --text-2: #383e46; --text-3: #5c626b;
+    --accent: var(--gold-dk); --on-accent: #fff; --accent-soft: color-mix(in srgb, var(--gold-dk) 14%, transparent);
+    --accent-ink: color-mix(in oklab, var(--gold-dk) 82%, #000); --accent-2: #5f6a86;
+    --ok: #2f7d3a; --warn: #8a5a00; --bad: #b52a43; --info: #23638c; --on-bad: #fff;
+    --ring: #16181b; --hover: rgb(0 0 0 / .06);
+    --sheet: rgb(255 255 255 / .6); --sheet-2: rgb(0 0 0 / .045); --stat: rgb(0 0 0 / .06);
+    --well: rgb(255 255 255 / .75); --well-line: rgb(0 0 0 / .22); --well-line-hi: #16181b;
+    --key: #121316; --key-hi: #2a2b30; --key-fg: #fff; --key-lines: var(--contour);
+    --key2: rgb(255 255 255 / .72); --key2-hi: #fff; --key2-fg: #2a2f36; --key2-line: rgb(0 0 0 / .16);
+    --pick: #1d2026; --pick-fg: #fff; --pick-line: transparent; --knob: #16181b; --track: rgb(0 0 0 / .18);
+    --gold-ink: color-mix(in oklab, var(--gold-dk) 82%, #000); --gold-fill: var(--gold-dk);
+    --wm: var(--compass); --img-bg: #cfcfcc;
+    color: var(--text); color-scheme: light;
+  }
+  --shadow: 0 1px 3px rgb(0 0 0 / .12); --shadow-lg: 0 18px 44px rgb(30 34 44 / .22), 0 2px 8px rgb(30 34 44 / .12);
+  --scrim: rgb(40 44 56 / .36);
+  --tex: var(--contour-ink) left center / auto 100% no-repeat;
+
+  .chip-n, .tab-n { background: rgb(0 0 0 / .08); color: var(--gold-ink); }
+  .chip.on .chip-n, .tab.on .tab-n { background: #fff; color: #16181b; }
+  .chip.on .chip-img { box-shadow: 0 0 0 1px #fff; }
+  .select select option { background: #fff; color: #16181b; }
+  .select .i { color: var(--gold-ink); }
+  .stat-v { color: var(--tone, var(--gold-ink)); }
+  .pchip.on { color: var(--gold-ink); }
+  .skel { background: linear-gradient(100deg, rgb(0 0 0 / .05) 30%, rgb(0 0 0 / .1) 50%, rgb(0 0 0 / .05) 70%); background-size: 250% 100%; }
+  .codeblock { background: #1d1f25; }
+  .list-row { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .5), 0 1px 4px rgb(0 0 0 / .14); }
+  .list.lined .list-row + .list-row { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .5), 0 1px 4px rgb(0 0 0 / .14); }
+  .list-row.sel { box-shadow: 0 0 0 2px #16181b, 0 4px 14px rgb(0 0 0 / .2); }
+
+  /* tiles sit on light grey: the hover and picked outlines turn dark */
+  :is(.card-btn, .tile.click, button.tile, a.tile, .portraits > .portrait, .home-tile, .mod-card):hover:not(:disabled) { outline-color: rgb(0 0 0 / .45); }
+  :is(.card.sel, .tile.sel, .gallery-th.on) { outline-color: #16181b; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07), 0 4px 14px rgb(0 0 0 / .25); }
+  .portraits > .portrait.on { outline-color: #16181b; box-shadow: 0 4px 14px rgb(0 0 0 / .25); }
+
+  .popover, .palette { background: rgb(250 250 248 / .97); box-shadow: inset 0 0 0 1px var(--line-2), var(--shadow-lg); }
+  .menu-i.danger, .menu-i.danger .i { color: var(--bad); }
+  .drawer { background: var(--compass) right -6rem top -5rem / 22rem 22rem no-repeat, linear-gradient(90deg, #f6f6f4, #ededeb 30%); box-shadow: inset 1px 0 0 var(--line-2), -30px 0 60px rgb(30 34 44 / .18); }
+  .drawer-h h2, .drawer-h > .ibtn:last-child { color: var(--text); }
+  .drawer-h > .ibtn:last-child:hover:not(:disabled) { color: var(--gold-ink); }
+  .drawer-f { background: rgb(0 0 0 / .04); }
+  .floatbar { background: rgb(250 250 248 / .94); }
+  .floatbar-n { color: var(--gold-ink); }
 }

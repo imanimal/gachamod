@@ -1,0 +1,11 @@
+{
+  "about": "Other names for Action Taimanin characters. name: GameBanana's category name. aka: other spellings. See docs/spec.md, Characters.",
+  "groups": [],
+  "skip": [],
+  "characters": [
+    { "name": "Kirara", "aka": ["Kirara Onisaki"] },
+    { "name": "Ragnarok", "aka": [] },
+    { "name": "Rin", "aka": ["Rin Koukawa"] },
+    { "name": "Shiranui", "aka": ["Shiranui Mizuki"] }
+  ]
+}

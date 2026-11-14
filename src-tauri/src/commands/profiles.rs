@@ -45,3 +45,29 @@ pub async fn profile_capture(st: State<'_, AppState>, id: i64) -> Result<Profile
     let db = st.db.clone();
     blocking(move || profiles::capture(&*lock(&db)?, id)).await
 }
+
+/// Library ids of the mods that are on in a profile.
+#[tauri::command]
+pub async fn profile_members(st: State<'_, AppState>, id: i64) -> Result<Vec<String>> {
+    let db = st.db.clone();
+    blocking(move || profiles::members(&*lock(&db)?, id)).await
+}
+
+#[tauri::command]
+pub async fn profile_snapshot(st: State<'_, AppState>, id: i64) -> Result<profiles::ProfileSnapshot> {
+    let db = st.db.clone();
+    blocking(move || profiles::snapshot(&*lock(&db)?, id)).await
+}
+
+#[tauri::command]
+pub async fn profile_restore(st: State<'_, AppState>, snapshot: profiles::ProfileSnapshot) -> Result<Profile> {
+    let db = st.db.clone();
+    blocking(move || profiles::restore(&*lock(&db)?, &snapshot)).await
+}
+
+/// Put mods in a profile on (or listed but off) without switching to it.
+#[tauri::command]
+pub async fn profile_set_mods(st: State<'_, AppState>, profile_id: i64, mod_ids: Vec<String>, enabled: bool) -> Result<SwitchReport> {
+    let db = st.db.clone();
+    blocking(move || profiles::set_mods(&*lock(&db)?, profile_id, &mod_ids, enabled)).await
+}

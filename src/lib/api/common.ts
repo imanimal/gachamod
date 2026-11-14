@@ -55,3 +55,13 @@ export function fileUrl(pathOrUrl: string | null | undefined): string | undefine
   const internals = (window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc?: (p: string, proto?: string) => string } }).__TAURI_INTERNALS__;
   return internals?.convertFileSrc ? internals.convertFileSrc(pathOrUrl, "asset") : undefined;
 }
+
+/** A copy of a mod's files taken right before the app changed them (crates/gacha-core/src/backups.rs). */
+export interface Backup { id: string; game: string; modId: string; modDir: string; files: string[]; created: string[]; label: string; at: number }
+
+/** Undo for file changes: every command that edits a mod's files returns the Backup it took; restoring it puts the
+ *  files back and returns a backup of the changed state, which restores the change again (redo). */
+export const backups = {
+  restore: (id: string) => call<Backup>("backup_restore", { id }),
+  list: (game?: string | null, modId?: string | null) => call<Backup[]>("backup_list", { game: game ?? null, modId: modId ?? null }),
+};

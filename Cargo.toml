@@ -12,3 +12,21 @@ rust-version = "1.80"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# The 3D preview decodes textures in dev builds too: unoptimised, a 4K DDS takes seconds.
+[profile.dev.package.image]
+opt-level = 3
+[profile.dev.package.image_dds]
+opt-level = 3
+[profile.dev.package.bcdec_rs]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+[profile.dev.package.base64]
+opt-level = 3

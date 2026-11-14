@@ -1,58 +1,161 @@
-// Settings (global): games and their folders, XXMI Launcher, appearance, mod behaviour, links and files, about.
-// Every change applies at once. Sections have ids for go({ view: "settings", section }). Owner: SYSTEM area.
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { Badge, Button, Card, PageHeader, Panel, Segmented, Toggle } from "../../ui/kit";
+// Settings (global), for changing one thing fast: a list of sections on the left, every setting in the global search
+// (settingsSearch.ts), every change saved at once. A section or a single setting is a route:
+// go({ view: "settings", section: "storage" }) or section: "set-trash-days". Owner: SETTINGS/AI area.
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Badge, Button, PageHeader, Panel, Select, Toggle } from "../../ui/kit";
 import { GameBadge } from "../../ui/GameBadge";
+import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
-import { saved } from "../../ui/motion";
-import { about, app, dialogs, errorText, games, integrations, settings, shell, xxmi, type GameState, type Integration, type XxmiStatus } from "../../lib/api";
-import { consumeRoute, currentGame, refreshGames, setGames, useGame, useGames, useRoute } from "../../lib/store";
-import { THEMES, accentPick, setAccentPick, setMotion, setScheme, setThemePick, themePick, useTheme, type SchemeChoice } from "../../lib/theme";
-import { SIZES, getTextSize, setTextSize } from "../../lib/zoom";
+import { about, app, dialogs, errorText, games, integrations, settings, shell, xxmi, type GameId, type GameState, type Integration, type XxmiStatus } from "../../lib/api";
+import { gameMeta } from "../../lib/games";
+import { consumeRoute, refreshGames, setGames, useGames, useOnlyGame, useRoute } from "../../lib/store";
+import { focusGame } from "../../shell/commands";
+import { useAiShow } from "../../lib/ai";
 import "./settings.css";
+import { AccountSection } from "./AccountSection";
 import { HotkeysSection } from "./HotkeysSection";
 import { TransferSection, UpdateRow } from "./SettingsTransfer";
+import { AppearanceSection, CustomThemesSection } from "./Appearance";
+import { AutomaticSection, CreatorsSection, ModsSection, StorageSection } from "./Sections";
+import { AiSection } from "./AiSection";
+import { ExtensionsSection } from "../extensions/ExtensionsSection";
+import { SECTIONS, sectionOf } from "./settingsSearch";
+import { SetRow, openXxmi, useSetting } from "./parts";
+
+export { SetRow, openXxmi, useSetting };
 
 export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releases";
 
+
 export function Settings() {
   const route = useRoute();
+  const aiShow = useAiShow();
+  const [active, setActive] = useState(SECTIONS[0]!.id);
+  const [present, setPresent] = useState<string[]>(SECTIONS.map((s) => s.id));
+  const main = useRef<HTMLDivElement>(null);
+  const nav = useRef<HTMLElement>(null);
+
+  // the section list sticks just under the page header (its height differs per theme) and only scrolls when the
+  // window is too short to show all of it
+  useLayoutEffect(() => {
+    const el = nav.current;
+    const view = el?.closest(".view") as HTMLElement | null;
+    const head = view?.querySelector(".page-h") as HTMLElement | null;
+    if (!el || !view) return;
+    const fit = () => {
+      if (getComputedStyle(el).position !== "sticky") return;
+      // stick where it starts (below the header), so scrolling the page never moves it at all
+      const h = head && getComputedStyle(head).position === "sticky" ? head.offsetHeight : 0;
+      const start = el.parentElement!.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
+      const top = Math.max(h + 8, Math.round(start));
+      el.style.top = `${top}px`;
+      el.style.maxHeight = `${view.clientHeight - top - 8}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(view);
+    if (head) ro.observe(head);
+    return () => ro.disconnect();
+  }, []);
+
+  // scroll to a section or a single setting, mark its section in the list and light it up once it stops moving.
+  // Sections near the end can't reach the top of the page, so without the highlight it isn't clear which one it was.
+  const pinned = useRef(false);
+  const reveals = useRef(0);
+  const reveal = useCallback((id: string) => {
+    const el = document.getElementById(id) ?? document.getElementById(sectionOf(id) ?? "");
+    if (!el) return;
+    const row = el.id.startsWith("set-");
+    const section = row ? sectionOf(el.id) : el.id;
+    if (section) setActive(section);
+    el.scrollIntoView({ behavior: "smooth", block: row ? "center" : "start" });
+    pinned.current = true;
+    const n = ++reveals.current;
+    whenSettled(el.closest(".view"), () => {
+      if (reveals.current === n) pinned.current = false;
+      const cls = row ? "set-flash" : "set-ring";
+      el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+    });
+  }, []);
+
+  // a section or a single setting from the route
   useEffect(() => {
     const id = route.section;
     if (!id) return;
-    const t = window.setTimeout(() => { document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); consumeRoute(["section"]); }, 120);
+    const t = window.setTimeout(() => { reveal(id); consumeRoute(["section"]); }, 120);
     return () => window.clearTimeout(t);
-  }, [route.section]);
+  }, [route.section, reveal]);
+
+  // sections that render nothing (a part still being built) stay out of the list
+  useEffect(() => {
+    const check = () => setPresent(SECTIONS.map((s) => s.id).filter((id) => { const el = document.getElementById(id); return !!el && el.childElementCount > 0; }));
+    check();
+    const t = window.setTimeout(check, 800);
+    return () => window.clearTimeout(t);
+  }, [aiShow]);
+
+  // the section in view is the one marked in the list (except while scrolling to one that was picked)
+  useEffect(() => {
+    const root = main.current?.closest(".view") ?? null;
+    const seen = new Map<string, boolean>();
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) seen.set(e.target.id, e.isIntersecting);
+      const first = SECTIONS.find((s) => seen.get(s.id));
+      if (first && !pinned.current) setActive(first.id);
+    }, { root, rootMargin: "0px 0px -65% 0px" });
+    for (const s of SECTIONS) { const el = document.getElementById(s.id); if (el) io.observe(el); }
+    return () => io.disconnect();
+  }, [present]);
 
   return (
     <div className="page settings">
       <PageHeader title="Settings" icon="settings" />
-      <GamesSection />
-      <XxmiSection />
-      <AppearanceSection />
-      <ModsSection />
-      <HotkeysSection />
-      <IntegrationsSection />
-      <TransferSection />
-      <AboutSection />
+      <div className="set-layout">
+        <nav ref={nav} className="set-nav" aria-label="Settings sections">
+          {SECTIONS.filter((s) => present.includes(s.id)).map((s) => (
+            <button key={s.id} type="button" className={`set-nav-i${active === s.id ? " on" : ""}`} onClick={() => reveal(s.id)} aria-current={active === s.id ? "true" : undefined}>
+              <Icon name={s.icon} /><span>{s.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="set-main" ref={main}>
+          <GamesSection />
+          <XxmiSection />
+          <IntegrationsSection />
+          <AppearanceSection />
+          <CustomThemesSection />
+          <ExtensionsSection />
+          <ModsSection />
+          <AutomaticSection />
+          <StorageSection />
+          <CreatorsSection />
+          <HotkeysSection />
+          <div className="set-ext" id="account"><AccountSection /></div>
+          <AiSection />
+          <TransferSection />
+          <AboutSection />
+        </div>
+      </div>
     </div>
   );
 }
 
-// ── a setting with a default, saved on change ──
-
-function useSetting(key: string, fallback: string): [string, (v: string) => void] {
-  const [v, setV] = useState(fallback);
-  useEffect(() => {
-    let live = true;
-    settings.get(key).then((x) => { if (live && x !== null) setV(x); }).catch(() => {});
-    return () => { live = false; };
-  }, [key]);
-  const set = useCallback((nv: string) => {
-    setV(nv);
-    settings.set(key, nv).catch((e) => toast(errorText(e), true));
-  }, [key]);
-  return [v, set];
+/** Runs `then` once the smooth scroll just started in `view` stops, or almost at once when nothing had to move. */
+function whenSettled(view: Element | null, then: () => void) {
+  if (!view) { then(); return; }
+  let done = false;
+  const top = view.scrollTop;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    view.removeEventListener("scrollend", finish);
+    window.clearTimeout(still);
+    window.clearTimeout(cap);
+    then();
+  };
+  view.addEventListener("scrollend", finish);
+  const still = window.setTimeout(() => { if (view.scrollTop === top) finish(); }, 100);
+  const cap = window.setTimeout(finish, 2500);
 }
 
 // ── games ──
@@ -73,15 +176,35 @@ function GamesSection() {
   const community = list.filter((g) => !g.xxmi);
   return (
     <Panel title="Games" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
+      <OnlyGameRow list={list} />
       <div className="set-games">{xxmiGames.map((g) => <GameRow key={g.id} game={g} />)}</div>
-      <h3 className="sub-h">Other 3DMigoto games</h3>
-      <p className="hint set-note">These use a community 3DMigoto loader. Pick the loader's folder, the one that holds d3dx.ini and Mods.</p>
-      <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
+      {community.length > 0 && <>
+        <h3 className="sub-h" id="set-community">Community games</h3>
+        <p className="hint set-note" title="3DMigoto is the program that loads mods into the game. XXMI Launcher bundles one per game for the games above">
+          XXMI Launcher doesn't support these. Each needs its own 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.</p>
+        <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
+      </>}
     </Panel>
   );
 }
 
+/** One-game mode: pick the game you play, and the others stay out of the sidebar and menus. */
+function OnlyGameRow({ list }: { list: GameState[] }) {
+  const only = useOnlyGame();
+  const shown = list.filter((g) => g.shown);
+  if (shown.length < 2 && !only) return null;
+  return (
+    <div className="set-rows">
+      <SetRow id="set-only-game" label="One-game mode" hint="Only this game shows in the sidebar and menus. The others stay set up, and search still finds them">
+        <Select value={only?.id ?? ""} onChange={(v) => focusGame(v ? (v as GameId) : null)}
+          options={[{ value: "", label: "Off" }, ...shown.map((g) => ({ value: g.id, label: g.name }))]} />
+      </SetRow>
+    </div>
+  );
+}
+
 function GameRow({ game }: { game: GameState }) {
+  const meta = gameMeta(game.id);
   const change = async (field: "gameDir" | "importerDir" | "modsDir") => {
     try {
       const picked = await dialogs.pickFolder(field === "gameDir" ? `${game.name}'s game folder` : field === "importerDir" ? `${game.name}'s mod loader folder (holds d3dx.ini)` : `${game.name}'s Mods folder`);
@@ -104,9 +227,12 @@ function GameRow({ game }: { game: GameState }) {
       {path
         ? <button type="button" className="set-folder-p mono" title={`Open ${path}`} onClick={() => shell.openPath(path).catch((e) => toast(errorText(e), true))}>{path}</button>
         : <span className="set-folder-p hint">Not set</span>}
-      <Button size="sm" variant="ghost" onClick={() => void change(field)}>Change</Button>
+      <Button size="sm" variant="ghost" onClick={() => void change(field)} title={`Pick the ${label.toLowerCase()} folder`}>{path ? "Change" : "Set"}</Button>
     </div>
   );
+  // what's different for this game, said once and plainly
+  const notes: string[] = [];
+  if (!game.gbCharacterCategory) notes.push(`GameBanana has no character categories for ${game.short}, so its mods aren't sorted by character. Set a mod's character yourself in its details.`);
   return (
     <div className={`set-game${game.shown ? " shown" : ""}`} style={{ "--g-accent": game.accent } as CSSProperties}>
       <GameBadge game={game} size={40} />
@@ -121,8 +247,12 @@ function GameRow({ game }: { game: GameState }) {
         {folder("Game", game.gameDir, "gameDir", "Where the game's exe is")}
         {folder("Mod loader", game.importerDir, "importerDir", "The folder with d3dx.ini and Mods")}
         {game.modsDir && game.importerDir && game.modsDir.toLowerCase() !== `${game.importerDir}\\Mods`.toLowerCase() && folder("Mods", game.modsDir, "modsDir", "Where mods live")}
+        {notes.map((n) => <span key={n} className="hint set-game-note">{n}</span>)}
+        {!game.xxmi && !game.importerDir && meta.loader && (
+          <span className="row"><Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(meta.loader!.url).catch((e) => toast(errorText(e), true))}>{meta.loader.label}</Button></span>
+        )}
       </div>
-      <Toggle checked={game.shown} onChange={(v) => void show(v)} label="Show" hint="In the game rail" />
+      <Toggle checked={game.shown} onChange={(v) => void show(v)} label="Show" hint="In the sidebar" />
     </div>
   );
 }
@@ -159,7 +289,7 @@ function XxmiSection() {
           <p>XXMI Launcher loads mods into Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves, Honkai Impact 3rd and Endfield. gachamod starts games through it.</p>
           <div className="row">
             <Button variant="primary" icon="external" onClick={() => shell.openUrl(XXMI_RELEASES).catch((e) => toast(errorText(e), true))}>Get XXMI Launcher</Button>
-            <Button onClick={() => void pick()}>It's in another folder</Button>
+            <Button onClick={() => void pick()} title="Pick the folder XXMI Launcher is in">It's in another folder</Button>
           </div>
         </div>
       ) : (
@@ -179,9 +309,9 @@ function XxmiSection() {
             ))}
           </div>
           <div className="row">
-            <Button icon="external" onClick={() => xxmi.open().catch((e) => toast(errorText(e), true))}>Open XXMI Launcher</Button>
+            <Button icon="external" onClick={openXxmi}>Open XXMI Launcher</Button>
             <Button variant="ghost" onClick={() => void pick()} title="For a portable copy of XXMI Launcher">Use another folder</Button>
-            {root && <Button variant="ghost" onClick={() => void reset()}>Use the usual folder</Button>}
+            {root && <Button variant="ghost" onClick={() => void reset()} title="Look for XXMI Launcher where its installer puts it">Use the usual folder</Button>}
           </div>
         </>
       )}
@@ -189,149 +319,34 @@ function XxmiSection() {
   );
 }
 
-// ── appearance ──
-
-function AppearanceSection() {
-  const game = useGame();
-  const theme = useTheme();
-  const [pick, setPick] = useState(() => (game ? themePick(game.id) : "auto"));
-  const [size, setSize] = useState(getTextSize());
-  useEffect(() => { setPick(game ? themePick(game.id) : "auto"); }, [game?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const h = (e: Event) => setSize((e as CustomEvent<number>).detail);
-    window.addEventListener("pm-text-size", h);
-    return () => window.removeEventListener("pm-text-size", h);
-  }, []);
-
-  const choose = (id: string) => { if (!game) return; setThemePick(game, id); setPick(id); };
-  const defaultFor = THEMES.find((t) => t.id === (game?.theme || "default")) ?? THEMES[0]!;
-  const themeInfo = THEMES.find((t) => t.id === theme.id);
-  const accents = themeInfo?.accents ?? [];
-  const themeName = themeInfo?.name ?? "the theme";
-  const [accent, setAccent] = useState(() => accentPick(theme.id));
-  useEffect(() => { setAccent(accentPick(theme.id)); }, [theme.id]);
-
-  return (
-    <Panel title="Appearance" icon="palette" id="appearance">
-      <div className="field-l">Theme {game ? `for ${game.name}` : ""}</div>
-      <div className="set-themes">
-        <ThemeCard id={defaultFor.id} name="Game's own" description={`${defaultFor.name}, the one ${game?.short ?? "the game"} uses`} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
-        {THEMES.map((t) => <ThemeCard key={t.id} id={t.id} name={t.name} description={t.description} on={pick === t.id} onClick={() => choose(t.id)} disabled={!game} />)}
-      </div>
-      <div className="set-rows">
-        {accents.length > 1 && (
-          <div className="set-row">
-            <span><b>Accent</b><span className="hint">The colour {themeName} uses for what is picked or on</span></span>
-            <span className="set-accents" role="radiogroup" aria-label="Accent">
-              {accents.map((a) => (
-                <button key={a.id} type="button" role="radio" aria-checked={accent === a.id} className={`swatch${accent === a.id ? " on" : ""}`} title={a.name} aria-label={a.name}
-                  style={{ "--c": a.color } as CSSProperties} onClick={() => { setAccentPick(theme.id, a.id, currentGame()); setAccent(a.id); }} />
-              ))}
-            </span>
-          </div>
-        )}
-        <div className="set-row">
-          <span><b>Colours</b><span className="hint">{theme.id === "zzz" ? "New Eridu is dark only" : "System follows Windows' light or dark setting"}</span></span>
-          <Segmented<SchemeChoice> value={theme.choice} onChange={(v) => setScheme(v, currentGame())} label="Colours"
-            options={[{ value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" }, { value: "system", label: "System" }]} />
-        </div>
-        <div className="set-row">
-          <span><b>Text size</b><span className="hint">Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets</span></span>
-          <Segmented value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }} label="Text size"
-            options={SIZES.map((s) => ({ value: String(s), label: String(s) }))} size="sm" />
-        </div>
-        <div className="set-row">
-          <span><b>Animations</b><span className="hint">Off keeps every change instant</span></span>
-          <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-function ThemeCard({ id, name, description, on, onClick, disabled }: { id: string; name: string; description: string; on: boolean; onClick: () => void; disabled?: boolean }) {
-  return (
-    <Card className="theme-card" selected={on} onClick={onClick} disabled={disabled} title={description}>
-      <span className="theme-preview" data-theme={id} data-scheme="dark" aria-hidden="true">
-        <span className="theme-preview-rail" />
-        <span className="theme-preview-body">
-          <span className="theme-preview-line" />
-          <span className="theme-preview-line short" />
-          <span className="theme-preview-btn" />
-        </span>
-      </span>
-      <span className="theme-card-t"><b>{name}</b><span className="hint">{description}</span></span>
-    </Card>
-  );
-}
-
-// ── mods ──
-
-function ModsSection() {
-  const shown = useGames().filter((g) => g.shown);
-  const [nsfw, setNsfw] = useSetting("ui.nsfw", "blur");
-  const [updates, setUpdates] = useSetting("updates.check", "1");
-  const [keep, setKeep] = useSetting("downloads.keep", "0");
-  return (
-    <Panel title="Mods" icon="mods" id="mods">
-      <div className="set-rows">
-        <div className="set-row">
-          <span><b>Mature content</b><span className="hint">For previews marked NSFW on GameBanana or by you</span></span>
-          <Segmented value={nsfw} onChange={setNsfw} label="Mature content"
-            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show" }]} />
-        </div>
-        <div className="set-row">
-          <span><b>Check for updates</b><span className="hint">Looks up your GameBanana mods when you open Mods, and every 30 minutes</span></span>
-          <Toggle checked={updates !== "0"} onChange={(v) => setUpdates(v ? "1" : "0")} />
-        </div>
-        <div className="set-row">
-          <span><b>Keep downloaded archives</b><span className="hint">Off deletes the .zip or .7z after it's installed</span></span>
-          <Toggle checked={keep === "1"} onChange={(v) => setKeep(v ? "1" : "0")} />
-        </div>
-      </div>
-      {shown.length > 0 && (
-        <div className="set-pergame">
-          <div className="set-pergame-h"><span /><span>One skin per character</span><span>Reload in game</span></div>
-          {shown.map((g) => <PerGame key={g.id} game={g} />)}
-          <p className="hint">One skin per character turns off a character's other skins when you turn one on. Reload in game presses F10 for you when you switch back to the game.</p>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function PerGame({ game }: { game: GameState }) {
-  const [one, setOne] = useSetting(`${game.id}.oneSkin`, "1");
-  const [auto, setAuto] = useSetting(`${game.id}.autoReload`, "1");
-  return (
-    <div className="set-pergame-r">
-      <span className="row"><GameBadge game={game} size={24} />{game.name}</span>
-      <Toggle size="sm" checked={one !== "0"} onChange={(v) => setOne(v ? "1" : "0")} />
-      <Toggle size="sm" checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
-    </div>
-  );
-}
-
 // ── links and files ──
+
+/** Per integration: the row id, what it does when on, and the toasts. */
+const LINKS: Record<string, { row: string; on: string; toastOn: string; toastOff: string }> = {
+  "scheme:gachamod": { row: "set-links", on: "GameBanana's 1-click install buttons send mods here",
+    toastOn: "1-click installs open in gachamod", toastOff: "1-click installs no longer open gachamod" },
+  "file:.gachamod": { row: "set-files", on: "Double-clicking a mod pack opens it here",
+    toastOn: ".gachamod files open in gachamod", toastOff: ".gachamod files no longer open gachamod" },
+};
 
 function IntegrationsSection() {
   const [list, setList] = useState<Integration[] | null>(null);
-  const ack = useRef<HTMLDivElement>(null);
   useEffect(() => { integrations.get().then(setList).catch(() => setList([])); }, []);
-  const register = async (id: string) => {
-    try { setList(await integrations.register(id)); saved(ack.current); } catch (e) { toast(errorText(e), true); }
+  const set = async (i: Integration, on: boolean) => {
+    const t = LINKS[i.id];
+    try { setList(await integrations.set(i.id, on)); toast(on ? t?.toastOn ?? "Turned on" : t?.toastOff ?? "Turned off"); }
+    catch (e) { toast(errorText(e), true); }
   };
   return (
     <Panel title="Links and files" icon="link" id="integrations">
-      <div className="set-rows" ref={ack}>
+      <div className="set-rows">
         {list === null && <p className="hint">Checking…</p>}
         {list?.length === 0 && <p className="hint">Only available in the Windows app.</p>}
         {list?.map((i) => (
-          <div key={i.id} className="set-row">
-            <span><b>{i.label}</b><span className="hint">{i.ours ? "Set to gachamod" : i.owner ? `${i.owner} has these now` : "Not set"}</span></span>
-            {i.ours ? <Badge tone="ok" icon="check">On</Badge>
-              : <Button disabled={!i.supported} onClick={() => void register(i.id)} title={i.owner ? `Takes them over from ${i.owner}` : undefined}>Use gachamod</Button>}
-          </div>
+          <SetRow key={i.id} id={LINKS[i.id]?.row} label={i.label}
+            hint={i.ours ? LINKS[i.id]?.on : i.owner ? `${i.owner} has these now. Turn on to take them back` : "Off"}>
+            <Toggle checked={i.ours} disabled={!i.supported} onChange={(v) => void set(i, v)} />
+          </SetRow>
         ))}
       </div>
     </Panel>

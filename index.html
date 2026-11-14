@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Fandom wikis answer image requests that name another site with a "not found" stand-in, so portraits go without one -->
+    <meta name="referrer" content="no-referrer" />
     <title>gachamod</title>
     <script>
       // Apply the last game's theme before first paint (lib/theme.ts does the same once the game list loads).
@@ -12,25 +14,43 @@
         var game = g("gm.game") || "";
         var pick = g("gm.theme." + game);
         var theme = pick && pick !== "auto" ? pick : game === "zzz" ? "zzz" : "default";
-        var c = g("gm.scheme") || "dark";
+        var p = null;
+        try { p = JSON.parse(g("gm.paint") || "null"); } catch (e) { /* no saved colours yet */ }
+        var custom = p && p.game === game && p.custom && theme.indexOf("custom:") === 0 ? p.custom : null;
+        if (theme.indexOf("custom:") === 0) theme = custom && custom.base ? custom.base : "default";
+        // all themes dark or light (gm.schemeMode), else each theme keeps its own choice; Teyvat and Talos-II are light
+        // by default, the rest dark
+        var mode = g("gm.schemeMode");
+        var c = (custom && custom.scheme) || (mode === "dark" || mode === "light" || mode === "system" ? mode : null) || g("gm.scheme." + theme) || (theme === "default" ? g("gm.scheme") : null) || (theme === "gi" || theme === "ef" ? "light" : "dark");
         var s = c === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : c;
-        if (theme === "zzz") s = "dark";
         r.setAttribute("data-theme", theme);
         r.setAttribute("data-scheme", s);
+        if (!custom && (mode === "dark" || mode === "light" || mode === "system")) r.setAttribute("data-full", "");
         r.setAttribute("data-game", game);
         r.setAttribute("data-accent", g("gm.accent." + theme) || "");
         r.setAttribute("data-motion", g("gm.motion") === "0" ? "reduced" : "full");
-        try {
-          var p = JSON.parse(g("gm.paint") || "null");
-          if (p && p.game === game && p.vars) for (var k in p.vars) r.style.setProperty(k, p.vars[k]);
-        } catch (e) { /* no saved colours yet */ }
+        if (p && p.game === game && p.vars) for (var k in p.vars) r.style.setProperty(k, p.vars[k]);
+        // the layout picked in Settings (a custom theme's own layout below wins)
+        var mine = null;
+        try { mine = JSON.parse(g("gm.layout") || "null"); } catch (e) { /* not set */ }
+        ["density", "sidebar", "nav", "corners"].forEach(function (n) { if (mine && typeof mine[n] === "string") r.setAttribute("data-" + n, mine[n]); });
+        if (custom) {
+          // a custom theme: its checked CSS and layout, as lib/theme.ts last applied them
+          r.setAttribute("data-custom", custom.id);
+          var lay = custom.layout || {};
+          for (var n in lay) r.setAttribute("data-" + n, lay[n]);
+          var st = document.createElement("style");
+          st.id = "gm-custom-theme";
+          st.textContent = custom.css || "";
+          document.head.appendChild(st);
+        }
       })();
     </script>
     <style>
       /* first frame before the stylesheets load */
       html { background: #0c0e13; }
       html[data-scheme="light"] { background: #f3f4f7; }
-      html[data-theme="zzz"] { background: #000; }
+      html[data-theme="zzz"]:not([data-scheme="light"]) { background: #000; }
     </style>
   </head>
   <body>

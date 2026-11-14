@@ -7,6 +7,7 @@ import { held } from "../../lib/tauri";
 import { onApp } from "../../lib/store";
 import { record } from "../../lib/history";
 import { toast } from "../../ui/toast";
+import { autoRescanPref } from "../settings/automatic";
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -60,7 +61,7 @@ export function useMods(game: GameId) {
       if (!live) return;
       setMods(l);
       if (l.length) setLoaded(true);
-      if (Date.now() - (lastScan.get(game) ?? 0) > SCAN_AGE) void rescan(true);
+      if (Date.now() - (lastScan.get(game) ?? 0) > SCAN_AGE) void autoRescanPref.ready.then(() => { if (!live) return; if (autoRescanPref.get() || !l.length) void rescan(true); else setLoaded(true); });
       else setLoaded(true);
     }).catch((e) => { if (live) { setLoaded(true); toast(errorText(e), true); } });
     if (!purged) { purged = true; library.trashPurge(null).catch(() => {}); }

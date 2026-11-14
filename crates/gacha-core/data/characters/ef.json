@@ -1,0 +1,13 @@
+{
+  "about": "Other names for Arknights: Endfield operators. name: GameBanana's category name. aka: short names and other spellings. Names that only differ in spaces, case or punctuation match without being listed. See docs/spec.md, Characters.",
+  "groups": [
+    { "name": "Endministrator", "members": ["Endministrator (F)", "Endministrator (M)"], "aka": ["Endmin", "Endministrators"] }
+  ],
+  "skip": [],
+  "characters": [
+    { "name": "Endministrator (F)", "aka": ["Endministrator Female", "Female Endministrator", "Endmin F", "Endmin Female", "Female Endmin", "F Endmin"] },
+    { "name": "Endministrator (M)", "aka": ["Endministrator Male", "Male Endministrator", "Endmin M", "Endmin Male", "Male Endmin", "M Endmin"] },
+    { "name": "Chen Qianyu", "aka": ["Qianyu"] },
+    { "name": "Zhuang Fangyi", "aka": ["Fangyi"] }
+  ]
+}

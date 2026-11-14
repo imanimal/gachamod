@@ -1,4 +1,4 @@
-// The big Play button at the bottom of the sidebar (and on Home). Owner: SYSTEM area.
+// The big Play button at the bottom of the sidebar (and on Home). Owner: HOME/PROFILES area.
 // States: Play, Starting (until the game-state event says it runs, or 60 s), Running (disabled, shows the time),
 // and Set up (no folder yet: goes to Settings). Ctrl+Enter and the controller's Menu button click `.side .play-btn`.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -100,14 +100,14 @@ export function PlayButton({ big = false }: { big?: boolean }) {
 
   const isStarting = startTime !== undefined && !isRunning;
   const label = isRunning ? `Running ${elapsed(Date.now() - (startedAt.get(game.id) ?? Date.now()))}` : isStarting ? "Starting" : "Play";
-  const tip = isRunning ? `${game.name} is running` : game.viaXxmi ? `Start ${game.name} with mods through XXMI (Ctrl+Enter)` : `Start ${game.name} (Ctrl+Enter)`;
+  const tip = isRunning ? `${game.name} is running (${label.toLowerCase()})` : game.viaXxmi ? `Start ${game.name} with mods through XXMI (Ctrl+Enter)` : `Start ${game.name} (Ctrl+Enter)`;
 
   return (
     <div className={`${cls}${isRunning ? " running" : ""}${isStarting ? " starting" : ""}`}>
       <Button className="play-btn" variant="primary" size="lg" icon={isRunning ? "zap" : "play"} busy={isStarting}
         disabled={isRunning} title={tip} onClick={() => void play(game)}>{label}</Button>
       <span ref={more} className="play-more-w">
-        <IconButton className="play-more" icon="down" variant="primary" size="lg" label="More ways to start" on={menu}
+        <IconButton className="play-more" icon="menu" variant="primary" size="lg" label="More ways to start" title="More ways to start: without mods, XXMI Launcher, launch options" on={menu}
           onClick={() => setMenu((m) => !m)} />
       </span>
       {menu && (

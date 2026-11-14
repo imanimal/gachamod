@@ -1,166 +1,342 @@
-// Home: the current game's hero with Play, the active profile, a few numbers, recent installs and what's new on
-// GameBanana. Owner: SYSTEM area (docs/spec.md).
-import { useEffect, useState, type CSSProperties } from "react";
-import { Badge, Button, Card, Empty, PageHeader, Panel, Skeleton, plural, timeAgo } from "../../ui/kit";
+// Home: what people do most, in the fewest clicks. A stack of widgets the user can hide and reorder (Customise):
+// Play with the profiles and quick actions, updates, new high-quality mods, picks for you, followed creators, your
+// characters, recent installs and a small GameBanana browser. A widget with nothing to show is left out (in Customise
+// it says so instead). Owner: HOME/PROFILES area.
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { dialogs, errorText, fileUrl, type GameState, type ModEntry, type Profile } from "../../lib/api";
+import { record } from "../../lib/history";
+import { useCreators, useNsfw, type NsfwMode } from "../../lib/prefs";
+import { surpriseMe } from "../../lib/recommend";
+import { usePortraitBatch } from "../../lib/portraits";
+import { charNoun } from "../../lib/games";
+import { emitApp, go, useGame } from "../../lib/store";
+import { gameInfo } from "../../lib/gamebanana";
+import { Badge, Button, IconButton, plural, Skeleton, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
+import { Portrait } from "../../ui/Portrait";
+import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { toast } from "../../ui/toast";
-import { dialogs, errorText, fileUrl, library, profiles, settings, shell, type ModEntry, type Profile } from "../../lib/api";
-import { held } from "../../lib/tauri";
-import { emitApp, go, onApp, useGame } from "../../lib/store";
-import { gameInfo, imageAt, listMods, type GbCard } from "../../lib/gamebanana";
+import { checkModUpdates, openModsFolder, rescan } from "../../shell/commands";
+import { GbBrowser, AdultSwitch } from "../browse/GbBrowser";
+import { GbStrip } from "../browse/GbStrip";
+import { rowKeys, useSideScroll } from "../browse/sideScroll";
+import { useMods } from "../library/data";
+import { getUpdate } from "../library/actions";
+import { useRoster } from "../characters/roster";
+import { startNewProfile, switchTo } from "../profiles/actions";
+import { useProfiles } from "../profiles/data";
+import { ProfileThumb } from "../profiles/ProfileThumb";
+import "../profiles/menus";
 import { PlayButton } from "./PlayButton";
+import { DEFAULT_LAYOUT, WIDGETS, homeLayoutPref, move, normalize, setHomeEditing, setShown, useHomeEditing, type HomeLayout, type WidgetId } from "./layout";
+import "./commands";
 import "./home.css";
-
-type Nsfw = "hide" | "blur" | "show";
-
-function Thumb({ src, nsfw, mode, className }: { src?: string; nsfw: boolean; mode: Nsfw; className: string }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => setBroken(false), [src]);
-  return (
-    <span className={`${className}${nsfw && mode === "blur" ? " nsfw-blur" : ""}`}>
-      {src && !broken ? <img src={src} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} /> : <Icon name="image" className="thumb-ph" />}
-    </span>
-  );
-}
 
 export function Home() {
   const game = useGame();
-  const gameId = game?.id;
+  if (!game) return null;
+  return <HomeFor key={game.id} game={game} />;
+}
+
+function HomeFor({ game }: { game: GameState }) {
+  const layout = normalize(homeLayoutPref.use());
+  const editing = useHomeEditing();
+  const lib = useMods(game.id);
+  const creators = useCreators();
+  const following = Object.values(creators).some((c) => (c.sub || c.prio) && !c.blocked);
+  const before = useRef<HomeLayout | null>(null);
+
+  // leaving Home ends Customise; the layout so far stays, with one Undo for all of it
+  useEffect(() => () => finish(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!editing) return;
+    if (!before.current) before.current = layout;
+    // Esc ends Customise (not while typing in a field)
+    const esc = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || (e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      finish();
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function finish() {
+    const from = before.current;
+    before.current = null;
+    setHomeEditing(false);
+    const to = normalize(homeLayoutPref.get());
+    if (from && JSON.stringify(from) !== JSON.stringify(to)) {
+      record({ label: "Changed what Home shows", undo: () => homeLayoutPref.set(from), redo: () => homeLayoutPref.set(to) });
+    }
+  }
+  const put = (l: HomeLayout) => void homeLayoutPref.set(l);
+
+  const body = (id: WidgetId) => {
+    switch (id) {
+      case "start": return <QuickBar game={game} mods={lib.mods} />;
+      case "updates": return <Updates game={game} mods={lib.mods} editing={editing} />;
+      case "hq": return <GbStrip game={game.id} title={WIDGETS.hq.title} query={{ hq: true, sort: "new" }} />;
+      case "foryou": return <GbStrip game={game.id} title={WIDGETS.foryou.title} query={{ sort: "foryou" }} />;
+      case "followed": return following ? <GbStrip game={game.id} title={WIDGETS.followed.title} query={{ followed: true }} />
+        : editing ? <Nothing title={WIDGETS.followed.title}>Follow a creator (right-click their name) and their new mods show here.</Nothing> : null;
+      case "characters": return <Characters game={game} mods={lib.mods} loaded={lib.loaded} editing={editing} />;
+      case "recent": return <Recent game={game} mods={lib.mods} loaded={lib.loaded} editing={editing} />;
+      case "browser": return <section className="home-w-browser" aria-label="GameBanana"><GbBrowser game={game.id} embedded onExpand={() => go("browse")} /></section>;
+    }
+  };
+
+  const shown = layout.order.filter((id) => editing || !layout.hidden.includes(id));
+  return (
+    <div className={`page home${editing ? " is-editing" : ""}`}>
+      {editing && (
+        <div className="home-edit-bar" role="toolbar" aria-label="Customise Home">
+          <Icon name="layout" />
+          <span className="home-edit-t">Show, hide and move what Home shows. Alt+Up and Alt+Down move the focused one.</span>
+          <span className="grow" />
+          <Button size="sm" variant="ghost" icon="undo" onClick={() => put(DEFAULT_LAYOUT)} title="Every widget, in the order Home started with">Reset</Button>
+          <Button size="sm" variant="primary" icon="check" onClick={finish} title="Done (Esc)">Done</Button>
+        </div>
+      )}
+      {shown.map((id, i) => {
+        const hidden = layout.hidden.includes(id);
+        if (!editing) return <div key={id} className={`home-w home-w-${id}`}>{body(id)}</div>;
+        const onKey = (e: KeyboardEvent) => {
+          if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+          e.preventDefault();
+          put(move(layout, id, e.key === "ArrowUp" ? -1 : 1));
+        };
+        return (
+          <div key={id} className={`home-w home-w-${id} is-edit${hidden ? " is-hidden" : ""}`} onKeyDown={onKey}>
+            <div className="home-w-edit">
+              <Icon name={WIDGETS[id].icon} />
+              <span className="home-w-edit-t" title={WIDGETS[id].tip}>{WIDGETS[id].title}</span>
+              {hidden && <Badge tone="muted">Hidden</Badge>}
+              <span className="grow" />
+              <IconButton size="sm" icon="up" label={`Move ${WIDGETS[id].title} up`} title="Move up (Alt+Up)" disabled={i === 0} onClick={() => put(move(layout, id, -1))} />
+              <IconButton size="sm" icon="down" label={`Move ${WIDGETS[id].title} down`} title="Move down (Alt+Down)" disabled={i === shown.length - 1} onClick={() => put(move(layout, id, 1))} />
+              <Button size="sm" variant={hidden ? "primary" : "secondary"} icon={hidden ? "eye" : "hide"} onClick={() => put(setShown(layout, id, hidden))}
+                title={hidden ? "Show it on Home" : "Hide it from Home"}>{hidden ? "Show" : "Hide"}</Button>
+            </div>
+            {!hidden && <div className="home-w-body">{body(id)}</div>}
+          </div>
+        );
+      })}
+      {!editing && (
+        <div className="home-foot">
+          <Button size="sm" variant="ghost" icon="layout" onClick={() => setHomeEditing(true)} title="Show, hide and reorder what's on Home">Customise Home</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** What a widget says in Customise when it has nothing to show. */
+function Nothing({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="home-section">
+      <header className="home-section-h"><h3 className="sub-h">{title}</h3></header>
+      <p className="hint home-nothing">{children}</p>
+    </section>
+  );
+}
+
+// ── Play, profiles and quick actions ──
+
+function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
+  const nsfw = useNsfw();
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerOk, setBannerOk] = useState(true);
-  const [mods, setMods] = useState<ModEntry[] | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [fresh, setFresh] = useState<GbCard[]>([]);
-  const [nsfw, setNsfw] = useState<Nsfw>("blur");
-  const [scanning, setScanning] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!game) return;
     let live = true;
     gameInfo(game.gamebananaId).then((g) => { if (live) setBanner(g?.banner ?? null); }).catch(() => {});
-    listMods({ gbGameId: game.gamebananaId, page: 1, perPage: 24, sort: "newest" }).then((r) => { if (live) setFresh(r.items.slice(0, 24)); }).catch(() => {});
-    profiles.list(game.id).then((l) => { if (live) setProfile(l.find((p) => p.active) ?? null); }).catch(() => {});
-    settings.get("ui.nsfw").then((v) => { if (live && (v === "hide" || v === "show" || v === "blur")) setNsfw(v); }).catch(() => {});
     return () => { live = false; };
-  }, [gameId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [game.gamebananaId]);
 
-  // the library list, again whenever it changes
-  useEffect(() => {
-    if (!gameId) return;
-    let live = true;
-    const load = () => library.list(gameId).then((l) => { if (live) setMods(l); }).catch(() => { if (live) setMods([]); });
-    void load();
-    const off = held(library.onChanged((p) => { if (p.game === gameId) void load(); }));
-    const offApp = onApp((e) => { if (e.type === "library-refresh" && e.game === gameId) void load(); });
-    return () => { live = false; off(); offApp(); };
-  }, [gameId]);
-
-  if (!game) return null;
-
-  const on = mods?.filter((m) => m.enabled).length ?? game.enabledCount;
-  const total = mods?.length ?? game.modCount;
-  const updates = mods?.filter((m) => m.updateAvailable).length ?? 0;
-  const conflicts = mods?.filter((m) => m.enabled && m.conflicts > 0).length ?? 0;
-  const recent = [...(mods ?? [])].sort((a, b) => b.installedAt - a.installedAt).filter((m) => !(m.nsfw && nsfw === "hide")).slice(0, 12);
-  const newOnGb = fresh.filter((c) => !(c.nsfw && nsfw === "hide"));
+  const on = mods.length ? mods.filter((m) => m.enabled).length : game.enabledCount;
+  const total = mods.length || game.modCount;
   const importerUpdate = !!(game.importerLatest && game.importerVersion && game.importerLatest !== game.importerVersion);
   const status = game.viaXxmi
     ? `${game.importer}${game.importerVersion ? ` ${game.importerVersion}` : ""} via XXMI`
     : game.importerDir ? `${game.importer} loader` : game.gameDir ? "No mod loader set" : "Not set up yet";
 
-  const rescan = async () => {
-    setScanning(true);
-    try {
-      const list = await library.scan(game.id);
-      setMods(list);
-      emitApp({ type: "library-refresh", game: game.id });
-      toast(`Found ${plural(list.length, "mod")}`);
-    } catch (e) { toast(errorText(e), true); }
-    finally { setScanning(false); }
+  const job = (id: string, f: () => Promise<unknown>) => async () => {
+    setBusy(id);
+    try { await f(); } catch (e) { toast(errorText(e), true); } finally { setBusy(null); }
   };
   const importPack = async () => {
-    try {
-      const r = await dialogs.pickFiles({ title: "Import a .gachamod", extensions: ["gachamod"] });
-      if (r?.[0]) emitApp({ type: "open-pack", path: r[0] });
-    } catch (e) { toast(errorText(e), true); }
+    const r = await dialogs.pickFiles({ title: "Import a .gachamod", extensions: ["gachamod"] });
+    if (r?.[0]) emitApp({ type: "open-pack", path: r[0] });
   };
-  const openMods = () => { if (game.modsDir) shell.openPath(game.modsDir).catch((e) => toast(errorText(e), true)); };
 
   return (
-    <div className="page home">
-      <PageHeader title={game.name} icon="home" sub={status} actions={<>
-        <Button icon="folder" onClick={openMods} disabled={!game.modsDir} title={game.modsDir ?? "No Mods folder yet"}>Open Mods folder</Button>
-        <Button icon="refresh" busy={scanning} onClick={() => void rescan()} disabled={!game.modsDir} title="Look through the Mods folder again">Rescan</Button>
-        <Button icon="import" onClick={() => void importPack()} title="Add mods from a .gachamod file">Import .gachamod</Button>
-      </>} />
-
-      <section className="home-hero" style={{ "--g-accent": game.accent } as CSSProperties}>
-        {banner && bannerOk
-          ? <img className="home-hero-img" src={banner} alt="" loading="lazy" decoding="async" onError={() => setBannerOk(false)} />
-          : <span className="home-hero-name" aria-hidden="true">{game.name}</span>}
-        <div className="home-hero-body">
-          <div className="home-hero-text">
-            <p className="home-hero-status">
-              {status}
-              {importerUpdate && <Badge tone="info" icon="update" title={`XXMI Launcher installs ${game.importer} ${game.importerLatest} when it next starts`}>{game.importerLatest} available</Badge>}
-            </p>
-          </div>
-          <PlayButton big />
+    <section className="home-quick" style={{ "--g-accent": game.accent } as CSSProperties} aria-label="Play and profiles">
+      {banner && bannerOk && <img className="home-quick-img" src={banner} alt="" loading="lazy" decoding="async" onError={() => setBannerOk(false)} />}
+      <div className="home-quick-top">
+        <div className="home-quick-game">
+          <h1 className="home-quick-name">{game.name}</h1>
+          <p className="home-quick-status">
+            <span>{status}</span>
+            <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+2)">{on} of {plural(total, "mod")} on</button>
+            {importerUpdate && <Badge tone="info" icon="update" title={`XXMI Launcher installs ${game.importer} ${game.importerLatest} when it next starts. Click for its settings`} onClick={() => go({ view: "settings", section: "xxmi" })}>{game.importerLatest} available</Badge>}
+          </p>
         </div>
-      </section>
-
-      <div className="home-row">
-        <Card className="home-profile" onClick={() => go("profiles")} title="Profiles">
-          <span className="home-profile-stripe" style={{ "--g-accent": profile?.color ?? game.accent } as CSSProperties} aria-hidden="true" />
-          <span className="home-profile-icon">{profile?.icon && !profile.icon.startsWith("char:") ? profile.icon : <Icon name="profiles" />}</span>
-          <span className="home-profile-text">
-            <span className="hint">Active profile</span>
-            <span className="home-profile-name">{profile?.name ?? "None yet"}</span>
-            {profile && <span className="hint">{plural(profile.modCount, "mod")}</span>}
-          </span>
-        </Card>
-        <Card className="home-stat" onClick={() => go("library")} title="Open your mods">
-          <span className="home-stat-n">{on}<span className="home-stat-of">/{total}</span></span><span className="hint">mods on</span>
-        </Card>
-        <Card className={`home-stat${updates ? " has" : ""}`} onClick={() => go("library")} title="Mods with a newer version on GameBanana">
-          <span className="home-stat-n">{updates}</span><span className="hint">{updates === 1 ? "update waiting" : "updates waiting"}</span>
-        </Card>
-        <Card className={`home-stat${conflicts ? " bad" : ""}`} onClick={() => go({ view: "tools", section: "conflicts" })} title="Enabled mods that change the same thing">
-          <span className="home-stat-n">{conflicts}</span><span className="hint">{conflicts === 1 ? "mod with conflicts" : "mods with conflicts"}</span>
-        </Card>
+        <PlayButton big />
       </div>
+      <div className="home-quick-bar">
+        <ProfileRow game={game} />
+        <div className="home-quick-acts" role="toolbar" aria-label="Quick actions">
+          <IconButton icon="refresh" label="Rescan" title="Look through the Mods folder again" disabled={!game.modsDir || busy === "scan"} onClick={() => void job("scan", () => rescan(game))()} />
+          <IconButton icon="update" label="Check for updates" title="Check your mods for updates on GameBanana" disabled={busy === "upd"} onClick={() => void job("upd", () => checkModUpdates(game))()} />
+          <IconButton icon="folder" label="Open the Mods folder" title={game.modsDir ? `Open the Mods folder (${game.modsDir})` : "No Mods folder yet"} disabled={!game.modsDir} onClick={() => openModsFolder(game)} />
+          <IconButton icon="import" label="Import .gachamod" title="Add mods from a .gachamod file" onClick={() => void job("imp", importPack)()} />
+          <IconButton icon="dice" label="Surprise me" title="Open a random mod you might like" disabled={busy === "dice"} onClick={() => void job("dice", () => surpriseMe(game.id))()} />
+          <AdultSwitch value={nsfw} />
+        </div>
+      </div>
+    </section>
+  );
+}
 
-      <Panel title="Recently installed" icon="clock" className="home-recent" actions={<Button size="sm" variant="ghost" iconRight="chevron" onClick={() => go("library")}>All mods</Button>}>
-        {mods === null
-          ? <div className="home-strip">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="home-tile-skel" />)}</div>
-          : recent.length === 0
-            ? <Empty icon="mods" title="No mods yet" actions={<Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse GameBanana</Button>}>
-                Install from Browse, or drop an archive anywhere on this window.
-              </Empty>
-            : <div className="home-strip">
-                {recent.map((m) => (
-                  <Card key={m.id} className={`home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })} title={m.name}>
-                    <Thumb className="home-tile-img" src={fileUrl(m.preview)} nsfw={m.nsfw} mode={nsfw} />
-                    <span className="home-tile-name">{m.name}</span>
-                    <span className="hint">{m.character ?? "No character"} · {timeAgo(m.installedAt)}</span>
-                  </Card>
-                ))}
-              </div>}
-      </Panel>
-
-      {newOnGb.length > 0 && (
-        <Panel title="New on GameBanana" icon="sparkle" className="home-new" actions={<Button size="sm" variant="ghost" iconRight="chevron" onClick={() => go("browse")}>Browse</Button>}>
-          <div className="home-strip rows-2">
-            {newOnGb.map((c) => (
-              <Card key={c.id} className="home-tile" onClick={() => go({ view: "browse", modId: c.id })} title={c.name}>
-                <Thumb className="home-tile-img" src={imageAt(c.image, 220)} nsfw={c.nsfw} mode={nsfw} />
-                <span className="home-tile-name">{c.name}</span>
-                <span className="hint">{c.character ?? c.category?.name ?? "Mod"}{c.submitter ? ` · ${c.submitter.name}` : ""}</span>
-              </Card>
-            ))}
-          </div>
-        </Panel>
-      )}
+function ProfileRow({ game }: { game: GameState }) {
+  const { list } = useProfiles(game.id);
+  const [busy, setBusy] = useState<number | null>(null);
+  const row = useRef<HTMLDivElement>(null);
+  const pick = async (p: Profile) => {
+    if (p.active || busy !== null) return;
+    setBusy(p.id);
+    try { await switchTo(game.id, p, list); } finally { setBusy(null); }
+  };
+  return (
+    <div ref={row} className="home-profiles" role="group" aria-label="Profiles" onKeyDown={(e) => rowKeys(e, ".home-pchip")}>
+      {list === null && <Skeleton className="home-pchip-skel" />}
+      {(list ?? []).map((p) => (
+        <button key={p.id} type="button" className={`home-pchip${p.active ? " on" : ""}`} aria-pressed={p.active}
+          style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
+          title={p.active ? `${p.name} is on now. Right-click for more` : `Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
+          onClick={() => void pick(p)} onContextMenu={menuHandler(() => menuFor("profile", { game: game.id, id: p.id }))}>
+          <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={26} />
+          <span className="home-pchip-t">{p.name}</span>
+          {busy === p.id ? <span className="spin" aria-hidden="true" /> : p.active ? <Icon name="check" className="home-pchip-on" /> : null}
+        </button>
+      ))}
+      <button type="button" className="home-pchip add" onClick={() => startNewProfile(game.id)} title="Save the mods on now as a new profile" aria-label="New profile">
+        <Icon name="plus" />
+      </button>
     </div>
+  );
+}
+
+// ── a sideways row with its own header (updates, characters, recent installs) ──
+
+function Row({ title, count, more, moreLabel, moreTip, children, deps }: { title: string; count?: number; more?: () => void; moreLabel?: string; moreTip?: string; children: ReactNode; deps: unknown[] }) {
+  const row = useRef<HTMLDivElement>(null);
+  const { left, right, page } = useSideScroll(row, deps);
+  return (
+    <section className="home-section" aria-label={title}>
+      <header className="home-section-h">
+        <h3 className="sub-h">{title}{count !== undefined && <span className="home-n">{count}</span>}</h3>
+        <span className="grow" />
+        {(left || right) && <>
+          <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
+          <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
+        </>}
+        {more && <Button size="sm" variant="ghost" iconRight="chevron" onClick={more} title={moreTip}>{moreLabel ?? "See all"}</Button>}
+      </header>
+      <div ref={row} className="home-row" role="list" onKeyDown={(e) => rowKeys(e, ".home-item")}>{children}</div>
+    </section>
+  );
+}
+
+function ModThumb({ src, adult, mode }: { src?: string | null; adult: boolean; mode: NsfwMode }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+  return (
+    <span className={`home-tile-img${adult && mode === "blur" ? " nsfw-blur" : ""}`}>
+      {src && !broken ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} /> : <Icon name="image" className="thumb-ph" />}
+    </span>
+  );
+}
+
+function Updates({ game, mods, editing }: { game: GameState; mods: ModEntry[]; editing: boolean }) {
+  const nsfw = useNsfw();
+  const [busy, setBusy] = useState(false);
+  const list = mods.filter((m) => m.updateAvailable && m.source && !(m.nsfw && nsfw === "hide"));
+  if (!list.length) return editing ? <Nothing title={WIDGETS.updates.title}>Every mod is up to date. Mods with a newer version show here.</Nothing> : null;
+  const all = async () => {
+    setBusy(true);
+    try { for (const m of list) await getUpdate(game.id, m); } finally { setBusy(false); }
+  };
+  return (
+    <Row title={WIDGETS.updates.title} count={list.length} deps={[list.length]}
+      more={() => go("library")} moreLabel="In Mods" moreTip="Open Mods">
+      {list.map((m) => (
+        <div key={m.id} role="listitem" className="home-tile" onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>
+          <button type="button" className="home-item home-tile-main" onClick={() => go({ view: "library", modId: m.id })} title={`${m.name}. Click for details`}>
+            <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
+            <span className="home-tile-name">{m.name}</span>
+          </button>
+          <Button size="sm" icon="downloads" className="home-tile-btn" onClick={() => void getUpdate(game.id, m)} title="Download the newest version">Update</Button>
+        </div>
+      ))}
+      {list.length > 1 && (
+        <button type="button" className="home-item home-all" disabled={busy} onClick={() => void all()} title="Download every update listed here">
+          <Icon name="downloads" /><span>Update all {list.length}</span>
+        </button>
+      )}
+    </Row>
+  );
+}
+
+function Characters({ game, mods, loaded, editing }: { game: GameState; mods: ModEntry[]; loaded: boolean; editing: boolean }) {
+  const roster = useRoster(game.id, mods);
+  const withMods = (roster ?? []).filter((c) => c.mods.length > 0 && !c.hidden)
+    .sort((a, b) => b.mods.length - a.mods.length || b.last - a.last).slice(0, 40);
+  usePortraitBatch(game.id, withMods.map((c) => c.name));
+  const noun = charNoun(game.id);
+  const title = `Your ${noun.toLowerCase()}`;
+  if (!loaded) return null;
+  if (!withMods.length) return editing ? <Nothing title={title}>{noun} you have mods for show here.</Nothing> : null;
+  return (
+    <Row title={title} count={withMods.length} deps={[withMods.length]} more={() => go("characters")} moreLabel={`All ${noun.toLowerCase()}`}>
+      {withMods.map((c) => (
+        <button key={c.name} type="button" role="listitem" className="home-item home-char" onClick={() => go({ view: "characters", character: c.name })}
+          title={`${c.name}: ${plural(c.mods.length, "mod")}, ${c.on} on. Click for their mods`}
+          onContextMenu={menuHandler(() => menuFor("character", { game: game.id, name: c.name }))}>
+          <Portrait game={game.id} name={c.name} icon={c.icon} size={64} />
+          <span className="home-char-t">{c.name}</span>
+          <span className="home-char-n">{c.on ? `${c.on} of ${c.mods.length} on` : plural(c.mods.length, "mod")}</span>
+        </button>
+      ))}
+    </Row>
+  );
+}
+
+function Recent({ game, mods, loaded, editing }: { game: GameState; mods: ModEntry[]; loaded: boolean; editing: boolean }) {
+  const nsfw = useNsfw();
+  const recent = [...mods].sort((a, b) => b.installedAt - a.installedAt).filter((m) => !(m.nsfw && nsfw === "hide")).slice(0, 16);
+  if (!loaded) return null;
+  if (!recent.length) {
+    return editing ? <Nothing title={WIDGETS.recent.title}>Mods you install show here.</Nothing> : (
+      <section className="home-section home-first">
+        <header className="home-section-h"><h3 className="sub-h">No mods yet</h3></header>
+        <p className="hint">Install from Browse, or drop an archive anywhere on this window.</p>
+        <span><Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse GameBanana</Button></span>
+      </section>
+    );
+  }
+  return (
+    <Row title={WIDGETS.recent.title} deps={[recent.length]} more={() => go("library")} moreLabel="All mods">
+      {recent.map((m) => (
+        <button key={m.id} type="button" role="listitem" className={`home-item home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })}
+          title={`${m.name}${m.enabled ? "" : " (off)"}`} onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>
+          <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
+          <span className="home-tile-name">{m.name}</span>
+          <span className="hint home-tile-sub">{m.character ?? "No character"}, {timeAgo(m.installedAt)}</span>
+        </button>
+      ))}
+    </Row>
   );
 }

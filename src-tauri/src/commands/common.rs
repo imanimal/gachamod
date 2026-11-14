@@ -18,7 +18,13 @@ pub async fn settings_get(st: State<'_, AppState>, key: String) -> Result<Option
 #[tauri::command]
 pub async fn settings_set(st: State<'_, AppState>, key: String, value: String) -> Result<()> {
     let db = st.db.clone();
-    blocking(move || db.lock().unwrap().set_setting(&key, &value)).await
+    blocking(move || {
+        let d = db.lock().unwrap();
+        d.set_setting(&key, &value)?;
+        // a shorter trash time applies now
+        if key == "trash.days" { let _ = gacha_core::library::purge_expired(&d); }
+        Ok(())
+    }).await
 }
 
 /// Open a file or folder with Windows (Explorer for folders).

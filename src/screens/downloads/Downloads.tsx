@@ -1,14 +1,19 @@
-// Downloads: the queue of GameBanana files and local installs, with progress, speed and time left. Owner: ONLINE area
-// (docs/spec.md, "Downloads and Browse").
+// Downloads: the queue of GameBanana files and local installs, with progress, speed and time left. Shows the current
+// game's downloads; "All games" (remembered, or route tab "all") shows every game's, grouped by game.
+// Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
 import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Empty, IconButton, PageHeader, Panel, Progress, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Empty, IconButton, PageHeader, Panel, Progress, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
+import { CharLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { dialogs, errorText, fileUrl, installs, queue, type QueueItem, type QueueSnapshot } from "../../lib/api";
-import { go, useGame, useGames } from "../../lib/store";
+import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
 import { useQueue } from "../browse/useQueue";
 import { openVariantPicker } from "../browse/OnlineOverlays";
 import "./downloads.css";
+
+const ALL_KEY = "gm.downloads.all";
+const readAll = () => { try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; } };
 
 const finished = (i: QueueItem) => i.state === "done" || i.state === "failed" || i.state === "cancelled";
 
@@ -65,13 +70,23 @@ function stateLine(i: QueueItem, speed: number | undefined): string {
 export function Downloads() {
   const game = useGame();
   const games = useGames();
+  const route = useRoute();
   const snap = useQueue();
   const speeds = useSpeeds(snap);
   const [busy, setBusy] = useState(false);
+  const [allPref, setAllPref] = useState(readAll);
+  const all = route.tab === "all" || allPref || !game;
+  const setAll = (v: boolean) => {
+    setAllPref(v);
+    try { localStorage.setItem(ALL_KEY, v ? "1" : "0"); } catch { /* storage off */ }
+    if (route.tab === "all" && !v) patchRoute({ tab: undefined });
+  };
 
   const act = (job: () => Promise<unknown>) => { job().catch((e) => toast(errorText(e), true)); };
-  const active = snap.items.filter((i) => !finished(i));
-  const done = snap.items.filter(finished).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
+  const mine = all ? snap.items : snap.items.filter((i) => i.req.game === game?.id);
+  const elsewhere = snap.items.length - mine.length;
+  const active = mine.filter((i) => !finished(i));
+  const done = mine.filter(finished).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
 
   const addFiles = async () => {
     if (!game) return;
@@ -89,7 +104,7 @@ export function Downloads() {
   const row = (i: QueueItem) => {
     const thumb = fileUrl(i.req.thumb ?? i.req.meta.previewUrl ?? null);
     const name = i.req.meta.name || i.req.fileName || "Mod";
-    const other = game && i.req.game !== game.id;
+    const other = !!game && i.req.game !== game.id;
     const speed = speeds.get(i.id);
     const progress = i.state === "downloading" && i.total ? i.received / i.total : null;
     return (
@@ -100,18 +115,20 @@ export function Downloads() {
         </span>
         <div className="dl-main">
           <div className="dl-name">
-            <span className="dl-t" title={i.req.fileName}>{name}</span>
-            {i.req.meta.character && <span className="dl-c">{i.req.meta.character}</span>}
-            {other && <Badge title="Installs into this game">{gameName(i.req.game)}</Badge>}
+            {i.req.gbModId > 0 && !other
+              ? <button type="button" className="dl-t dl-t-link" title={`${i.req.fileName}. Open its GameBanana page`} onClick={() => go({ view: "downloads", tab: route.tab, modId: i.req.gbModId })}>{name}</button>
+              : <span className="dl-t" title={i.req.fileName}>{name}</span>}
+            {i.req.meta.character && (other ? <span className="dl-c">{i.req.meta.character}</span> : <CharLink game={i.req.game} name={i.req.meta.character} className="dl-c" />)}
+            {other && !all && <Badge title="Installs into this game">{gameName(i.req.game)}</Badge>}
             {i.req.meta.replaces && <Badge tone="accent" icon="update">Update</Badge>}
           </div>
           <div className={`dl-line hint${i.state === "failed" ? " dl-bad" : ""}`}>{stateLine(i, speed)}</div>
           {(i.state === "downloading" || i.state === "installing") && <Progress value={progress} label={`${name}: ${stateLine(i, speed)}`} />}
         </div>
         <div className="dl-act">
-          {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)}>Pick</Button>}
+          {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)} title="This download has more than one version. Pick the ones to install">Pick</Button>}
           {i.state === "done" && i.modIds?.[0] && (
-            <Button size="sm" icon="mods" onClick={() => go({ view: "library", modId: i.modIds[0] })} disabled={!!other}
+            <Button size="sm" icon="mods" onClick={() => go({ view: "library", modId: i.modIds[0] })} disabled={other}
               title={other ? `Switch to ${gameName(i.req.game)} to see it` : "Open it in Mods"}>Show in Mods</Button>
           )}
           {(i.state === "failed" || i.state === "cancelled") && <Button size="sm" icon="refresh" onClick={() => act(() => queue.retry(i.id))}>Retry</Button>}
@@ -122,23 +139,47 @@ export function Downloads() {
     );
   };
 
-  const s = snap.summary;
-  const sub = s.running + s.waiting > 0 ? `${s.running} running, ${s.waiting} waiting` : "Mods you install from Browse, links and dropped files show up here";
+  /** Rows, with a heading per game when showing every game. */
+  const list = (items: QueueItem[]) => {
+    const ids = [...new Set(items.map((i) => i.req.game))];
+    if (!all || ids.length < 2) return <ul className="dl-list">{items.map(row)}</ul>;
+    ids.sort((a, b) => (a === game?.id ? -1 : b === game?.id ? 1 : gameName(a).localeCompare(gameName(b))));
+    return ids.map((g) => (
+      <div key={g} className="dl-group">
+        <h4 className="dl-group-h">{games.find((x) => x.id === g)?.name ?? g}</h4>
+        <ul className="dl-list">{items.filter((i) => i.req.game === g).map(row)}</ul>
+      </div>
+    ));
+  };
+
+  const running = active.filter((i) => i.state === "downloading" || i.state === "installing").length;
+  const waiting = active.filter((i) => i.state === "waiting").length;
+  const sub = running + waiting > 0 ? `${running} running, ${waiting} waiting` : "Mods you install from Browse, links and dropped files show up here";
+  const clearFinished = () => act(() => (all ? queue.clearFinished() : Promise.all(done.map((i) => queue.remove(i.id)))));
   return (
     <div className="page dl-page">
       <PageHeader title="Downloads" icon="downloads" sub={sub}
         actions={<>
+          {game && <span title="Show the downloads of every game, grouped by game"><Toggle size="sm" checked={all} onChange={setAll} label="All games" /></span>}
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title="Install .zip, .7z or .rar files from this PC (or drop them on the window)">Install from files</Button>
-          <Button variant="ghost" icon="trash" disabled={!done.length} onClick={() => act(() => queue.clearFinished())}>Clear finished</Button>
+          <Button variant="ghost" icon="trash" disabled={!done.length} title={all ? "Clear every finished download" : `Clear ${game?.short ?? "this game"}'s finished downloads`}
+            onClick={clearFinished}>Clear finished</Button>
         </>} />
-      {snap.items.length === 0 ? (
-        <Empty icon="downloads" title="Nothing downloading" actions={<Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse mods</Button>}>
+      {mine.length === 0 ? (
+        <Empty icon="downloads" title={elsewhere ? `Nothing downloading for ${game?.short ?? "this game"}` : "Nothing downloading"}
+          actions={<>
+            <Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse mods</Button>
+            {elsewhere > 0 && <Button icon="layers" onClick={() => setAll(true)}>Show all games ({elsewhere})</Button>}
+          </>}>
           Install a mod from Browse, open a GameBanana link, or drop an archive or folder on the window.
         </Empty>
       ) : (
         <>
-          {active.length > 0 && <Panel title="In progress" icon="downloads" count={active.length} className="dl-panel"><ul className="dl-list">{active.map(row)}</ul></Panel>}
-          {done.length > 0 && <Panel title="Finished" icon="check" count={done.length} className="dl-panel"><ul className="dl-list">{done.map(row)}</ul></Panel>}
+          {active.length > 0 && <Panel title="In progress" icon="downloads" count={active.length} className="dl-panel">{list(active)}</Panel>}
+          {done.length > 0 && <Panel title="Finished" icon="check" count={done.length} className="dl-panel">{list(done)}</Panel>}
+          {!all && elsewhere > 0 && (
+            <p className="hint dl-elsewhere">{plural(elsewhere, "download")} for other games. <button type="button" className="dl-more" onClick={() => setAll(true)}>Show all games</button></p>
+          )}
         </>
       )}
     </div>

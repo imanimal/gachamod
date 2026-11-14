@@ -1,26 +1,14 @@
 // A mod's preview image: lazy, covers its box, a plain placeholder when there is none or it fails to load, and a
 // blur for NSFW previews when the setting says so. Owner: LIBRARY area.
 import { useEffect, useState } from "react";
-import { fileUrl, settings } from "../../lib/api";
+import { fileUrl } from "../../lib/api";
+import { useNsfw } from "../../lib/prefs";
 import { Icon, type IconName } from "../../ui/Icon";
 
 export type NsfwMode = "hide" | "blur" | "show";
 
-let nsfwCache: NsfwMode | null = null;
-/** Setting "ui.nsfw" (default blur), read once per session and refreshed when a screen mounts. */
-export function useNsfwMode(): NsfwMode {
-  const [mode, setMode] = useState<NsfwMode>(nsfwCache ?? "blur");
-  useEffect(() => {
-    let live = true;
-    settings.get("ui.nsfw").then((v) => {
-      const m: NsfwMode = v === "hide" || v === "show" ? v : "blur";
-      nsfwCache = m;
-      if (live) setMode(m);
-    }).catch(() => {});
-    return () => { live = false; };
-  }, []);
-  return mode;
-}
+/** How mods for adults show (Settings, or the quick switch in a mod's details). Live: a change shows everywhere. */
+export const useNsfwMode = (): NsfwMode => useNsfw();
 
 // A new custom preview often has the same path as the last one (preview.png), so the webview would keep showing
 // the cached picture. A version number on the URL makes every Preview of that path load it again.

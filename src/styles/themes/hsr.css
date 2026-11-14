@@ -11,7 +11,8 @@
    and the picked option, teal is done, red is the warning strip.
 
    Two token sets live here. The first block is glass (dark): the root, and every cell or dark bar wherever it sits.
-   The second is plate (light): dialogs, menus and list rows. A control reads --ctl-* and --well so it fits both. */
+   The second is plate (light): dialogs, menus and list rows. A control reads --ctl-* and --well so it fits both.
+   The light scheme (end of this file) turns the root into a plate; cells keep the glass tokens in both schemes. */
 
 @font-face { font-family: "Sofia Sans"; font-weight: 400; font-display: swap; src: url("../fonts/sofia-sans-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Sofia Sans"; font-weight: 500; font-display: swap; src: url("../fonts/sofia-sans-latin-500-normal.woff2") format("woff2"); }
@@ -24,7 +25,7 @@
 
 /* ── glass: the root, and cells and dark bars inside plates ── */
 [data-theme="hsr"],
-[data-theme="hsr"] :is(.card, .tile, .char-tile, .char-skin, .hero, .home-hero, .codeblock, .toast, .dialog-f, .drawer-f, .floatbar, .library-bulk, .gallery, .gb-gallery, .lightbox, .tools-log-text, .mi-readme-t) {
+[data-theme="hsr"] :is(.card, .tile, .char-tile, .char-skin, .hero, .home-hero, .home-tile, .portraits > .portrait, .codeblock, .toast, .dialog-f, .drawer-f, .floatbar, .library-bulk, .gallery, .gb-gallery, .lightbox, .tools-log-text, .mi-readme-t) {
   color-scheme: dark;
   /* the shared tokens (base.css) */
   --bg: #0f1224; --bg-2: #0a0b14; --surface: #1b1c24; --surface-2: #262833; --surface-3: #323543; --raised: #e2e2e2;
@@ -55,7 +56,7 @@
   --dot-line: radial-gradient(circle at 2.5px 50%, currentColor 0 2px, transparent 2.6px) 0 50% / 6px 7px no-repeat, linear-gradient(currentColor, currentColor) 9px 50% / calc(100% - 22px) 1px no-repeat,
     radial-gradient(circle at 50% 50%, transparent 0 1.6px, currentColor 1.9px 2.9px, transparent 3.3px) 100% 50% / 9px 9px no-repeat;
 
-  --radius: 14px; --radius-sm: 8px; --radius-lg: 22px; --radius-xs: 3px; --radius-pill: 999px;
+  --radius: 14px; --radius-sm: 8px; --radius-lg: 22px; --radius-xs: 3px; --radius-pill: 999px; --stack-gap: .65rem;
   --shadow: 0 2px 10px rgb(0 0 0 / .35); --shadow-lg: 0 18px 50px rgb(0 0 0 / .55);
   --scrim: rgb(8 9 18 / .62);
   --tex: var(--rings);
@@ -68,12 +69,12 @@
 }
 
 /* ── plate: dialogs, menus and list rows. Ink text, darker status colours ── */
-[data-theme="hsr"] :is(.dialog, .popover, .apptip, .list-row, .set-row, .set-game, .tools-dev-row, .dl-item, .gb-file, .gb-post, .trash-item, .tp-conflict, .tp-problem, .mi-opt, .mi-key-row, .pack-mod, .set-importer, .set-pergame-r, .keys-list, .kv, .note.t-warn, .tools-blocked) {
+[data-theme="hsr"] :is(.dialog, .popover, .palette, .apptip, .list-row, .set-row, .set-game, .tools-dev-row, .dl-item, .gb-file, .gb-post, .trash-item, .tp-conflict, .tp-problem, .mi-opt, .mi-key-row, .pack-mod, .set-importer, .set-pergame-r, .keys-list, .kv, .note.t-warn, .tools-blocked) {
   color-scheme: light;
   --bg: #dadcde; --bg-2: #edefef; --surface: #dadcde; --surface-2: #cbccd0; --surface-3: #bfc0c5; --raised: #26262a;
   --line: rgb(0 0 0 / .13); --line-2: rgb(0 0 0 / .26);
-  --text: #111113; --text-2: #35363b; --text-3: #6b6c73;
-  --accent-ink: #a8651a; --accent-soft: rgb(242 154 46 / .18);
+  --text: #111113; --text-2: #35363b; --text-3: #5e5f66;
+  --accent-ink: #7a4f12; --accent-soft: rgb(242 154 46 / .18);
   --ok: #14876a; --warn: #b8720e; --bad: #c2463b; --info: #2d6cb3;
   --ring: #111113; --hover: rgb(0 0 0 / .07);
   --img-bg: #b9bbc2;
@@ -95,6 +96,8 @@
   .btn-secondary:hover:not(:disabled), .ibtn.btn-secondary:hover:not(:disabled) { background: #fff; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px #9d9da1, 0 0 0 2px rgb(255 255 255 / .35), 0 1px 4px rgb(0 0 0 / .28); }
   /* a button's icon sits in a small black disc */
   .btn-secondary > .i:first-child, .btn-primary > .i:first-child, .btn-secondary > .spin:first-child { box-sizing: content-box; width: .82em; height: .82em; padding: .22em; margin-left: -.35rem; border-radius: 50%; background: #17171a; color: #ecd9ac; stroke-width: 2.6; }
+  /* an icon button keeps the icon disc but not the text button's pull to the left, so the icon stays centred */
+  .ibtn.btn-secondary > .i:first-child, .ibtn.btn-primary > .i:first-child, .ibtn.btn-secondary > .spin:first-child { margin-left: 0; }
   .btn-primary, .ibtn.btn-primary { color: var(--ink); background: linear-gradient(180deg, var(--gold-hi), var(--gold) 60%); box-shadow: inset 0 0 0 3px rgb(240 215 156 / .0), inset 0 0 0 4px rgb(120 90 30 / .0), inset 0 0 0 1px rgb(255 255 255 / .35), 0 1px 5px rgb(0 0 0 / .3); }
   .btn-primary::before { content: ""; position: absolute; inset: 3px; border-radius: inherit; border: 1px solid rgb(110 80 20 / .35); pointer-events: none; }
   .btn-primary:hover:not(:disabled), .ibtn.btn-primary:hover:not(:disabled) { filter: brightness(1.07); transform: none; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .5), 0 0 0 2px rgb(240 215 156 / .4), 0 1px 5px rgb(0 0 0 / .3); }
@@ -277,6 +280,29 @@
   .menu-i.danger, .menu-i.danger .i { color: #b53c32; }
   .menu-i.danger:hover:not(:disabled) { background: var(--red); color: #fff; }
   .menu-i.danger:hover:not(:disabled) .i { color: #fff; }
+  /* right-click menus: headers in small caps of ink, key hints plain */
+  .ctx .menu-i { padding: .4rem .7rem; }
+  .ctx .menu-i.on { background: #d2d4d8; color: var(--ink); }
+  .menu-h { color: #5e5f66; font-weight: 700; letter-spacing: .03em; text-transform: none; font-size: .78em; }
+  .menu-h + .menu-i { box-shadow: none; }
+  .menu-k { background: none; box-shadow: none; color: #5e5f66; font-family: var(--font-num); font-weight: 600; }
+  .menu-c, .menu-sub { color: #7a4f12; }
+  .menu-img { box-shadow: 0 0 0 1px rgb(0 0 0 / .2); }
+  .qlink { text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+  .qlink:hover { color: var(--accent-ink); }
+
+  /* ── command palette: the pale dropdown, large ── */
+  .palette { border-radius: var(--cut-lg); background: #e9eaec; box-shadow: 0 24px 70px rgb(0 0 0 / .55), 0 0 0 1px rgb(255 255 255 / .3); animation: hsrDrop 160ms var(--ease-out); }
+  .palette-in { box-shadow: none; position: relative; }
+  .palette-in::after { content: ""; position: absolute; left: .9rem; right: .9rem; bottom: 0; height: 9px; color: rgb(0 0 0 / .22); background: var(--dot-line); pointer-events: none; }
+  .palette-in input { color: var(--ink); font-weight: 600; }
+  .palette-h { color: #5e5f66; text-transform: none; letter-spacing: .03em; font-weight: 700; }
+  .palette-i { border-radius: 2px; color: var(--ink); font-weight: 600; }
+  .palette-i > .i { color: #55565c; }
+  .palette-i.on { background: #26262a; color: #f0dcae; }
+  .palette-i.on > .i, .palette-i.on .palette-hint { color: #f0dcae; }
+  .palette-img { border-radius: 50%; }
+  .palette-foot { box-shadow: inset 0 1px 0 rgb(0 0 0 / .12); color: #5e5f66; }
 
   /* ── toast: a dark band; a failure is the red strip ── */
   .toasts { right: 1rem; bottom: 1rem; }
@@ -355,11 +381,58 @@
   .num, .mono { letter-spacing: 0; }
 }
 
+/* ── light scheme: the root is a pale plate (Star Rail's settings and dialog grey) instead of glass. Cells (cards,
+   tiles, portraits) stay dark slate, as they do on the game's own plates. ── */
+[data-theme="hsr"][data-scheme="light"] {
+  color-scheme: light;
+  --bg: #e3e4e8; --bg-2: #d7d9de; --surface: #eeeff1; --surface-2: #e2e3e6; --surface-3: #d4d5d9; --raised: #26262a;
+  --line: rgb(0 0 0 / .12); --line-2: rgb(0 0 0 / .24);
+  --text: #111113; --text-2: #35363b; --text-3: #5e5f66;
+  --accent: var(--gold); --on-accent: #111113; --accent-soft: rgb(199 150 60 / .2); --accent-ink: #7a4f12; --accent-2: #a85f10;
+  --ok: #0f7a5f; --warn: #94590a; --bad: #b23a30; --info: #2563a8; --on-bad: #fff;
+  --ring: #111113; --hover: rgb(0 0 0 / .06);
+  --img-bg: #c9cbd1;
+  --shadow: 0 1px 4px rgb(30 34 60 / .16); --shadow-lg: 0 18px 50px rgb(30 34 60 / .28);
+  --scrim: rgb(40 44 60 / .38);
+  --ctl-line: rgb(0 0 0 / .3); --ctl-fill: rgb(255 255 255 / .55); --ctl-on-bg: #26262a; --ctl-on-fg: #f0dcae;
+  --well: rgb(0 0 0 / .07); --well-line: rgb(0 0 0 / .22); --track: rgb(0 0 0 / .15);
+  --btn-bg: #f7f7f7; --btn-line: #c9c9cc; --row: #f3f4f5; --row-hi: #fafafa;
+  color: var(--text);
+
+  .btn-secondary:hover:not(:disabled), .ibtn.btn-secondary:hover:not(:disabled) { box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px #9d9da1, 0 0 0 2px rgb(0 0 0 / .12), 0 1px 4px rgb(0 0 0 / .2); }
+  .btn-secondary, .ibtn.btn-secondary { box-shadow: inset 0 0 0 3px var(--btn-bg), inset 0 0 0 4px var(--btn-line), 0 1px 3px rgb(0 0 0 / .18); }
+  .panel-b { background: rgb(255 255 255 / .55); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .07); }
+  .drawer { background: linear-gradient(180deg, rgb(236 237 240 / .97), rgb(229 230 234 / .98)); box-shadow: -1px 0 0 rgb(0 0 0 / .12), -30px 0 80px rgb(30 34 60 / .25); }
+  .drawer-b .panel-b { background: rgb(255 255 255 / .6); }
+  .skel { background: linear-gradient(100deg, rgb(0 0 0 / .05) 30%, rgb(0 0 0 / .1) 50%, rgb(0 0 0 / .05) 70%); background-size: 250% 100%; }
+  .empty-i { background: radial-gradient(circle, rgb(199 162 90 / .25) 0 34%, transparent 35%); }
+  .empty-i::before { filter: invert(1); opacity: .6; }
+  .stat { background: #f3f4f5; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .07); }
+  button.stat:hover { background: #fff; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); }
+  .stat-v { color: var(--tone, var(--ink)); }
+  .note { background: rgb(0 0 0 / .05); }
+  .avatar.ring { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--gold-lo); }
+  .pchip:hover .pchip-img { box-shadow: 0 0 0 1.5px var(--ink); }
+  .pchip.on .pchip-img { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+  .gallery-th.on, .gb-thumb.on { outline-color: var(--ink); }
+  .swatch.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--ink); }
+  /* cells keep their dark slate; the outline that marks them sits on the pale page, so it turns ink */
+  :is(.card-btn:hover:not(:disabled), button.tile:hover, a.tile:hover, .tile.click:hover, .mod-card:hover, .char-tile:hover) { outline-color: rgb(0 0 0 / .45); }
+  :is(.card.sel, .tile.sel, .char-tile.sel, .char-skin.is-on, .profile-card.is-active, .mod-card:has(.mod-card-hit[aria-pressed="true"])) { outline-color: var(--ink); }
+  .portraits > .portrait.on { box-shadow: inset 0 0 0 2px var(--gold), 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
+}
+
+/* GameBanana text on a plate is ink on pale grey whatever the scheme, so author colours use the light range */
+[data-theme="hsr"] :is(.gb-post, .gb-file, .dialog, .popover) .gb-desc { --gb-l-lo: .32; --gb-l-hi: .55; }
+[data-theme="hsr"][data-scheme="light"] :is(.card, .tile, .codeblock) .gb-desc { --gb-l-lo: .74; --gb-l-hi: .95; }
+
 /* scrollbars: a thin pale line */
 [data-theme="hsr"] ::-webkit-scrollbar { width: 9px; height: 9px; }
 [data-theme="hsr"] ::-webkit-scrollbar-thumb { background: rgb(160 165 180 / .45); border-radius: 9px; border: 3px solid transparent; background-clip: padding-box; }
 [data-theme="hsr"] ::-webkit-scrollbar-thumb:hover { background: rgb(200 205 220 / .8); background-clip: padding-box; border: 3px solid transparent; }
 [data-theme="hsr"] ::selection { background: #e0be78; color: #111113; }
+[data-theme="hsr"][data-scheme="light"] ::-webkit-scrollbar-thumb { background: rgb(60 64 80 / .35); background-clip: padding-box; }
+[data-theme="hsr"][data-scheme="light"] ::-webkit-scrollbar-thumb:hover { background: rgb(60 64 80 / .6); background-clip: padding-box; }
 
 @keyframes hsrTurn { to { transform: rotate(360deg); } }
 @keyframes hsrPop { from { opacity: 0; transform: translateY(10px) scale(.985); } }

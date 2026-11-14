@@ -8,8 +8,8 @@ art, icons or fonts are used: shapes are CSS, gradients and inline SVG. Hex valu
 so they are close, not exact.
 
 Files: `src/styles/themes/ww.css` (fonts, keyframes, accents, imports), `ww-kit.css` (tokens, textures, every kit
-class), `ww-shell.css` (window, rail, sidebar, page
-bar, the sky), `ww-screens.css` (screen classes).
+class), `ww-shell.css` (window, sidebar, page bar,
+the sky), `ww-screens.css` (screen classes).
 
 ## The idea
 
@@ -32,8 +32,9 @@ is not a status, and it is thin: a line, a number, a small diamond.
    on ink are ink boxes with a thin slate line.
 5. **Picked is white**: the current row, tab, segment or chip turns into a white card with black text. A picked
    tile gets a white outline that stands 2 px off its edge. Nothing picked is ever filled with gold.
-6. **Rail**: icon rails are bare icons beside a hairline. The current icon turns gold and a short gold bar sits
-   on the hairline next to it.
+6. **Light scheme**: the game is dark, so dark is the default. In light the paper sheet becomes the page: frosted
+   paper bars, the ring drawn in ink, gold darkened to read as text. Item tiles, tags, tips and toasts stay ink.
+   Keys on the page are white cards and the picked one turns black (the opposite tone of its sheet).
 7. **Item tiles**: a dark slate square (`#262628`), the picture, a soft glow rising from the bottom in the
    rarity colour, a 3 px bright line, then a darker strip (`#1e1e20`) for the name or count. Mods that are on
    use gold; mods that are off lose the line and go grey.

@@ -2,14 +2,23 @@
 // (Xbox names; PlayStation's are the same places). Wired in App.tsx:
 //   D-pad or left stick   move between keys and fields, by where they are on screen
 //   A                     press          B   back / close        X   the focused mod's key (install, or its menu)
-//   Y                     find (search)  LB, RB   previous, next view in the rail
-//   LT, RT, right stick   scroll         View (Back)   the shortcuts and buttons list      Menu (Start)   go to Play
+//   Y                     find (the screen's search, else the command palette)    LB, RB   previous, next view
+//   LT, RT, right stick   scroll         View (Back)   back a page             Menu (Start)   go to Play
+//   right stick pressed in (R3)   the focused thing's right-click menu
 //   both sticks pressed in (L3+R3)   back to the last theme, the way out of one that breaks the app
+// Owner: SHELL area.
 // It reads the pad only while this window has focus, so a pad used in the game never moves the app, and it polls
 // only while a pad is connected.
 import { focusSearch, topLayer } from "./keys";
 
-const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [role="button"]';
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [role="button"], iframe[data-ext]';
+
+// Extension pages run in frames (screens/extensions/ExtensionFrame.tsx): moves and presses go into the frame, which
+// hands focus back with moveFocusFrom when nothing in it lies that way.
+type FrameNav = (frame: HTMLIFrameElement, msg: { dx?: number; dy?: number; enter?: boolean; press?: boolean }) => void;
+let frameNav: FrameNav | null = null;
+export function setFrameNav(f: FrameNav) { frameNav = f; }
+const extFrame = (el: Element | null): HTMLIFrameElement | null => (el instanceof HTMLIFrameElement && el.dataset.ext ? el : null);
 
 function candidates(): HTMLElement[] {
   const root = topLayer();
@@ -23,8 +32,14 @@ function candidates(): HTMLElement[] {
 
 /** Move focus to the nearest focusable thing in a direction. */
 export function moveFocus(dx: number, dy: number) {
+  const frame = extFrame(document.activeElement);
+  if (frame && frameNav) { frameNav(frame, { dx, dy }); return; }
+  moveFocusFrom(document.activeElement as HTMLElement | null, dx, dy);
+}
+
+/** Move focus from `cur` (an extension frame handing it back, or the focused element). */
+export function moveFocusFrom(cur: HTMLElement | null, dx: number, dy: number) {
   const list = candidates();
-  const cur = document.activeElement as HTMLElement | null;
   if (!cur || cur === document.body || !list.includes(cur)) { (list.find((e) => e.closest(".app .view")) ?? list[0])?.focus(); return; }
   const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
   let best: HTMLElement | null = null, score = Infinity;
@@ -37,12 +52,19 @@ export function moveFocus(dx: number, dy: number) {
     const s = along + across * 2.2;
     if (s < score) { score = s; best = el; }
   }
-  if (best) { best.focus({ preventScroll: true }); best.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+  if (best) {
+    best.focus({ preventScroll: true });
+    best.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const f = extFrame(best);
+    if (f && frameNav) frameNav(f, { dx, dy, enter: true });
+  }
 }
 
 const key = (k: string) => (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
 
-export function installGamepad(opts: { nextView: (dir: 1 | -1) => void; help: () => void; play: () => void; back: () => void; themeBack?: () => void }): () => void {
+export function installGamepad(opts: {
+  nextView: (dir: 1 | -1) => void; play: () => void; back: () => void; menu: () => void; palette: () => void; themeBack?: () => void;
+}): () => void {
   let raf = 0;
   const held = new Map<string, number>(); // button -> next repeat time
   const press = (name: string, now: number, on: boolean, fn: () => void, repeat = false) => {
@@ -65,17 +87,24 @@ export function installGamepad(opts: { nextView: (dir: 1 | -1) => void; help: ()
     press("down", now, b(13) || ax(1) > 0.6, () => moveFocus(0, 1), true);
     press("left", now, b(14) || ax(0) < -0.6, () => moveFocus(-1, 0), true);
     press("right", now, b(15) || ax(0) > 0.6, () => moveFocus(1, 0), true);
-    press("a", now, b(0), () => { const el = document.activeElement as HTMLElement | null; if (el && el !== document.body) el.click(); else moveFocus(0, 1); });
+    press("a", now, b(0), () => {
+      const el = document.activeElement as HTMLElement | null;
+      const f = extFrame(el);
+      if (f && frameNav) frameNav(f, { press: true });
+      else if (el && el !== document.body) el.click(); else moveFocus(0, 1);
+    });
     press("b", now, b(1), () => { if (document.querySelector(".lightbox, .overlay, .popover")) key("Escape"); else opts.back(); });
     press("x", now, b(2), () => (document.activeElement?.closest("[data-pad-x]")?.querySelector("[data-pad-x-target]") as HTMLElement | null)?.click());
-    press("y", now, b(3), () => { focusSearch(); });
+    press("y", now, b(3), () => { if (!focusSearch()) opts.palette(); });
     press("lb", now, b(4), () => opts.nextView(-1));
     press("rb", now, b(5), () => opts.nextView(1));
     press("lt", now, (pad.buttons[6]?.value ?? 0) > 0.3, () => scroll(-window.innerHeight * 0.6), true);
     press("rt", now, (pad.buttons[7]?.value ?? 0) > 0.3, () => scroll(window.innerHeight * 0.6), true);
-    press("view", now, b(8), opts.help);
+    press("view", now, b(8), () => { if (document.querySelector(".lightbox, .overlay, .popover")) key("Escape"); else opts.back(); });
     press("menu", now, b(9), opts.play);
     press("sticks", now, b(10) && b(11), () => opts.themeBack?.());
+    // R3 alone opens the focused thing's menu; with L3 held it is the theme escape above
+    press("r3", now, b(11) && !b(10), opts.menu);
     const rs = ax(3);
     if (Math.abs(rs) > 0.25) scroll(rs * 22);
   };

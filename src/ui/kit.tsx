@@ -1,6 +1,6 @@
 // The UI kit: every screen builds from these, so the app looks and behaves the same everywhere and a theme only has
 // to style this list of classes (docs/spec.md, "UI kit"). Props are the contract; markup may gain decoration spans.
-import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { leave } from "./motion";
@@ -87,7 +87,7 @@ export function Segmented<T extends string>({ value, options, onChange, label, s
     <div className={cx("seg", `seg-${size}`)} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={cx("seg-o", value === o.value && "on")}
-          onClick={() => onChange(o.value)} title={o.title}>
+          onClick={() => onChange(o.value)} title={o.title ?? (typeof o.label === "string" ? o.label : undefined)}>
           {o.icon && <Icon name={o.icon} />}{o.label !== "" && <span>{o.label}</span>}
         </button>
       ))}
@@ -95,11 +95,11 @@ export function Segmented<T extends string>({ value, options, onChange, label, s
   );
 }
 
-export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; tabs: Array<{ value: T; label: ReactNode; icon?: IconName; count?: number }>; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; tabs: Array<{ value: T; label: ReactNode; icon?: IconName; count?: number; title?: string }>; onChange: (v: T) => void }) {
   return (
     <div className="tabs" role="tablist">
       {tabs.map((t) => (
-        <button key={t.value} type="button" role="tab" aria-selected={value === t.value} className={cx("tab", value === t.value && "on")} onClick={() => onChange(t.value)}>
+        <button key={t.value} type="button" role="tab" aria-selected={value === t.value} className={cx("tab", value === t.value && "on")} onClick={() => onChange(t.value)} title={t.title}>
           {t.icon && <Icon name={t.icon} />}<span>{t.label}</span>{t.count !== undefined && <span className="tab-n">{t.count}</span>}
         </button>
       ))}
@@ -149,8 +149,25 @@ export function Select<T extends string>({ label, value, options, onChange, hint
 
 /** The top of every screen: title, a line under it, actions on the right, and optional content below (filters). */
 export function PageHeader({ title, sub, icon, actions, children }: { title: ReactNode; sub?: ReactNode; icon?: IconName; actions?: ReactNode; children?: ReactNode }) {
+  // once the page scrolls, a sticky header (the game themes have one) folds to its controls: is-stuck hides the
+  // subtitle and keeps rows of chips on one line, so it takes a strip instead of a quarter of the window
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const view = el?.closest(".view");
+    if (!el || !view) return;
+    let on = false;
+    const check = () => {
+      // on past 60px, off under 8: folding moves the page up a little, so one threshold would flicker
+      const next = (on ? view.scrollTop > 8 : view.scrollTop > 60) && getComputedStyle(el).position === "sticky";
+      if (next !== on) { on = next; el.classList.toggle("is-stuck", on); }
+    };
+    check();
+    view.addEventListener("scroll", check, { passive: true });
+    return () => view.removeEventListener("scroll", check);
+  }, []);
   return (
-    <header className="page-h">
+    <header ref={ref} className="page-h">
       {typeof title === "string" && <span className="page-h-ghost" aria-hidden="true">{title}</span>}
       <div className="page-h-row">
         <div className="page-h-t">
@@ -202,8 +219,12 @@ export function Row({ label, children, hint }: { label: ReactNode; children: Rea
 
 export type Tone = "accent" | "ok" | "warn" | "bad" | "info" | "muted";
 
-export function Badge({ tone = "muted", children, icon, title }: { tone?: Tone; children: ReactNode; icon?: IconName; title?: string }) {
-  return <span className={cx("badge", `t-${tone}`)} title={title}>{icon && <Icon name={icon} />}{children}</span>;
+/** A small tag. With `onClick` it is a button that opens what it names (the mod's toggles, its conflicts): a tag
+ *  that says something is there takes you to it. */
+export function Badge({ tone = "muted", children, icon, title, onClick, className }: { tone?: Tone; children: ReactNode; icon?: IconName; title?: string; onClick?: (e: MouseEvent<HTMLButtonElement>) => void; className?: string }) {
+  const cls = cx("badge", `t-${tone}`, className);
+  if (onClick) return <button type="button" className={cls} title={title} onClick={onClick}>{icon && <Icon name={icon} />}{children}</button>;
+  return <span className={cls} title={title}>{icon && <Icon name={icon} />}{children}</span>;
 }
 
 /** 0..1, or null for an unknown amount. */

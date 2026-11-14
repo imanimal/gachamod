@@ -9,6 +9,7 @@
 @import "/src/styles/themes/gi-kit.css";
 @import "/src/styles/themes/gi-shell.css";
 @import "/src/styles/themes/gi-screens.css";
+@import "/src/styles/themes/gi-night.css";
 
 @font-face { font-family: "Laila"; font-weight: 400; font-display: swap; src: url("../fonts/laila-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Laila"; font-weight: 500; font-display: swap; src: url("../fonts/laila-latin-500-normal.woff2") format("woff2"); }

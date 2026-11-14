@@ -1,0 +1,94 @@
+/* themes/ef-light.css: Talos-II, light all through. The theme's own light scheme keeps the game's charcoal stage
+   (title bar, sidebar, page bar, dialog heads, card name plates). When every theme is set to light (Settings,
+   Appearance: html[data-full]), the stage turns to a pale sheet too. Small parts keep their charcoal: badges, the
+   picked chip, avatars. */
+
+:root[data-full][data-theme="ef"][data-scheme="light"] {
+  --stage: #f1f0f0; --stage-hi: #e6e5e5; --stage-lo: #e8e7e7; --plate-2: #ffffff;
+
+  /* the stage parts read the sheet's dark text */
+  :is(.titlebar, .side, .page-h, .dialog-h, .drawer-h, .tabs, .home-quick, .home-hero, .hero) {
+    --text: #1c1c1c; --text-2: #4a4a4a; --text-3: #6f6f6f; --line: rgb(0 0 0 / .1); --line-2: rgb(0 0 0 / .22);
+    --hover: rgb(0 0 0 / .06); --ring: var(--ink); --accent-ink: var(--acc-ink); --img-bg: #d5d3d3; --br-c: #1c1c1c;
+    --bg: var(--stage); --bg-2: var(--stage-lo); --surface: #fff; --surface-2: #ececec; --surface-3: #e0e0e0; --raised: #fff;
+    --accent-soft: var(--acc-wash);
+  }
+  :is(.tile-body, .mod-card-body, .gb-card, .home-tile, .char-skin, .char-tile-name, .portrait-n) {
+    --text: #1c1c1c; --text-2: #4a4a4a; --text-3: #6f6f6f; --hover: rgb(0 0 0 / .06); --line: rgb(0 0 0 / .1); --accent-ink: var(--acc-ink);
+  }
+  :is(.tile-body, .mod-card-body, .gb-card.gb-card, .home-tile, .char-skin, .char-tile-name, .portrait-n, .gb-ch.on, .hero, .home-quick) { color: #1c1c1c; }
+  :is(.mod-card, .gb-card, .home-tile, .char-skin) { box-shadow: 0 0 0 1px rgb(0 0 0 / .1); }
+  .mod-card-name { color: #1c1c1c; }
+  .mod-card-char { color: #5a5a5a; }
+  .mod-card-meta { color: #6f6f6f; }
+  .mod-card .toggle:not(.on) .toggle-track { background: #d6d4d4; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .18); }
+  .mod-card .toggle:not(.on) .toggle-knob { background: #7a7a7a; }
+  .mod-card.is-off .mod-card-body { background: #e4e3e3; }
+  .mod-card.is-off .mod-card-name { color: #5a5a5a; }
+  .mod-card.is-off .mod-card-char { color: #7a7a7a; }
+
+  /* ── title bar ── */
+  .titlebar { box-shadow: inset 0 -1px 0 rgb(0 0 0 / .1); }
+  .brand, .crumb-view, .crumb-game, .crumb-part:last-child .crumb-b { color: #1c1c1c; }
+  .crumb { color: #6f6f6f; }
+  .crumb::before, .crumb-sep { color: #9a9a9a; }
+  .crumb-b { color: #4a4a4a; }
+  .crumb-b:hover { background: rgb(0 0 0 / .06); color: #111; }
+  .sp .glyphs { color: #d2d1d1; }
+  .titlebar > .ibtn, .tb-k { color: #4a4a4a; }
+  .tb-k:hover:not(:disabled), .side-hk:hover, .side-fold:hover, :is(.titlebar, .side, .page-h, .dialog-h, .drawer-h, .toast) .ibtn.btn-ghost:hover:not(:disabled) { background: #1c1c1c; color: #fff; }
+  .wk { color: #3a3a3a; }
+  .wk:hover { background: rgb(0 0 0 / .07); color: #111; }
+  .tb-search { background: #fff; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .16); color: #6f6f6f; }
+  .tb-search:hover { color: #1c1c1c; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .4); }
+  .gbadge { box-shadow: 0 0 0 1px rgb(0 0 0 / .12); }
+
+  /* ── sidebar ── */
+  .side { color: #1c1c1c; background: linear-gradient(180deg, #f7f6f6, var(--stage) 40%, #ebeaea); box-shadow: inset -1px 0 0 rgb(0 0 0 / .1); }
+  .player-card, .side-game-cur { background: #fff; }
+  .player-card { box-shadow: 0 0 0 1px rgb(0 0 0 / .1); }
+  .player-card:hover { background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .35); }
+  .side-game-cur { box-shadow: 0 0 0 1px rgb(0 0 0 / .1), inset 3px 0 0 var(--g-accent, var(--acc)); }
+  .side-game-cur:hover { background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .35), inset 3px 0 0 var(--g-accent, var(--acc)); }
+  .player-card .player-av { box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgb(0 0 0 / .3); }
+  .side-me { box-shadow: 0 0 0 2px var(--stage), 0 0 0 3px rgb(0 0 0 / .3); }
+  .player-title, .player-uid, .side-h, .side-deco-m { color: #6f6f6f; }
+  .side-nav::before { color: #8a8a8a; background: linear-gradient(rgb(0 0 0 / .12) 0 0) 0 100% / 100% 1px no-repeat; }
+  .side-prof-h { background: linear-gradient(rgb(0 0 0 / .12) 0 0) 0 100% / 100% 1px no-repeat; }
+  .nv, .side-p { color: #2a2a2a; }
+  .nv-t::before { color: #9a9a9a; }
+  .nv .i, .side-hk, .side-fold { color: #6f6f6f; }
+  .nv:hover:not(:disabled), .side-p:hover { background: rgb(0 0 0 / .06); color: #111; }
+  .nv:hover:not(:disabled) .i { color: #111; }
+  .nv-b { background: #1c1c1c; color: #fff; }
+  .side-deco { color: #cfcfcf; }
+  .side-game-add { color: var(--acc-ink); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .25); }
+  .side-p.on { background: #fff; color: #111; box-shadow: inset 3px 0 0 var(--p-color, var(--acc)), 0 0 0 1px rgb(0 0 0 / .1); }
+  .side-p-on { color: var(--acc-ink); }
+  .side-p-k { background: #e6e6e6; color: #3a3a3a; }
+  .play-btn.btn-primary:hover:not(:disabled) { outline-color: #1c1c1c; }
+  .play .ibtn.play-more { background: #1c1c1c; color: #fff; }
+  .play.running .ibtn.play-more:not(:hover, .on) { background: #e6e6e6; color: #3a3a3a; }
+
+  /* ── page bar ── */
+  .page-h { color: #1c1c1c; background: rgb(241 240 240 / .96); box-shadow: 0 1px 0 rgb(0 0 0 / .12), 0 4px 12px rgb(0 0 0 / .08); }
+  .page-h::after { color: rgb(0 0 0 / .22); }
+  .page-h h1 > span::before { color: #8a8a8a; }
+  .page-h-sub, .page-h .hint { color: #6f6f6f; }
+  .page-h .field-l { color: #4a4a4a; }
+  .page-h-ghost { -webkit-text-stroke: 1px rgb(0 0 0 / .07); }
+
+  /* ── tabs, dialog and drawer heads, banners ── */
+  .tabs { background: #fff; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .1); }
+  .tab { color: #4a4a4a; }
+  .tab:hover { color: #111; }
+  .tab + .tab::before { background: rgb(0 0 0 / .15); }
+  .tab-n { background: rgb(0 0 0 / .08); color: #1c1c1c; }
+  .dialog-h, .drawer-h { color: #1c1c1c; background: linear-gradient(180deg, #f7f6f6, #e9e8e8 120%); box-shadow: inset 0 -1px 0 rgb(0 0 0 / .1); }
+  .dialog-h::after, .drawer-h::after { background: repeating-linear-gradient(90deg, rgb(0 0 0 / .3) 0 2px, transparent 2px 5px); }
+  .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { background: #1c1c1c; color: #fff; }
+  .hero, .home-hero, .home-quick { background: var(--stage); box-shadow: 0 0 0 1px rgb(0 0 0 / .12); }
+}
+
+:root[data-full][data-theme="ef"][data-scheme="light"] :is(.side, .titlebar, .dialog-h, .drawer-h) ::-webkit-scrollbar-thumb,
+:root[data-full][data-theme="ef"][data-scheme="light"] .side::-webkit-scrollbar-thumb { background: rgb(0 0 0 / .3); background-clip: padding-box; }

@@ -2,7 +2,7 @@
    from theme tokens and the kit. */
 
 /* ── mod insides (in the mod drawer) ── */
-.mi { display: flex; flex-direction: column; gap: 1rem; }
+.mi { display: flex; flex-direction: column; gap: var(--stack-gap); }
 .mi-loading { gap: .5rem; }
 .mi-panel .panel-b { display: flex; flex-direction: column; gap: .6rem; }
 
@@ -13,14 +13,7 @@
 .mi-opt-l { font-weight: 500; }
 .mi-opt .field { min-width: 9rem; }
 
-.mi-key-list, .mi-prob-list, .mi-conf-list, .pack-mods, .tp-list, .tp-conflict-mods, .tp-problem-items { list-style: none; margin: 0; padding: 0; }
-.mi-key-list { display: flex; flex-direction: column; gap: .5rem; }
-.mi-key-row { display: grid; grid-template-columns: minmax(8rem, auto) 1fr; align-items: center; gap: .25rem .75rem; padding: .35rem 0;
-  border-bottom: 1px solid var(--line); }
-.mi-key-row:last-child { border-bottom: 0; }
-.mi-key-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
-.mi-key-back { display: inline-flex; align-items: center; gap: .3rem; }
-.mi-key-vals { grid-column: 2; display: flex; flex-wrap: wrap; gap: .25rem; }
+.mi-prob-list, .mi-conf-list, .pack-mods, .tp-list, .tp-conflict-mods, .tp-problem-items { list-style: none; margin: 0; padding: 0; }
 
 .mi-prob-list, .mi-conf-list { display: flex; flex-direction: column; gap: .4rem; }
 .mi-prob { display: flex; align-items: baseline; gap: .5rem; }
@@ -48,6 +41,12 @@
 .pack-mod-tags { display: flex; gap: .3rem; flex: none; }
 .pack-pick { gap: .25rem; }
 .pack-existing { display: flex; flex-direction: column; gap: .35rem; }
+.pack-files { display: flex; flex-direction: column; gap: .35rem; }
+.pack-files .hint { margin: 0; }
+.pack-big { color: var(--warn); }
+.pack-skip { display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--warn); }
+.pack-game { padding: .5rem .4rem .1rem; }
+.pack-game:first-child { padding-top: 0; }
 
 /* ── Tools panels ── */
 .tp-intro { margin: 0 0 .75rem; }
@@ -61,15 +60,19 @@
 .tp-conflict-h { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .35rem; }
 .tp-conflict-char { font-weight: 600; }
 .tp-conflict-mods, .tp-problem-items { display: flex; flex-direction: column; gap: .3rem; }
-.tp-problem .tp-link { font-weight: 600; margin-bottom: .3rem; }
-.tp-problem-item { align-items: baseline; }
+.tp-problem .tp-link { font-weight: 600; }
+.tp-problem-h { gap: .4rem; margin-bottom: .35rem; flex-wrap: wrap; }
+.tp-problem-item { align-items: baseline; flex-wrap: wrap; }
+.tp-problem-t { min-width: 12rem; overflow-wrap: anywhere; }
+.tp-fix { gap: .25rem; flex: none; align-self: center; }
+.tp-ignored { margin-top: .75rem; }
+.tp-ignored > summary { cursor: pointer; width: max-content; }
+.tp-ignored .tp-list { margin-top: .5rem; gap: .3rem; }
+.tp-ignored-mod { gap: .5rem; }
+.mi-prob { flex-wrap: wrap; }
+.mi-prob .tp-fix { margin-left: auto; }
 .tp-hash-form { align-items: flex-end; margin-bottom: .75rem; }
 .tp-hash-hit .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-packs-a { flex-wrap: wrap; }
 .tp-imm-game { flex-wrap: wrap; }
 .tp-imm-name { min-width: 12rem; }
-
-@media (max-width: 40rem) {
-  .mi-key-row { grid-template-columns: 1fr; }
-  .mi-key-vals { grid-column: 1; }
-}

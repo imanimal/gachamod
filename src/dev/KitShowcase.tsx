@@ -240,7 +240,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
         <Chip on={chips.includes("upd")} onClick={() => tog("upd")} icon="update" count={3}>Updates</Chip>
         {chars.slice(0, 4).map((c, i) => <Chip key={c} img={PEOPLE[i]} count={i + 1} on={chips.includes(c.split(" ")[0]!.toLowerCase())} onClick={() => tog(c.split(" ")[0]!.toLowerCase())}>{c}</Chip>)}
       </div>
-      <Tabs value={tab} onChange={setTab} tabs={[{ value: "keys", label: "Keys", icon: "keyboard", count: 4 }, { value: "options", label: "Options", icon: "sliders" }, { value: "problems", label: "Problems", count: 1 }, { value: "readme", label: "Readme" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ value: "keys", label: "Toggles", icon: "keyboard", count: 4 }, { value: "options", label: "Options", icon: "sliders" }, { value: "problems", label: "Problems", count: 1 }, { value: "readme", label: "Readme" }]} />
     </Section>
 
     <Section title="Panels, cards, rows">
@@ -270,7 +270,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
     <Section title="Status">
       <div style={wrap}>
         {tones.map((t) => <Badge key={t} tone={t} icon={t === "bad" ? "warn" : t === "ok" ? "check" : undefined}>{t}</Badge>)}
-        <Badge tone="accent" icon="update">Update</Badge><Badge tone="bad">Conflict</Badge><Badge tone="info" icon="key">Keys</Badge>
+        <Badge tone="accent" icon="update">Update</Badge><Badge tone="bad">Conflict</Badge><Badge tone="info" icon="key">Toggles</Badge>
       </div>
       <div style={grid2}>
         <div className="stack">
@@ -431,7 +431,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
         <div className="stack">
           <div className="gallery"><div className="gallery-main"><img src={ARTS[1]} alt="" /></div></div>
           <Row label="Character">Ellen Joe</Row><Row label="Version">1.2</Row><Row label="Size">48 MB</Row>
-          <Tabs value={tab} onChange={setTab} tabs={[{ value: "keys", label: "Keys" }, { value: "options", label: "Options" }]} />
+          <Tabs value={tab} onChange={setTab} tabs={[{ value: "keys", label: "Toggles" }, { value: "options", label: "Options" }]} />
           <p className="hint">The drawer scrolls on its own.</p>
         </div>
       </Drawer>

@@ -1,57 +1,61 @@
-// The shell: title bar, game rail, sidebar (player card, profile switch, views, Play), the current screen, and the
-// app-wide layers (each area's overlays, drop zone, toasts, shortcuts). Owner: skeleton. Areas own the components it
-// imports from screens/* (docs/spec.md, "Areas").
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Icon, type IconName } from "./ui/Icon";
-import { Dialog, IconButton } from "./ui/kit";
+// The shell: title bar, sidebar, the current screen, and the app-wide layers (each area's overlays, the right-click
+// menu, the command palette, the AI helper, drop zone, toasts, shortcuts). Owner: SHELL area. Areas own the
+// components it imports from screens/* (docs/spec.md, "Areas").
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Icon } from "./ui/Icon";
+import { Dialog } from "./ui/kit";
 import { Toasts, toast } from "./ui/toast";
-import { GameBadge } from "./ui/GameBadge";
 import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
-import { Backdrop, Glyphs, SideDeco } from "./ui/Deco";
+import { Backdrop } from "./ui/Deco";
+import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
 import { app as appApi, games as gamesApi, settings as settingsApi } from "./lib/api";
-import { held, inTauri, windowAction } from "./lib/tauri";
-import { currentGame, emitApp, go, patchGame, refreshGames, setGame, useBadges, useGame, useGames, useRoute, useShownGames, VIEWS, type View } from "./lib/store";
+import { held } from "./lib/tauri";
+import { back, currentGame, emitApp, forward, go, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
 import { applyGameTheme, watchSystemScheme } from "./lib/theme";
 import { warmUp } from "./lib/warmup";
-import { SHORTCUTS, installKeys } from "./lib/keys";
+import { PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
 import { installGamepad } from "./lib/gamepad";
 import { installUndoKeys } from "./lib/history";
 import { applyTextSize, installZoomKeys } from "./lib/zoom";
+import { Titlebar } from "./shell/Titlebar";
+import { Sidebar } from "./shell/Sidebar";
+import { CommandPalette } from "./shell/CommandPalette";
+import { installGlobalInput } from "./shell/globalInput";
+import { offerTour, openPalette, setHelpOpen, toggleHelp, toggleSide, useHelpOpen, useSideCollapsed } from "./shell/state";
+import { Tour } from "./shell/Tour";
+import { viewLabel } from "./shell/names";
+import "./shell/commands";
+import { AiHost } from "./screens/ai/AiHost";
 import { Home } from "./screens/home/Home";
-import { PlayButton } from "./screens/home/PlayButton";
-import { PlayerCard } from "./screens/home/PlayerCard";
 import { Library } from "./screens/library/Library";
 import { Characters } from "./screens/characters/Characters";
 import { Browse } from "./screens/browse/Browse";
 import { Downloads } from "./screens/downloads/Downloads";
 import { OnlineOverlays } from "./screens/browse/OnlineOverlays";
 import { Profiles } from "./screens/profiles/Profiles";
-import { ProfileSwitch } from "./screens/profiles/ProfileSwitch";
+import { NewProfileHost } from "./screens/profiles/ProfileEditor";
 import { Tools } from "./screens/tools/Tools";
 import { Settings } from "./screens/settings/Settings";
+import { Extensions } from "./screens/extensions/Extensions";
 import { Onboarding } from "./screens/settings/Onboarding";
 import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
+import { installSmoothScroll } from "./lib/smoothScroll";
 
-const NAV: Array<{ id: View; label: string; icon: IconName }> = [
-  { id: "home", label: "Home", icon: "home" },
-  { id: "library", label: "Mods", icon: "mods" },
-  { id: "characters", label: "Characters", icon: "characters" },
-  { id: "browse", label: "Browse", icon: "browse" },
-  { id: "downloads", label: "Downloads", icon: "downloads" },
-  { id: "profiles", label: "Profiles", icon: "profiles" },
-  { id: "tools", label: "Tools", icon: "tools" },
-];
+/** Ctrl+1 … Ctrl+8, in the sidebar's order. */
+const KEY_VIEWS: View[] = ["home", "library", "characters", "browse", "downloads", "profiles", "tools", "settings"];
 
 export function App() {
   const games = useGames();
-  const shown = useShownGames();
+  const shown = useDailyGames();
   const game = useGame();
   const route = useRoute();
-  const badges = useBadges();
-  const [help, setHelp] = useState(false);
+  const nav = useNav();
+  const help = useHelpOpen();
+  const collapsed = useSideCollapsed();
   const [loaded, setLoaded] = useState(false);
   const [onboard, setOnboard] = useState(false);
+  const viewRef = useRef<HTMLElement>(null);
 
   // games: the saved list at once, then a detection pass on first start (and whenever nothing is set up)
   useEffect(() => {
@@ -62,8 +66,11 @@ export function App() {
     }).catch((e) => { setLoaded(true); toast(String((e as { message?: string }).message ?? e), true); });
   }, []);
 
+  // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
+  useEffect(() => installSmoothScroll(), []);
+
   // the current game's theme
-  useEffect(() => { applyGameTheme(game); }, [game?.id, game?.theme, game?.accent]);
+  useEffect(() => { applyGameTheme(game); }, [game?.id, game?.theme, game?.accent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => watchSystemScheme(currentGame), []);
 
   // first open of a game this session: its character list and a scan, in the background
@@ -74,14 +81,14 @@ export function App() {
 
   // links and files the app was started with or handed later
   useEffect(() => {
-    const route = (o: { kind: "link"; url: string } | { kind: "file"; path: string }) => {
+    const open = (o: { kind: "link"; url: string } | { kind: "file"; path: string }) => {
       if (o.kind === "file") emitApp({ type: "open-pack", path: o.path });
       else emitApp({ type: "open-gb-link", url: o.url });
     };
-    appApi.startupOpened().then((list) => list.forEach(route)).catch(() => {});
+    appApi.startupOpened().then((list) => list.forEach(open)).catch(() => {});
     const offs = [
-      held(appApi.onDeepLink((p) => route({ kind: "link", url: p.url }))),
-      held(appApi.onOpenFile((p) => route({ kind: "file", path: p.path }))),
+      held(appApi.onDeepLink((p) => open({ kind: "link", url: p.url }))),
+      held(appApi.onOpenFile((p) => open({ kind: "file", path: p.path }))),
       held(appApi.onToast((p) => toast(p.text, !!p.bad))),
     ];
     return () => offs.forEach((f) => f());
@@ -99,29 +106,50 @@ export function App() {
     return () => window.removeEventListener("paste", h);
   }, []);
 
-  // keys, controller, undo, text size
+  // keys, controller, mouse, undo, text size
   useEffect(() => {
-    const views = [...NAV.map((n) => n.id), "settings" as View];
     const nextGame = (d: number) => {
       const list = shownRef.current;
       const i = list.findIndex((g) => g.id === currentGame()?.id);
       const n = list[(i + d + list.length) % list.length];
       if (n) setGame(n.id);
     };
-    const play = () => (document.querySelector(".side .play-btn button, .side .play-btn") as HTMLElement | null)?.click();
-    const back = () => window.dispatchEvent(new Event("gm-back"));
-    const offKeys = installKeys({ views, go: (v) => go(v as View), help: () => setHelp((h) => !h), back, nextGame, play });
+    const play = () => (document.querySelector(".side .play-btn") as HTMLElement | null)?.click();
+    const offKeys = installKeys({
+      views: KEY_VIEWS, go: (v) => go(v as View), help: toggleHelp, back: () => back(), forward: () => forward(), nextGame, play,
+      palette: () => openPalette(), sidebar: toggleSide, menu: menuForFocus,
+    });
     const offPad = installGamepad({
       nextView: (d) => { const cur = VIEWS.indexOf(routeRef.current); go(VIEWS[(cur + d + VIEWS.length) % VIEWS.length]!); },
-      help: () => setHelp((h) => !h), back, play,
+      back: () => back(), play, menu: menuForFocus, palette: () => openPalette(),
     });
+    const offMouse = installGlobalInput();
     const offUndo = installUndoKeys();
     applyTextSize();
     const offZoom = installZoomKeys((px) => toast(`Text size ${px}px (Ctrl+0 resets)`));
-    return () => { offKeys(); offPad(); offUndo(); offZoom(); };
+    return () => { offKeys(); offPad(); offMouse(); offUndo(); offZoom(); };
   }, []);
   const shownRef = useLatest(shown);
   const routeRef = useLatest(route.view);
+
+  // Back and Forward bring the page back where it was scrolled (screens load in steps, so try for a moment)
+  useLayoutEffect(() => {
+    const want = takeRestoreScroll();
+    const el = viewRef.current;
+    if (want === undefined || !el) return;
+    let raf = 0;
+    const until = performance.now() + 1200;
+    const step = () => {
+      el.style.scrollBehavior = "auto";
+      el.scrollTop = want;
+      el.style.scrollBehavior = "";
+      if (Math.abs(el.scrollTop - want) > 2 && performance.now() < until) raf = requestAnimationFrame(step);
+    };
+    step();
+    const stop = () => cancelAnimationFrame(raf);
+    el.addEventListener("wheel", stop, { once: true, passive: true });
+    return () => { stop(); el.removeEventListener("wheel", stop); };
+  }, [nav.n]);
 
   const view = route.view;
   const screen = !game && view !== "settings" ? <NoGame loaded={loaded} />
@@ -132,80 +160,35 @@ export function App() {
     : view === "downloads" ? <Downloads />
     : view === "profiles" ? <Profiles />
     : view === "tools" ? <Tools />
+    : view === "extensions" ? <Extensions />
     : <Settings />;
 
   return (
-    <div className="app">
+    <div className="app" data-side={collapsed ? "rail" : "full"}>
       <Backdrop game={game} />
-      <header className="titlebar" data-tauri-drag-region onDoubleClick={(e) => { if (e.target === e.currentTarget) void windowAction("toggleMaximize"); }}>
-        <span className="brand" data-tauri-drag-region><span className="brand-mark" aria-hidden="true" /><span className="brand-t">gachamod</span></span>
-        <span className="crumb" data-tauri-drag-region>
-          {game && <span className="crumb-game">{game.name}</span>}
-          <span className="crumb-view">{view === "settings" ? "Settings" : NAV.find((n) => n.id === view)?.label}</span>
-        </span>
-        <span className="sp" data-tauri-drag-region><Glyphs run /></span>
-        <IconButton icon="keyboard" label="Shortcuts (?)" size="sm" onClick={() => setHelp(true)} />
-        <span className="winkeys">
-          <button type="button" className="wk" aria-label="Minimise" onClick={() => void windowAction("minimize")}><Icon name="minus" /></button>
-          <button type="button" className="wk" aria-label="Maximise" onClick={() => void windowAction("toggleMaximize")}><Icon name="max" /></button>
-          <button type="button" className="wk wk-x" aria-label="Close" onClick={() => { if (inTauri()) void windowAction("close"); }}><Icon name="x" /></button>
-        </span>
-      </header>
+      <Titlebar />
+      <Sidebar />
 
-      <nav className="rail" aria-label="Games">
-        <div className="rail-games">
-          {shown.map((g, i) => (
-            <button key={g.id} type="button" className={`rail-g${g.id === game?.id ? " on" : ""}${g.running ? " running" : ""}`}
-              title={`${g.name}${i < 9 ? ` (Ctrl+Tab to switch)` : ""}`} aria-pressed={g.id === game?.id} onClick={() => setGame(g.id)}
-              style={{ "--g-accent": g.accent } as CSSProperties}>
-              <GameBadge game={g} size={44} />
-            </button>
-          ))}
-          <button type="button" className="rail-add" title="Add a game" aria-label="Add a game" onClick={() => go({ view: "settings", section: "games" })}>
-            <Icon name="plus" />
-          </button>
-        </div>
-        <div className="rail-foot">
-          <button type="button" className={`rail-k${view === "settings" ? " on" : ""}`} title="Settings (Ctrl+8)" aria-label="Settings" onClick={() => go("settings")}><Icon name="settings" /></button>
-        </div>
-      </nav>
-
-      <aside className="side" aria-label="Views">
-        <PlayerCard />
-        {game && <ProfileSwitch />}
-        <div className="side-nav">
-          {NAV.map((n, i) => {
-            const b = badges[n.id];
-            return (
-              <button key={n.id} type="button" className={`nv${view === n.id ? " on" : ""}`} onClick={() => go(n.id)} title={`${n.label} (Ctrl+${i + 1})`} disabled={!game}>
-                <Icon name={n.icon} /><span className="nv-t">{n.label}</span>
-                {b && <span className={`nv-b t-${b.tone ?? "accent"}`}>{b.count ? b.count : ""}</span>}
-              </button>
-            );
-          })}
-        </div>
-        <SideDeco game={game} />
-        <div className="side-foot">{game && <PlayButton />}</div>
-      </aside>
-
-      <main className="view" key={`${game?.id}-${view}`}>
-        <ErrorBoundary where={view === "settings" ? "Settings" : NAV.find((n) => n.id === view)?.label ?? "This screen"}>{screen}</ErrorBoundary>
+      <main ref={viewRef} className="view" key={`${game?.id}-${view}${route.ext ? `-${route.ext}` : ""}`}>
+        <ErrorBoundary where={viewLabel(view, game?.id)}>{screen}</ErrorBoundary>
       </main>
 
       {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
       {games.length > 0 && <ErrorBoundary where="Mod tools" quiet><ModtoolsOverlays /></ErrorBoundary>}
-      {onboard && <Onboarding onDone={() => setOnboard(false)} />}
+      {games.length > 0 && <ErrorBoundary where="Profiles" quiet><NewProfileHost /></ErrorBoundary>}
+      {onboard && <Onboarding onDone={() => { setOnboard(false); offerTour((text, action) => toast(text, false, action)); }} />}
       <DropZone />
+      <ErrorBoundary where="AI helper" quiet><AiHost /></ErrorBoundary>
+      <CommandPalette />
       {help && (
-        <Dialog icon="keyboard" title="Shortcuts" onClose={() => setHelp(false)}>
+        <Dialog icon="keyboard" title="Shortcuts" onClose={() => setHelpOpen(false)}>
           <div className="keys-list">{SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
           <h3 className="sub-h">Controller</h3>
-          <div className="keys-list">
-            {[["D-pad, left stick", "Move between buttons"], ["A", "Press"], ["B", "Back, close"], ["X", "The focused mod's main action"], ["Y", "Find"],
-              ["LB, RB", "Previous, next view"], ["LT, RT, right stick", "Scroll"], ["View", "This list"], ["Menu", "Play"]].map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}
-          </div>
+          <div className="keys-list">{PAD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
         </Dialog>
       )}
+      <ContextMenuHost />
+      <Tour />
       <Toasts />
     </div>
   );

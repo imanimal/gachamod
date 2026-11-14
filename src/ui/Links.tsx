@@ -1,0 +1,58 @@
+// Names that go somewhere: a character's name opens that character's page, a creator's name opens their page in
+// Browse. Right-click gives the same menu the thing has everywhere (ui/ContextMenu.tsx registry). Use these wherever
+// the UI writes a character, creator or category name. They stop the click, so they work inside clickable cards. Owner: skeleton.
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { GameId } from "../lib/api";
+import type { GbCategoryRef } from "../lib/gamebanana";
+import { setFilters } from "../screens/browse/state";
+import { go } from "../lib/store";
+import { menuFor, menuHandler } from "./ContextMenu";
+import { Portrait } from "./Portrait";
+
+const stop = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); };
+
+/** A character's name: click opens their page (Characters), right-click their menu. */
+export function CharLink({ game, name, icon, children, className, portrait }:
+  { game: GameId; name: string; icon?: string | null; children?: ReactNode; className?: string; portrait?: boolean }) {
+  return (
+    <span role="link" tabIndex={0} className={`qlink qlink-char${className ? ` ${className}` : ""}`} title={`Open ${name}'s page`}
+      onClick={(e) => { stop(e); e.preventDefault(); go({ view: "characters", character: name }); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); go({ view: "characters", character: name }); } }}
+      onMouseDown={stop} onContextMenu={menuHandler(() => menuFor("character", { game, name }))}>
+      {portrait && <Portrait game={game} name={name} icon={icon} size="1.2em" className="qlink-img" />}
+      {children ?? name}
+    </span>
+  );
+}
+
+/** A GameBanana member's name: click opens their page in Browse, right-click their menu (follow, block ...). */
+export function CreatorLink({ id, name, avatar, modId, children, className }:
+  { id?: number | null; name: string; avatar?: string | null; modId?: number | null; children?: ReactNode; className?: string }) {
+  const open = () => {
+    if (id) go({ view: "browse", user: id });
+    else window.dispatchEvent(new CustomEvent("gm-find-creator", { detail: { name, modId } }));
+  };
+  return (
+    <span role="link" tabIndex={0} className={`qlink qlink-user${className ? ` ${className}` : ""}`} title={`Mods by ${name}`}
+      onClick={(e) => { stop(e); e.preventDefault(); open(); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); open(); } }}
+      onMouseDown={stop} onContextMenu={menuHandler(() => menuFor("creator", { id, name, avatar, modId }))}>
+      {avatar && <img className="qlink-img" src={avatar} alt="" loading="lazy" />}
+      {children ?? name}
+    </span>
+  );
+}
+
+/** A GameBanana category's name ("UI", "Weapons"): click shows its mods in Browse, right-click the same. */
+export function CategoryLink({ game, category, children, className }:
+  { game: GameId; category: GbCategoryRef; children?: ReactNode; className?: string }) {
+  const open = () => { setFilters(game, { category, character: null }); go({ view: "browse" }); };
+  return (
+    <span role="link" tabIndex={0} className={`qlink qlink-cat${className ? ` ${className}` : ""}`} title={`Browse ${category.name} mods`}
+      onClick={(e) => { stop(e); e.preventDefault(); open(); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); open(); } }}
+      onMouseDown={stop} onContextMenu={menuHandler(() => [{ label: `Browse ${category.name} mods`, icon: "browse", onClick: open }])}>
+      {children ?? category.name}
+    </span>
+  );
+}

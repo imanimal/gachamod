@@ -18,15 +18,18 @@ bars, the sidebar. Content sits on light grey sheets, in white cards that end in
 control is a pill or a disc. Signal yellow is the only loud colour and it means chosen, done or go. Around all of
 it runs fine line work: hairlines, crosshairs, tick rulers and tiny captions with codes.
 
+Light is the native scheme. In the dark scheme the sheets and cards turn charcoal (`#191919`, cards `#262626`)
+with light text; the stage gets a step darker and controls keep their light pills.
+
 ## Rules
 
 1. **Stage**: charcoal (`#1b1b1b`, bars `#101010` to `#262626`) with a faint contour texture and hairlines at 12%
-   white. The title bar, game rail, sidebar, the sticky page bar, dialog headers, toasts and floating bars are
+   white. The title bar, sidebar, Home's quick bar, the sticky page bar, dialog headers, toasts and floating bars are
    stage. Text on it is white, small labels grey.
 2. **Sheet**: light grey (`#e3e2e2`) with fine scan lines and small crosshairs. The view, dialog and drawer bodies
    and panels are sheets. Text on it is near black.
 3. **Card**: white, 4 px corners, a hairline shadow. A picture card has a 4 px colour line under the picture, a
-   2 px gap, then a separate charcoal name plate (`#424345`) with white text. The line is yellow when the thing is
+   2 px gap, then a separate charcoal name plate (`#3b3c3e`) with white text. The line is yellow when the thing is
    on and grey when it is off.
 4. **Plate**: a charcoal row (`#333`) with white text, used for rows on a sheet and for panel headers. A header
    plate has an icon block at its left end and hatching at its right end. A finished or chosen plate turns yellow

@@ -1,7 +1,7 @@
 // The first time a game is opened in a session: refresh its character list from GameBanana (at most once a day) and
 // scan its Mods folder, so every screen (Home included) shows real mods and mods get their characters from their
 // folders before anything else asks. Runs quietly in the background. Owner: skeleton.
-import { characters, library, type GameState } from "./api";
+import { characters, library, settings, type GameState } from "./api";
 import { characterList } from "./gamebanana";
 import { emitApp } from "./store";
 
@@ -31,6 +31,8 @@ export async function warmUp(game: GameState): Promise<void> {
     console.warn("character list:", e);
   }
   try {
+    // Settings, Automatic, "Rescan mods when Mods opens" off: leave the folder alone
+    if ((await settings.get("library.autoScan").catch(() => null)) === "0") return;
     await library.scan(game.id);
     emitApp({ type: "library-refresh", game: game.id });
   } catch (e) {

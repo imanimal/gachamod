@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GameBanana drafts</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #dcdcd8; --accent: #5b4fd6;
+    --gb-bg: #1c1e24; --gb-text: #d9d9de; --gb-link: #6fb3ff; --gb-head: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #141416; --panel: #1d1d20; --text: #e9e9ec; --muted: #9a9aa2; --line: #333338; --accent: #a89dff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  nav button, .actions button, select { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+  nav button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .field { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+  .field h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 6px; }
+  .field small { color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .note { color: var(--muted); font-size: 13px; }
+  /* A rough stand-in for a GameBanana description */
+  .gb { background: var(--gb-bg); color: var(--gb-text); border-radius: 6px; padding: 20px 22px; line-height: 1.55; overflow-wrap: anywhere; }
+  .gb h3 { color: var(--gb-head); font-size: 19px; margin: 22px 0 6px; }
+  .gb a { color: var(--gb-link); }
+  .gb .nolink { border-bottom: 1px dashed #888; }
+  .gb img { max-width: 100%; height: auto; display: block; border-radius: 4px; }
+  .gb ul { padding-left: 22px; margin: 8px 0; }
+  .gb li { margin: 4px 0; }
+  .gb details { margin: 18px 0 4px; }
+  .gb summary { cursor: pointer; color: var(--gb-head); font-weight: 600; }
+  .gb kbd { background: #2c2f37; border: 1px solid #444; border-radius: 3px; padding: 0 4px; font-size: 13px; }
+  .gb .missing { display: block; border: 1px dashed #666; border-radius: 4px; padding: 28px; text-align: center; color: #999; }
+  textarea.hidden { position: fixed; left: -9999px; top: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GameBanana pages</h1>
+  <p class="lead">One page per game. Pick a game, read it through, then copy the body into GameBanana. "Copy formatted" pastes into the editor as it looks here. "Copy HTML" is for the editor's source view.</p>
+  <nav id="tabs" aria-label="Game"></nav>
+  <div class="field" id="pickRow" hidden>
+    <label>Community game <select id="pick"></select></label>
+  </div>
+  <section class="field"><h2>Title</h2><div id="title"></div></section>
+  <section class="field"><h2>Summary</h2><div id="summary"></div><small id="count"></small></section>
+  <section class="field">
+    <h2>Body</h2>
+    <div class="actions">
+      <button id="copyRich" type="button">Copy formatted</button>
+      <button id="copyHtml" type="button">Copy HTML</button>
+      <span class="note" id="note"></span>
+    </div>
+    <article class="gb" id="body"></article>
+  </section>
+</div>
+
+<script>
+// ── Fill these in as pages go up ──
+// Each page's address once it's posted. Empty ones show as plain text in the copied body.
+const LINKS = { gi: "", hsr: "", zzz: "", ww: "", ef: "", hi3: "", pgr: "", p5x: "", gf2: "", idv: "", ss: "", at: "" };
+// Hosted copies of the pictures (GameBanana's own image upload, imgur, postimg...), keyed by file name without .jpg,
+// for example "zzz-browse": "https://i.imgur.com/abc123.jpg". Until a picture has one, the copied body says
+// [picture: ...] in its place.
+const IMAGES = {};
+// Draft pictures in shots/, taken from the browser demo.
+const LOCAL = ["gi-home", "gi-browse", "gi-mods", "zzz-home", "zzz-browse", "zzz-mods", "ww-home", "ww-browse", "ww-mods",
+  "ef-home", "ef-browse", "ef-mods", "zzz-default-home", "zzz-mod-drawer", "zzz-mod-keys", "zzz-mod-3d", "zzz-browse-drawer",
+  "zzz-profiles", "zzz-characters", "zzz-tools", "zzz-downloads"];
+
+const XXMI = ["gi", "hsr", "zzz", "ww", "ef", "hi3"];
+const GAMES = {
+  gi: { name: "Genshin Impact", short: "Genshin", importer: "GIMI", who: "character", example: "Furina", chars: true,
+    theme: "Teyvat", themeFrom: "the Paimon menu and the Archive", fix: "data",
+    owned: "Genshin Optimizer, Inventory Kamera, Irminsul or an Enka.Network profile", launch: "the FPS unlock and HDR" },
+  hsr: { name: "Honkai: Star Rail", short: "Star Rail", importer: "SRMI", who: "character", example: "Firefly", chars: true,
+    theme: "Astral Express", themeFrom: "the phone menu and the Omni-Synthesizer", fix: "data",
+    owned: "Fribbels HSR Optimizer, SROD, HSR-Scanner or an Enka.Network profile", launch: "window mode and process priority" },
+  zzz: { name: "Zenless Zone Zero", short: "ZZZ", importer: "ZZMI", who: "agent", example: "Ellen", chars: true,
+    theme: "New Eridu", themeFrom: "the Schedule notebook and the Agents screen", fix: "data",
+    owned: "a ZOD export from a ZZZ optimizer or an Enka.Network profile", launch: "window mode and process priority" },
+  ww: { name: "Wuthering Waves", short: "WuWa", importer: "WWMI", who: "resonator", example: "Changli", chars: true,
+    theme: "Solaris", themeFrom: "the Terminal and the Data Bank", fix: "data",
+    owned: "Inventory Kamera or your wuwatracker pull history", launch: "the FPS unlock and turning off the low HP screen effect" },
+  ef: { name: "Arknights: Endfield", short: "Endfield", importer: "EFMI", who: "operator", example: "Perlica", chars: true,
+    theme: "Talos-II", themeFrom: "the operator and depot screens", fix: "watch",
+    owned: "a pasted list of names", launch: "window mode and process priority" },
+  hi3: { name: "Honkai Impact 3rd", short: "HI3", importer: "HIMI", who: "valkyrie", example: "Kiana", chars: true,
+    theme: null, fix: null, owned: "a pasted list of names", launch: "window mode and process priority" },
+};
+// Games XXMI doesn't support, which load mods through a community 3DMigoto loader.
+const COMMUNITY = {
+  pgr: { name: "Punishing: Gray Raven", short: "PGR", who: "construct", example: "Lucia", chars: true,
+    loader: { name: "3dmigoto for PGR", url: "https://gamebanana.com/tools/21867" } },
+  p5x: { name: "Persona 5: The Phantom X", short: "P5X", who: "character", chars: false,
+    loader: { name: "Phantom X 3dmigoto", url: "https://gamebanana.com/tools/21129" } },
+  gf2: { name: "Girls' Frontline 2: Exilium", short: "GF2", who: "character", chars: false, loader: null },
+  idv: { name: "Identity V", short: "Identity V", who: "character", chars: false,
+    loader: { name: "Identity V 3DMigoto", url: "https://gamebanana.com/tools/18906" } },
+  ss: { name: "Stella Sora", short: "Stella Sora", who: "character", chars: false, loader: null },
+  at: { name: "Action Taimanin", short: "Taimanin", who: "character", example: "Asagi", chars: true,
+    loader: { name: "Action Taimanin unofficial mod loader", url: "https://gamebanana.com/tools/24815" } },
+};
+
+// ── The text ──
+
+function summary(g) {
+  if (g.community) return `Install and update ${g.short} mods from GameBanana without leaving the app. It works with the community 3DMigoto loader.`;
+  return g.fix === "data"
+    ? `Install, update and fix ${g.short} mods from GameBanana without leaving the app. It works next to XXMI Launcher.`
+    : `Install and update ${g.short} mods from GameBanana without leaving the app. It works next to XXMI Launcher.`;
+}
+
+function blocks(g, L) {
+  const who = g.who, whos = g.who + "s";
+  const where = g.chars ? `under the ${who}'s name` : "in its own folder";
+  const out = [];
+  const p = (s) => out.push({ p: s });
+  const h = (s) => out.push({ h: s });
+  const pic = (name, alt) => out.push({ img: name, alt });
+  const html = (s) => out.push({ html: s });
+
+  if (g.community) {
+    const loader = g.loader ? `the community loader (${L.url(g.loader.url, g.loader.name)})` : "a community 3DMigoto loader";
+    p(`gachamod is a free mod manager for ${g.name}. It works with ${loader}: point gachamod at the loader's folder once and it looks after the Mods folder from then on. Browse GameBanana inside the app, press Install, and the mod goes into Mods ${where}, already turned on.`);
+    p(`Download the installer from this page and run it. If you mod other gacha games too, the same install handles all of them.`);
+  } else {
+    p(`gachamod is a free mod manager for ${g.name}. Browse GameBanana inside it, press Install, and the mod goes into your ${g.importer} Mods folder ${where}, already turned on. It works next to XXMI Launcher, so mods load the way they always have.`);
+    p(`Download the installer from this page and run it. gachamod finds XXMI, your games and the mods you already have on its own. If you play more than one XXMI game, the same install handles all of them.`);
+    if (g.theme) p(`On ${g.short} the app takes on a ${g.theme} look, drawn from ${g.themeFrom}. There's a plain look in Settings if you'd rather.`);
+  }
+  pic("home", `gachamod's Home for ${g.short}`);
+
+  h("GameBanana in the app");
+  p(`Search ${g.short} mods, sort them by new or most liked${g.chars ? `, filter by ${who}` : ""}, and open any mod to see its pictures, description, files and comments. Install puts it in the right folder. When an archive holds several versions (three hair colours, say), you tick the ones you want. You can also paste a GameBanana link anywhere in the app, or drop a .zip, .7z or .rar on the window.`);
+  pic("browse", `Browse${g.chars ? `, filtered to one ${who}` : ""}`);
+
+  h("Updates that keep your settings");
+  p(`Mods with a newer file on GameBanana get an Update badge. Update one, or all of them from Home. The new version keeps the old one's folder, whether it was on, and the options you picked in it.`);
+
+  h(g.chars ? "One skin at a time, and profiles" : "Profiles");
+  p(`${g.chars ? `Turn on a new ${g.example ? `${g.example} skin` : "skin"} and the old one turns off by itself (you can change that in Settings if you like stacking mods). ` : ""}Profiles remember which mods are on and how each one is set up. Keep a clean one for streaming and one for yourself, give each a hotkey, and switch while the game runs: gachamod swaps the mods and reloads them in the game.`);
+  pic("profiles", "Profiles");
+
+  h("Toggle keys you can see and change");
+  p(`Each mod's keys are listed in plain words, like "Ctrl+Alt+Up: jacket". Click one and press a new key, mouse button or controller button to rebind it, or switch it off. When two mods share a key, gachamod says so. Turn on Toggles only while on screen and a mod's keys do nothing while its ${who} is off screen, so a key meant for one outfit stops changing another. The author's files are kept, and one click puts them back.`);
+  pic("mod-keys", "A mod's toggles and keys");
+
+  h("See a mod in 3D");
+  p(`View in 3D draws the parts a mod replaces, with its toggles as they're set now. Check what an option does without starting the game, then save the view as the mod's picture if you like it better than the one it came with.`);
+  pic("mod-3d", "The 3D view");
+
+  if (g.fix === "data") {
+    h("Fixes after a game update");
+    p(`When a ${g.short} update breaks mods, the Fixes page lists them. Most get fixed in one click, using data from the community fixers credited on this page. For the rest it points you to the fixer to run.`);
+    pic("tools", "The Fixes page");
+  } else if (g.fix === "watch") {
+    h("Fixes after a game update");
+    p(`gachamod has no fix data for ${g.short} yet. The Fixes page still lists new fixers posted on GameBanana, so you hear about one when it comes out.`);
+  }
+
+  h("Nothing gets lost");
+  p(`Removed mods stay in gachamod's trash for 14 days (you pick how long). After that it still remembers the name, settings and GameBanana link, so Download again brings the mod back the way you had it. Most changes show an Undo, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> works anywhere in the app. Config files are backed up before gachamod first writes to them.`);
+
+  const more = [
+    `<b>Mods for adults:</b> pick Show, Blur or Hide once and it applies everywhere, from Browse to your own mods. You can also mark a mod by hand.`,
+    `<b>New high-quality mods:</b> a row on Home with roughly the best fifth of new outfits, judged by likes and views for the mod's age and by how the creator's other mods did. A good one can show up within hours.`,
+    `<b>For you and Surprise me:</b> picks based on the ${g.chars ? `${whos} you mod most and the ` : ""}creators you follow, never ones you already have or removed.`,
+    `<b>Creators:</b> follow, favourite, prioritize or block them. Prioritized creators' mods come first, and blocked ones disappear from every list.`,
+    g.chars && !g.community ? `<b>${cap(who)} pages:</b> every ${who} with their mods, which skin is on, and their new mods on GameBanana. Mark who you own, or import the list from ${g.owned}.` : null,
+    `<b>Problems and conflicts:</b> missing files, broken .ini files and two versions of a mod left on together are found for you, with a Fix button when the fix is certain. When two mods change the same thing, Keep this one turns the other off.`,
+    `<b>Mod options:</b> the switches a mod saves (outfit parts, colours) show as buttons on its page. Change them while the game is closed.`,
+    `<b>Pictures:</b> mods show their GameBanana picture instead of whatever texture came first in the folder. Paste or drop an image to use your own.`,
+    `<b>Share your setup:</b> a .gachamod file with only links is a few KB. Whoever opens it gets the same mods from GameBanana, with your options and profiles. Put the files in too and it works as a backup.`,
+    g.community ? null : `<b>Coming from another manager:</b> mods set up by JASM, XX Mod Manager, FlairX, EMMM, Fairy's Secret Folder or No Reload Mod Manager keep their names, pictures and links. Mods inside IMM's folders can be moved back into normal folders.`,
+    g.community ? `<b>Play:</b> starts the game. The menu next to it has Play without mods.` : `<b>Play:</b> starts the game through XXMI. The menu next to it has Play without mods and the launch options XXMI keeps, like ${g.launch}.`,
+    `<b>Controller, keyboard or mouse:</b> everything works with any of them. <kbd>Ctrl</kbd>+<kbd>K</kbd> searches mods, ${g.chars ? `${whos}, ` : ""}settings and actions.`,
+    `<b>Looks:</b> a theme for each game, light and dark, accent colours, and custom themes you can share as a file. Home is a set of rows you can reorder or hide.`,
+    `<b>Moving PCs:</b> settings and profiles go into one file you open on the new PC.`,
+    `<b>You decide:</b> update checks, automatic rescans and deleting downloaded archives can each be turned off.`,
+    `<b>Chatbot helper (optional):</b> writes a prompt for the chatbot you already use (ChatGPT, Gemini, Copilot and others) to tidy names or set ${g.chars ? whos : "tags"} for many mods at once. You see every change before it applies. No account or API key needed, and you can turn it off.`,
+  ].filter(Boolean);
+  html(`<details><summary>Everything else it does</summary><ul>${more.map((m) => `<li>${m}</li>`).join("")}</ul></details>`);
+
+  h("Questions");
+  const qa = g.community ? [
+    ["Do I still need the loader?", `Yes. The loader puts mods in the game. gachamod looks after the Mods folder and starts the game.`],
+  ] : [
+    ["Does it replace XXMI Launcher?", `No. XXMI still loads the mods and keeps its own settings. gachamod sorts your Mods folder and starts the game through XXMI. If XXMI isn't installed, gachamod's first screen links to it.`],
+  ];
+  qa.push(
+    ["What does it do to my Mods folder?", `Mods stay normal folders${g.chars ? `, sorted by ${who}` : ""}. Turning one off adds DISABLED to its folder name, which 3DMigoto already skips. Each mod also gets a small .gachamod.json with its name and GameBanana link. Uninstall gachamod and your mods keep working.`],
+    ["What do I need?", `Windows 10 or 11${g.community ? ` and the game's 3DMigoto loader` : ` and XXMI Launcher`}. You don't need a GameBanana account.`],
+    ["Found a bug?", `Leave a comment here with what you did and what happened.`],
+  );
+  p(qa.map(([q, a]) => `<b>${q}</b><br>${a}`).join("<br><br>"));
+
+  h("Other games");
+  const others = XXMI.filter((id) => id !== g.id).map((id) => L.page(id, GAMES[id].name));
+  const comm = Object.keys(COMMUNITY).filter((id) => id !== g.id).map((id) => L.page(id, COMMUNITY[id].name));
+  p(`gachamod has a page in each game's section. It's the same app, so one install is enough: ${list(others)}. It also works with community 3DMigoto loaders for ${list(comm)}.`);
+  return out;
+}
+
+// ── Rendering ──
+
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const list = (a) => a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+function render(g, mode) {
+  const missing = [];
+  const L = {
+    url: (href, text) => `<a href="${esc(href)}">${text}</a>`,
+    page: (id, text) => LINKS[id] ? `<a href="${esc(LINKS[id])}">${text}</a>` : (mode === "preview" ? `<span class="nolink" title="No address yet: add it to LINKS">${text}</span>` : text),
+  };
+  const image = (name, alt) => {
+    const own = `${g.id}-${name}`;
+    if (IMAGES[own]) return `<img src="${esc(IMAGES[own])}" alt="${esc(alt)}" width="100%">`;
+    missing.push(own);
+    if (mode === "copy") return `<b>[picture: ${alt}]</b>`;
+    const local = [own, `zzz-${name}`].find((k) => LOCAL.includes(k));
+    return local
+      ? `<img src="shots/${local}.jpg" alt="${esc(alt)}" title="${local === own ? "Draft from the demo" : `Draft borrowed from ${local}`}">`
+      : `<span class="missing">[picture: ${alt}]</span>`;
+  };
+  let html = "", inline = false;
+  for (const b of blocks(g, L)) {
+    if (b.h) { html += `<h3>${b.h}</h3>`; inline = false; }
+    else if (b.html) { html += b.html; inline = false; }
+    else { html += (inline ? "<br><br>" : "") + (b.p ?? image(b.img, b.alt)); inline = true; }
+  }
+  return { html, missing };
+}
+
+// ── Page ──
+
+const tabs = [...XXMI.map((id) => [id, GAMES[id].short]), ["community", "Community games"]];
+let current = "zzz", pick = "pgr";
+const $ = (id) => document.getElementById(id);
+
+function game() {
+  if (current !== "community") return { id: current, ...GAMES[current] };
+  return { id: pick, community: true, ...COMMUNITY[pick] };
+}
+
+function show() {
+  const g = game();
+  $("tabs").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === current)));
+  $("pickRow").hidden = current !== "community";
+  $("title").textContent = "gachamod";
+  const s = summary(g);
+  $("summary").textContent = s;
+  $("count").textContent = `${s.length} characters`;
+  const r = render(g, "preview");
+  $("body").innerHTML = r.html;
+  $("note").textContent = r.missing.length
+    ? `${r.missing.length} pictures have no hosted copy yet (${r.missing.join(", ")}). Copies say [picture: ...] there.`
+    : "";
+}
+
+function copy(kind) {
+  const { html } = render(game(), "copy");
+  const done = () => { $("note").textContent = kind === "rich" ? "Copied. Paste it into GameBanana's editor." : "HTML copied."; };
+  if (kind === "rich") {
+    const box = document.createElement("div");
+    box.innerHTML = html;
+    box.style.position = "fixed"; box.style.left = "-9999px";
+    document.body.append(box);
+    const range = document.createRange(); range.selectNodeContents(box);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    document.execCommand("copy"); sel.removeAllRanges(); box.remove(); done();
+  } else {
+    const t = document.createElement("textarea"); t.className = "hidden"; t.value = html;
+    document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); done();
+  }
+}
+
+for (const [id, label] of tabs) {
+  const b = document.createElement("button");
+  b.type = "button"; b.dataset.id = id; b.textContent = label;
+  b.onclick = () => { current = id; show(); };
+  $("tabs").append(b);
+}
+for (const [id, c] of Object.entries(COMMUNITY)) $("pick").append(new Option(c.name, id));
+$("pick").onchange = (e) => { pick = e.target.value; show(); };
+$("copyRich").onclick = () => copy("rich");
+$("copyHtml").onclick = () => copy("html");
+show();
+</script>
+</body>
+</html>

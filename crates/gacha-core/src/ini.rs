@@ -73,12 +73,29 @@ pub struct VarInfo {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Problem {
-    /// "missing_file", "bad_ini", "no_ini", "no_key", "missing_section", "duplicate_hash", "old_hash".
+    /// "missing_file", "bad_ini", "no_ini", "no_key", "missing_section", "overlap".
     pub kind: String,
     pub detail: String,
     pub ini: Option<String>,
-    /// "bad" (the mod or part of it won't load), "warn" (something may not work), "info".
+    /// "bad": part of the mod won't show or shows wrong in game. "warn": something may not work, or only in a
+    /// corner case (another skin, a boss). "info": harmless, or gachamod couldn't check it.
     pub severity: String,
+    /// A change gachamod can make that fixes it, when one was found.
+    pub fix: Option<ProblemFix>,
+}
+
+/// A fix `lint` found for a problem. `apply_fix` makes it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProblemFix {
+    /// "point": in `ini`, change the `filename = <from>` lines to `<to>`, a file with the same name that is in the
+    /// mod (paths relative to the ini's folder, as 3DMigoto reads them).
+    /// "keep": keep `ini` on and turn off the other `inis` by renaming them DISABLED_<name>.
+    pub kind: String,
+    pub ini: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub inis: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -111,7 +128,14 @@ pub struct ConflictGroup {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ModProblems { pub mod_id: String, pub name: String, pub problems: Vec<Problem> }
+pub struct ModProblems {
+    pub mod_id: String,
+    pub name: String,
+    pub enabled: bool,
+    /// Where the mod came from, so it can be downloaded again.
+    pub source: Option<crate::model::ModSource>,
+    pub problems: Vec<Problem>,
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -292,6 +316,13 @@ fn vk_name(code: u32) -> Option<String> {
         0x70..=0x87 => format!("F{}", code - 0x6F),
         0xBA => ";".into(), 0xBB => "=".into(), 0xBC => ",".into(), 0xBD => "-".into(), 0xBE => ".".into(), 0xBF => "/".into(),
         0xC0 => "`".into(), 0xDB => "[".into(), 0xDC => "\\".into(), 0xDD => "]".into(), 0xDE => "'".into(),
+        0xA0 => "Left Shift".into(), 0xA1 => "Right Shift".into(), 0xA2 => "Left Ctrl".into(), 0xA3 => "Right Ctrl".into(),
+        0xA4 => "Left Alt".into(), 0xA5 => "Right Alt".into(),
+        // Windows' own gamepad key codes
+        0xC3 => "Pad A".into(), 0xC4 => "Pad B".into(), 0xC5 => "Pad X".into(), 0xC6 => "Pad Y".into(),
+        0xC7 => "Pad RB".into(), 0xC8 => "Pad LB".into(), 0xC9 => "Pad LT".into(), 0xCA => "Pad RT".into(),
+        0xCB => "Pad Up".into(), 0xCC => "Pad Down".into(), 0xCD => "Pad Left".into(), 0xCE => "Pad Right".into(),
+        0xCF => "Pad Start".into(), 0xD0 => "Pad Back".into(), 0xD1 => "Pad LS".into(), 0xD2 => "Pad RS".into(),
         _ => return None,
     })
 }
@@ -326,6 +357,8 @@ fn key_label(token: &str) -> String {
         "OEM_1" => ";", "OEM_2" => "/", "OEM_3" => "`", "OEM_4" => "[", "OEM_5" => "\\", "OEM_6" => "]", "OEM_7" => "'",
         "OEM_PLUS" => "=", "OEM_MINUS" => "-", "OEM_COMMA" => ",", "OEM_PERIOD" => ".",
         "MULTIPLY" => "Num *", "ADD" => "Num +", "SUBTRACT" => "Num -", "DIVIDE" => "Num /", "DECIMAL" => "Num .",
+        "OEM_102" => "\\", "OEM_8" => "`", "PAUSE" => "Pause", "SCROLL" => "Scroll Lock", "NUMLOCK" => "Num Lock", "APPS" => "Menu key",
+        "SNAPSHOT" => "Print Screen", "CLEAR" => "Clear",
         "SPACE" => "Space", "RETURN" | "ENTER" => "Enter", "BACK" | "BACKSPACE" => "Backspace", "TAB" => "Tab",
         "ESCAPE" | "ESC" => "Esc", "PRIOR" | "PAGEUP" => "Page Up", "NEXT" | "PAGEDOWN" => "Page Down",
         "HOME" => "Home", "END" => "End", "INSERT" => "Ins", "DELETE" => "Del", "CAPITAL" => "Caps Lock",
@@ -333,6 +366,8 @@ fn key_label(token: &str) -> String {
         "XBUTTON1" => "Mouse 4", "XBUTTON2" => "Mouse 5",
         "LCONTROL" => "Left Ctrl", "RCONTROL" => "Right Ctrl", "LSHIFT" => "Left Shift", "RSHIFT" => "Right Shift",
         "LMENU" => "Left Alt", "RMENU" => "Right Alt", "CONTROL" => "Ctrl", "MENU" => "Alt", "SHIFT" => "Shift",
+        "LCTRL" => "Left Ctrl", "RCTRL" => "Right Ctrl", "LALT" => "Left Alt", "RALT" => "Right Alt", "CTRL" => "Ctrl",
+        "ALT" => "Alt", "LWIN" => "Left Win", "RWIN" => "Right Win",
         _ => return title_words(name),
     };
     fixed.to_string()
@@ -388,7 +423,7 @@ pub(crate) fn format_g9(v: f64) -> String {
 }
 
 /// A value normalised for comparing and saving: numbers as %.9g, anything else trimmed as is.
-fn norm_value(v: &str) -> String {
+pub(crate) fn norm_value(v: &str) -> String {
     let t = v.trim();
     t.parse::<f64>().map(format_g9).unwrap_or_else(|_| t.to_string())
 }
@@ -402,7 +437,7 @@ fn sentence(words: &[String]) -> String {
 }
 
 /// "swapvar" -> "Swap", "jacket_off" -> "Jacket off".
-fn var_label(var: &str) -> String {
+pub(crate) fn var_label(var: &str) -> String {
     let mut v = var.trim_start_matches('$').to_lowercase();
     if v.len() > 3 && v.ends_with("var") { v.truncate(v.len() - 3); }
     let words: Vec<String> = v.split(['_', '-', ' ']).map(String::from).collect();
@@ -411,7 +446,7 @@ fn var_label(var: &str) -> String {
 }
 
 /// "KeyJacket" -> "Jacket", "KeyToggleCoat" -> "Toggle coat", "Key_hat_2" -> "Hat 2".
-fn section_label(section: &str) -> String {
+pub(crate) fn section_label(section: &str) -> String {
     let rest = if section.len() >= 3 && section[..3].eq_ignore_ascii_case("key") { &section[3..] } else { section };
     let mut words: Vec<String> = Vec::new();
     let mut cur = String::new();
@@ -431,7 +466,7 @@ fn section_label(section: &str) -> String {
 }
 
 /// A name that says nothing about what the option does ("Swap", "1", "Swap 2").
-fn generic_label(label: &str) -> bool {
+pub(crate) fn generic_label(label: &str) -> bool {
     let l = label.to_lowercase();
     let base = l.trim_end_matches(|c: char| c.is_ascii_digit() || c == ' ');
     base.is_empty() || matches!(base, "swap" | "var" | "toggle" | "cycle" | "key" | "switch" | "change" | "option")
@@ -606,6 +641,32 @@ pub fn set_user_vars(importer_dir: &Path, mod_rel: &str, values: &[VarValue]) ->
     write_user_ini(&path, &ini)
 }
 
+/// One saved value by its full name (`gachamod\live\g3`), from d3dx_user.ini.
+pub(crate) fn user_value(importer_dir: &Path, name: &str) -> Option<String> {
+    let ini = UserIni::read(&user_ini_path(importer_dir)).ok().flatten()?;
+    let name = name.to_lowercase();
+    ini.lines.iter().filter_map(|l| var_line(l)).find(|(n, _)| *n == name).map(|(_, v)| v)
+}
+
+/// Write one saved value by its full name into d3dx_user.ini. Callers check the game is closed first.
+pub(crate) fn set_user_value(importer_dir: &Path, name: &str, value: &str) -> Result<()> {
+    let _guard = USER_INI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let path = user_ini_path(importer_dir);
+    let mut ini = UserIni::read(&path)?.unwrap_or_else(UserIni::empty);
+    let name = name.to_lowercase();
+    let mut done = false;
+    for line in ini.lines.iter_mut() {
+        if var_line(line).is_some_and(|(n, _)| n == name) {
+            let end = if line.ends_with("\r\n") { "\r\n" } else if line.ends_with('\n') { "\n" } else { "" };
+            *line = format!("$\\{name} = {value}{end}");
+            done = true;
+        }
+    }
+    if !done { ini.insert(vec![format!("$\\{name} = {value}")]); }
+    if !path.exists() { if let Some(dir) = path.parent() { std::fs::create_dir_all(dir)?; } }
+    write_user_ini(&path, &ini)
+}
+
 /// Move saved values from one mod path to another (a mod folder was renamed or moved), so they survive.
 pub fn move_user_vars(importer_dir: &Path, from_rel: &str, to_rel: &str) -> Result<()> {
     let from = format!("{}\\", mod_namespace(from_rel));
@@ -651,35 +712,190 @@ fn read_mod(dir: &Path) -> Vec<ModIni> {
 }
 
 fn problem(kind: &str, severity: &str, ini: Option<&str>, detail: String) -> Problem {
-    Problem { kind: kind.into(), detail, ini: ini.map(String::from), severity: severity.into() }
+    Problem { kind: kind.into(), detail, ini: ini.map(String::from), severity: severity.into(), fix: None }
 }
 
-/// Everything that looks wrong in one mod's files.
-fn lint_mod(inis: &[ModIni]) -> Vec<Problem> {
+fn severity_rank(s: &str) -> u8 { match s { "bad" => 0, "warn" => 1, _ => 2 } }
+
+/// Any ini in the folder at all, on or turned off (DISABLED*.ini, *.ini.disabled, or under a DISABLED folder).
+fn any_ini_file(dir: &Path) -> bool {
+    walkdir::WalkDir::new(dir).follow_links(false).max_depth(10).into_iter().flatten().any(|e| {
+        let n = e.file_name().to_string_lossy().to_ascii_lowercase();
+        e.file_type().is_file() && n != "desktop.ini" && (n.ends_with(".ini") || library::is_off_ini(&n))
+    })
+}
+
+/// Resource sections that something in the mod names (lowercased, "resourcefoo"). 3DMigoto loads a resource's file
+/// the first time a command uses it, so a `[Resource]` section nothing names never loads and its file isn't needed.
+fn used_resources(inis: &[ModIni]) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for ini in inis.iter().filter_map(|m| m.parsed.as_ref().ok()) {
+        for l in ini.sections.iter().flat_map(|s| &s.lines) {
+            let text = match &l.value { Some(v) => format!("{} {v}", l.lkey), None => l.lkey.clone() };
+            for tok in text.split(|c: char| c.is_whitespace() || "=,()!&|<>+*/;\"".contains(c)) {
+                let t = tok.to_lowercase();
+                if !t.starts_with("resource") { continue; }
+                // Resource\namespace\Name names [ResourceName] in another file
+                out.insert(match t.rsplit_once('\\') { Some((_, last)) => format!("resource{last}"), None => t });
+            }
+        }
+    }
+    out
+}
+
+/// Every file in the mod folder (DISABLED folders too) by lowercased name, read once per mod when a file is missing.
+fn files_by_name(dir: &Path) -> HashMap<String, Vec<PathBuf>> {
+    let mut out: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    for e in walkdir::WalkDir::new(dir).follow_links(false).max_depth(10).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+        out.entry(e.file_name().to_string_lossy().to_lowercase()).or_default().push(e.into_path());
+    }
+    out
+}
+
+fn same_bytes(a: &Path, b: &Path) -> bool {
+    const MAX: u64 = 256 * 1024 * 1024;
+    let (Ok(ma), Ok(mb)) = (std::fs::metadata(a), std::fs::metadata(b)) else { return false };
+    if ma.len() != mb.len() { return false; }
+    ma.len() <= MAX && matches!((std::fs::read(a), std::fs::read(b)), (Ok(x), Ok(y)) if x == y)
+}
+
+/// The copy of a missing file to use instead: the only one, the one whose folder name is closest to the folder the
+/// ini asks for ("./Regular/x.buf" finds "RegularRaiden/x.buf"), or the first when every copy is the same file.
+/// None when it can't tell which one is meant.
+fn pick_copy(wanted: &str, found: &[PathBuf]) -> Option<PathBuf> {
+    if found.len() <= 1 { return found.first().cloned(); }
+    let w = wanted.replace('\\', "/");
+    let want_dir = w.rsplit_once('/').map(|(d, _)| d.rsplit('/').next().unwrap_or(d)).unwrap_or("").to_lowercase();
+    if !want_dir.is_empty() && want_dir != "." && want_dir != ".." {
+        let score = |p: &PathBuf| {
+            let dir = p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+            dir.chars().zip(want_dir.chars()).take_while(|(a, b)| a == b).count()
+        };
+        let best = found.iter().map(score).max().unwrap_or(0);
+        let top: Vec<&PathBuf> = found.iter().filter(|p| score(p) == best).collect();
+        if best >= 3 && top.len() == 1 { return Some(top[0].clone()); }
+    }
+    found[1..].iter().all(|p| same_bytes(&found[0], p)).then(|| found[0].clone())
+}
+
+/// `target` as 3DMigoto reads it from an ini in `base`: "..\RegularRaiden\x.buf". `like` is the line it replaces,
+/// whose slashes and leading ".\" are kept.
+fn path_from(base: &Path, target: &Path, like: &str) -> Option<String> {
+    let b: Vec<_> = base.components().collect();
+    let t: Vec<_> = target.components().collect();
+    let common = b.iter().zip(&t).take_while(|(x, y)| x == y).count();
+    if common == 0 || common == t.len() { return None; }
+    let mut parts: Vec<String> = vec!["..".to_string(); b.len() - common];
+    parts.extend(t[common..].iter().map(|c| c.as_os_str().to_string_lossy().into_owned()));
+    let sep = if like.contains('/') && !like.contains('\\') { "/" } else { "\\" };
+    let path = parts.join(sep);
+    let dotted = like.starts_with(".\\") || like.starts_with("./");
+    Some(if dotted && parts[0] != ".." { format!(".{sep}{path}") } else { path })
+}
+
+/// Lexically resolve `.` and `..` (the file may not exist).
+fn lexical(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => { out.pop(); }
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Inis that change the same parts (a TextureOverride's hash and match_first_index) with no match_priority to say
+/// which wins. 3DMigoto runs both, so the variants draw over each other. Returns groups of ini indexes, each with
+/// whether at least one of them draws without an `if` (inis that all check a condition are built to take turns).
+fn overlaps(inis: &[ModIni]) -> Vec<(Vec<usize>, bool)> {
+    let mut parts: Vec<HashSet<(String, String)>> = Vec::new();
+    let mut plain: Vec<bool> = Vec::new();
+    for m in inis {
+        let mut set = HashSet::new();
+        let mut uncond = false;
+        if let Ok(ini) = &m.parsed {
+            let has_if = |s: &Sec| s.lines.iter().any(|l| l.lkey == "if" || l.lkey.starts_with("if "));
+            let by_name: HashMap<&str, &Sec> = ini.sections.iter().map(|s| (s.lower.as_str(), s)).collect();
+            for s in ini.sections.iter().filter(|s| s.lower.starts_with("textureoverride")) {
+                if s.first("match_priority").is_some() { continue; }
+                let Some(hash) = s.get("hash").find_map(norm_hash) else { continue };
+                let first = s.first("match_first_index").map(|v| v.trim().to_string()).unwrap_or_default();
+                set.insert((hash, first));
+                let runs_if = s.get("run").any(|r| by_name.get(r.trim().to_lowercase().as_str()).is_some_and(|c| has_if(c)));
+                if !has_if(s) && !runs_if { uncond = true; }
+            }
+        }
+        parts.push(set);
+        plain.push(uncond);
+    }
+    let n = inis.len();
+    let mut group: Vec<usize> = (0..n).collect();
+    fn root(g: &mut [usize], i: usize) -> usize { let mut r = i; while g[r] != r { r = g[r]; } g[i] = r; r }
+    for i in 0..n {
+        for j in i + 1..n {
+            let shared = parts[i].intersection(&parts[j]).count();
+            if shared >= 2 && shared * 2 >= parts[i].len().min(parts[j].len()) {
+                let (a, b) = (root(&mut group, i), root(&mut group, j));
+                group[b] = a;
+            }
+        }
+    }
+    let mut by_root: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for i in 0..n { let r = root(&mut group, i); by_root.entry(r).or_default().push(i); }
+    by_root.into_values().filter(|g| g.len() > 1).map(|g| { let u = g.iter().any(|&i| plain[i]); (g, u) }).collect()
+}
+
+/// "a.ini, b.ini and 2 more".
+fn name_list(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [a] => a.to_string(),
+        [a, b] => format!("{a} and {b}"),
+        [a, b, c] => format!("{a}, {b} and {c}"),
+        [a, b, rest @ ..] => format!("{a}, {b} and {} more", rest.len()),
+    }
+}
+
+/// Everything that looks wrong in one mod's files, worst first, each with a fix when gachamod found one. `dir` is
+/// the mod folder.
+fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
     let mut out = Vec::new();
     if inis.is_empty() {
-        out.push(problem("no_ini", "bad", None, "This mod has no .ini file, so the game won't load anything from it".into()));
+        // inis that are only turned off mean the mod (or each of its variants) is off, which is the user's choice
+        if !any_ini_file(dir) {
+            out.push(problem("no_ini", "bad", None, "This mod has no .ini file, so the game loads nothing from it".into()));
+        }
         return out;
     }
+    let used = used_resources(inis);
+    let all_sections: HashSet<&str> = inis.iter().filter_map(|m| m.parsed.as_ref().ok()).flat_map(|i| i.sections.iter().map(|s| s.lower.as_str())).collect();
+    let mut files: Option<HashMap<String, Vec<PathBuf>>> = None;
+    let mut empty: Vec<&str> = Vec::new();
+    let mut loads = false;
     for m in inis {
         let ini = match &m.parsed {
             Ok(i) => i,
-            Err(e) => { out.push(problem("bad_ini", "bad", Some(&m.rel), e.clone())); continue; }
+            Err(e) => {
+                // 3DMigoto reads big files fine; gachamod just didn't
+                let big = std::fs::metadata(&m.abs).is_ok_and(|md| md.len() > FULL_MAX);
+                if big { loads = true; }
+                out.push(problem("bad_ini", if big { "info" } else { "bad" }, Some(&m.rel), if big { format!("gachamod didn't check {}: {e}", m.rel) } else { e.clone() }));
+                continue;
+            }
         };
-        if ini.sections.iter().all(|s| s.lines.is_empty()) {
-            out.push(problem("bad_ini", "bad", Some(&m.rel), format!("{} is empty", m.rel)));
-            continue;
-        }
-        let base = m.abs.parent().unwrap_or(Path::new("."));
-        let names: HashSet<&str> = ini.sections.iter().map(|s| s.lower.as_str()).collect();
-        let mut missing = Vec::new();
+        if ini.sections.iter().all(|s| s.lines.is_empty()) { empty.push(&m.rel); continue; }
+        loads = true;
+        let base = m.abs.parent().unwrap_or(dir);
+        let mut missing: Vec<(String, &str)> = Vec::new();
         for s in &ini.sections {
             if s.lower.starts_with("resource") {
                 for f in s.get("filename") {
                     let f = f.trim().trim_matches('"');
                     if f.is_empty() { continue; }
                     let ok = if Path::new(f).is_absolute() { Path::new(f).exists() } else { exists_ci(base, f) };
-                    if !ok && !missing.iter().any(|x: &String| x.eq_ignore_ascii_case(f)) { missing.push(f.replace('\\', "/")); }
+                    if !ok && !missing.iter().any(|(x, _)| x.eq_ignore_ascii_case(f)) { missing.push((f.to_string(), s.lower.as_str())); }
                 }
             }
             if s.lower.starts_with("key") && !s.get("key").any(|k| !k.trim().is_empty()) {
@@ -687,20 +903,118 @@ fn lint_mod(inis: &[ModIni]) -> Vec<Problem> {
             }
             for run in s.get("run") {
                 let r = run.trim();
-                if r.to_lowercase().starts_with("commandlist") && !r.contains('\\') && !names.contains(r.to_lowercase().as_str()) {
-                    out.push(problem("missing_section", "warn", Some(&m.rel), format!("{} runs [{r}], which isn't in the file", m.rel)));
+                let lower = r.to_lowercase();
+                if lower.starts_with("commandlist") && !r.contains('\\') && !all_sections.contains(lower.as_str()) {
+                    out.push(problem("missing_section", "warn", Some(&m.rel), format!("{} runs [{r}], which isn't in the mod. That step is skipped", m.rel)));
                 }
             }
         }
         const SHOWN: usize = 8;
-        for f in missing.iter().take(SHOWN) {
-            out.push(problem("missing_file", "bad", Some(&m.rel), format!("{} needs {f}, which isn't in the mod folder", m.rel)));
+        let mut shown: HashMap<&str, usize> = HashMap::new();
+        let mut extra: HashMap<&str, usize> = HashMap::new();
+        for (f, section) in &missing {
+            let shown_f = f.replace('\\', "/");
+            let name = Path::new(&shown_f).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let (severity, detail) = if !used.contains(*section) {
+                ("info", format!("{} lists {shown_f}, which isn't in the mod folder. Nothing uses it, so the game never loads it", m.rel))
+            } else if name.to_lowercase().contains("remap") {
+                ("warn", format!("{} needs {shown_f}, which isn't in the mod folder. Only the remap for another model of the character (a skin, or the Raiden boss) uses it", m.rel))
+            } else {
+                ("bad", format!("{} needs {shown_f}, which isn't in the mod folder", m.rel))
+            };
+            let n = shown.entry(severity).or_default();
+            if *n >= SHOWN { *extra.entry(severity).or_default() += 1; continue; }
+            *n += 1;
+            let mut p = problem("missing_file", severity, Some(&m.rel), detail);
+            if severity != "info" {
+                let index = files.get_or_insert_with(|| files_by_name(dir));
+                let found = index.get(&name.to_lowercase()).map(Vec::as_slice).unwrap_or(&[]);
+                if let Some(to) = pick_copy(f, found).and_then(|c| path_from(base, &c, f)) {
+                    p.fix = Some(ProblemFix { kind: "point".into(), ini: Some(m.rel.clone()), from: Some(f.clone()), to: Some(to), inis: vec![] });
+                }
+            }
+            out.push(p);
         }
-        if missing.len() > SHOWN {
-            out.push(problem("missing_file", "bad", Some(&m.rel), format!("{} needs {} more files that aren't there", m.rel, missing.len() - SHOWN)));
+        for (severity, n) in extra {
+            out.push(problem("missing_file", severity, Some(&m.rel), format!("{} needs {n} more files like these that aren't there", m.rel)));
         }
     }
+    for e in &empty {
+        let (severity, detail) = if loads { ("info", format!("{e} is empty. The mod's other inis still load")) } else { ("bad", format!("{e} is empty, so the game loads nothing from this mod")) };
+        out.push(problem("bad_ini", severity, Some(e), detail));
+    }
+    for (group, plain) in overlaps(inis) {
+        if !plain { continue; }
+        let names: Vec<&str> = group.iter().map(|&i| inis[i].rel.as_str()).collect();
+        let mut p = problem("overlap", "bad", Some(names[0]),
+            format!("{} change the same parts of the model, so they draw over each other in game. Keep one of them on", name_list(&names)));
+        p.fix = Some(ProblemFix { kind: "keep".into(), ini: Some(names[0].to_string()), from: None, to: None, inis: names.iter().map(|s| s.to_string()).collect() });
+        out.push(p);
+    }
+    out.sort_by_key(|p| severity_rank(&p.severity));
     out
+}
+
+/// Make a fix that `lint` offered. Returns the backup that undoes it.
+pub fn apply_fix(db: &Db, game: &str, id: &str, fix: &ProblemFix) -> Result<crate::backups::Backup> {
+    let m = library::get(db, game, id)?;
+    let dir = PathBuf::from(&m.path);
+    if !dir.is_dir() { return Err(Error::Invalid(format!("{}'s folder isn't there any more. Rescan to update the list", m.name))); }
+    let changed = || Error::Invalid(format!("{} changed since the last check. Check again", m.name));
+    let ini = fix.ini.as_deref().ok_or_else(changed)?.replace('\\', "/");
+    let ini_abs = crate::backups::inside(&dir, &ini)?;
+    if !ini_abs.is_file() { return Err(changed()); }
+    let backup = match fix.kind.as_str() {
+        "point" => {
+            let (Some(from), Some(to)) = (fix.from.as_deref(), fix.to.as_deref()) else { return Err(changed()) };
+            let base = ini_abs.parent().unwrap_or(&dir);
+            if !lexical(&base.join(to.replace('\\', "/"))).starts_with(&dir) {
+                return Err(Error::Invalid(format!("Not a path inside the mod: {to}")));
+            }
+            if !exists_ci(base, to) { return Err(changed()); }
+            let raw = std::fs::read(&ini_abs)?;
+            let mut doc = crate::keys::Doc::from_bytes(&raw);
+            let mut in_resource = false;
+            let mut hits = 0;
+            for line in doc.lines.iter_mut() {
+                if let Some(h) = crate::keys::header_name(line) { in_resource = h.to_lowercase().starts_with("resource"); continue; }
+                if !in_resource { continue; }
+                let Some((k, v)) = crate::keys::kv(line) else { continue };
+                if k != "filename" || !v.trim_matches('"').eq_ignore_ascii_case(from) { continue; }
+                let value = if v.starts_with('"') { format!("\"{to}\"") } else { to.to_string() };
+                *line = crate::keys::with_value(line, &value);
+                hits += 1;
+            }
+            if hits == 0 { return Err(changed()); }
+            let label = format!("{ini} now uses {}", to.replace('\\', "/").trim_start_matches("./"));
+            let b = crate::backups::take(db, game, &m.id, &dir, std::slice::from_ref(&ini), &label)?;
+            std::fs::write(&ini_abs, doc.to_bytes())?;
+            b
+        }
+        "keep" => {
+            if !fix.inis.iter().any(|i| i.replace('\\', "/").eq_ignore_ascii_case(&ini)) { return Err(changed()); }
+            let mut moves: Vec<(PathBuf, PathBuf, String, String)> = Vec::new();
+            for other in fix.inis.iter().map(|i| i.replace('\\', "/")).filter(|i| !i.eq_ignore_ascii_case(&ini)) {
+                let abs = crate::backups::inside(&dir, &other)?;
+                let (Some(parent), Some(name)) = (abs.parent(), abs.file_name().map(|n| n.to_string_lossy().into_owned())) else { continue };
+                if !abs.is_file() { continue; }
+                let mut new_name = format!("DISABLED_{name}");
+                let mut n = 2;
+                while parent.join(&new_name).exists() { new_name = format!("DISABLED{n}_{name}"); n += 1; }
+                let new_rel = match other.rsplit_once('/') { Some((d, _)) => format!("{d}/{new_name}"), None => new_name.clone() };
+                moves.push((abs.clone(), parent.join(&new_name), other, new_rel));
+            }
+            if moves.is_empty() { return Err(changed()); }
+            let files: Vec<String> = moves.iter().flat_map(|(_, _, a, b)| [a.clone(), b.clone()]).collect();
+            let off = if moves.len() == 1 { moves[0].2.clone() } else { format!("{} others", moves.len()) };
+            let b = crate::backups::take(db, game, &m.id, &dir, &files, &format!("Kept {ini} on and turned off {off}"))?;
+            for (from, to, ..) in &moves { rename_retry(from, to)?; }
+            b
+        }
+        _ => return Err(Error::Invalid("gachamod doesn't know that fix. Check again".into())),
+    };
+    if m.enabled { crate::devtools::mark_changed(game); }
+    Ok(backup)
 }
 
 /// Declared global variables of one ini: (name, persist, default).
@@ -781,7 +1095,7 @@ fn inspect_dir(dir: &Path, saved: &[VarValue]) -> ModInspect {
         for s in ini.sections.iter().filter(|s| is_override(&s.lower)) { hashes.extend(s.get("hash").filter_map(norm_hash)); }
     }
     out.hash_count = hashes.len() as u32;
-    out.problems = lint_mod(&inis);
+    out.problems = lint_mod(dir, &inis);
     out.readmes = readmes(dir);
     out
 }
@@ -907,8 +1221,10 @@ pub fn lint(db: &Db, game: &str) -> Result<Vec<ModProblems>> {
     for m in &mods {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
-        let problems = lint_mod(&read_mod(dir));
-        if !problems.is_empty() { out.push(ModProblems { mod_id: m.id.clone(), name: m.name.clone(), problems }); }
+        let problems = lint_mod(dir, &read_mod(dir));
+        if !problems.is_empty() {
+            out.push(ModProblems { mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, source: m.source.clone(), problems });
+        }
     }
     Ok(out)
 }
@@ -1064,10 +1380,127 @@ mod tests {
     #[test]
     fn lints_empty_and_missing_inis() {
         let d = temp("lint");
-        assert_eq!(lint_mod(&read_mod(&d))[0].kind, "no_ini");
+        assert_eq!(lint_mod(&d, &read_mod(&d))[0].kind, "no_ini");
         fs::write(d.join("a.ini"), "; only a comment\n").unwrap();
-        assert_eq!(lint_mod(&read_mod(&d))[0].kind, "bad_ini");
+        assert_eq!(lint_mod(&d, &read_mod(&d))[0].kind, "bad_ini");
         fs::remove_dir_all(&d).unwrap();
+    }
+
+    fn lint_dir(d: &Path) -> Vec<Problem> { lint_mod(d, &read_mod(d)) }
+
+    const REMAP_INI: &str = "[TextureOverrideRemap]\nhash = fe5c0180\nrun = CommandListRemap\n[CommandListRemap]\nvb1 = ResourceRemap.0\nib = ResourceBodyIB\n\
+        [ResourceRemap.0]\nfilename = .\\Regular\\RaidenShogunRemapBlend.buf\n[ResourceBodyIB]\nfilename = Body.ib\n[ResourceDressIB]\nfilename = Dress.ib\n";
+
+    fn write_remap_mod(d: &Path) {
+        fs::create_dir_all(d.join("RegularRaiden")).unwrap();
+        fs::create_dir_all(d.join("NarukamiRaiden")).unwrap();
+        fs::write(d.join("RegularRaiden/RaidenShogunRemapBlend.buf"), b"a").unwrap();
+        fs::write(d.join("NarukamiRaiden/RaidenShogunRemapBlend.buf"), b"b").unwrap();
+        fs::write(d.join("merged.ini"), REMAP_INI).unwrap();
+    }
+
+    #[test]
+    fn missing_files_rated_by_what_uses_them() {
+        let d = temp("severity");
+        write_remap_mod(&d);
+        let ps = lint_dir(&d);
+        let of = |f: &str| ps.iter().find(|p| p.detail.contains(f)).unwrap_or_else(|| panic!("{f}: {ps:?}"));
+        // a part that draws with it is broken, with nothing to point it to
+        assert_eq!(of("Body.ib").severity, "bad");
+        assert!(of("Body.ib").fix.is_none());
+        // nothing names [ResourceDressIB], so 3DMigoto never loads it
+        assert_eq!(of("Dress.ib").severity, "info");
+        // a boss or skin remap: a warning, pointed to the folder whose name is closest ("Regular" -> "RegularRaiden")
+        let remap = of("RemapBlend");
+        assert_eq!(remap.severity, "warn");
+        assert_eq!(remap.fix.as_ref().and_then(|f| f.to.as_deref()), Some(r".\RegularRaiden\RaidenShogunRemapBlend.buf"));
+        assert_eq!(ps[0].severity, "bad", "worst first");
+
+        // a file one folder up is found from a variant folder
+        let v = temp("up");
+        fs::create_dir_all(v.join("1")).unwrap();
+        fs::write(v.join("Body.ib"), b"x").unwrap();
+        fs::write(v.join("1/a.ini"), "[TextureOverrideBody]\nhash = 1234abcd\nib = ResourceBodyIB\n[ResourceBodyIB]\nfilename = Body.ib\n").unwrap();
+        let p = &lint_dir(&v)[0];
+        assert_eq!(p.fix.as_ref().and_then(|f| f.to.as_deref()), Some(r"..\Body.ib"));
+        fs::remove_dir_all(&d).unwrap();
+        fs::remove_dir_all(&v).unwrap();
+    }
+
+    #[test]
+    fn variants_that_draw_over_each_other() {
+        let d = temp("overlap");
+        let variant = |extra: &str| format!("[TextureOverrideVB]\nhash = 11111111\n{extra}handling = skip\n[TextureOverrideIB]\nhash = 22222222\nmatch_first_index = 0\n{extra}handling = skip\n");
+        let write = |extra: &dyn Fn(&str) -> String| for n in ["1", "2", "3"] {
+            fs::create_dir_all(d.join(n)).unwrap();
+            fs::write(d.join(n).join("a.ini"), variant(&extra(n))).unwrap();
+        };
+        write(&|_| String::new());
+        let ps = lint_dir(&d);
+        let o = ps.iter().find(|p| p.kind == "overlap").expect("overlap");
+        assert_eq!(o.severity, "bad");
+        assert_eq!(o.fix.as_ref().unwrap().inis, vec!["1/a.ini", "2/a.ini", "3/a.ini"]);
+        assert!(o.detail.starts_with("1/a.ini, 2/a.ini and 3/a.ini change"), "{}", o.detail);
+        // match_priority says which wins, and variants that each check a condition take turns
+        write(&|n| format!("match_priority = {n}\n"));
+        assert!(!lint_dir(&d).iter().any(|p| p.kind == "overlap"));
+        write(&|n| format!("if $\\master\\swapvar == {n}\n"));
+        assert!(!lint_dir(&d).iter().any(|p| p.kind == "overlap"));
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn turned_off_inis_are_not_a_problem() {
+        let d = temp("offinis");
+        fs::create_dir_all(d.join("DISABLED 2")).unwrap();
+        fs::write(d.join("DISABLED 2/a.ini"), "[TextureOverrideX]\nhash = 1\n").unwrap();
+        fs::write(d.join("DISABLED_b.ini"), "[TextureOverrideX]\nhash = 1\n").unwrap();
+        assert!(lint_dir(&d).is_empty());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn fixes_apply_and_undo() {
+        let root = temp("fix");
+        let mods = root.join("Mods");
+        let m = mods.join("Raiden/Xentinel");
+        write_remap_mod(&m);
+        fs::write(m.join("RegularRaiden/Body.ib"), b"x").unwrap();
+        for n in ["1", "2"] {
+            fs::create_dir_all(m.join(n)).unwrap();
+            fs::write(m.join(n).join("v.ini"), "[TextureOverrideVB]\nhash = 11111111\nhandling = skip\n[TextureOverrideIB]\nhash = 22222222\nhandling = skip\n").unwrap();
+        }
+        let db = crate::db::Db::open(&root.join("gachamod.db")).unwrap();
+        crate::games::save_paths(&db, "zzz", &crate::games::GamePaths { mods_dir: Some(mods.to_string_lossy().into_owned()), ..Default::default() }).unwrap();
+        let shared = Arc::new(Mutex::new(db));
+        let id = library::scan(&shared, "zzz").unwrap()[0].id.clone();
+        let db = shared.lock().unwrap();
+        let fixes = |kind: &str| lint(&db, "zzz").unwrap().into_iter().flat_map(|m| m.problems).filter_map(|p| p.fix).filter(|f| f.kind == kind).collect::<Vec<_>>();
+
+        // "point": every line naming the file changes, the rest of the file stays byte for byte
+        let point = fixes("point").into_iter().find(|f| f.from.as_deref().is_some_and(|x| x.contains("Remap"))).unwrap();
+        let b = apply_fix(&db, "zzz", &id, &point).unwrap();
+        let after = fs::read_to_string(m.join("merged.ini")).unwrap();
+        assert_eq!(after, REMAP_INI.replace(r".\Regular\", r".\RegularRaiden\"));
+        assert!(apply_fix(&db, "zzz", &id, &point).is_err(), "a second try finds nothing to change");
+        crate::backups::restore(&db, &b.id).unwrap();
+        assert_eq!(fs::read_to_string(m.join("merged.ini")).unwrap(), REMAP_INI);
+
+        // "keep": the other variant is renamed off, and undo names it back
+        let mut keep = fixes("keep").pop().unwrap();
+        keep.ini = Some("2/v.ini".into());
+        let b = apply_fix(&db, "zzz", &id, &keep).unwrap();
+        assert!(m.join("1/DISABLED_v.ini").is_file() && !m.join("1/v.ini").exists() && m.join("2/v.ini").is_file());
+        assert!(fixes("keep").is_empty());
+        crate::backups::restore(&db, &b.id).unwrap();
+        assert!(m.join("1/v.ini").is_file() && !m.join("1/DISABLED_v.ini").exists());
+
+        // a path that climbs out of the mod is refused
+        let bad = ProblemFix { to: Some(r"..\..\..\x.buf".into()), ..point };
+        assert!(apply_fix(&db, "zzz", &id, &bad).is_err());
+        drop(db);
+        drop(shared);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

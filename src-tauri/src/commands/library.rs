@@ -103,8 +103,39 @@ pub async fn mod_set_preview_data(st: State<'_, AppState>, game: String, id: Str
     blocking(move || library::set_preview(&*lock(&db)?, &game, &id, &data, &ext)).await
 }
 
+/// The user's own preview as raw bytes (empty when there's none). The UI keeps it for Undo before replacing or
+/// resetting it.
+#[tauri::command]
+pub async fn mod_custom_preview(st: State<'_, AppState>, game: String, id: String) -> Result<tauri::ipc::Response> {
+    let db = st.db.clone();
+    let bytes = blocking(move || library::custom_preview_bytes(&*lock(&db)?, &game, &id)).await?;
+    Ok(tauri::ipc::Response::new(bytes.unwrap_or_default()))
+}
+
 #[tauri::command]
 pub async fn mod_clear_preview(st: State<'_, AppState>, game: String, id: String) -> Result<ModEntry> {
     let db = st.db.clone();
     blocking(move || library::clear_preview(&*lock(&db)?, &game, &id)).await
+}
+
+/// Download a picture (GameBanana's first image) and save it as the mod's preview.<ext>.
+#[tauri::command]
+pub async fn mod_fetch_preview(st: State<'_, AppState>, game: String, id: String, url: String) -> Result<ModEntry> {
+    let (bytes, ext) = gacha_core::previews::download(&st.http, &url).await?;
+    let db = st.db.clone();
+    blocking(move || library::save_fetched_preview(&*lock(&db)?, &game, &id, &bytes, &ext)).await
+}
+
+/// Removed mods of a game (or of every game with null): in the trash, then details only. Newest first.
+#[tauri::command]
+pub async fn archive_list(st: State<'_, AppState>, game: Option<String>) -> Result<Vec<library::ArchiveEntry>> {
+    let db = st.db.clone();
+    blocking(move || library::archive_list(&*lock(&db)?, game.as_deref())).await
+}
+
+/// Forget removed mods for good ("t<trash id>" / "a<archive id>" keys).
+#[tauri::command]
+pub async fn archive_forget(st: State<'_, AppState>, keys: Vec<String>) -> Result<u64> {
+    let db = st.db.clone();
+    blocking(move || library::archive_forget(&*lock(&db)?, &keys)).await
 }

@@ -23,6 +23,29 @@ pub struct InstallMeta {
     /// Update in place: the library id of the mod this replaces (its folder, sidecar id, enabled state and saved
     /// variables are kept; the old files go to the trash as "replaced").
     pub replaces: Option<String>,
+    /// Settings from a shared .gachamod link list, one per mod to make from this file. They pick the archive's
+    /// folders (no question), and set each mod's id, name, folder, on/off state, options and key edits.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub setups: Vec<ModSetup>,
+}
+
+/// How a shared mod was set up on the PC it came from (see `InstallMeta::setups`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ModSetup {
+    /// Its id, name, character, tags, notes, favourite and nsfw flag. Source and version come from the download.
+    pub sidecar: Sidecar,
+    /// Where it lived under Mods, without DISABLED prefixes ("Ellen Joe/Coca Cola").
+    pub rel_path: String,
+    pub enabled: bool,
+    /// The archive folder it was (`Sidecar::variant`), when known.
+    pub variant: Option<String>,
+    /// Its .ini files (paths inside the mod folder), to find the archive folder when `variant` is unknown.
+    pub inis: Vec<String>,
+    pub vars: Vec<crate::ini::VarValue>,
+    pub keys: Vec<crate::keys::KeyChange>,
+    /// Its keys work only while the character is on screen (gachamod's fix).
+    pub on_screen: bool,
 }
 
 /// A mod folder found inside an extracted archive.
@@ -85,11 +108,17 @@ fn is_mod_dir(dir: &Path) -> bool { dir.join(crate::model::SIDECAR_FILE).is_file
 /// True when an ini file is somewhere below `dir` (skipped folders left out).
 fn leads_to_ini(dir: &Path) -> bool { is_mod_dir(dir) || child_dirs(dir).iter().any(|c| leads_to_ini(c)) }
 
-/// An image in the folder itself: preview.* first, then the first image by name. The runner's own preview file is
-/// left out.
+/// A picture in the folder itself: preview.* first, then the first root-level image that no ini loads and that isn't
+/// named like a texture (previews.rs). The runner's own preview file is left out.
 fn own_image(dir: &Path) -> Option<PathBuf> {
-    let imgs: Vec<PathBuf> = entries(dir).into_iter().filter(|p| is_image(p) && !name_of(p).starts_with(PREVIEW_STEM)).collect();
-    imgs.iter().find(|p| p.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("preview"))).or(imgs.first()).cloned()
+    let names: Vec<String> = entries(dir).into_iter().filter(|p| is_image(p)).map(|p| name_of(&p)).filter(|n| !n.starts_with(PREVIEW_STEM)).collect();
+    if let Some(p) = names.iter().find(|n| crate::previews::is_preview_name(n)) { return Some(dir.join(p)); }
+    crate::previews::root_picture(dir, &names, |_| false).map(|n| dir.join(n))
+}
+
+/// The folder has a preview.* picture of its own.
+fn has_preview_file(dir: &Path) -> bool {
+    entries(dir).iter().any(|p| p.is_file() && crate::previews::is_preview_name(&name_of(p)))
 }
 
 fn tree_facts(dir: &Path) -> (u32, u64) {
@@ -277,12 +306,13 @@ fn preview_in(dir: &Path) -> Option<PathBuf> {
     entries(dir).into_iter().find(|p| p.is_file() && name_of(p).starts_with(PREVIEW_STEM))
 }
 
-/// Put the downloaded preview into a mod folder as preview.<ext> unless the mod has an image of its own.
+/// Put the downloaded preview (GameBanana's first picture) into a mod folder as preview.<ext> unless the mod has a
+/// preview.* of its own. Other images in the mod don't count: they are often textures.
 fn give_preview(target: &Path, src: Option<&Path>) -> Option<String> {
     let src = src?;
     if !src.is_file() { return None; }
     let inside = src.parent() == Some(target);
-    let result = if own_image(target).is_none() {
+    let result = if !has_preview_file(target) {
         let name = format!("preview.{}", { let e = ext_of(src); if e.is_empty() { "jpg".into() } else { e } });
         let ok = if inside { fs::rename(src, target.join(&name)).is_ok() } else { fs::copy(src, target.join(&name)).is_ok() };
         ok.then_some(name)
@@ -319,22 +349,101 @@ fn lock(db: &crate::db::Shared) -> Result<std::sync::MutexGuard<'_, crate::db::D
     db.lock().map_err(|_| Error::Db("The local database is stuck. Restart gachamod".into()))
 }
 
+/// The live .ini files of a mod folder, as lowercase paths inside it, sorted (to tell an archive's folders apart).
+pub fn ini_set(dir: &Path) -> Vec<String> {
+    let mut v: Vec<String> = crate::ini::mod_inis(dir).into_iter().map(|(_, rel)| rel.replace('\\', "/").to_ascii_lowercase()).collect();
+    v.sort();
+    v.dedup();
+    v
+}
+
+/// Pairs (candidate, setup) for shared settings: the same archive folder, else the same .ini files (or mostly the
+/// same), else the only candidate with the only setup.
+fn match_setups(staging: &Path, cands: &[Candidate], setups: &[ModSetup]) -> Vec<(usize, usize)> {
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    let free_c = |pairs: &[(usize, usize)], c: usize| !pairs.iter().any(|p| p.0 == c);
+    for (si, s) in setups.iter().enumerate() {
+        let Some(v) = s.variant.as_deref() else { continue };
+        if let Some(ci) = cands.iter().position(|c| c.key == v).filter(|&ci| free_c(&pairs, ci)) { pairs.push((ci, si)); }
+    }
+    let sets: Vec<Vec<String>> = cands.iter().map(|c| ini_set(&if c.key.is_empty() { staging.to_path_buf() } else { staging.join(&c.key) })).collect();
+    for (si, s) in setups.iter().enumerate() {
+        if pairs.iter().any(|p| p.1 == si) || s.inis.is_empty() { continue; }
+        let want: Vec<String> = { let mut w: Vec<String> = s.inis.iter().map(|i| i.replace('\\', "/").to_ascii_lowercase()).collect(); w.sort(); w.dedup(); w };
+        let score = |have: &[String]| {
+            let common = want.iter().filter(|w| have.contains(w)).count() as f64;
+            common / (want.len() + have.len()) as f64 * 2.0
+        };
+        let best = (0..cands.len()).filter(|&ci| free_c(&pairs, ci))
+            .map(|ci| (ci, score(&sets[ci])))
+            .filter(|&(_, sc)| sc >= 0.5)
+            .max_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((ci, _)) = best { pairs.push((ci, si)); }
+    }
+    if pairs.is_empty() && cands.len() == 1 && setups.len() == 1 { pairs.push((0, 0)); }
+    pairs.sort_unstable();
+    pairs
+}
+
+/// Where a shared mod goes: the sender's folder under Mods (made safe for this PC), with the DISABLED prefix when
+/// it was off. A name that is taken gets " (2)".
+fn shared_target(mods_dir: &Path, group: &str, name: &str, s: &ModSetup) -> PathBuf {
+    let parts: Vec<String> = crate::archive::safe_relative(&s.rel_path)
+        .map(|p| p.components().map(|c| sanitize_name(crate::library::display_folder(&c.as_os_str().to_string_lossy()))).collect())
+        .unwrap_or_default();
+    let (folder, parent) = match parts.split_last() {
+        Some((last, groups)) => (last.clone(), groups.iter().fold(mods_dir.to_path_buf(), |p, g| p.join(g))),
+        None => (sanitize_name(name), mods_dir.join(group)),
+    };
+    let free = unique_child(&parent, &folder);
+    if s.enabled { free } else { parent.join(format!("{DISABLED_PREFIX}{}", name_of(&free))) }
+}
+
+/// A shared mod's options and key edits, once it is in place. Never fails the install.
+fn apply_setup(db: &crate::db::Shared, game: &str, entry: &ModEntry, s: &ModSetup, notes: &mut Vec<String>) {
+    let Ok(d) = lock(db) else { return };
+    if !s.keys.is_empty() || s.on_screen {
+        match crate::keys::apply_shared(&d, game, &entry.id, &s.keys, s.on_screen) {
+            Ok(Some(n)) => notes.push(n),
+            Ok(None) => {}
+            Err(e) => notes.push(format!("Couldn't make {}'s key changes: {e}", entry.name)),
+        }
+    }
+    if !s.vars.is_empty() {
+        if let Err(e) = crate::library::stash_vars(&d, game, &entry.id, &s.vars) { notes.push(format!("Couldn't keep {}'s options: {e}", entry.name)); }
+    }
+}
+
 fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
     let all = find_roots(staging)?;
     if all.is_empty() {
         return Err(Error::Invalid("No mod found inside. A mod is a folder with at least one .ini file in it".into()));
     }
-    let chosen: Vec<Candidate> = if choose.is_empty() {
-        if all.len() > 1 { return Ok(InstallOutcome { needs_choice: Some(all), ..Default::default() }); }
-        all
+    let in_archive = all.len();
+    // shared settings pick the archive's folders themselves; when some can't be found the user picks
+    let pairs = if meta.setups.is_empty() { Vec::new() } else { match_setups(staging, &all, &meta.setups) };
+    let (chosen, setup_of): (Vec<Candidate>, Vec<Option<&ModSetup>>) = if choose.is_empty() {
+        if !pairs.is_empty() && (pairs.len() == meta.setups.len() || pairs.len() == all.len()) {
+            pairs.iter().map(|&(c, s)| (all[c].clone(), Some(&meta.setups[s]))).unzip()
+        } else {
+            if all.len() > 1 { return Ok(InstallOutcome { needs_choice: Some(all), ..Default::default() }); }
+            let s = meta.setups.first();
+            (all, vec![s])
+        }
     } else {
-        let c: Vec<Candidate> = all.into_iter().filter(|c| choose.contains(&c.key)).collect();
-        if c.is_empty() { return Err(Error::Invalid("The picked folders aren't in this archive anymore. Try the install again".into())); }
-        c
+        let picked: Vec<usize> = (0..all.len()).filter(|&i| choose.contains(&all[i].key)).collect();
+        if picked.is_empty() { return Err(Error::Invalid("The picked folders aren't in this archive anymore. Try the install again".into())); }
+        // matched pairs first, then the setups left over go to the other picked folders in order
+        let mut left: Vec<&ModSetup> = (0..meta.setups.len()).filter(|s| !pairs.iter().any(|p| p.1 == *s && picked.contains(&p.0))).map(|s| &meta.setups[s]).collect();
+        left.reverse();
+        picked.iter().map(|&c| {
+            let s = pairs.iter().find(|p| p.0 == c).map(|p| &meta.setups[p.1]).or_else(|| left.pop());
+            (all[c].clone(), s)
+        }).unzip()
     };
 
     let base_name = meta.name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| chosen[0].label.clone());
-    let (mods_dir, character, one_skin, old) = {
+    let (mods_dir, character, one_skin, old, mut removed) = {
         let d = lock(db)?;
         let mods_dir = crate::games::mods_dir(&d, game)?;
         let character = meta.character.clone().filter(|c| !c.trim().is_empty()).or_else(|| {
@@ -343,7 +452,12 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         });
         let one_skin = d.setting(&format!("{game}.oneSkin")).ok().flatten().map(|v| v != "0").unwrap_or(true);
         let old = meta.replaces.as_deref().and_then(|id| crate::library::get(&d, game, id).ok());
-        (mods_dir, character, one_skin, old)
+        // the same GameBanana mod was removed before: the new copy takes its place (id, details, options, profiles)
+        let removed = match (&old, meta.source.as_ref()) {
+            (None, Some(src)) if src.mod_id > 0 => crate::library::removed_by_gb(&d, game, src.mod_id).unwrap_or_default(),
+            _ => Vec::new(),
+        };
+        (mods_dir, character, one_skin, old, removed)
     };
     let group = sanitize_name(character.as_deref().or(meta.category.as_deref()).filter(|g| !g.trim().is_empty()).unwrap_or("Other"));
     let preview_src = preview_in(staging);
@@ -353,12 +467,28 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     let mut turned_off = 0;
 
     for (i, cand) in chosen.iter().enumerate() {
+        let setup = setup_of.get(i).copied().flatten();
         let src = if cand.key.is_empty() { staging.to_path_buf() } else { staging.join(&cand.key) };
-        let name = if several { format!("{base_name} - {}", cand.label) } else { base_name.clone() };
+        let name = match setup.map(|s| s.sidecar.name.trim()).filter(|n| !n.is_empty()) {
+            Some(n) => n.to_string(),
+            None if several => format!("{base_name} - {}", cand.label),
+            None => base_name.clone(),
+        };
         let mut sidecar = Sidecar {
             format: 1, id: String::new(), name: name.clone(), character: character.clone(), source: meta.source.clone(),
-            version: meta.version.clone().filter(|v| !v.is_empty()), installed_at: crate::db::now(), nsfw: meta.nsfw, ..Default::default()
+            version: meta.version.clone().filter(|v| !v.is_empty()), installed_at: crate::db::now(), nsfw: meta.nsfw,
+            variant: (in_archive > 1).then(|| cand.key.clone()), ..Default::default()
         };
+        // shared settings: the sender's id (so their profiles find it), details and folder
+        if let Some(s) = setup {
+            let sc = &s.sidecar;
+            sidecar.id = sc.id.clone();
+            if sc.character.as_deref().is_some_and(|c| !c.trim().is_empty()) { sidecar.character = sc.character.clone(); }
+            sidecar.tags = sc.tags.clone();
+            sidecar.notes = sc.notes.clone();
+            sidecar.favorite = sc.favorite;
+            sidecar.nsfw = meta.nsfw || sc.nsfw;
+        }
 
         // an update replaces the first candidate in place: same folder, id, name, tags and on/off state
         let mut target = None;
@@ -374,13 +504,38 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
                     sidecar.favorite = o.favorite;
                     sidecar.nsfw = meta.nsfw || o.nsfw;
                     if o.character.is_some() { sidecar.character = o.character.clone(); }
+                    // replacing with a shared copy takes the sender's details, but keeps this PC's id
+                    if let Some(s) = setup {
+                        sidecar.name = name.clone();
+                        sidecar.tags = s.sidecar.tags.clone();
+                        sidecar.notes = s.sidecar.notes.clone();
+                        sidecar.favorite = s.sidecar.favorite;
+                        if s.sidecar.character.as_deref().is_some_and(|c| !c.trim().is_empty()) { sidecar.character = s.sidecar.character.clone(); }
+                    }
                 }
                 _ => notes.push(format!("Couldn't move the old copy of {} to the trash, so both copies are there now", o.name)),
             }
         }
-        let target = match target {
-            Some(t) => t,
-            None => {
+        // a removed copy of this GameBanana mod comes back: its id (so its kept options and profile places fit
+        // again), name, character, tags, notes and favourite
+        let back = if target.is_some() || removed.is_empty() || setup.is_some() { None } else {
+            let at = removed.iter().position(|r| r.entry.name.eq_ignore_ascii_case(&name)).unwrap_or(0);
+            Some(removed.remove(at))
+        };
+        if let Some(r) = &back {
+            let p = &r.entry;
+            sidecar.id = r.mod_id.clone();
+            if !p.name.trim().is_empty() { sidecar.name = p.name.clone(); }
+            if p.character.as_deref().is_some_and(|c| !c.trim().is_empty()) { sidecar.character = p.character.clone(); }
+            sidecar.tags = p.tags.clone();
+            sidecar.notes = p.notes.clone();
+            sidecar.favorite = p.favorite;
+            sidecar.nsfw = sidecar.nsfw || p.nsfw;
+        }
+        let target = match (target, setup) {
+            (Some(t), _) => t,
+            (None, Some(s)) => shared_target(&mods_dir, &group, &name, s),
+            (None, None) => {
                 let mut folder = sanitize_name(&name);
                 // variants of one character: only the first stays on
                 if several && i > 0 && character.is_some() && one_skin {
@@ -394,6 +549,10 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         move_dir(&src, &target)?;
         let own = if cand.key.is_empty() { preview_in(&target) } else { preview_src.clone() };
         if let Some(p) = give_preview(&target, own.as_deref()) { sidecar.preview = Some(p); }
+        // the picture didn't download: show GameBanana's link until the mod has a preview.* of its own
+        if sidecar.preview.is_none() && !has_preview_file(&target) {
+            sidecar.preview = meta.preview_url.clone().filter(|u| u.starts_with("https://"));
+        }
 
         let entry = {
             let d = lock(db)?;
@@ -406,12 +565,19 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
                 }
             }
         };
+        if let Some(r) = &back {
+            let d = lock(db)?;
+            let _ = crate::library::drop_removed(&d, r);
+            notes.push(format!("{} came back with its settings", entry.name));
+        }
+        if let Some(s) = setup { apply_setup(db, game, &entry, s, &mut notes); }
         installed.push(entry);
     }
     if turned_off > 0 {
         let who = character.as_deref().unwrap_or("this character");
         notes.push(format!("Turned off {turned_off} of the variants so only one {who} skin is on"));
     }
+    crate::keys::after_install(db, game, &installed, &mut notes);
     crate::devtools::mark_changed(game);
     Ok(InstallOutcome { installed, needs_choice: None, notes })
 }
@@ -626,6 +792,117 @@ mod tests {
         assert!(mods.join("Ellen Joe/DISABLED Coca Cola - Red").is_dir());
         assert_eq!(o.notes.len(), 1);
         assert!(!staging.exists());
+    }
+
+    // ── previews and reinstalls (the "Velina" case: a texture jpg was taken as the preview) ──
+
+    fn gb_meta(gb: u64) -> InstallMeta {
+        InstallMeta {
+            name: Some("Velina Maid".into()), character: Some("Velina Airgid".into()),
+            source: Some(crate::model::ModSource { site: "gamebanana".into(), mod_id: gb, url: format!("https://gamebanana.com/mods/{gb}"), ..Default::default() }),
+            preview_url: Some("https://images.gamebanana.com/img/ss/mods/velina.jpg".into()),
+            ..Default::default()
+        }
+    }
+
+    /// A mod whose only images are textures: one the ini loads, one named like a texture, one in a Textures folder.
+    fn velina_staging(data: &Path, downloaded: bool) -> PathBuf {
+        let s = new_staging(data).unwrap();
+        let m = s.join("Velina Maid");
+        fs::create_dir_all(m.join("Textures")).unwrap();
+        fs::write(m.join("Velina.ini"), "[TextureOverrideBody]\nhash = 0011aabb\n[ResourceBody]\nfilename = VelinaBody.jpg\n[ResourceHair]\nfilename = Textures\\Hair.png\n").unwrap();
+        fs::write(m.join("VelinaBody.jpg"), "texture").unwrap();
+        fs::write(m.join("Velina_Diffuse.png"), "texture").unwrap();
+        fs::write(m.join("Textures/Hair.png"), "texture").unwrap();
+        if downloaded { fs::write(s.join(format!("{PREVIEW_STEM}.jpg")), "gb picture").unwrap(); }
+        s
+    }
+
+    #[test]
+    fn gamebanana_picture_beats_textures() {
+        let t = Tmp::new("velina");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+
+        let staging = velina_staging(&data, true);
+        assert_eq!(find_roots(&staging).unwrap()[0].preview, None, "a texture is never a candidate's preview");
+        let o = place(&db, &data, "zzz", &staging, &gb_meta(900001), &[]).unwrap();
+        let dir = mods.join("Velina Airgid/Velina Maid");
+        assert_eq!(fs::read_to_string(dir.join("preview.jpg")).unwrap(), "gb picture");
+        assert!(o.installed[0].preview.as_deref().unwrap().ends_with("preview.jpg"));
+
+        // the picture didn't download: GameBanana's link shows instead of a texture
+        let staging = velina_staging(&data, false);
+        let mut meta = gb_meta(900002);
+        meta.name = Some("Velina Two".into());
+        let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        assert_eq!(o.installed[0].preview.as_deref(), Some("https://images.gamebanana.com/img/ss/mods/velina.jpg"));
+
+        // a local mod with only textures has no preview at all
+        let staging = velina_staging(&data, false);
+        let o = place(&db, &data, "zzz", &staging, &InstallMeta { name: Some("Velina Local".into()), ..Default::default() }, &[]).unwrap();
+        assert_eq!(o.installed[0].preview, None);
+        assert_eq!(crate::library::scan(&db, "zzz").unwrap().iter().find(|m| m.name == "Velina Local").unwrap().preview, None);
+    }
+
+    #[test]
+    fn reinstall_brings_back_settings() {
+        use crate::{ini, library, profiles};
+        let t = Tmp::new("reinstall");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let first = place(&db, &data, "zzz", &velina_staging(&data, true), &gb_meta(900001), &[]).unwrap().installed.remove(0);
+        let id = first.id.clone();
+        let beach = {
+            let d = db.lock().unwrap();
+            library::update_meta(&d, "zzz", &id, &library::MetaPatch {
+                name: Some("My Velina".into()), tags: Some(vec!["maid".into()]), favorite: Some(true), ..Default::default()
+            }).unwrap();
+            ini::set_user_vars(&t.0, &first.rel_path, &[ini::VarValue { ini: "Velina.ini".into(), var: "swapvar".into(), value: "2".into() }]).unwrap();
+            profiles::list(&d, "zzz").unwrap();
+            let beach = profiles::create(&d, "zzz", "Beach", None).unwrap();
+            library::remove(&d, &data, "zzz", std::slice::from_ref(&id), "removed").unwrap();
+            // files go right away at 0 days; the details move to the archive
+            d.set_setting("trash.days", "0").unwrap();
+            let a = library::archive_list(&d, Some("zzz")).unwrap();
+            assert_eq!(a.len(), 1);
+            assert!(a[0].key.starts_with('a') && a[0].files_until.is_none() && a[0].has_options && a[0].favorite);
+            assert_eq!(a[0].tags, vec!["maid".to_string()]);
+            assert!(a[0].preview.as_deref().is_some_and(|p| Path::new(p).is_file() && p.contains("archive")), "{:?}", a[0].preview);
+            assert!(library::trash_list(&d, "zzz").unwrap().is_empty());
+            beach
+        };
+
+        // the same GameBanana mod again: same id, its details, options and profile places
+        let back = place(&db, &data, "zzz", &velina_staging(&data, true), &gb_meta(900001), &[]).unwrap().installed.remove(0);
+        assert_eq!((back.id.as_str(), back.name.as_str(), back.favorite), (id.as_str(), "My Velina", true));
+        assert_eq!(back.tags, vec!["maid".to_string()]);
+        {
+            let d = db.lock().unwrap();
+            assert!(library::archive_list(&d, None).unwrap().is_empty());
+            assert_eq!(ini::user_vars(&t.0, &back.rel_path).unwrap()[0].value, "2");
+            assert!(profiles::members(&d, beach.id).unwrap().contains(&id));
+
+            // from the trash (files still there) by GameBanana id too
+            d.set_setting("trash.days", "14").unwrap();
+            library::remove(&d, &data, "zzz", std::slice::from_ref(&id), "removed").unwrap();
+            let a = library::archive_list(&d, Some("zzz")).unwrap();
+            assert!(a[0].key.starts_with('t') && a[0].files_until.is_some());
+        }
+        let again = place(&db, &data, "zzz", &velina_staging(&data, true), &gb_meta(900001), &[]).unwrap().installed.remove(0);
+        assert_eq!(again.id, id);
+        let d = db.lock().unwrap();
+        assert!(library::archive_list(&d, Some("zzz")).unwrap().is_empty());
+        assert!(!data.join("trash/zzz").read_dir().is_ok_and(|mut r| r.next().is_some()), "the old copy's files went");
+
+        // forgetting drops the kept values and profile places
+        library::remove(&d, &data, "zzz", std::slice::from_ref(&id), "removed").unwrap();
+        let key = library::archive_list(&d, None).unwrap()[0].key.clone();
+        assert_eq!(library::archive_forget(&d, &[key]).unwrap(), 1);
+        assert!(library::archive_list(&d, None).unwrap().is_empty());
+        assert!(!profiles::snapshot(&d, beach.id).unwrap().mods.iter().any(|m| m.mod_id == id));
     }
 
     #[test]

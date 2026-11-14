@@ -49,6 +49,9 @@ export const games = {
   setShown: (game: GameId, shown: boolean) => call<GameState[]>("game_set_shown", { game, shown }),
   launch: (game: GameId, vanilla = false) => call<void>("game_launch", { game, vanilla }),
   running: (game: GameId) => call<boolean>("game_running", { game }),
+  /** The game's own icon at 256 px, taken from its exe and kept as a PNG in the app's data folder; null when the game
+   *  folder isn't known. */
+  icon: (game: GameId) => call<string | null>("game_icon", { game }),
   onState: (cb: (p: { game: GameId; running: boolean }) => void) => listen<{ game: GameId; running: boolean }>(EVENTS.gameState, cb),
 };
 
@@ -73,7 +76,8 @@ export const dev = {
 
 export const integrations = {
   get: () => call<Integration[]>("integrations_get"),
-  register: (id: string) => call<Integration[]>("integration_register", { id }),
+  /** On points it at this copy of gachamod (taking it from another program); off removes it until turned on again. */
+  set: (id: string, on: boolean) => call<Integration[]>("integration_set", { id, on }),
 };
 
 export const about = {

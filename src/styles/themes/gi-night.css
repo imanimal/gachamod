@@ -1,0 +1,74 @@
+/* themes/gi-night.css: Teyvat, dark. The same menus at night: the cream sheets (sidebar, panels, dialogs, cards)
+   turn to navy glass over the evening sky, their ink turns cream, and the rules stay gold. Controls keep the game's
+   rule of taking the other material: cream pills on navy. Light, the game's own cream paper, is in the other files. */
+
+[data-theme="gi"]:not([data-scheme="light"]) {
+  /* the cream materials, at night */
+  --parch: #243041; --paper: #2a3547; --band: #344055; --tan: #3e4a60; --tan-2: #56627a; --tan-ink: #aab1c0;
+  --weave: var(--weave-l); --rule-ink: var(--rule);
+
+  /* the sheets keep the sky's tokens; --ink, their text colour, turns cream */
+  .side, .panel, .dialog, .card, .tile, .mod-card, .gb-card, .home-tile, .dl-item, .portraits > .portrait, .profile-card, .dropzone-card {
+    --title: var(--gold); --b-fill: var(--cream); --b-ink: #3b4255; --b-line: rgb(236 229 216 / .55); --b-line-ink: var(--cream);
+    --f-bg: rgb(10 14 24 / .35); --f-ring: rgb(236 229 216 / .35); --row: var(--slate-row);
+    --bg-2: #1d2633; --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #5d677b;
+    --line: rgb(236 229 216 / .13); --line-2: rgb(236 229 216 / .26);
+    --text: #ece5d8; --text-2: #c9c3b6; --text-3: #a3abbb;
+    --accent-ink: var(--acc); --accent-soft: rgb(211 188 142 / .18);
+    --ok: var(--lime); --warn: var(--orange); --bad: var(--red-hi); --info: var(--blue);
+    --hover: rgb(236 229 216 / .08); --img-bg: #2a3242; --ring: #fff;
+    --ink: #ece5d8;
+    color: var(--text);
+  }
+
+  /* dark text stays dark on the light fills inside them */
+  .check.on .check-box, .badge.t-accent { color: #2a3040; }
+  ::selection { color: #2a3040; }
+  .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child, .mod-card-more, .mod-card-more:hover:not(:disabled) { color: #3b4255; }
+  .dialog-h > .ibtn:last-child { box-shadow: inset 0 0 0 2.5px #eee5d8, inset 0 0 0 4.5px #3b4255, 0 1px 4px rgb(0 0 0 / .3); }
+  .dialog-h > .ibtn:last-child:hover:not(:disabled) { color: #3b4255; box-shadow: inset 0 0 0 2.5px #fff, inset 0 0 0 4.5px #3b4255, 0 0 12px rgb(255 255 255 / .5); }
+
+  /* ── sidebar: a navy glass column ── */
+  .side { background: var(--weave-l), linear-gradient(180deg, rgb(36 46 64 / .94), rgb(28 36 52 / .96)); backdrop-filter: blur(12px);
+    box-shadow: inset -1px 0 0 rgb(211 188 142 / .2), 6px 0 18px rgb(4 7 14 / .35); }
+  .player-card { box-shadow: inset 0 0 0 1px rgb(236 229 216 / .1), 0 1px 3px rgb(4 7 14 / .3); }
+  .side-game-cur:hover { background: var(--band); }
+  .side-deco::before { opacity: .35; }
+  .side-deco-t { color: var(--tan-ink); }
+  .side .play.running .play-btn:disabled { color: var(--lime); }
+  /* the open view and the profile that's on: cream pills */
+  .nv.on, .nv.on:hover:not(:disabled) { color: #3b4255; }
+  .nv.on .i, .nv.on:hover:not(:disabled) .i { color: #3b4255; }
+  .nv-b { color: #3b4255; }
+  .nv-b.t-bad { box-shadow: 0 0 0 1.5px var(--paper); }
+  &:not([data-nav="grid"]) .nv:hover:not(:disabled), .side-p:hover { background: rgb(236 229 216 / .08); }
+  &:not([data-nav="grid"]) .nv.on, &:not([data-nav="grid"]) .nv.on:hover:not(:disabled), .side:not([data-collapsed]) .side-p.on {
+    background: var(--cream); color: #3b4255; box-shadow: 0 1px 4px rgb(4 7 14 / .35); }
+  .side:not([data-collapsed]) .side-p.on { box-shadow: inset 3px 0 0 var(--p-color, var(--acc)), 0 1px 4px rgb(4 7 14 / .35); }
+  &:not([data-nav="grid"]) .nv.on .i, .side-p.on .side-p-on { color: #3b4255; }
+
+  /* ── panels and dialogs: navy sheets with a faint gold hairline ── */
+  .panel { background: var(--weave-l), linear-gradient(180deg, #2c3849, var(--parch) 4rem); box-shadow: 0 8px 24px rgb(4 7 14 / .45), 0 1px 3px rgb(4 7 14 / .3); }
+  .panel::before { border-color: rgb(211 188 142 / .16); }
+  .dialog { background: var(--weave-l), linear-gradient(180deg, #2d394b, var(--parch) 6rem); }
+  .dialog::before { border-color: rgb(211 188 142 / .22); }
+  .dialog-h h2 { color: var(--gold); }
+  .card { box-shadow: 0 1px 3px rgb(4 7 14 / .35), inset 0 0 0 1px rgb(236 229 216 / .08); }
+  :is(.panel, .dialog, .card) .progress { background: rgb(0 0 0 / .3); box-shadow: inset 0 0 0 1px rgb(236 229 216 / .1); }
+  :is(.panel, .dialog) .skel { background: linear-gradient(100deg, rgb(73 83 102 / .55) 30%, rgb(110 120 140 / .6) 50%, rgb(73 83 102 / .55) 70%); background-size: 250% 100%; }
+  .dropzone-card span { color: var(--text-2); }
+
+  /* ── cards ── */
+  .mod-card, .home-tile, .gb-card, .portraits > .portrait, .profile-card { background: var(--paper); }
+  .mod-card.is-off { background: #232d3c; }
+  .mod-card.is-off .mod-card-name, .portrait.dim .portrait-n { color: #9aa1b0; }
+  .mod-card.is-row .mod-card-more { color: var(--cream); }
+  .gb-card-by, .profile-card-desc { color: var(--text-2); }
+  .profile-card-head .profile-icon, .profile-editor-top .profile-icon { box-shadow: 0 0 0 2.5px var(--paper), 0 0 0 4px var(--gold); }
+
+  /* ── settings rows ── */
+  .set-row { background: var(--star) 64% 50% / 15px no-repeat, linear-gradient(90deg, var(--paper) 0 60%, var(--band) 68%); box-shadow: inset 0 0 0 1px rgb(236 229 216 / .1); }
+  .set-pergame-r:nth-child(odd) { background: rgb(255 255 255 / .04); }
+}
+
+[data-theme="gi"]:not([data-scheme="light"]) :is(.side, .panel, .dialog) ::-webkit-scrollbar-thumb { background: rgb(236 229 216 / .25); background-clip: padding-box; border: 3px solid transparent; }

@@ -9,7 +9,7 @@ art, icons or fonts are used: shapes are CSS, gradients and inline SVG. Hex valu
 screenshots, so they are close, not exact.
 
 Files: `src/styles/themes/gi.css` (fonts and imports), `gi-kit.css` (tokens, textures, every kit class),
-`gi-shell.css` (window, rail, sidebar, page bar, the sky), `gi-screens.css` (screen classes). The kit is
+`gi-shell.css` (window, sidebar, page bar, the sky), `gi-screens.css` (screen classes). The kit is
 imported first so screen rules win.
 
 ## The idea
@@ -17,8 +17,10 @@ imported first so screen rules win.
 Two materials trade places. Cream is warm paper. Slate is a blue grey, darker where it is a side
 panel. A control always takes the material its surface does not have: cream pills on slate and on the sky, slate
 pills on cream. Thin gold lines that end in diamonds and four-point stars do the decorating. Nothing has a
-thick outline or a hard shadow. The window is laid out like the Paimon menu: a dark strip of round icons, a
-cream column with the namecard and a grid of slate tiles, and a menu page over an evening sky.
+thick outline or a hard shadow. The window is laid out like the Paimon menu: a cream column with the namecard
+and a grid of slate tiles, and a menu page over an evening sky (dark) or over cream paper (light, the default,
+like the game's own menus). In light the page bar and drawers are paper too; pop-up menus, tips and toasts stay
+slate.
 
 ## Rules
 
@@ -52,8 +54,8 @@ cream column with the namecard and a grid of slate tiles, and a menu page over a
     Cream never does.
 11. **Idle motion.** Four-point sparkles drift across the sky and twinkle. Nothing else moves by itself. They
     stop with reduced motion.
-12. **Density.** Grids sit at half a rem. The top bar holds title, tabs and buttons in one line. The spare room
-    in the sidebar carries an emblem plate with the game's name.
+12. **Density.** Grids sit at half a rem. The top bar holds title, tabs and buttons in one line. Spare room in the
+    sidebar goes to the nav tiles and profile rows; a small emblem with the game's name shows only in what is left.
 13. **Motion** is soft and short (120 to 260 ms), ease out, no overshoot: dialogs grow from 96% as they fade in,
     side panels slide, rows fade to cream.
 
@@ -70,7 +72,7 @@ cream column with the namecard and a grid of slate tiles, and a menu page over a
 | Gold, yellow, orange | `#d3bc8e`, `#ffcc32`, `#f39000` |
 | Lime, red, blue | `#c3f436`, `#b75b4a` (`#e0523f`), `#39a0e3` |
 | Text on dark | `#ece5d8`, `#c9c3b6`, `#959cab` |
-| Text on cream | `#3b4255`, `#5b6274`, `#8d8372` |
+| Text on cream | `#3b4255`, `#4f5567`, `#62584a` (4.5:1 on cream) |
 | Rarity 1 to 5 | `#72778b`, `#5f8b6f`, `#5392b8`, `#9c75b7`, `#c8823c` |
 
 ## Textures (custom properties in gi-kit.css)
@@ -80,7 +82,7 @@ rows and slate tiles), `--rule` and `--rule-ink` (a hairline with diamond ends, 
 
 ## Context
 
-Text and line tokens are set twice: once for dark surfaces (the default) and once under every cream
+Text and line tokens are set twice: once for dark surfaces (the sky, in the dark scheme) and once under every cream
 container (`.side`, `.panel`, `.dialog`, `.card`, `.tile` and so on), so a screen's own CSS picks the right ink
 without knowing where it sits.
 

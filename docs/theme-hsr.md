@@ -49,6 +49,14 @@ dark strip under it. Gold marks what is in use, orange marks numbers and the pic
     carries an orbit ornament or a hairline, not blank glass.
 13. **Motion** is soft and short (120 to 260 ms): fade and a small slide, no bounce.
 
+## Light scheme
+
+Dark is the default, as in the game. In light the page itself becomes a plate (`#e3e4e8`, panels `#eeeff1`) with ink
+text, and the phone menu turns pale; its picked tile and the active profile flip to the dark key (`#26262a` with a
+pale gold label). Cells (cards, tiles, portraits) stay dark slate in both, as they do on the game's own plates, so
+outlines around them turn ink. Gold text on pale grounds uses `#7a4f12` (5:1). Stars and orbits are inverted to faint
+ink. The picture viewer stays dark.
+
 ## Colour
 
 | Use | Hex |

@@ -1,16 +1,26 @@
-// A GameBanana mod's page in a wide drawer: gallery, stats, description, update posts and files with Install buttons.
-// Owner: ONLINE area (docs/spec.md, "Downloads and Browse").
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { Avatar, Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, formatBytes, formatCount, plural, timeAgo } from "../../ui/kit";
+// A GameBanana mod's page in a wide drawer: gallery, creator and stats, files with Install buttons, the keys the
+// description lists, the description as the author formatted it, update posts and comments. It opens over any screen
+// from the route (a numeric route.modId, see OnlineOverlays). Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { errorText, type GameState, type ModEntry, type QueueItem, type QueueSnapshot } from "../../lib/api";
+import { gbLinkTarget, imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, type GbFile, type GbImage, type GbMod, type GbUpdate } from "../../lib/gamebanana";
+import { detectKeybinds } from "../../lib/keybinds";
+import { likeMod, useAccount, useLiked } from "../../lib/account";
+import { useNsfw } from "../../lib/prefs";
+import { go, useGames } from "../../lib/store";
+import { DescKeys } from "../../ui/DescKeys";
+import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, formatBytes, formatCount, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
+import { CategoryLink, CharLink, CreatorLink } from "../../ui/Links";
+import { menuFor, openMenu } from "../../ui/ContextMenu";
 import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
-import { errorText, shell, type GameState, type ModEntry, type QueueItem, type QueueSnapshot } from "../../lib/api";
-import { imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, type GbFile, type GbMod, type GbUpdate } from "../../lib/gamebanana";
-import { go } from "../../lib/store";
+import { openCreator, openExternal, takeWantFiles } from "./actions";
 import { Comments } from "./Comments";
+import { AdultSwitch } from "./GbBrowser";
 import { Lightbox } from "./Lightbox";
-import type { NsfwMode } from "./Browse";
+import { openGbMod, useLibIndex } from "./state";
+import { useQueue } from "./useQueue";
 
 const activeStates = new Set(["waiting", "downloading", "installing", "needsChoice"]);
 
@@ -21,37 +31,61 @@ export function queueLabel(i: QueueItem): string {
   return i.archive ? "Waiting to install" : "Waiting";
 }
 
-function openLink(e: MouseEvent | KeyboardEvent) {
-  const a = (e.target as HTMLElement).closest<HTMLElement>("[data-href]");
-  if (!a) return;
-  if ("key" in e && e.key !== "Enter" && e.key !== " ") return;
-  e.preventDefault();
-  const url = a.getAttribute("data-href");
-  if (url) shell.openUrl(url).catch((err) => toast(errorText(err), true));
+/** Clicks and keys inside sanitized GameBanana HTML: links (GameBanana mods and members open in the app, others in
+ *  the browser), spoilers (click to show) and pictures (`onImage`). */
+export function descHandler(onImage?: (img: HTMLImageElement) => void) {
+  return (e: MouseEvent | KeyboardEvent) => {
+    const key = "key" in e;
+    if (key && e.key !== "Enter" && e.key !== " ") return;
+    const t = e.target as HTMLElement;
+    const spoiler = t.closest<HTMLElement>(".gb-spoiler");
+    if (spoiler && !spoiler.classList.contains("open")) { e.preventDefault(); spoiler.classList.add("open"); spoiler.removeAttribute("title"); return; }
+    const a = t.closest<HTMLElement>("[data-href]");
+    if (a) {
+      e.preventDefault();
+      const url = a.getAttribute("data-href");
+      if (!url) return;
+      const inApp = gbLinkTarget(url);
+      if (inApp && "mod" in inApp) openGbMod(inApp.mod);
+      else if (inApp && "member" in inApp) openCreator(inApp.member);
+      else openExternal(url);
+      return;
+    }
+    if (!key && onImage && t instanceof HTMLImageElement && t.classList.contains("gb-dimg")) { e.preventDefault(); onImage(t); }
+  };
 }
 
-export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
-  game: GameState; modId: number; lib: ModEntry[]; snap: QueueSnapshot; nsfw: NsfwMode; onClose: () => void;
-}) {
+export function ModDrawer({ game: here, modId, onClose }: { game: GameState; modId: number; onClose: () => void }) {
+  const games = useGames();
+  const nsfw = useNsfw();
+  const snap = useQueue();
   const [mod, setMod] = useState<GbMod | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [reveal, setReveal] = useState(nsfw === "show");
+  const [reveal, setReveal] = useState(false);
   const [shown, setShown] = useState(0);
-  const [lightbox, setLightbox] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: GbImage[]; start: number } | null>(null);
   const [older, setOlder] = useState(false);
   const [posts, setPosts] = useState<GbUpdate[] | null>(null);
   const [postsOpen, setPostsOpen] = useState(false);
   const [menu, setMenu] = useState<{ el: HTMLElement; file: GbFile; replaces: string } | null>(null);
+  const filesRef = useRef<HTMLElement>(null);
+  const descRef = useRef<HTMLDivElement>(null);
+  const commentsRef = useRef<HTMLDivElement>(null);
+  const [wantFiles] = useState(takeWantFiles);
 
   useEffect(() => {
     const c = new AbortController();
-    setMod(null); setError(null); setPosts(null); setShown(0);
+    setMod(null); setError(null); setPosts(null); setShown(0); setReveal(false); setPostsOpen(false);
     modPage(modId, c.signal)
       .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError("GameBanana didn't send this mod's page."); } })
       .catch((e) => { if (!c.signal.aborted && !isAbort(e)) setError(errorText(e)); });
     return () => c.abort();
   }, [modId, attempt]);
+
+  useEffect(() => {
+    if (mod && wantFiles) window.setTimeout(() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }, [mod, wantFiles]);
 
   useEffect(() => {
     if (!postsOpen || posts || !mod) return;
@@ -60,23 +94,45 @@ export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
     return () => { live = false; };
   }, [postsOpen, posts, mod]);
 
-  const closeLightbox = useCallback(() => setLightbox(null), []);
-  const description = useMemo(() => (mod ? sanitizeHtml(mod.descriptionHtml) : ""), [mod]);
+  // the game it installs into: the mod's own game when that is set up here
+  const target = mod?.game ? games.find((g) => g.gamebananaId === mod.game!.id) ?? null : here;
+  const lib = useLibIndex(target?.id ?? here.id);
+  const installed = lib.byMod.get(modId) ?? [];
+  const archived = installed.length ? undefined : lib.archived.get(modId);
 
-  const installed = lib.filter((m) => m.source?.modId === modId);
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const found = useMemo(() => detectKeybinds(mod ? sanitizeHtml(mod.descriptionHtml) : ""), [mod]);
+  const onDesc = useMemo(() => descHandler((img) => {
+    const all = [...(descRef.current?.querySelectorAll<HTMLImageElement>("img.gb-dimg") ?? [])];
+    setLightbox({ images: all.map((i) => ({ full: i.src, caption: i.alt || undefined })), start: Math.max(0, all.indexOf(img)) });
+  }), []);
+  const onPlain = useMemo(() => descHandler(), []);
+
   const install = async (file: GbFile, replaces?: string) => {
-    if (!mod) return;
+    if (!mod || !target) return;
     try {
-      await queueModFile(game.id, mod, file, replaces);
-      toast(`${replaces ? "Updating" : "Downloading"} ${mod.name}`, false, { label: "Show", run: () => go("downloads") });
+      await queueModFile(target.id, mod, file, replaces);
+      const verb = replaces ? "Updating" : archived ? "Reinstalling" : "Downloading";
+      toast(`${verb} ${mod.name}${target.id !== here.id ? ` for ${target.short}` : ""}`, false, { label: "Show", run: () => go("downloads") });
     } catch (e) { toast(errorText(e), true); }
+  };
+
+  const jumpKeys = () => {
+    if (!found.anchor) return;
+    document.getElementById(found.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const title = mod?.name ?? (error ? "Couldn't open this mod" : "Loading");
   const url = mod?.url ?? `https://gamebanana.com/mods/${modId}`;
+  const blurred = !!mod?.nsfw && !reveal && nsfw !== "show";
   return (
     <Drawer title={title} onClose={onClose} width="min(60rem, 94vw)" className="gb-drawer"
-      actions={<IconButton icon="external" label="Open on GameBanana" onClick={() => shell.openUrl(url).catch((e) => toast(errorText(e), true))} />}>
+      actions={<>
+        {mod?.nsfw && <span className="gb-drawer-adult"><AdultSwitch value={nsfw} /></span>}
+        {mod && <IconButton icon="more" label="More (right-click works too)" onClick={(e) => openMenu(e.currentTarget, menuFor("gbmod", { game: target?.id ?? here.id, card: mod }))} />}
+        {mod && <LikeButton id={mod.id} name={mod.name} />}
+        <IconButton icon="external" label="Open on GameBanana" onClick={() => openExternal(url)} />
+      </>}>
       {error && <Empty icon="warn" title="Couldn't load this mod" actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>}>{error}</Empty>}
       {!mod && !error && (
         <div className="gb-drawer-skel">
@@ -87,41 +143,55 @@ export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
       )}
       {mod && (
         <div className="gb-mod">
-          <Gallery mod={mod} blurred={mod.nsfw && !reveal && nsfw !== "show"} shown={shown} setShown={setShown}
-            onOpen={(i) => setLightbox(i)} onReveal={() => setReveal(true)} />
+          <Gallery mod={mod} blurred={blurred} shown={shown} setShown={setShown}
+            onOpen={(i) => setLightbox({ images: mod.images, start: i })} onReveal={() => setReveal(true)} />
 
           <div className="gb-mod-head">
             {mod.submitter && (
-              <button type="button" className="gb-submitter" title={`${mod.submitter.name} on GameBanana`}
-                onClick={() => shell.openUrl(mod.submitter!.url).catch((e) => toast(errorText(e), true))}>
-                <Avatar src={mod.submitter.avatar} name={mod.submitter.name} size={28} />
-                <span>{mod.submitter.name}</span>
-              </button>
+              <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-submitter" />
             )}
             <div className="gb-stats">
-              <span className="gb-stat" title="Likes"><Icon name="heart" />{formatCount(mod.likes)}</span>
-              <span className="gb-stat" title="Views"><Icon name="eye" />{formatCount(mod.views)}</span>
-              {mod.downloads !== null && <span className="gb-stat" title="Downloads"><Icon name="downloads" />{formatCount(mod.downloads)}</span>}
-              <span className="gb-stat" title={`Added ${new Date(mod.added * 1000).toLocaleDateString()}`}><Icon name="clock" />{timeAgo(mod.updated)}</span>
+              <span className="gb-stat" title={`${mod.likes} likes`}><Icon name="heart" />{formatCount(mod.likes)}</span>
+              <span className="gb-stat" title={`${mod.views} views`}><Icon name="eye" />{formatCount(mod.views)}</span>
+              {mod.downloads !== null && <span className="gb-stat" title={`${mod.downloads} downloads`}><Icon name="downloads" />{formatCount(mod.downloads)}</span>}
+              {(mod.comments ?? 0) > 0 && (
+                <button type="button" className="gb-stat gb-stat-btn" title="Go to the comments" onClick={() => commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                  <Icon name="feed" />{plural(mod.comments ?? 0, "comment")}
+                </button>
+              )}
+              <span className="gb-stat" title={`Added ${new Date(mod.added * 1000).toLocaleString()}, updated ${new Date(mod.updated * 1000).toLocaleString()}`}><Icon name="clock" />{timeAgo(mod.updated)}</span>
             </div>
           </div>
           <div className="gb-mod-tags">
-            {mod.character && <Badge tone="accent" icon="characters">{mod.character}</Badge>}
-            {mod.category && mod.category.name !== mod.character && <Badge>{mod.category.name}</Badge>}
+            {mod.character && target && <CharLink game={target.id} name={mod.character} className="badge t-accent gb-tag-char" portrait />}
+            {mod.character && !target && <Badge tone="accent" icon="characters">{mod.character}</Badge>}
+            {mod.category && mod.category.name !== mod.character && (target
+              ? <CategoryLink game={target.id} category={mod.category} className="badge" />
+              : <Badge>{mod.category.name}</Badge>)}
             {mod.version && <Badge title="Version">{mod.version}</Badge>}
-            {mod.nsfw && <Badge tone="warn" title={mod.ratings.join(", ") || "Marked for adults"}>18+</Badge>}
-            {installed.length > 0 && <Badge tone="ok" icon="check">Installed</Badge>}
+            {mod.nsfw && (nsfw === "show"
+              ? <span className="gb-nsfw-mark is-inline" title={mod.ratings.join(", ") || "Marked for adults"}>18+</span>
+              : <Badge tone="bad" title={mod.ratings.join(", ") || "Marked for adults"}>18+</Badge>)}
+            {installed.length > 0 && (target?.id === here.id
+              ? <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
+              : <Badge tone="ok" icon="check">Installed</Badge>)}
+            {archived && (target?.id === here.id
+              ? <Badge tone="info" icon="trash" title="You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash" onClick={() => go({ view: "library", tab: "archive" })}>Removed</Badge>
+              : <Badge tone="info" icon="trash" title="You removed it before. Reinstalling brings back its settings">Removed</Badge>)}
           </div>
           {mod.summary && <p className="gb-summary">{mod.summary}</p>}
 
-          <section className="gb-files" aria-label="Files">
+          <section ref={filesRef} className="gb-files" aria-label="Files">
             <h3 className="sub-h">Files</h3>
-            <FileList mod={mod} game={game} installed={installed} snap={snap} older={older} setOlder={setOlder}
+            {!target && mod.game && <p className="hint">This is a mod for {mod.game.name}, which isn't set up in gachamod.</p>}
+            <FileList mod={mod} game={target} installed={installed} archived={!!archived} snap={snap} older={older} setOlder={setOlder}
               onInstall={install} onMenu={(el, file, replaces) => setMenu({ el, file, replaces })} />
           </section>
 
-          {description && (
-            <div className="gb-desc selectable" onClick={openLink} onKeyDown={openLink} dangerouslySetInnerHTML={{ __html: description }} />
+          <DescKeys found={found} onJump={found.anchor ? jumpKeys : undefined} />
+
+          {found.html && (
+            <div ref={descRef} className="gb-desc selectable" onClick={onDesc} onKeyDown={onDesc} dangerouslySetInnerHTML={{ __html: found.html }} />
           )}
 
           {mod.updatesCount > 0 && (
@@ -135,7 +205,7 @@ export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
                     <li key={p.id} className="gb-post">
                       <div className="gb-post-h"><strong>{p.name}</strong>{p.version && <Badge>{p.version}</Badge>}<span className="muted">{timeAgo(p.added)}</span></div>
                       {p.changes.length > 0 && <ul className="gb-post-changes">{p.changes.map((c, n) => <li key={n}>{c.cat && <span className="gb-post-cat">{c.cat}</span>} {c.text}</li>)}</ul>}
-                      {p.text && <div className="gb-desc selectable" onClick={openLink} onKeyDown={openLink} dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.text) }} />}
+                      {p.text && <div className="gb-desc selectable" onClick={onPlain} onKeyDown={onPlain} dangerouslySetInnerHTML={{ __html: sanitizeHtml(p.text) }} />}
                     </li>
                   ))}
                 </ol>
@@ -143,10 +213,10 @@ export function ModDrawer({ game, modId, lib, snap, nsfw, onClose }: {
             </section>
           )}
 
-          <Comments key={mod.id} modId={mod.id} url={url} onLink={openLink} />
+          <div ref={commentsRef}><Comments key={mod.id} modId={mod.id} url={url} onLink={onPlain} /></div>
         </div>
       )}
-      {lightbox !== null && mod && <Lightbox images={mod.images} start={lightbox} onClose={closeLightbox} />}
+      {lightbox && <Lightbox images={lightbox.images} start={lightbox.start} onClose={closeLightbox} />}
       {menu && (
         <Popover anchor={menu.el} onClose={() => setMenu(null)} label="File actions" width="14em">
           <Menu items={[{ label: "Reinstall", icon: "refresh", hint: "Download this file again and replace the installed copy", onClick: () => { const m = menu; setMenu(null); void install(m.file, m.replaces); } }]} />
@@ -164,12 +234,12 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
   if (!img) return <div className="gb-gallery gb-gallery-empty"><Icon name="image" /><span>No pictures</span></div>;
   return (
     <div className={`gb-gallery${blurred ? " is-nsfw" : ""}`}>
-      <button type="button" className="gb-gallery-main" title="Open full size" onClick={() => (blurred ? onReveal() : onOpen(shown))}>
+      <button type="button" className="gb-gallery-main" title={blurred ? "Show the pictures" : "Open full size"} onClick={() => (blurred ? onReveal() : onOpen(shown))}>
         {broken.has(shown)
           ? <span className="gb-img-broken"><Icon name="image" /></span>
           : <img src={imageAt(img, 800)} alt={img.caption ?? mod.name} loading="lazy" decoding="async"
               onError={() => setBroken((b) => new Set(b).add(shown))} />}
-        {blurred && <span className="gb-nsfw-cover"><Badge tone="warn">18+</Badge><span>Show pictures</span></span>}
+        {blurred && <span className="gb-nsfw-cover"><span className="gb-nsfw-badge is-inline">18+</span><span className="gb-nsfw-show on-img">Show pictures</span></span>}
       </button>
       {mod.images.length > 1 && (
         <div className="gb-gallery-thumbs" role="listbox" aria-label="Pictures">
@@ -185,8 +255,8 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
   );
 }
 
-function FileList({ mod, game, installed, snap, older, setOlder, onInstall, onMenu }: {
-  mod: GbMod; game: GameState; installed: ModEntry[]; snap: QueueSnapshot; older: boolean; setOlder: (v: boolean) => void;
+function FileList({ mod, game, installed, archived, snap, older, setOlder, onInstall, onMenu }: {
+  mod: GbMod; game: GameState | null; installed: ModEntry[]; archived: boolean; snap: QueueSnapshot; older: boolean; setOlder: (v: boolean) => void;
   onInstall: (f: GbFile, replaces?: string) => void; onMenu: (el: HTMLElement, f: GbFile, replaces: string) => void;
 }) {
   const newest = newestFile(mod);
@@ -194,12 +264,14 @@ function FileList({ mod, game, installed, snap, older, setOlder, onInstall, onMe
   const old = mod.files.filter((f) => f.archived);
   if (!mod.files.length) return <p className="muted">This mod has no files to download.</p>;
   const row = (f: GbFile) => {
-    const q = snap.items.find((i) => i.req.game === game.id && i.req.fileId === f.id && activeStates.has(i.state));
+    const q = game ? snap.items.find((i) => i.req.game === game.id && i.req.fileId === f.id && activeStates.has(i.state)) : undefined;
     const same = installed.find((m) => m.source?.fileId === f.id);
     const base = installed[0];
     const baseTime = base?.source?.remoteUpdated ?? base?.installedAt ?? 0;
     let action;
-    if (q) {
+    if (!game) {
+      action = null;
+    } else if (q) {
       action = (
         <div className="gb-file-q">
           <span className="hint">{queueLabel(q)}</span>
@@ -218,8 +290,11 @@ function FileList({ mod, game, installed, snap, older, setOlder, onInstall, onMe
       action = <Button variant={f === newest && isNewer ? "primary" : "secondary"} icon={isNewer ? "update" : "swap"}
         title={isNewer ? `Replace ${base.name} with this file. Its options, tags and on/off state stay.` : `Install this older file in place of ${base.name}`}
         onClick={() => onInstall(f, base.id)}>{isNewer ? "Update" : "Use this file"}</Button>;
+    } else if (archived) {
+      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" title="Download it again. Your settings, tags and profile places for it come back"
+        onClick={() => onInstall(f)}>Reinstall</Button>;
     } else {
-      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)}>Install</Button>;
+      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)} title="Download this file and add it to Mods">Install</Button>;
     }
     const scan = f.analysis === "clean" ? null : f.analysis;
     return (
@@ -235,7 +310,7 @@ function FileList({ mod, game, installed, snap, older, setOlder, onInstall, onMe
           </div>
           {f.description && <p className="gb-file-desc">{f.description}</p>}
         </div>
-        <div className="gb-file-act">{action}</div>
+        {action && <div className="gb-file-act">{action}</div>}
       </li>
     );
   };
@@ -251,5 +326,17 @@ function FileList({ mod, game, installed, snap, older, setOlder, onInstall, onMe
         </>
       )}
     </>
+  );
+}
+
+/** Like on GameBanana, shown while signed in (Settings > Account). */
+function LikeButton({ id, name }: { id: number; name: string }) {
+  const acc = useAccount();
+  const liked = useLiked(id);
+  const [busy, setBusy] = useState(false);
+  if (!acc.available || !acc.user) return null;
+  return (
+    <IconButton icon="heart" on={liked} disabled={busy} label={liked ? "Take back your like on GameBanana" : "Like on GameBanana. Nobody is notified"}
+      onClick={() => { setBusy(true); void likeMod(id, name, !liked).finally(() => setBusy(false)); }} />
   );
 }

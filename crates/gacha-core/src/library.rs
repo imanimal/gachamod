@@ -14,8 +14,9 @@
 use crate::db::{now, Db, Shared};
 use crate::error::{Error, Result};
 use crate::ini::{self, QuickFacts, VarValue};
+use crate::aliases::Matcher;
 use crate::model::{Character, ModChange, ModEntry, Sidecar, DISABLED_PREFIX, SIDECAR_FILE};
-use crate::{devtools, games, launch, profiles};
+use crate::{devtools, games, launch, managers, previews, profiles};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -65,14 +66,20 @@ pub fn migrate(db: &Db) -> Result<()> {
     if !db.has_column("trash", "data")? {
         db.conn.execute_batch("ALTER TABLE trash ADD COLUMN data TEXT")?;
     }
+    // characters the player has (CREATE ... IF NOT EXISTS)
+    db.conn.execute_batch(crate::owned::SCHEMA)?;
+    // removed mods whose files are gone (CREATE ... IF NOT EXISTS, safe on every database)
+    db.conn.execute_batch(removed::ARCHIVE_SCHEMA)?;
     Ok(())
 }
+
+mod removed;
+pub use removed::{archive_forget, archive_list, drop_removed, purge_expired, removed_by_gb, trash_days, trash_purge, ArchiveEntry, Removed};
 
 /// IMM keeps every mod here (3DMigoto skips it because of the DISABLED prefix) ...
 pub const IMM_STORE: &str = "DISABLED - ALL MODS ARE STORED HERE (Managed by IMM)";
 /// ... and links the enabled ones into here.
 pub const IMM_LINKS: &str = "DO NOT MODIFY (Managed by IMM)";
-const TRASH_DAYS: i64 = 14;
 
 /// Fields the user can change on a mod. `None` leaves a field alone; an empty string clears a text field.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -238,69 +245,60 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
 
 // ── characters ──
 
-fn norm(s: &str) -> String { s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect() }
+/// The best character among `names` for some hints, by the rules in aliases.rs (no alias table).
+pub fn match_character(names: &[String], hints: &[&str]) -> Option<String> { Matcher::plain(names).best(hints) }
 
-/// Words of a name, split at anything that isn't a letter or digit and where a lower case letter meets an upper
-/// case one ("EllenJoe_bunny" -> ellen, joe, bunny).
-fn tokens(s: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut cur = String::new();
-    let mut prev_lower = false;
-    for c in s.chars() {
-        if !c.is_alphanumeric() {
-            if !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
-            prev_lower = false;
-            continue;
-        }
-        if c.is_uppercase() && prev_lower && !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
-        prev_lower = c.is_lowercase() || c.is_numeric();
-        cur.extend(c.to_lowercase());
-    }
-    if !cur.is_empty() { out.push(cur); }
-    out
-}
+/// The same with the game's alias table: "Ei" finds Raiden Shogun, "Anbi" finds Anby.
+pub fn match_character_for(game: &str, names: &[String], hints: &[&str]) -> Option<String> { Matcher::new(game, names).best(hints) }
 
-fn has_run(hay: &[String], needle: &[String]) -> bool {
-    !needle.is_empty() && hay.len() >= needle.len() && hay.windows(needle.len()).any(|w| w == needle)
-}
-
-/// The best character for some hints: case- and punctuation-insensitive, whole names beat name parts, longer
-/// matches beat shorter ones, and parts of 3 letters or less only count as an exact match.
-pub fn match_character(names: &[String], hints: &[&str]) -> Option<String> {
-    let prepared: Vec<(String, Vec<String>, &String)> = names.iter().map(|n| (norm(n), tokens(n), n)).filter(|(f, _, _)| !f.is_empty()).collect();
-    let mut best: Option<(usize, &String)> = None;
-    for h in hints {
-        let hn = norm(h);
-        if hn.is_empty() { continue; }
-        let toks = tokens(h);
-        for (full, parts, name) in &prepared {
-            let mut score = 0;
-            if hn == *full { score = 1000 + full.len(); }
-            else if full.len() > 3 && has_run(&toks, parts) { score = 500 + full.len(); }
-            else if full.len() >= 5 && hn.contains(full.as_str()) { score = 200 + full.len(); }
-            else {
-                for p in parts {
-                    if p.len() > 3 && toks.iter().any(|t| t == p) { score = score.max(p.len() + 1); }
-                    else if p.len() >= 5 && hn.contains(p.as_str()) { score = score.max(p.len()); }
-                }
-            }
-            if score > 0 && best.is_none_or(|(b, _)| score > b) { best = Some((score, name)); }
-        }
-    }
-    best.map(|(_, n)| n.clone())
-}
-
-fn character_names(db: &Db, game: &str) -> Result<Vec<String>> {
+pub(crate) fn character_names(db: &Db, game: &str) -> Result<Vec<String>> {
     let mut st = db.conn.prepare("SELECT name FROM characters WHERE game = ?1 ORDER BY sort")?;
     let v = st.query_map([game], |r| r.get::<_, String>(0))?.collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(v)
 }
+
+/// A matcher over the game's roster and alias table.
+pub fn matcher(db: &Db, game: &str) -> Result<Matcher> { Ok(Matcher::new(game, &character_names(db, game)?)) }
 
 // ── reading a mod folder ──
 
 fn is_ini(name: &str) -> bool {
     let l = name.to_ascii_lowercase();
     l.ends_with(".ini") && l != "desktop.ini"
+}
+
+/// An ini another manager turned off by renaming it: "DISABLED_mod.ini" (3DMigoto skips it) or "mod.ini.disabled".
+pub(crate) fn is_off_ini(name: &str) -> bool {
+    let l = name.to_ascii_lowercase();
+    (is_ini(name) && is_disabled_name(name)) || l.ends_with(".ini.disabled") || l.ends_with(".ini.disable")
+}
+
+/// The ini name a turned-off ini had: "DISABLED_mod.ini" -> "mod.ini", "mod.ini.disabled" -> "mod.ini".
+fn live_ini_name(name: &str) -> Option<String> {
+    let l = name.to_ascii_lowercase();
+    let n = if l.ends_with(".ini.disabled") { &name[..name.len() - 9] } else if l.ends_with(".ini.disable") { &name[..name.len() - 8] } else { name };
+    let n = display_folder(n);
+    (is_ini(n) && n.len() > 4).then(|| n.to_string())
+}
+
+/// A mod folder that 3DMigoto skips although its name doesn't say so: every ini in it, at any depth, was turned off
+/// by renaming (another manager's way of turning a mod off).
+fn only_off_inis(dir: &Path) -> bool {
+    fn walk(dir: &Path, off: &mut bool, depth: u32) -> bool {
+        if depth > 8 { return true; }
+        let Ok(rd) = fs::read_dir(dir) else { return true };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            let Ok(ft) = e.file_type() else { continue };
+            if ft.is_dir() {
+                if !is_disabled_name(&name) && !skip_dir(&name) && !walk(&e.path(), off, depth + 1) { return false; }
+            } else if is_off_ini(&name) { *off = true; }
+            else if is_ini(&name) { return false; }
+        }
+        true
+    }
+    let mut off = false;
+    walk(dir, &mut off, 0) && off
 }
 
 fn is_image(name: &str) -> bool {
@@ -311,7 +309,7 @@ fn is_image(name: &str) -> bool {
 /// Folders that are never mods or groups.
 fn skip_dir(name: &str) -> bool {
     let l = name.to_ascii_lowercase();
-    l.starts_with('.') || l == "shaderfixes" || l == "shadercache" || l == "__macosx"
+    l.starts_with('.') || l == "shaderfixes" || l == "shadercache" || l == "__macosx" || l == crate::live::DIR
 }
 
 const GENERIC: &[&str] = &["mod", "mods", "files", "file", "data", "content", "mod files", "modfiles"];
@@ -344,24 +342,31 @@ fn dir_facts(dir: &Path) -> Facts {
     f
 }
 
-/// The user's own preview (set_preview) when its file is there, else preview.(png|jpg|jpeg|webp|gif) in the mod root,
-/// else the sidecar's preview (a file there or a URL), else the first image in the mod root.
+/// The picture that shows a mod (docs/spec.md, "Previews"): the user's own (set_preview) when its file is there, else
+/// preview.(png|jpg|jpeg|webp|gif) in the mod root, else the sidecar's preview (the GameBanana picture saved at install,
+/// a file there or a URL), else the first root-level image that no ini loads and that isn't named like a texture, else
+/// such a picture up to three folders down (previews::nested_picture).
 fn pick_preview(dir: &Path, files: &[String], sc: &Sidecar) -> Option<String> {
     if let Some(full) = custom_preview_path(dir, sc) { return Some(full.to_string_lossy().into_owned()); }
-    let own = sc.preview.as_deref();
     let mut images: Vec<&String> = files.iter().filter(|f| is_image(f)).collect();
     images.sort_by_key(|f| f.to_ascii_lowercase());
-    if let Some(p) = images.iter().find(|f| f.to_ascii_lowercase().starts_with("preview.")) {
+    if let Some(p) = images.iter().find(|f| previews::is_preview_name(f)) {
         return Some(dir.join(p).to_string_lossy().into_owned());
     }
-    if let Some(p) = own.map(str::trim).filter(|p| !p.is_empty()) {
+    if let Some(p) = sc.preview.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
         if p.starts_with("http://") || p.starts_with("https://") { return Some(p.to_string()); }
         if let Some(rel) = safe_rel(p) {
             let full = dir.join(rel);
-            if full.is_file() { return Some(full.to_string_lossy().into_owned()); }
+            if full.is_file() && !previews::looks_like_texture(p) { return Some(full.to_string_lossy().into_owned()); }
         }
     }
-    images.first().map(|p| dir.join(p).to_string_lossy().into_owned())
+    // pictures other managers save: JASM's .JASM_Cover.png, EMMM's preview_custom.png, FlairX's preview001.jpg ...
+    if let Some(p) = images.iter().find(|f| managers::is_cover_name(f)) {
+        return Some(dir.join(p).to_string_lossy().into_owned());
+    }
+    previews::root_picture(dir, files, |_| false)
+        .or_else(|| previews::nested_picture(dir))
+        .map(|p| dir.join(p).to_string_lossy().into_owned())
 }
 
 fn folder_time(dir: &Path) -> i64 {
@@ -381,15 +386,16 @@ fn hints_for<'a>(rel: &'a str, name: &'a str) -> Vec<&'a str> {
     v
 }
 
-fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, qf: &QuickFacts, chars: &[String]) -> ModEntry {
+fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, qf: &QuickFacts, m: &Matcher) -> ModEntry {
     let dir = root.join(rel);
     let facts = dir_facts(&dir);
     let folder = rel.rsplit('/').next().unwrap_or(rel).to_string();
     let group = group_of(rel);
-    let character = sc.character.clone().filter(|c| !c.trim().is_empty()).or_else(|| {
+    // a character saved under another name ("Ei", "RaidenShogun") shows under the roster's name
+    let character = sc.character.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(|c| m.exact(c).unwrap_or_else(|| c.to_string())).or_else(|| {
         // group folders first, then the mod's own folder ("Jane Doe Maid" in a folder that isn't a character's)
         let parts: Vec<&str> = group.as_deref().map(|g| g.split('/').map(display_folder).collect()).unwrap_or_default();
-        match_character(chars, &parts).or_else(|| match_character(chars, &[display_folder(&folder)]))
+        m.best(&parts).or_else(|| m.best(&[display_folder(&folder)]))
     });
     let name = if sc.name.trim().is_empty() { display_folder(&folder).to_string() } else { sc.name.clone() };
     ModEntry {
@@ -429,7 +435,7 @@ fn custom_preview_path(dir: &Path, sc: &Sidecar) -> Option<PathBuf> {
 
 // ── finding mods ──
 
-struct Found { dir: PathBuf, rel: String, name_hint: String }
+struct Found { dir: PathBuf, rel: String, name_hint: String, ini_off: bool }
 
 struct Walk { canon_root: Option<PathBuf>, found: Vec<Found>, links: HashSet<PathBuf> }
 
@@ -440,6 +446,7 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
     let Ok(rd) = fs::read_dir(dir) else { return };
     let mut has_side = false;
     let mut has_ini = false;
+    let mut off_ini = false;
     let mut kids: Vec<(PathBuf, String)> = Vec::new();
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
@@ -458,18 +465,22 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
             if !skip_dir(&name) { kids.push((e.path(), name)); }
         } else if name == SIDECAR_FILE {
             has_side = true;
+        } else if is_off_ini(&name) {
+            off_ini = true;
         } else if is_ini(&name) {
             has_ini = true;
         }
     }
-    if !rel.is_empty() && (has_side || has_ini) {
+    if !rel.is_empty() && (has_side || has_ini || off_ini) {
         let folder = name_of(dir);
         let own = display_folder(&folder);
         let name_hint = match outer {
             Some(o) if GENERIC.contains(&own.to_ascii_lowercase().as_str()) || own.eq_ignore_ascii_case(o) => o.to_string(),
             _ => own.to_string(),
         };
-        w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint });
+        // only turned-off inis here: off, unless a sub-folder still has a live one
+        let ini_off = off_ini && !has_ini && only_off_inis(dir);
+        w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint, ini_off });
         return;
     }
     kids.sort_by_key(|(_, n)| n.to_ascii_lowercase());
@@ -481,11 +492,18 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
     }
 }
 
+/// Every mod folder under `root` by the rules of "Finding mods": (folder, path from root). Read-only.
+pub(crate) fn mod_dirs(root: &Path) -> Vec<(PathBuf, String)> {
+    let mut w = Walk { canon_root: fs::canonicalize(root).ok(), found: Vec::new(), links: HashSet::new() };
+    walk_dir(&mut w, root, "", None, 0);
+    w.found.into_iter().map(|f| (f.dir, f.rel)).collect()
+}
+
 fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') }
 
 /// Counts, for each enabled mod, the other enabled mods that override any of the same hashes. Hashes that 5 or more
 /// enabled mods share are left out (shared buffers, UI, effects).
-fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>]) {
+fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>], live: &HashMap<String, u32>) {
     let mut by_hash: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in entries.iter().enumerate() {
         if !e.enabled { continue; }
@@ -495,7 +513,13 @@ fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>]) {
     let mut others: Vec<HashSet<usize>> = vec![HashSet::new(); entries.len()];
     for v in by_hash.values() {
         if v.len() < 2 || v.len() >= 5 { continue; }
-        for &a in v { for &b in v { if a != b { others[a].insert(b); } } }
+        for &a in v {
+            for &b in v {
+                // two live mods of one character never show together
+                let same_group = live.get(&entries[a].id).is_some_and(|g| live.get(&entries[b].id) == Some(g));
+                if a != b && !same_group { others[a].insert(b); }
+            }
+        }
     }
     for (i, e) in entries.iter_mut().enumerate() { e.conflicts = others[i].len() as u32; }
 }
@@ -513,7 +537,7 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         let d = lock(db)?;
         let root = games::mods_dir(&d, game)?;
         let prev: HashMap<String, ModEntry> = list(&d, game)?.into_iter().map(|m| (m.id.clone(), m)).collect();
-        (root, prev, character_names(&d, game)?)
+        (root, prev, matcher(&d, game)?)
     };
 
     let mut w = Walk { canon_root: fs::canonicalize(&root).ok(), found: Vec::new(), links: HashSet::new() };
@@ -545,23 +569,27 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
             }
             None => {
                 let hints = hints_for(&f.rel, &f.name_hint);
-                (Sidecar {
-                    format: 1, id: new_id(), name: f.name_hint.clone(), character: match_character(&chars, &hints),
+                let mut sc = Sidecar {
+                    format: 1, id: new_id(), name: f.name_hint.clone(), character: chars.best(&hints),
                     installed_at: folder_time(&f.dir), ..Default::default()
-                }, true)
+                };
+                // what another mod manager knew about it: name, character, GameBanana link, picture ...
+                if let Some(fm) = managers::read(&f.dir) { managers::merge(&mut sc, &fm, &chars, &f.name_hint, true); }
+                (sc, true)
             }
         };
         if write { let _ = write_sidecar(&f.dir, &sc); }
         let enabled = if f.rel.split('/').next().is_some_and(|p| p.eq_ignore_ascii_case(IMM_STORE)) {
             fs::canonicalize(&f.dir).is_ok_and(|c| w.links.contains(&c))
-        } else { !rel_disabled(&f.rel) };
+        } else { !rel_disabled(&f.rel) && !f.ini_off };
         let qf = ini::quick_facts(&f.dir);
         let mut e = build_entry(game, &root, &f.rel, enabled, &sc, &qf, &chars);
         if let Some(p) = prev.get(&e.id) { e.update_available = p.update_available; }
         hashes.push(qf.hashes);
         entries.push(e);
     }
-    compute_conflicts(&mut entries, &hashes);
+    let live = lock(db).map(|d| crate::live::groups_by_mod(&d, game)).unwrap_or_default();
+    compute_conflicts(&mut entries, &hashes, &live);
 
     let d = lock(db)?;
     let stamp = now();
@@ -708,6 +736,21 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
         if let Some(p) = disabled_parent(&e.rel_path) {
             return Err(Error::Conflict(format!("{} is inside the folder \"{p}\", which keeps everything in it off. Rename that folder first.", e.name)));
         }
+        if !rel_disabled(&e.rel_path) {
+            // another manager turned it off by renaming its inis ("DISABLED_mod.ini", "mod.ini.disabled"): name them back
+            let mut renamed = 0;
+            for f in root_files(&old).into_iter().filter(|f| is_off_ini(f)) {
+                let Some(live) = live_ini_name(&f) else { continue };
+                if old.join(&live).exists() { continue; }
+                fs::rename(old.join(&f), old.join(&live))?;
+                renamed += 1;
+            }
+            if renamed == 0 { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
+            e.enabled = true;
+            save_row(db, e)?;
+            if kept_vars(db, &cx.game, &e.id).is_ok_and(|v| !v.is_empty()) && !cx.running { write_kept(db, cx, e); }
+            return Ok(true);
+        }
     }
     let parent = old.parent().map(Path::to_path_buf).unwrap_or_else(|| cx.root.clone());
     let base = match display_folder(&e.folder).trim() { "" => "Mod", b => b }.to_string();
@@ -800,10 +843,14 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
     }
 
     if one_skin {
+        // live mods all stay on: the live group decides which one shows (live.rs)
+        let live = crate::live::groups_by_mod(db, game);
         for id in &turned_on {
+            if live.contains_key(id) { continue; }
             let Some(c) = rows.get(id).filter(|e| e.enabled).and_then(|e| e.character.clone()) else { continue };
+            if let Some(note) = crate::live::hide_group(db, game, &c) { change.notes.push(note); }
             let others: Vec<String> = rows.values()
-                .filter(|o| o.enabled && o.id != *id && !listed.contains(o.id.as_str()) && o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(&c)))
+                .filter(|o| o.enabled && o.id != *id && !listed.contains(o.id.as_str()) && !live.contains_key(&o.id) && o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(&c)))
                 .map(|o| o.id.clone()).collect();
             for oid in others {
                 let Some(o) = rows.get_mut(&oid) else { continue };
@@ -941,6 +988,49 @@ pub fn set_preview_file(db: &Db, game: &str, id: &str, src: &Path) -> Result<Mod
     set_preview(db, game, id, &bytes, &ext)
 }
 
+/// Save a downloaded picture (GameBanana's first image, previews::download) as the mod's `preview.<ext>`. It is not a
+/// custom preview: preview files already there are kept as `preview-original.<ext>`, and when the user picked their
+/// own preview it stays in front and this one waits as `preview-gamebanana.<ext>`.
+pub fn save_fetched_preview(db: &Db, game: &str, id: &str, bytes: &[u8], ext: &str) -> Result<ModEntry> {
+    let ext = preview_ext(ext).ok_or_else(|| Error::Invalid("That isn't a PNG, JPG, WebP or GIF picture".into()))?;
+    if bytes.is_empty() { return Err(Error::Invalid("That picture is empty".into())); }
+    if bytes.len() > PREVIEW_MAX { return Err(Error::Invalid("That picture is over 25 MB".into())); }
+    let e = get(db, game, id)?;
+    let dir = PathBuf::from(&e.path);
+    if !dir.is_dir() { return Err(Error::Invalid("That mod's folder isn't there anymore. Rescan to refresh the list".into())); }
+    let mut sc = sidecar_of_entry(&dir, &e);
+    // gachamod's own earlier download goes
+    if let Some(old) = sc.preview.as_deref().filter(|p| p.to_ascii_lowercase().starts_with("preview-gamebanana.")).and_then(safe_rel) {
+        let _ = fs::remove_file(dir.join(old));
+    }
+    let name = if custom_preview_path(&dir, &sc).is_some() {
+        format!("preview-gamebanana.{ext}")
+    } else {
+        let mut found: Vec<String> = root_files(&dir).into_iter().filter(|f| previews::is_preview_name(f)).collect();
+        found.sort();
+        for f in found {
+            let fext = preview_ext(&f).unwrap_or_else(|| "png".into());
+            let mut to = dir.join(format!("preview-original.{fext}"));
+            let mut n = 2;
+            while to.exists() { to = dir.join(format!("preview-original ({n}).{fext}")); n += 1; }
+            fs::rename(dir.join(&f), &to)?;
+        }
+        format!("preview.{ext}")
+    };
+    fs::write(dir.join(&name), bytes)?;
+    sc.preview = Some(name);
+    save_preview(db, game, e, &dir, &sc)
+}
+
+/// The user's own preview picture, read before it's replaced or reset so Undo can put it back. None when the mod
+/// has none.
+pub fn custom_preview_bytes(db: &Db, game: &str, id: &str) -> Result<Option<Vec<u8>>> {
+    let e = get(db, game, id)?;
+    let dir = PathBuf::from(&e.path);
+    let sc = sidecar_of_entry(&dir, &e);
+    Ok(match custom_preview_path(&dir, &sc) { Some(p) => Some(fs::read(p)?), None => None })
+}
+
 /// Remove the user's own preview and put back the preview files set_preview renamed.
 pub fn clear_preview(db: &Db, game: &str, id: &str) -> Result<ModEntry> {
     let e = get(db, game, id)?;
@@ -1002,7 +1092,7 @@ pub fn move_to_group(db: &Db, game: &str, id: &str, group: Option<&str>) -> Resu
     e.path = new.to_string_lossy().into_owned();
     e.folder = folder;
     e.group = group;
-    e.enabled = !rel_disabled(&e.rel_path);
+    e.enabled = !rel_disabled(&e.rel_path) && !only_off_inis(&new);
     if !was_on && e.enabled && !cx.running { write_kept(db, &cx, &e); }
     if was_on && !e.enabled { stash_from_ini(db, &cx, &e); }
     save_row(db, &e)?;
@@ -1017,7 +1107,7 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
     let cx = ctx(db, game)?;
     if !dir.is_dir() { return Err(Error::Invalid("That mod folder isn't there".into())); }
     let rel = rel_of(&cx.root, dir).ok_or_else(|| Error::Invalid("That folder isn't inside the game's Mods folder".into()))?;
-    let chars = character_names(db, game)?;
+    let chars = matcher(db, game)?;
     let existing = read_sidecar(dir);
     let folder = name_of(dir);
     let mut sc = match (sidecar, existing.clone()) {
@@ -1033,7 +1123,7 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
     if sc.installed_at == 0 { sc.installed_at = now(); }
     if sc.character.as_deref().is_none_or(|c| c.trim().is_empty()) {
         let name = sc.name.clone();
-        sc.character = match_character(&chars, &hints_for(&rel, &name));
+        sc.character = chars.best(&hints_for(&rel, &name));
     }
     // the id belongs to another folder that is still there (a copy): this one gets a new id
     if let Ok(other) = get(db, game, &sc.id) {
@@ -1043,7 +1133,7 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
     }
     if existing.as_ref() != Some(&sc) { write_sidecar(dir, &sc)?; }
     let qf = ini::quick_facts(dir);
-    let e = build_entry(game, &cx.root, &rel, !rel_disabled(&rel), &sc, &qf, &chars);
+    let e = build_entry(game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(dir), &sc, &qf, &chars);
     save_row(db, &e)?;
     if e.enabled && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
     finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
@@ -1052,7 +1142,7 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
 
 // ── trash ──
 
-/// Move mods to the app's trash folder (`<data>/trash/<game>/<trash id>`), kept 14 days.
+/// Move mods to the app's trash folder (`<data>/trash/<game>/<trash id>`), kept "trash.days" days (removed.rs).
 pub fn remove(db: &Db, data_dir: &Path, game: &str, ids: &[String], reason: &str) -> Result<ModChange> {
     let cx = ctx(db, game)?;
     let mut change = ModChange::default();
@@ -1092,6 +1182,8 @@ pub fn remove(db: &Db, data_dir: &Path, game: &str, ids: &[String], reason: &str
         for err in errors { change.notes.push(format!("Couldn't remove one: {err}")); }
     }
     finish(db, game, &change);
+    // "trash.days" at 0: the files go now and only the details stay
+    if trash_days(db) == 0 { let _ = purge_expired(db); }
     Ok(change)
 }
 
@@ -1135,9 +1227,9 @@ pub fn trash_restore(db: &Db, trash_id: i64) -> Result<ModChange> {
     // a newer copy took the id meanwhile (an update replaced it): this one comes back as its own mod
     if db.conn.query_row("SELECT 1 FROM mods WHERE id = ?1", [&sc.id], |_| Ok(())).optional()?.is_some() { sc.id = new_id(); write = true; }
     if write { write_sidecar(&target, &sc)?; }
-    let chars = character_names(db, &game)?;
+    let chars = matcher(db, &game)?;
     let qf = ini::quick_facts(&target);
-    let mut e = build_entry(&game, &cx.root, &rel, !rel_disabled(&rel), &sc, &qf, &chars);
+    let mut e = build_entry(&game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(&target), &sc, &qf, &chars);
     e.update_available = prev.is_some_and(|p| p.update_available);
     save_row(db, &e)?;
     db.conn.execute("DELETE FROM trash WHERE id = ?1", [trash_id])?;
@@ -1145,44 +1237,6 @@ pub fn trash_restore(db: &Db, trash_id: i64) -> Result<ModChange> {
     let change = ModChange { changed: vec![e], ..Default::default() };
     finish(db, &game, &change);
     Ok(change)
-}
-
-/// Delete trash for good: one entry, or everything older than 14 days with `None`.
-pub fn trash_purge(db: &Db, trash_id: Option<i64>) -> Result<u64> {
-    let rows: Vec<(i64, String, String)> = {
-        let (sql, arg) = match trash_id {
-            Some(id) => ("SELECT id, mod_id, kept_path FROM trash WHERE id = ?1", id),
-            None => ("SELECT id, mod_id, kept_path FROM trash WHERE removed_at < ?1", now() - TRASH_DAYS * 86400),
-        };
-        let mut st = db.conn.prepare(sql)?;
-        let v = st.query_map([arg], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<std::result::Result<Vec<_>, _>>()?;
-        v
-    };
-    let mut n = 0;
-    for (id, mod_id, kept) in rows {
-        let kept = PathBuf::from(kept);
-        // the numbered folder that holds the mod, only ever inside a "trash" folder
-        if let Some(holder) = kept.parent() {
-            let in_trash = holder.ancestors().any(|a| a.file_name().is_some_and(|n| n.eq_ignore_ascii_case("trash")));
-            if in_trash && holder.exists() {
-                if let Err(e) = fs::remove_dir_all(holder) {
-                    if trash_id.is_some() { return Err(e.into()); }
-                    continue;
-                }
-            }
-        }
-        db.conn.execute("DELETE FROM trash WHERE id = ?1", [id])?;
-        // nothing else refers to it: forget its kept values and profile places
-        let alive = db.conn.query_row("SELECT 1 FROM mods WHERE id = ?1", [&mod_id], |_| Ok(())).optional()?.is_some()
-            || db.conn.query_row("SELECT 1 FROM trash WHERE mod_id = ?1", [&mod_id], |_| Ok(())).optional()?.is_some();
-        if !alive {
-            db.conn.execute("DELETE FROM mod_vars WHERE mod_id = ?1", [&mod_id])?;
-            db.conn.execute("DELETE FROM profile_mods WHERE mod_id = ?1", [&mod_id])?;
-            db.conn.execute("DELETE FROM profile_vars WHERE mod_id = ?1", [&mod_id])?;
-        }
-        n += 1;
-    }
-    Ok(n)
 }
 
 // ── characters ──
@@ -1225,10 +1279,13 @@ pub fn characters_sync(db: &Db, game: &str, list: &[CharacterRef]) -> Result<()>
     Ok(())
 }
 
-/// The best character match for some text (a folder name, a GameBanana category name, a mod name), or None.
+/// The best character match for some text (a folder name, a GameBanana category name, a mod name), or None. Only
+/// characters on the game's roster: an install names a folder after the answer, so before GameBanana's list has
+/// loaded it goes to "Other" rather than to a name only the alias table knows.
 pub fn infer_character(db: &Db, game: &str, hints: &[&str]) -> Option<String> {
     let names = character_names(db, game).ok()?;
-    match_character(&names, hints)
+    let found = Matcher::new(game, &names).best(hints)?;
+    names.iter().any(|n| n.trim() == found).then_some(found)
 }
 
 /// Set which mods have a newer version online (the UI's update check). Others are cleared.

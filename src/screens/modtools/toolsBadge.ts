@@ -1,6 +1,6 @@
 // The "tools" nav badge: enabled-mod conflicts plus problems for the current game. The overlays and the Tools panels
 // each report the part they loaded. Owner: MODTOOLS area.
-import { library, type GameId, type ModProblems } from "../../lib/api";
+import { library, type GameId } from "../../lib/api";
 import { currentGame, setBadge } from "../../lib/store";
 import { record } from "../../lib/history";
 
@@ -15,9 +15,6 @@ export function setToolsCount(game: GameId, part: keyof typeof parts, n: number)
   const total = parts.conflicts + parts.problems;
   setBadge("tools", total ? { count: total, tone: "bad" } : null);
 }
-
-/** Problems that matter (not the "info" ones). */
-export const problemCount = (list: ModProblems[]) => list.reduce((s, m) => s + m.problems.filter((p) => p.severity !== "info").length, 0);
 
 /** Turn mods off with Undo. Returns once they are off. */
 export async function turnOff(game: GameId, ids: string[], names: string[]) {

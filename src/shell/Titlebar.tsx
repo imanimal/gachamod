@@ -1,0 +1,144 @@
+// The title bar: Back and Forward (right-click lists recent pages), a breadcrumb you can click (game, view, then the
+// open character, mod, creator or section; the chevrons between them open a menu), the search box in the middle
+// (it opens the palette, and grows in when the app opens to show it's there), Undo and Redo (right-click lists the
+// history), Help (the tour, shortcuts) and the window keys. The empty parts drag the window. Owner: SHELL area.
+import { useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { Icon } from "../ui/Icon";
+import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
+import { Glyphs } from "../ui/Deco";
+import { inTauri, windowAction } from "../lib/tauri";
+import { redo, undo, useHistory } from "../lib/history";
+import { allGames, back, forward, go, goIndex, recentPages, useDailyGames, useGame, useNav, useRoute, useShownGames, VIEWS, type Route } from "../lib/store";
+import { pageName, subCrumbs, useNamesVersion, VIEW_INFO, viewLabel } from "./names";
+import { switchEntries } from "./Sidebar";
+import { openPalette, startTour, toggleHelp, useSearchIntro } from "./state";
+import { shell } from "../lib/api";
+import { toast } from "../ui/toast";
+
+const ISSUES = "https://github.com/imanimal/gachamod/issues";
+const at = (e: ReactMouseEvent) => ({ x: e.clientX, y: e.clientY });
+const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
+
+function historyMenu(dir: -1 | 1): MenuEntry[] {
+  const list = recentPages(dir, 12);
+  if (!list.length) return [];
+  return [
+    { header: dir < 0 ? "Back to" : "Forward to" },
+    ...list.map((p) => {
+      const g = allGames().find((x) => x.id === p.game);
+      return { label: pageName(p.route, p.game), icon: VIEW_INFO[p.route.view].icon, title: g?.name, onClick: () => goIndex(p.index) } satisfies MenuEntry;
+    }),
+  ];
+}
+
+export function Titlebar() {
+  const nav = useNav();
+  const game = useGame();
+  const shown = useShownGames();
+  const daily = useDailyGames();
+  const route = useRoute();
+  const hist = useHistory();
+  const introN = useSearchIntro();
+  useNamesVersion();
+  const gameBtn = useRef<HTMLButtonElement>(null);
+  const gid = game?.id ?? null;
+  const subs = subCrumbs(route, gid);
+
+  const gameMenu = (): MenuEntry[] => [
+    ...switchEntries(game, daily, shown),
+    shown.length > 1 && "-",
+    ...(game ? menuFor("game", { id: game.id }) : []),
+  ];
+  const viewMenu = (): MenuEntry[] => VIEWS.map((v) => ({ label: viewLabel(v, gid), icon: VIEW_INFO[v].icon, checked: route.view === v, onClick: () => go(v) }));
+  const undoMenu = (): MenuEntry[] => {
+    const done = hist.entries.filter((e) => e.state === "done").slice(0, 15);
+    return done.length ? [{ header: "Undo back to" }, ...done.map((e) => ({ label: e.label, icon: "undo" as const, onClick: () => void undo(e) }))] : [];
+  };
+  const redoMenu = (): MenuEntry[] => {
+    const und = hist.entries.filter((e) => e.state === "undone").reverse().slice(0, 15);
+    return und.length ? [{ header: "Redo up to" }, ...und.map((e) => ({ label: e.label, icon: "redo" as const, onClick: () => void redo(e) }))] : [];
+  };
+  const nextUndo = hist.entries.find((e) => e.state === "done");
+  const nextRedo = [...hist.entries].reverse().find((e) => e.state === "undone");
+
+  const crumbs: Array<{ key: string; label: string; route: Route; menu?: () => MenuEntry[]; title?: string }> = [
+    { key: "view", label: viewLabel(route.view, gid), route: { view: route.view }, menu: viewMenu, title: `Go to ${viewLabel(route.view, gid)}` },
+    ...subs.map((c, i) => ({ key: `s${i}`, label: c.label, route: c.route, title: c.title })),
+  ];
+
+  const helpMenu = (): MenuEntry[] => [
+    { label: "Take the tour", icon: "sparkle", title: "Six short steps through the window", onClick: startTour },
+    { label: "Keyboard and controller shortcuts", icon: "keyboard", keys: "?", onClick: toggleHelp },
+    { label: "Search anything", icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
+    "-",
+    { label: "Report a problem", icon: "bug", title: "Opens gachamod's issues on GitHub", onClick: () => shell.openUrl(ISSUES).catch((e) => toast(String(e), true)) },
+  ];
+
+  return (
+    <header className="titlebar" data-tauri-drag-region onDoubleClick={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).matches(".tb-side, .sp")) void windowAction("toggleMaximize"); }}>
+      <div className="tb-side tb-l" data-tauri-drag-region>
+        <span className="brand" data-tauri-drag-region title="gachamod"><span className="brand-mark" aria-hidden="true" /></span>
+        <span className="tb-nav">
+          <button type="button" className="tb-k" disabled={!nav.back} aria-label="Back" title="Back (Alt+Left, mouse button 4). Right-click for recent pages"
+            onClick={() => back()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), historyMenu(-1)); }}><Icon name="left" /></button>
+          <button type="button" className="tb-k" disabled={!nav.forward} aria-label="Forward" title="Forward (Alt+Right, mouse button 5). Right-click for recent pages"
+            onClick={() => forward()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), historyMenu(1)); }}><Icon name="right" /></button>
+        </span>
+
+        <nav className="crumb" aria-label="Where you are" data-tauri-drag-region>
+          {game && (
+            <>
+              <button ref={gameBtn} type="button" className="crumb-b crumb-game" title={`${game.name}. Click for games and more`}
+                onClick={(e) => openMenu(below(e.currentTarget), gameMenu())}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), gameMenu()); }}>
+                <span className="crumb-t">{game.short}</span><Icon name="down" className="crumb-dd" />
+              </button>
+              <Icon name="chevron" className="crumb-sep" />
+            </>
+          )}
+          {crumbs.map((c, i) => {
+            const last = i === crumbs.length - 1;
+            return (
+              <span key={c.key} className="crumb-part">
+                <button type="button" className={`crumb-b${last ? " crumb-view" : ""}`} aria-current={last ? "page" : undefined} title={c.title ?? (last ? undefined : `Go to ${c.label}`)}
+                  onClick={() => go(c.route)}
+                  onContextMenu={c.menu ? (e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), c.menu!()); } : undefined}>
+                  <span className="crumb-t">{c.label}</span>
+                </button>
+                {c.menu && (
+                  <button type="button" className="crumb-sep crumb-sep-b" aria-label="Other pages" title="Other pages"
+                    onClick={(e) => openMenu(below(e.currentTarget), c.menu!())}><Icon name={last ? "down" : "chevron"} /></button>
+                )}
+                {!c.menu && !last && <Icon name="chevron" className="crumb-sep" />}
+              </span>
+            );
+          })}
+        </nav>
+        <span className="sp" data-tauri-drag-region><Glyphs run /></span>
+      </div>
+
+      <button key={introN} type="button" className="tb-search intro" onClick={() => openPalette()} title="Search pages, mods, characters, settings and actions (Ctrl+K)">
+        <Icon name="search" /><span className="tb-search-t">Search anything</span><kbd className="kbd">Ctrl K</kbd>
+      </button>
+
+      <div className="tb-side tb-r" data-tauri-drag-region>
+        <span className="tb-nav">
+          <button type="button" className="tb-k" disabled={!hist.canUndo} aria-label="Undo"
+            title={nextUndo ? `Undo: ${nextUndo.label} (Ctrl+Z). Right-click for more` : "Nothing to undo (Ctrl+Z)"}
+            onClick={() => void undo()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), undoMenu()); }}><Icon name="undo" /></button>
+          <button type="button" className="tb-k" disabled={!hist.canRedo} aria-label="Redo"
+            title={nextRedo ? `Redo: ${nextRedo.label} (Ctrl+Y). Right-click for more` : "Nothing to redo (Ctrl+Y)"}
+            onClick={() => void redo()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), redoMenu()); }}><Icon name="redo" /></button>
+        </span>
+        <button type="button" className="tb-k tb-help" aria-label="Help" title="Help: the tour and every shortcut (? for shortcuts)"
+          onClick={(e) => openMenu(below(e.currentTarget), helpMenu())}><Icon name="help" /></button>
+
+        <span className="winkeys">
+          <button type="button" className="wk" aria-label="Minimise" onClick={() => void windowAction("minimize")}><Icon name="minus" /></button>
+          <button type="button" className="wk" aria-label="Maximise" onClick={() => void windowAction("toggleMaximize")}><Icon name="max" /></button>
+          <button type="button" className="wk wk-x" aria-label="Close" onClick={() => { if (inTauri()) void windowAction("close"); }}><Icon name="x" /></button>
+        </span>
+      </div>
+    </header>
+  );
+}

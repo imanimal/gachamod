@@ -1,17 +1,19 @@
 // Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own update check for the
-// About section. Owner: SYSTEM area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
-import { useEffect, useState } from "react";
-import { Button, Checkbox, Confirm, Panel, Progress, Toggle, formatBytes, plural } from "../../ui/kit";
+// About section. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
+import { useState } from "react";
+import { Button, Checkbox, Confirm, Panel, Progress, formatBytes, plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { appUpdate, dialogs, errorText, settings, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
+import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
 import { record, undo } from "../../lib/history";
 import { currentGame, refreshGames } from "../../lib/store";
 import { applyGameTheme } from "../../lib/theme";
 import { getTextSize, setTextSize } from "../../lib/zoom";
+import { appUpdateCheckPref } from "./automatic";
 
 // ── the window's own choices (kept in localStorage, not the database) ──
 
-const isUiKey = (k: string) => k.startsWith("gm.theme.") || k.startsWith("gm.accent.") || k === "gm.scheme" || k === "gm.motion" || k === "pm.textSize";
+const isUiKey = (k: string) => k.startsWith("gm.theme.") || k.startsWith("gm.accent.") || k === "gm.scheme" || k.startsWith("gm.scheme.")
+  || k === "gm.motion" || k === "gm.layout" || k === "pm.textSize" || k === "gm.onlyGame" || k === "gm.schemeMode";
 
 function readUi(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -126,16 +128,12 @@ function ImportPlan({ plan }: { plan: ImportSummary }) {
 
 // ── updates (About section) ──
 
-const UPDATE_KEY = "app.updateCheck";
-
 export function UpdateRow() {
-  const [auto, setAuto] = useState(true);
+  const auto = appUpdateCheckPref.use();
   const [state, setState] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number | null } | null>(null);
 
-  useEffect(() => { settings.get(UPDATE_KEY).then((v) => setAuto(v !== "0")).catch(() => {}); }, []);
-  const setAutoSaved = (v: boolean) => { setAuto(v); settings.set(UPDATE_KEY, v ? "1" : "0").catch((e) => toast(errorText(e), true)); };
 
   const checkNow = async () => {
     setChecking(true);
@@ -162,9 +160,8 @@ export function UpdateRow() {
   return (
     <div className="set-rows set-update">
       <div className="set-row">
-        <span><b>Check for updates</b><span className="hint">Looks for a new gachamod once a day when it starts. Nothing installs unless you press Install</span></span>
+        <span><b>Updates</b><span className="hint">{auto ? "gachamod looks for a new version once a day. Nothing installs unless you press Install" : "Automatic checks are off (Settings, Automatic)"}</span></span>
         <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
-        <Toggle checked={auto} onChange={setAutoSaved} />
       </div>
       {r && (
         <div className="set-row">
@@ -172,8 +169,8 @@ export function UpdateRow() {
             <span className="hint">{progress ? `Downloading ${formatBytes(progress.done)}${progress.total ? ` of ${formatBytes(progress.total)}` : ""}. gachamod closes when the installer starts` : r.asset ? `Installer ${formatBytes(r.asset.size)}` : "This release has no installer. Get it from the release page"}</span>
             {progress && <Progress value={progress.total ? progress.done / progress.total : null} label="Downloading the update" />}
           </span>
-          <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(r.url).catch((e) => toast(errorText(e), true))}>See what's new</Button>
-          {r.asset && <Button size="sm" variant="primary" icon="install" busy={!!progress} onClick={() => void install()}>Install</Button>}
+          <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(r.url).catch((e) => toast(errorText(e), true))} title="Open the release notes">See what's new</Button>
+          {r.asset && <Button size="sm" variant="primary" icon="install" busy={!!progress} onClick={() => void install()} title="Download the installer and run it">Install</Button>}
         </div>
       )}
     </div>

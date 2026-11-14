@@ -126,11 +126,25 @@ pub async fn integrations_get() -> Result<Vec<Integration>> {
     blocking(|| platform::integrations(&std::env::current_exe()?)).await
 }
 
+/// Turn the gachamod link handler or the .gachamod file type on or off, and remember it for the next start.
 #[tauri::command]
-pub async fn integration_register(id: String) -> Result<Vec<Integration>> {
-    blocking(move || platform::register(&std::env::current_exe()?, &id)).await
+pub async fn integration_set(st: State<'_, AppState>, id: String, on: bool) -> Result<Vec<Integration>> {
+    let db = st.db.clone();
+    blocking(move || {
+        let list = platform::set(&std::env::current_exe()?, &id, on)?;
+        lock(&db)?.set_setting(&platform::setting_key(&id), if on { "1" } else { "0" })?;
+        Ok(list)
+    }).await
 }
 
 /// The app's own data folder (database, trash, downloads), for Settings' About section.
 #[tauri::command]
 pub fn app_data_dir(st: State<'_, AppState>) -> String { st.data_dir.to_string_lossy().into_owned() }
+
+/// The game's own exe icon as a 256 px PNG in the app's data folder, or null.
+#[tauri::command]
+pub async fn game_icon(st: State<'_, AppState>, game: String) -> Result<Option<String>> {
+    let db = st.db.clone();
+    let data = st.data_dir.clone();
+    blocking(move || Ok(games::icon(&*lock(&db)?, &data, &game)?.map(|p| p.to_string_lossy().into_owned()))).await
+}

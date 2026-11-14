@@ -16,15 +16,15 @@
         "title": "gachamod",
         "width": 1400,
         "height": 880,
-        "minWidth": 1000,
-        "minHeight": 640,
+        "minWidth": 760,
+        "minHeight": 480,
         "decorations": false,
         "center": true,
         "dragDropEnabled": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: https: asset: http://asset.localhost; media-src 'self' https: asset: http://asset.localhost; frame-src https://www.youtube-nocookie.com https://www.youtube.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://gamebanana.com https://*.gamebanana.com https://api.github.com",
+      "csp": "default-src 'self'; img-src 'self' data: blob: https: asset: http://asset.localhost; media-src 'self' https: asset: http://asset.localhost; frame-src https://www.youtube-nocookie.com https://www.youtube.com http://gmext.localhost gmext:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://gamebanana.com https://*.gamebanana.com https://api.github.com https://*.fandom.com https://*.wiki.gg https://iopwiki.com https://itunes.apple.com",
       "assetProtocol": { "enable": true, "scope": ["**"] }
     }
   },

@@ -1,5 +1,7 @@
-// App-wide ONLINE layers: the variant picker (event variants-needed), GameBanana links (app event open-gb-link),
-// installing dropped files (app event install-paths), and the Downloads badge. Owner: ONLINE area.
+// App-wide BROWSE layers: a GameBanana mod's page over any screen (a numeric route.modId), finding a creator by name
+// (window event gm-find-creator from CreatorLink), the gbmod and creator menus, the search commands, the variant
+// picker (event variants-needed), GameBanana links (app event open-gb-link), installing dropped files (app event
+// install-paths), and the Downloads badge. Owner: BROWSE area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Checkbox, Dialog, formatBytes, plural } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
@@ -7,9 +9,16 @@ import { toast } from "../../ui/toast";
 import { errorText, fileUrl, installs, queue, type Candidate, type QueueItem } from "../../lib/api";
 import { held } from "../../lib/tauri";
 import { fileIdFromLink, modPage, parseGbLink, queueModFile } from "../../lib/gamebanana";
-import { currentGame, emitApp, go, onApp, setBadge, setGame, useGames } from "../../lib/store";
+import { closeRoute, currentGame, emitApp, go, onApp, setBadge, setGame, useGame, useGames, useRoute } from "../../lib/store";
+import { registerBrowseCommands } from "./commands";
+import { registerBrowseMenus } from "./menus";
+import { ModDrawer } from "./ModDrawer";
+import { gbModOfRoute } from "./state";
 import { useQueue } from "./useQueue";
+import { withCreator, openCreator } from "./actions";
 import "./browse.css";
+
+registerBrowseMenus();
 
 const PICK_EVENT = "gm-pick-variants";
 
@@ -69,10 +78,41 @@ export function OnlineOverlays() {
     }
   }), []);
 
+  // a creator's name without their id (CreatorLink): find it, then open their page
+  useEffect(() => {
+    const h = (e: Event) => {
+      const d = (e as CustomEvent<{ name?: string; modId?: number | null }>).detail;
+      if (d?.name) void withCreator({ name: d.name, modId: d.modId ?? null }, (c) => openCreator(c.id));
+    };
+    window.addEventListener("gm-find-creator", h);
+    return () => window.removeEventListener("gm-find-creator", h);
+  }, []);
+
   const item = pickId === null ? undefined : snap.items.find((i) => i.id === pickId);
   const close = useCallback(() => { if (pickId !== null) dismissed.current.add(pickId); setPickId(null); }, [pickId]);
-  if (!item || item.state !== "needsChoice") return null;
-  return <VariantPicker key={item.id} item={item} candidates={item.candidates} onClose={close} />;
+  return (
+    <>
+      <GbModHost />
+      <BrowseCommands />
+      {item && item.state === "needsChoice" && <VariantPicker key={item.id} item={item} candidates={item.candidates} onClose={close} />}
+    </>
+  );
+}
+
+/** The mod page drawer for a numeric route.modId, on any screen. */
+function GbModHost() {
+  const route = useRoute();
+  const game = useGame();
+  const id = gbModOfRoute(route);
+  const close = useCallback(() => closeRoute(["modId"]), []);
+  if (!id || !game) return null;
+  return <ModDrawer key={id} game={game} modId={id} onClose={close} />;
+}
+
+function BrowseCommands() {
+  const game = useGame();
+  useEffect(() => registerBrowseCommands(game), [game]);
+  return null;
 }
 
 async function openLink(url: string, games: ReturnType<typeof useGames>) {

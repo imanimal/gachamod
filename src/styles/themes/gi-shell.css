@@ -1,11 +1,11 @@
-/* themes/gi-shell.css: Teyvat, part 2: the window (App.tsx). Laid out like the Paimon menu: a dark strip of
-   round game icons, a cream column with the namecard and a grid of slate tiles, and each screen as a menu
-   page over an evening sky with a see-through top bar. */
+/* themes/gi-shell.css: Teyvat, part 2: the window (App.tsx). Laid out like the Paimon menu: a cream column with the
+   namecard and a grid of slate tiles, and each screen as a menu page with a see-through top bar, over an evening
+   sky (dark) or cream paper (light, at the end). */
 
 [data-theme="gi"] {
-  .app { grid-template-columns: 64px 232px minmax(0, 1fr); grid-template-rows: 40px minmax(0, 1fr);
+  .app {
     background: radial-gradient(80rem 36rem at 85% 115%, rgb(78 128 168 / .5), transparent 62%), radial-gradient(60rem 30rem at 15% -10%, rgb(92 82 140 / .35), transparent 60%), linear-gradient(180deg, #141a28, #1d2640 55%, #26334f); }
-  .titlebar, .rail, .side, .view { position: relative; z-index: 1; }
+  .titlebar, .side, .view { position: relative; z-index: 1; }
 
   /* ── the sky: star dust, and sparkles that drift and twinkle (ui/Deco.tsx backdrop) ── */
   .backdrop { display: block; position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; contain: strict; background: var(--dust); }
@@ -24,33 +24,22 @@
   .bd-plain { background-size: 21px; background-position: 45% 55%; animation-duration: 8s; animation-delay: -3s; }
 
   /* ── title bar: a dark see-through strip, gold breadcrumb "Game / View" ── */
-  .titlebar { background: rgb(12 16 26 / .78); backdrop-filter: blur(10px); box-shadow: inset 0 -1px 0 rgb(211 188 142 / .18); padding-left: .9rem; }
+  .titlebar { background: rgb(12 16 26 / .78); backdrop-filter: blur(10px); box-shadow: inset 0 -1px 0 rgb(211 188 142 / .18); }
+  .tb-l { padding-left: .9rem; }
   .brand { font-weight: 700; font-size: 1rem; color: var(--cream); letter-spacing: 0; }
-  .brand-mark { width: 20px; height: 20px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='none' stroke='%23d3bc8e' stroke-width='1.2'/%3E%3Cpath d='M11 3.5C11.6 8.6 13.4 10.4 18.5 11C13.4 11.6 11.6 13.4 11 18.5C10.4 13.4 8.6 11.6 3.5 11C8.6 10.4 10.4 8.6 11 3.5Z' fill='%23d3bc8e'/%3E%3Cpath d='M17 14.5C17.2 16.2 17.8 16.8 19.5 17C17.8 17.2 17.2 17.8 17 19.5C16.8 17.8 16.2 17.2 14.5 17C16.2 16.8 16.8 16.2 17 14.5Z' fill='%23fff6dc'/%3E%3C/svg%3E"); }
-  .crumb { margin-left: 1.4rem; color: var(--gold); font-weight: 700; font-size: .92em; gap: .45rem; }
-  .crumb-game::after { content: "/"; width: auto; height: auto; border: 0; transform: none; margin: 0 0 0 .45rem; opacity: .8; }
-  .crumb-view { color: var(--gold); }
+  .brand-mark { width: 20px; height: 20px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='11' fill='none' stroke='%23d3bc8e' stroke-width='1.2'/%3E%3Cpath d='M12 4.5C12.6 9.6 14.4 11.4 19.5 12C14.4 12.6 12.6 14.4 12 19.5C11.4 14.4 9.6 12.6 4.5 12C9.6 11.4 11.4 9.6 12 4.5Z' fill='%23d3bc8e'/%3E%3C/svg%3E"); }
+  .crumb { margin-left: .8rem; color: var(--text-3); font-weight: 700; font-size: .92em; }
+  .crumb-b { border-radius: 999px; color: var(--text-2); }
+  .crumb-game, .crumb-view, .crumb-part:last-child .crumb-b { color: var(--title); }
+  .crumb-sep { color: var(--title); opacity: .55; }
+  .tb-k { border-radius: 50%; }
+  .tb-search { border-radius: 999px; background: var(--f-bg); box-shadow: inset 0 0 0 1.5px var(--f-ring); color: var(--text-2); }
+  .tb-search:hover { box-shadow: inset 0 0 0 1.5px var(--text-2); color: var(--text); }
   .titlebar > .ibtn { color: var(--text-2); }
   .wk { color: var(--text-2); }
   .wk:hover { background: rgb(236 229 216 / .1); color: #fff; }
   .wk-x:hover { background: var(--red); color: #fff; }
 
-  /* ── game rail: round icons on a dark strip; the current one gets a cream ring and a pointer ── */
-  .rail { background: rgb(12 16 26 / .62); backdrop-filter: blur(10px); box-shadow: inset -1px 0 0 rgb(211 188 142 / .14); padding: .8rem 0 .7rem; }
-  .rail-games { gap: .75rem; }
-  .rail-g { padding: 0; border-radius: 50%; }
-  .rail-g::before { left: -11px; width: 7px; height: 11px !important; border-radius: 0; background: var(--cream); clip-path: polygon(0 0, 100% 50%, 0 100%); opacity: 0; transition: opacity var(--dur) var(--ease); }
-  .rail-g:hover::before { opacity: .45; }
-  .rail-g.on::before { opacity: 1; }
-  .rail-g .gbadge, .rail-g:hover .gbadge { width: 42px !important; height: 42px !important; border-radius: 50%; box-shadow: 0 0 0 2px rgb(236 229 216 / .22); }
-  .rail-g:hover .gbadge { box-shadow: 0 0 0 2px rgb(236 229 216 / .6); }
-  .rail-g.on .gbadge { border-radius: 50%; box-shadow: 0 0 0 2px var(--cream), 0 0 12px 2px rgb(255 255 255 / .35); }
-  .gbadge { font-weight: 700; }
-  .rail-g.running::after { right: -2px; bottom: -2px; background: var(--lime); border: 2px solid #141a27; }
-  .rail-add, .rail-k { width: 40px; height: 40px; border-radius: 50%; color: var(--text-2); }
-  .rail-add { box-shadow: inset 0 0 0 1.5px rgb(236 229 216 / .35); }
-  .rail-add:hover { color: var(--ink); background: var(--cream); box-shadow: 0 0 10px rgb(255 255 255 / .35); }
-  .rail-k:hover, .rail-k.on { background: var(--cream); color: var(--ink); }
 
   /* ── sidebar: the Paimon menu's cream column ── */
   .side { padding: .7rem .6rem .7rem; gap: .55rem; scrollbar-width: none;
@@ -65,18 +54,9 @@
   .player-name { font-weight: 700; color: var(--ink); font-size: 1.05em; }
   .player-title { color: var(--tan-ink); font-weight: 600; }
   .player-uid { font-family: var(--font); font-weight: 600; background: var(--band); color: var(--tan-ink); border: 0; }
-  /* the profile switch: a slate pill on cream */
-  .pswitch { padding: 0; }
-  .pswitch-btn { height: 2.35rem; border-radius: 999px; padding: 0 .75rem 0 .25rem; background: var(--slate-btn); color: var(--cream); box-shadow: 0 1px 3px rgb(40 30 10 / .25); }
-  .pswitch-btn:hover, .pswitch-btn.on { box-shadow: 0 0 0 2px #fff, 0 0 10px rgb(120 100 60 / .35); }
-  .pswitch-btn .profile-icon, .pswitch-ph { box-shadow: 0 0 0 2px var(--cap); background: var(--cap); }
-  .pswitch-name { font-weight: 700; }
-  .pswitch-chev { color: var(--cream); }
-  .pswitch-item.on { background: #636c80; }
-  .pswitch-check { color: var(--yellow); }
-  /* the nav: a grid of slate tiles, icon over label */
-  .side-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .nv { flex-direction: column; justify-content: center; gap: .25rem; height: 4.15rem; padding: .35rem .3rem .3rem; border-radius: 3px; text-align: center;
+  /* the nav: slate rows by default; data-nav="grid" makes slate tiles, icon over label */
+  &[data-nav="grid"] .side-nav { gap: 6px; grid-auto-rows: 3.9rem; }
+  .nv { flex-direction: column; align-items: center; justify-content: center; gap: .25rem; padding: .35rem .3rem .3rem; border-radius: 3px; text-align: center;
     color: var(--cream); font-weight: 700; font-size: .9em; background: var(--weave-l), #4f596b; box-shadow: inset 0 0 0 2px #5c6578, 0 1px 2px rgb(40 30 10 / .25); }
   .nv::before { display: none; }
   .nv .i { width: 1.6rem; height: 1.6rem; color: var(--cream); stroke-width: 1.7; }
@@ -90,17 +70,37 @@
   .nv-b.t-run { top: 7px; right: 7px; width: .55rem; height: .55rem; margin: 0; background: var(--lime); }
   .nv-b.t-run::after { border-color: var(--lime); }
   .nv.on .nv-b:not(.t-bad):not(.t-run) { background: var(--slate-btn); color: var(--cream); }
+  .gbadge { font-weight: 700; }
+  /* rows (the default): slate ink rows, the open one a slate pill */
+  &:not([data-nav="grid"]) .nv-b { position: static; }
+  &:not([data-nav="grid"]) .nv { min-height: 0; flex-direction: row; justify-content: flex-start; text-align: left; border-radius: 999px; padding: 0 .8rem; background: transparent; color: var(--ink); box-shadow: none; animation: none; }
+  &:not([data-nav="grid"]) .nv .i { width: 1.2rem; height: 1.2rem; color: var(--ink); }
+  &:not([data-nav="grid"]) .nv:hover:not(:disabled) { background: rgb(59 66 85 / .08); color: var(--ink); box-shadow: none; }
+  &:not([data-nav="grid"]) .nv:hover:not(:disabled) .i { color: var(--ink); }
+  &:not([data-nav="grid"]) .nv.on, &:not([data-nav="grid"]) .nv.on:hover:not(:disabled) { background: var(--slate-btn); color: var(--cream); box-shadow: 0 1px 3px rgb(40 30 10 / .25); }
+  &:not([data-nav="grid"]) .nv.on .i { color: var(--yellow); }
 
-  /* the spare room: an emblem plate with the game's name */
-  .side-deco { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .3rem; padding: .3rem 0; color: var(--tan-ink); }
-  .side-deco::before { content: ""; flex: none; width: 5.4rem; height: 5.4rem; opacity: .75;
-    background: var(--star) 50% 50% / 1.5rem no-repeat,
+  /* profiles: slate ink rows; the one on is a slate pill */
+  .side-h { color: var(--tan-ink); font-weight: 700; letter-spacing: .05em; }
+  .side-hk { border-radius: 50%; color: var(--tan-ink); }
+  .side-hk:hover { background: var(--slate-btn); color: var(--cream); }
+  .side-p { border-radius: 999px; color: var(--ink); font-weight: 600; }
+  .side-p:hover { background: rgb(59 66 85 / .08); color: var(--ink); }
+  .side:not([data-collapsed]) .side-p.on { background: var(--slate-btn); color: var(--cream); box-shadow: inset 3px 0 0 var(--p-color, var(--yellow)), 0 1px 3px rgb(40 30 10 / .25); }
+  .side-p.on .side-p-on { color: var(--yellow); }
+  .side-p .pthumb-mini { border-radius: 50%; }
+  .side-game-cur { border-radius: 4px; background: var(--paper); }
+  .side-game-cur:hover { background: #fff; }
+  .side-g .gbadge { border-radius: 50%; }
+
+  /* a small emblem with the game's name over Play, shown only when there is room left */
+  .side-deco { margin-top: auto; max-height: 2.4rem; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: .45rem; padding: .2rem 0; color: var(--tan-ink); }
+  .side-deco::before { content: ""; flex: none; width: 1.9rem; height: 1.9rem; opacity: .8;
+    background: var(--star) 50% 50% / .6rem no-repeat,
       radial-gradient(circle, transparent 0 44%, #d2c4aa 45% 46.5%, transparent 47.5% 60%, #dacdb6 61% 62%, transparent 63% 68%, #cfc1a6 69% 70.5%, transparent 71.5%),
       conic-gradient(from 45deg, transparent 0 8%, rgb(207 193 166 / .55) 8% 9%, transparent 9% 33%, rgb(207 193 166 / .55) 33% 34%, transparent 34% 58%, rgb(207 193 166 / .55) 58% 59%, transparent 59% 83%, rgb(207 193 166 / .55) 83% 84%, transparent 84%); border-radius: 50%; }
-  .side-deco-t { font-weight: 700; font-size: .95rem; color: #a99c84; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; }
-  .side-deco-m { font-size: .68rem; font-weight: 600; letter-spacing: .06em; color: #b3a78f; white-space: nowrap; }
-  .side-deco::after { content: ""; flex: none; width: 70%; height: 10px; background: var(--rule-ink); order: 5; }
-  .side-foot { margin-top: 0; }
+  .side-deco-t { font-weight: 700; font-size: .9rem; color: #8d8372; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; }
+  .side-deco-m, .side-deco .glyphs { display: none; }
 
   /* ── the Play key: a pill with a capped play icon (slate on the cream, cream on the hero) ── */
   .play { gap: .35rem; }
@@ -120,7 +120,7 @@
 
   /* ── the view: a menu page over the sky with a see-through top bar ── */
   .view { background: none; animation: giView var(--dur-slow) var(--ease-out); scroll-padding-top: 8rem; }
-  .page { padding: 0 1rem 1.4rem; gap: .75rem; }
+  .page { padding: 0 1rem 1.4rem; }
   .page-h { position: sticky; top: 0; z-index: 6; margin: 0 -1rem; padding: .55rem 1rem .6rem; gap: .55rem;
     background: rgb(14 19 30 / .74); backdrop-filter: blur(12px) saturate(.8); box-shadow: 0 6px 18px rgb(4 7 14 / .3); }
   .page-h::after { content: ""; position: absolute; left: 0; right: 0; bottom: -5px; height: 10px; background: var(--rule); pointer-events: none; }
@@ -141,6 +141,33 @@
   .sub-h { font-weight: 700; color: var(--title); }
 
   &.kbd .menu-i:focus { background: #636c80; color: #fff; }
+
+  /* command palette: the picked row is a pill in the other material */
+  .palette { border-radius: 6px; }
+  .palette-h { color: var(--title); font-size: .82em; letter-spacing: .04em; text-transform: none; }
+  .palette-i { border-radius: 999px; }
+  .palette-i.on { background: var(--b-fill); color: var(--b-ink); }
+  .palette-i.on > .i, .palette-i.on .palette-hint { color: inherit; }
+  .palette-img { border-radius: 50%; }
+}
+
+
+
+/* light: cream paper behind everything, gold sparkles, a paper top bar */
+[data-theme="gi"][data-scheme="light"] {
+  .app { background: radial-gradient(70rem 30rem at 90% 112%, rgb(211 188 142 / .3), transparent 62%), radial-gradient(50rem 26rem at 10% -12%, rgb(255 255 255 / .7), transparent 60%), linear-gradient(180deg, #efe9de, #e7dfcf); }
+  .backdrop { background: none; }
+  .backdrop::after { display: none; }
+  .bd-b { background-image: var(--star); }
+  .titlebar { background: rgb(246 242 234 / .82); box-shadow: inset 0 -1px 0 #d9cebc; }
+  .brand { color: var(--ink); }
+  .wk:hover { background: rgb(59 66 85 / .08); color: var(--ink); }
+  .side { box-shadow: inset -1px 0 0 #d2c6b1, 4px 0 14px rgb(90 70 40 / .1); }
+  .page-h { background: rgb(242 236 225 / .84); box-shadow: 0 6px 18px rgb(90 70 40 / .1); }
+  .page-h::after { background: var(--rule-ink); }
+  .page-h h1, .nogame h1 { color: var(--ink); }
+  .page-h h1 .i { color: #b08d57; }
+  .dropzone { background: rgb(52 44 30 / .3); }
 }
 
 @keyframes giDrift { to { transform: translateX(-50%); } }

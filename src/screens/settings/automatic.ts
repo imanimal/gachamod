@@ -1,0 +1,29 @@
+// Settings other areas read: everything the app does by itself (each can be turned off) and how long removed mods
+// keep their files. Live prefs (lib/prefs.ts): change one in Settings and every reader sees it at once.
+// Owner: SETTINGS/AI area.
+import { pref } from "../../lib/prefs";
+
+const flag = (key: string, fallback: boolean) =>
+  pref<boolean>(key, fallback, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
+
+/** Look for a new gachamod once a day at start (gacha-core app_update.rs reads the same key). */
+export const appUpdateCheckPref = flag("app.updateCheck", true);
+/** Look up installed GameBanana mods for updates when Mods opens and every 30 minutes. */
+export const modUpdateCheckPref = flag("updates.check", true);
+/** Read the Mods folder again when Mods opens, so files added by hand show up. */
+export const autoRescanPref = flag("library.autoScan", true);
+/** Keep the downloaded .zip/.7z after installing (the downloader reads "downloads.keep"). Off deletes them. */
+export const keepArchivesPref = flag("downloads.keep", false);
+/** Look on GameBanana for new fixer tools (Tools > Fixes lists them; nothing is downloaded). */
+export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
+
+/** Days removed mods keep their files in the app's trash (backend setting "trash.days", 0 to 3650, default 14).
+ *  0 deletes the files right away; a short record always stays in Mods, Trash. */
+export const trashDaysPref = pref<number>("trash.days", 14,
+  (r) => { const n = Number.parseInt(r, 10); return Number.isFinite(n) ? Math.max(0, Math.min(3650, n)) : undefined; }, (v) => String(v));
+export const useTrashDays = () => trashDaysPref.use();
+/** How removed files are kept, to finish a sentence that starts "The files ": "stay on your PC for 14 days" or
+ *  "are deleted right away". */
+export function trashPhrase(days = trashDaysPref.get()): string {
+  return days > 0 ? `stay on your PC for ${days === 1 ? "1 day" : `${days} days`}` : "are deleted right away";
+}

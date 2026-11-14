@@ -35,6 +35,14 @@ fn hand_to_ui(app: &tauri::AppHandle, items: Vec<Opened>) {
     }
 }
 
+/// A screen smaller than the first window's size (1366x768 at 125%, a handheld) gets the window maximized, so the
+/// bottom of the sidebar (Play) is never under the taskbar or past the screen's edge.
+fn fit_to_screen(w: &tauri::WebviewWindow) {
+    let (Ok(Some(m)), Ok(size)) = (w.current_monitor(), w.outer_size()) else { return };
+    let area = m.work_area().size;
+    if size.width > area.width || size.height > area.height { let _ = w.maximize(); }
+}
+
 /// What the app was started with, for the UI to pick up once it is listening.
 #[tauri::command]
 fn startup_opened(st: tauri::State<'_, Pending>) -> Vec<Opened> { std::mem::take(&mut *st.0.lock().unwrap()) }
@@ -54,7 +62,13 @@ pub fn run() {
         .plugin(hotkeys::plugin())
         .manage(hotkeys::Held::default())
         .manage(Pending::default())
+        // EXTENSIONS: extension pages and their files (http://gmext.localhost/<id>/<file> on Windows)
+        .register_asynchronous_uri_scheme_protocol("gmext", |ctx, req, responder| {
+            let app = ctx.app_handle().clone();
+            std::thread::spawn(move || responder.respond(commands::extensions::serve(&app, &req)));
+        })
         .setup(|app| {
+            if let Some(w) = app.get_webview_window("main") { fit_to_screen(&w); }
             // GACHAMOD_DATA moves the app's own data (database, trash, downloads) elsewhere: a portable copy or a test run.
             let data_dir = match std::env::var_os("GACHAMOD_DATA") {
                 Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
@@ -64,6 +78,8 @@ pub fn run() {
             app.manage(state);
             *app.state::<Pending>().0.lock().unwrap() = opened_from_args(std::env::args());
             runner::start(app.handle().clone());
+            // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
+            if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
             // SYSTEM: game start/stop events and automatic F10 reloads; links and .gachamod files nobody else holds
             let handle = app.handle().clone();
             gacha_core::devtools::watch(app.state::<state::AppState>().db.clone(), move |g, r| {
@@ -71,8 +87,8 @@ pub fn run() {
                 hotkeys::on_game_state(&handle, r);
             });
             commands::app::start_daily_check(app.handle().clone());
-            #[cfg(not(debug_assertions))]
-            if let Ok(exe) = std::env::current_exe() { let _ = gacha_core::platform::register_free(&exe); }
+            let off = app.state::<state::AppState>().db.lock().map(|db| gacha_core::platform::turned_off(&db)).unwrap_or_default();
+            if let Ok(exe) = std::env::current_exe() { let _ = gacha_core::platform::register_free(&exe, &off); }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -84,6 +100,8 @@ pub fn run() {
             commands::common::open_path,
             commands::common::reveal_path,
             commands::common::open_url,
+            commands::backups::backup_restore,
+            commands::backups::backup_list,
             // ── LIBRARY ──
             commands::library::library_scan,
             commands::library::library_list,
@@ -97,9 +115,20 @@ pub fn run() {
             commands::library::trash_purge,
             commands::library::characters_list,
             commands::library::characters_sync,
+            commands::characters::owned_list,
+            commands::characters::owned_set,
+            commands::characters::owned_import,
+            commands::characters::owned_import_file,
+            commands::characters::owned_export,
+            commands::characters::owned_export_file,
+            commands::characters::owned_fetch,
+            commands::characters::foreign_detect,
+            commands::characters::foreign_import,
+            commands::characters::foreign_undo,
             commands::library::mods_mark_updates,
             commands::library::mod_set_preview,
             commands::library::mod_set_preview_data,
+            commands::library::mod_custom_preview,
             commands::library::mod_clear_preview,
             commands::profiles::profiles_list,
             commands::profiles::profile_create,
@@ -113,12 +142,37 @@ pub fn run() {
             commands::modtools::mod_set_var,
             commands::modtools::conflicts_scan,
             commands::modtools::lint_scan,
+            commands::modtools::lint_fix,
+            commands::account::gb_account,
+            commands::account::gb_sign_in,
+            commands::account::gb_sign_out,
+            commands::account::gb_follow,
+            commands::account::gb_like,
+            commands::account::gb_following,
+            commands::modtools::fixes_info,
+            commands::modtools::fixes_health,
+            commands::modtools::fixes_apply,
+            commands::modtools::mod_mesh,
+            commands::ingame::live_info,
+            commands::ingame::live_add,
+            commands::ingame::live_remove,
+            commands::ingame::live_pick,
             commands::modtools::hash_lookup,
+            commands::modtools::pack_plan,
             commands::modtools::pack_export,
             commands::modtools::pack_inspect,
             commands::modtools::pack_import,
             commands::modtools::imm_detect,
             commands::modtools::imm_takeover,
+            commands::modtools::keys_list,
+            commands::modtools::keys_rebind,
+            commands::modtools::keys_set_off,
+            commands::modtools::keys_put_back,
+            commands::modtools::keys_on_screen,
+            commands::modtools::keys_on_screen_all,
+            commands::modtools::keys_on_screen_mods,
+            commands::modtools::keys_clashes,
+            commands::modtools::keys_outline,
             // ── ONLINE ──
             commands::online::queue_get,
             commands::online::queue_add,
@@ -146,14 +200,44 @@ pub fn run() {
             commands::system::dev_reload,
             commands::system::dev_wipe_user_config,
             commands::system::integrations_get,
-            commands::system::integration_register,
+            commands::system::integration_set,
             commands::system::app_data_dir,
+            // ── BACKEND ──
+            commands::library::mod_fetch_preview,
+            commands::library::archive_list,
+            commands::library::archive_forget,
+            commands::profiles::profile_members,
+            commands::profiles::profile_snapshot,
+            commands::profiles::profile_restore,
+            commands::profiles::profile_set_mods,
+            commands::system::game_icon,
             commands::app::settings_export,
             commands::app::settings_import_preview,
             commands::app::settings_import,
             commands::app::settings_import_undo,
             commands::app::app_update_check,
             commands::app::app_update_install,
+            // ── SETTINGS/AI ──
+            commands::ai::ai_chatbots_installed,
+            // ── EXTENSIONS ──
+            commands::extensions::extensions_list,
+            commands::extensions::extensions_repos,
+            commands::extensions::extensions_install,
+            commands::extensions::extensions_install_file,
+            commands::extensions::extensions_link_folder,
+            commands::extensions::extensions_remove,
+            commands::extensions::extensions_restore,
+            commands::extensions::extensions_set_enabled,
+            commands::extensions::extensions_themes,
+            commands::extensions::extensions_needs,
+            commands::extensions::extensions_open_app,
+            commands::extensions::extensions_fetch,
+            commands::extensions::extensions_read_file,
+            commands::extensions::extensions_list_dir,
+            commands::extensions::extensions_storage_get,
+            commands::extensions::extensions_storage_set,
+            commands::extensions::extensions_pack_folder,
+            commands::extensions::extensions_pack_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gachamod");
