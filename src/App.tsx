@@ -9,7 +9,7 @@ import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop } from "./ui/Deco";
 import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
-import { app as appApi, games as gamesApi, settings as settingsApi } from "./lib/api";
+import { app as appApi, appUpdate, errorText, games as gamesApi, settings as settingsApi } from "./lib/api";
 import { held } from "./lib/tauri";
 import { back, currentGame, emitApp, forward, go, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
 import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
@@ -110,6 +110,11 @@ export function App() {
       held(appApi.onToast((p) => {
         const o = p.open;
         toast(p.text, !!p.bad, o ? { label: "Open", run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
+      })),
+      // a newer gachamod downloaded in the background (commands/app.rs)
+      held(appUpdate.onReady((p) => {
+        toast(`gachamod ${p.version} is ready. It installs when you close gachamod`, false,
+          { label: "Restart now", run: () => { appUpdate.install().catch((e) => toast(errorText(e), true)); } });
       })),
     ];
     return () => offs.forEach((f) => f());

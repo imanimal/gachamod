@@ -67,6 +67,7 @@ pub async fn live_menu_set(app: tauri::AppHandle, st: State<'_, AppState>, game:
 #[tauri::command]
 pub async fn app_restart_admin(app: tauri::AppHandle) -> Result<()> {
     blocking(gacha_core::devtools::restart_elevated).await?;
+    crate::commands::app::skip_update_on_quit(&app);
     app.exit(0);
     Ok(())
 }

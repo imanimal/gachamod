@@ -1,6 +1,6 @@
-// Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own update check for the
+// Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own updates for the
 // About section. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Checkbox, Confirm, Panel, Progress, formatBytes, plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
@@ -132,8 +132,18 @@ export function UpdateRow() {
   const auto = appUpdateCheckPref.use();
   const [state, setState] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
+  const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number | null } | null>(null);
 
+  // what a background check found, and its download while it runs
+  useEffect(() => {
+    appUpdate.status().then(setState).catch(() => {});
+    const offs = [
+      appUpdate.onProgress(setProgress),
+      appUpdate.onReady(() => { setProgress(null); appUpdate.status().then(setState).catch(() => {}); }),
+    ];
+    return () => offs.forEach((o) => void o.then((f) => f()));
+  }, []);
 
   const checkNow = async () => {
     setChecking(true);
@@ -147,30 +157,35 @@ export function UpdateRow() {
   };
 
   const install = async () => {
-    const asset = state?.release?.asset;
-    if (!asset) return;
-    setProgress({ done: 0, total: asset.size || null });
-    const off = appUpdate.onProgress(setProgress);
-    try { await appUpdate.install(asset); }
-    catch (e) { toast(errorText(e), true); setProgress(null); }
-    finally { void off.then((f) => f()); }
+    setInstalling(true);
+    // gachamod closes once the installer starts
+    try { await appUpdate.install(); }
+    catch (e) { toast(errorText(e), true); setProgress(null); setInstalling(false); }
   };
 
   const r = state?.available ? state.release : null;
+  const ready = !!state?.ready;
+  const downloading = !!progress && !ready;
+  const hint = downloading ? `Downloading ${formatBytes(progress.done)}${progress.total ? ` of ${formatBytes(progress.total)}` : ""}`
+    : ready ? (auto ? "It installs when you close gachamod, or restart now to get it" : "Restart gachamod to install it")
+    : "gachamod closes, updates and opens again";
   return (
     <div className="set-rows set-update">
       <div className="set-row">
-        <span><b>Updates</b><span className="hint">{auto ? "gachamod looks for a new version once a day. Nothing installs unless you press Install" : "Automatic checks are off (Settings, Automatic)"}</span></span>
+        <span><b>Updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "Automatic updates are off (Settings, Automatic)"}</span></span>
         <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
       </div>
       {r && (
         <div className="set-row">
-          <span><b>gachamod {r.version} is out</b>
-            <span className="hint">{progress ? `Downloading ${formatBytes(progress.done)}${progress.total ? ` of ${formatBytes(progress.total)}` : ""}. gachamod closes when the installer starts` : r.asset ? `Installer ${formatBytes(r.asset.size)}` : "This release has no installer. Get it from the release page"}</span>
-            {progress && <Progress value={progress.total ? progress.done / progress.total : null} label="Downloading the update" />}
+          <span><b>gachamod {r.version} {ready ? "is ready" : "is out"}</b>
+            <span className="hint">{hint}</span>
+            {downloading && <Progress value={progress.total ? progress.done / progress.total : null} label="Downloading the update" />}
           </span>
-          <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(r.url).catch((e) => toast(errorText(e), true))} title="Open the release notes">See what's new</Button>
-          {r.asset && <Button size="sm" variant="primary" icon="install" busy={!!progress} onClick={() => void install()} title="Download the installer and run it">Install</Button>}
+          <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(r.url).catch((e) => toast(errorText(e), true))} title="Open the release notes on GitHub">See what's new</Button>
+          <Button size="sm" variant="primary" icon="install" busy={installing || downloading} onClick={() => void install()}
+            title={ready ? "Close gachamod, install the update and open it again" : "Download the update, then close gachamod, install it and open it again"}>
+            {ready ? "Restart to update" : "Update now"}
+          </Button>
         </div>
       )}
     </div>

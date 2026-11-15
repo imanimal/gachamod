@@ -118,14 +118,26 @@ export const settingsFile = {
 
 // ── gachamod's own updates (commands/app.rs) ──
 
-export interface UpdateAsset { name: string; url: string; size: number }
-export interface Release { version: string; name: string; url: string; notes: string; publishedAt: string | null; asset: UpdateAsset | null }
-export interface UpdateCheck { current: string; reachable: boolean; available: boolean; release: Release | null }
+export interface Release { version: string; name: string; url: string; notes: string; publishedAt: string | null }
+export interface UpdateCheck {
+  current: string;
+  /** The update feed answered. */
+  reachable: boolean;
+  /** `release` is newer than this copy. */
+  available: boolean;
+  /** It's downloaded: it installs when gachamod closes, or now with `install`. */
+  ready: boolean;
+  release: Release | null;
+}
 
 export const appUpdate = {
-  /** Never fails: no answer from GitHub is `reachable: false`. */
+  /** Never fails: no answer from the update feed is `reachable: false`. */
   check: () => call<UpdateCheck>("app_update_check"),
-  /** Download the installer, start it and quit the app. */
-  install: (asset: UpdateAsset) => call<void>("app_update_install", { asset }),
+  /** What the last check found, without going online. */
+  status: () => call<UpdateCheck>("app_update_status"),
+  /** Download the update if it isn't yet, then run the installer, which closes gachamod and opens the new version. */
+  install: () => call<void>("app_update_install"),
   onProgress: (cb: (p: { done: number; total: number | null }) => void) => listen<{ done: number; total: number | null }>("app-update-progress", cb),
+  /** A newer version finished downloading in the background. */
+  onReady: (cb: (p: { version: string }) => void) => listen<{ version: string }>("app-update-ready", cb),
 };

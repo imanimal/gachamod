@@ -667,6 +667,19 @@ UI:
   what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
   the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
 - `npm run installer` builds the installer with build-machine folders written as `~` (scripts/build-installer.mjs).
+- gachamod's own updates (`src-tauri/src/commands/app.rs`, Tauri's updater plugin; `app_update.rs` keeps version
+  numbers). The feed is `releases/latest/download/latest.json` on imanimal/gachamod, and the updater only installs an
+  installer signed with the key in `%USERPROFILE%\.tauri\gachamod.key` (its public half is in tauri.conf.json, plugins
+  > updater). With "app.updateCheck" on (default), it checks 12 s after start and every 6 hours, downloads a newer
+  version quietly and toasts "gachamod X is ready" with Restart now; at quit (`RunEvent::Exit`) it runs the installer
+  without reopening gachamod. Settings, About shows the state (`app_update_status`) with Check now and Update now or
+  Restart to update. The NSIS installer runs passive (a small progress window), per user, no administrator.
+- `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
+  builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
+  (scripts/release.mjs). Without --notes the notes are the commit subjects since the last release.
+- Uninstalling (Windows' Installed apps) removes the program, its RUNASADMIN flag, and the `gachamod:` link and
+  `.gachamod` file keys when they still open that copy (`hooks.nsh`). Mods stay where they are. "Delete the application
+  data" also removes the data folder (settings, profiles, trash) and HKCU\Software\gachamod.
 - Demo handlers for every SYSTEM command.
 
 ## Settings, Tools and the AI helper (SETTINGS/AI)
@@ -691,7 +704,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   size, animations. Custom themes: list, apply, delete with Undo, import/export as JSON, and
   "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
 - Automatic: one switch each, all prefs in `automatic.ts` that other areas read: `appUpdateCheckPref`
-  ("app.updateCheck"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
+  ("app.updateCheck", shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
 - Storage: `trashDaysPref` ("trash.days", 0 to 3650, default 14; 0 deletes files at once, the record stays in

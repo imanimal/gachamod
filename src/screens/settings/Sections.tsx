@@ -101,8 +101,9 @@ export function AutomaticSection() {
   return (
     <Panel title="Automatic" icon="refresh" id="automatic">
       <div className="set-rows">
-        <SetRow id="set-app-updates" label="Check for gachamod updates" hint="Once a day at start. Nothing installs unless you press Install">
-          <Switch p={appUpdateCheckPref} on="Checking for gachamod updates" off="Stopped checking for gachamod updates" />
+        <SetRow id="set-app-updates" label="Update gachamod automatically" hint="New versions download in the background and install when you close gachamod"
+          tip="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now in About">
+          <Switch p={appUpdateCheckPref} on="Updating gachamod automatically" off="Stopped updating gachamod automatically" />
         </SetRow>
         <SetRow id="set-mod-updates" label="Check mods for updates" hint="When you open Mods, and every 30 minutes">
           <Switch p={modUpdateCheckPref} on="Checking mods for updates" off="Stopped checking mods for updates" />

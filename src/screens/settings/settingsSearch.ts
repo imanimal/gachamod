@@ -51,7 +51,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-nsfw", "mods", "Mods for adults", "nsfw 18+ adult lewd blur hide show censor", "eye"],
   ["set-pergame", "mods", "One skin per character", "single skin outfit only one at a time auto turn off others", "characters"],
   ["set-pergame", "mods", "Reload in game automatically", "f10 reload refresh in game auto press", "refresh"],
-  ["set-app-updates", "automatic", "Check for gachamod updates", "app update new version upgrade auto", "update"],
+  ["set-app-updates", "automatic", "Update gachamod automatically", "app update check new version upgrade auto install", "update"],
   ["set-mod-updates", "automatic", "Check mods for updates", "mod updates outdated gamebanana auto check", "update"],
   ["set-rescan", "automatic", "Rescan mods automatically", "scan rescan refresh folder watch auto", "refresh"],
   ["set-archives", "automatic", "Delete downloaded archives", "zip 7z rar archive keep downloads cleanup disk space", "trash"],

@@ -66,6 +66,9 @@ pub fn run() {
             hand_to_ui(app, opened_from_args(argv));
         }))
         .plugin(tauri_plugin_dialog::init())
+        // SYSTEM: gachamod's own updates (commands/app.rs)
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(commands::app::Updates::default())
         .plugin(hotkeys::plugin())
         .manage(hotkeys::Held::default())
         .manage(overlay::Showing::default())
@@ -114,7 +117,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 w.on_window_event(move |e| { if let tauri::WindowEvent::Destroyed = e { handle.exit(0); } });
             }
-            commands::app::start_daily_check(app.handle().clone());
+            commands::app::start_auto_update(app.handle().clone());
             // SYSTEM: usage counts and crash reports go out every few minutes and at quit, when they're on
             let (http, tdb) = { let s = app.state::<state::AppState>(); (s.http.clone(), s.db.clone()) };
             if let Ok(d) = tdb.lock() { gacha_core::telemetry::note_start(&d); }
@@ -278,6 +281,7 @@ pub fn run() {
             commands::app::settings_import,
             commands::app::settings_import_undo,
             commands::app::app_update_check,
+            commands::app::app_update_status,
             commands::app::app_update_install,
             // ── SETTINGS/AI ──
             commands::ai::ai_chatbots_installed,
@@ -313,6 +317,8 @@ pub fn run() {
                         let _ = tokio::time::timeout(std::time::Duration::from_secs(3), gacha_core::telemetry::flush(&http, &db)).await;
                     });
                 }
+                // last: a downloaded update installs now (this ends the process)
+                commands::app::install_on_quit(app);
             }
         });
 }

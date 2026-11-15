@@ -114,6 +114,7 @@ const EXACT: Record<string, Desc> = {
   characters_sync: ["Saving the character list", HOLD.db],
   app_update_check: ["Checking for a gachamod update", HOLD.github],
   app_update_install: ["Downloading the gachamod update", HOLD.github],
+  app_update_status: ["Reading the update status", HOLD.db],
   extensions_repos: ["Reading extension lists", HOLD.github],
   extensions_fetch: ["Reading an extension list", HOLD.github],
   extensions_install: ["Installing an extension", HOLD.github],

@@ -1,14 +1,20 @@
-//! Settings export and import, and gachamod's own update check and install. Owner: SYSTEM area.
+//! Settings export and import, and gachamod's own updates. Owner: SYSTEM area.
 use crate::state::{blocking, AppState};
-use gacha_core::app_update::{self, Asset, UpdateCheck};
+use gacha_core::app_update::{self, Release, UpdateCheck};
 use gacha_core::settings_file::{self, ImportSummary};
 use gacha_core::{Error, Result};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 /// `{ done, total }` while an update downloads.
 pub const UPDATE_PROGRESS: &str = "app-update-progress";
+/// A newer version finished downloading in the background: `{ version }`.
+pub const UPDATE_READY: &str = "app-update-ready";
 
 fn lock(db: &gacha_core::db::Shared) -> Result<std::sync::MutexGuard<'_, gacha_core::db::Db>> {
     db.lock().map_err(|_| Error::Invalid("The app's database stopped responding. Restart gachamod".into()))
@@ -67,50 +73,155 @@ pub async fn settings_import_undo(st: State<'_, AppState>, backup: String) -> Re
     }).await
 }
 
-fn app_version(app: &AppHandle) -> String { app.package_info().version.to_string() }
 
-/// Look for a newer gachamod. Never fails: no answer from GitHub is `reachable: false`.
-#[tauri::command]
-pub async fn app_update_check(app: AppHandle, st: State<'_, AppState>) -> Result<UpdateCheck> {
-    Ok(app_update::check(&st.http, &app_version(&app)).await)
+// ── gachamod's own updates ──
+//
+// Tauri's updater reads latest.json from the newest GitHub release (tauri.conf.json: plugins > updater) and only
+// accepts an installer signed with the release key. With automatic updates on (the default), gachamod looks at start
+// and every 6 hours, downloads a newer version in the background and installs it when gachamod closes. The toast
+// and Settings, About offer to restart now instead. On Windows the installer runs with a small progress window.
+
+const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
+
+#[derive(Default)]
+pub struct Updates {
+    /// The newer version the last check found.
+    found: Mutex<Option<Update>>,
+    /// A downloaded and verified installer, run when gachamod closes unless the user restarts first.
+    ready: Mutex<Option<(Update, Vec<u8>)>>,
+    /// One download at a time.
+    downloading: AtomicBool,
 }
 
-/// Download the installer to the temp folder, start it and quit.
-#[tauri::command]
-pub async fn app_update_install(app: AppHandle, st: State<'_, AppState>, asset: Asset) -> Result<()> {
-    let dir = std::env::temp_dir().join("gachamod-update");
+fn app_version(app: &AppHandle) -> String { app.package_info().version.to_string() }
+
+fn auto_on(app: &AppHandle) -> bool {
+    let st = app.state::<AppState>();
+    let Ok(d) = st.db.lock() else { return false };
+    d.setting(app_update::SETTING).ok().flatten().as_deref() != Some("0")
+}
+
+fn release_of(u: &Update) -> Release { Release::new(&u.version, u.body.as_deref(), u.date.map(|d| d.to_string())) }
+
+/// What's known without asking the feed again.
+fn status(app: &AppHandle, reachable: bool) -> UpdateCheck {
+    let up = app.state::<Updates>();
+    let ready = up.ready.lock().unwrap().as_ref().map(|(u, _)| u.version.clone());
+    let found = up.found.lock().unwrap().as_ref().map(release_of);
+    // a download of an older find still counts until something newer is downloaded
+    let release = found.or_else(|| up.ready.lock().unwrap().as_ref().map(|(u, _)| release_of(u)));
+    let is_ready = matches!((&ready, &release), (Some(v), Some(r)) if *v == r.version);
+    UpdateCheck { current: app_version(app), reachable, available: release.is_some(), ready: is_ready, release }
+}
+
+/// Ask the feed. Never fails: no answer (offline, no release yet) is `reachable: false`.
+async fn find(app: &AppHandle) -> UpdateCheck {
+    let res = match app.updater_builder().timeout(Duration::from_secs(30)).build() {
+        Ok(u) => u.check().await,
+        Err(e) => Err(e),
+    };
+    match res {
+        Ok(found) => {
+            *app.state::<Updates>().found.lock().unwrap() = found;
+            status(app, true)
+        }
+        Err(e) => {
+            gacha_core::logs::info(format!("Update check: {e}"));
+            status(app, false)
+        }
+    }
+}
+
+/// Download and check the installer of `u`, keeping it for the restart or the quit.
+async fn download(app: &AppHandle, mut u: Update) -> Result<()> {
+    let up = app.state::<Updates>();
+    if up.downloading.swap(true, Ordering::SeqCst) {
+        return Err(Error::Conflict("The update is already downloading".into()));
+    }
+    // the check's 30 seconds would cut a slow download short
+    u.timeout = Some(Duration::from_secs(30 * 60));
     let emitter = app.clone();
-    let mut last = 0u64;
-    let path = app_update::download_installer(&st.http, &asset, &dir, move |done, total| {
+    let (mut done, mut last) = (0u64, 0u64);
+    let res = u.download(move |chunk, total| {
+        done += chunk as u64;
         // about every 256 KB, so the UI isn't flooded
         if done - last >= 256 * 1024 || total == Some(done) {
             last = done;
             let _ = emitter.emit(UPDATE_PROGRESS, serde_json::json!({ "done": done, "total": total }));
         }
-    }).await?;
-    app_update::run_installer(&path)?;
-    app.exit(0);
+    }, || {}).await;
+    up.downloading.store(false, Ordering::SeqCst);
+    let bytes = res.map_err(|e| Error::Network(format!("The update didn't download: {e}")))?;
+    *up.ready.lock().unwrap() = Some((u, bytes));
     Ok(())
 }
 
-/// At start, once a day unless turned off: check quietly and say so in a toast when there is a newer version.
-pub fn start_daily_check(app: AppHandle) {
+/// Look for a newer gachamod now.
+#[tauri::command]
+pub async fn app_update_check(app: AppHandle) -> Result<UpdateCheck> { Ok(find(&app).await) }
+
+/// What the last check found and whether it's downloaded, without going online.
+#[tauri::command]
+pub fn app_update_status(app: AppHandle) -> UpdateCheck { status(&app, true) }
+
+/// Install the newer version now: download it if it isn't yet, then run the installer, which closes gachamod and
+/// opens the new version.
+#[tauri::command]
+pub async fn app_update_install(app: AppHandle) -> Result<()> {
+    let up = app.state::<Updates>();
+    let found = up.found.lock().unwrap().clone();
+    let have = up.ready.lock().unwrap().as_ref().map(|(u, _)| u.version.clone());
+    if let Some(f) = found.filter(|f| have.as_deref() != Some(f.version.as_str())) {
+        download(&app, f).await?;
+    }
+    let Some((u, bytes)) = up.ready.lock().unwrap().take() else {
+        return Err(Error::Invalid("There's no update to install. Check for updates first".into()));
+    };
+    gacha_core::logs::quitting();
+    // on Windows this starts the installer and ends the process
+    if let Err(e) = u.install(&bytes) {
+        *up.ready.lock().unwrap() = Some((u, bytes));
+        return Err(Error::Invalid(format!("The installer didn't start: {e}")));
+    }
+    app.restart()
+}
+
+/// Automatic updates: at start and every 6 hours, unless turned off. A newer version downloads quietly and a toast
+/// says it's ready.
+pub fn start_auto_update(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        // give the window time to start listening for toasts
-        tokio::time::sleep(std::time::Duration::from_secs(12)).await;
-        let st = app.state::<AppState>();
-        let due = {
-            let Ok(d) = st.db.lock() else { return };
-            let on = d.setting(app_update::SETTING).ok().flatten().as_deref() != Some("0");
-            let last = d.setting(app_update::CHECKED_AT).ok().flatten().and_then(|v| v.parse().ok());
-            on && app_update::due(last, gacha_core::db::now())
-        };
-        if !due { return; }
-        let c = app_update::check(&st.http, &app_version(&app)).await;
-        if let Ok(d) = st.db.lock() { let _ = d.set_setting(app_update::CHECKED_AT, &gacha_core::db::now().to_string()); }
-        if let (true, Some(r)) = (c.available, &c.release) {
-            let text = format!("gachamod {} is out. See what's new and install it in Settings, under About", r.version);
-            let _ = app.emit(gacha_core::model::events::TOAST, serde_json::json!({ "text": text, "bad": false }));
+        // give the window time to start listening for the toast
+        tokio::time::sleep(Duration::from_secs(12)).await;
+        loop {
+            if auto_on(&app) {
+                let c = find(&app).await;
+                let found = app.state::<Updates>().found.lock().unwrap().clone();
+                if let (false, Some(u)) = (c.ready, found) {
+                    let version = u.version.clone();
+                    match download(&app, u).await {
+                        Ok(()) => { let _ = app.emit(UPDATE_READY, serde_json::json!({ "version": version })); }
+                        Err(e) => gacha_core::logs::warn(format!("Update download: {e}")),
+                    }
+                }
+            }
+            tokio::time::sleep(CHECK_EVERY).await;
         }
     });
+}
+
+/// At quit: run a downloaded update's installer, without opening gachamod again after. Only with automatic updates
+/// on, so turning them off after a download keeps this version.
+pub fn install_on_quit(app: &AppHandle) {
+    let Some(up) = app.try_state::<Updates>() else { return };
+    if !auto_on(app) { return; }
+    let Some((u, bytes)) = up.ready.lock().unwrap().take() else { return };
+    if let Err(e) = u.restart_after_install(false).install(&bytes) {
+        gacha_core::logs::warn(format!("Update install at quit: {e}"));
+    }
+}
+
+/// gachamod is closing to start again (as administrator): the new copy installs the update itself, so this one
+/// doesn't run the installer under it.
+pub fn skip_update_on_quit(app: &AppHandle) {
+    if let Some(up) = app.try_state::<Updates>() { up.ready.lock().unwrap().take(); }
 }

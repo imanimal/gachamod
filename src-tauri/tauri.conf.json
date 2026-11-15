@@ -31,6 +31,10 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "publisher": "imanimal",
+    "homepage": "https://github.com/imanimal/gachamod",
+    "shortDescription": "Mod manager for 3DMigoto model importer games",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "fileAssociations": [
       { "ext": ["gachamod"], "name": "gachamod pack", "description": "Mods packed by gachamod", "role": "Editor", "mimeType": "application/x-gachamod" }
@@ -38,6 +42,13 @@
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "nsis": { "installMode": "currentUser", "installerHooks": "./windows/hooks.nsh" }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE4NUFFRTkyRERGQkE2QzcKUldUSHB2dmRrdTVhR08raXVTRFNDODZjZW9UNnNCbDNBeE10ZURTejlKZFFVb0piejRmTWdZQVMK",
+      "endpoints": ["https://github.com/imanimal/gachamod/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

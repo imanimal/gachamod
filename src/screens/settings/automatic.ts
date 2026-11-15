@@ -6,7 +6,8 @@ import { pref } from "../../lib/prefs";
 const flag = (key: string, fallback: boolean) =>
   pref<boolean>(key, fallback, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
-/** Look for a new gachamod once a day at start (gacha-core app_update.rs reads the same key). */
+/** Look for a new gachamod at start and every 6 hours, download it and install it at quit (src-tauri commands/app.rs
+ *  reads the same key). */
 export const appUpdateCheckPref = flag("app.updateCheck", true);
 /** Look up installed GameBanana mods for updates when Mods opens and every 30 minutes. */
 export const modUpdateCheckPref = flag("updates.check", true);

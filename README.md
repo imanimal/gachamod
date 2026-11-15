@@ -7,6 +7,22 @@ click, and switch skins per character. It works alongside XXMI Launcher and star
 
 It's early and Windows only.
 
+## Install
+
+Download `gachamod_<version>_x64-setup.exe` from the [latest release](https://github.com/imanimal/gachamod/releases/latest)
+and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run
+anyway. It installs for your Windows account and doesn't need administrator rights.
+
+gachamod updates itself. A new version downloads in the background and installs when you close the app, or right
+away if you click Restart in the toast. Settings, Automatic can turn that off.
+
+To uninstall, open Windows Settings, Apps, Installed apps, and pick gachamod. Your mods stay in their folders. Tick
+"Delete the application data" to also remove gachamod's settings, profiles and trash.
+
+Play Genshin, Star Rail, Wuthering Waves or Endfield? Switching skins while you play has only been checked in Zenless
+Zone Zero so far. Start your game, open Help, Check this game, and go through the steps. It takes about ten minutes
+and sends the answers to the developer (docs/testing.md).
+
 ## What it does
 
 - Finds your games and XXMI's importer folders on its own, and picks up the mods already in your Mods folders.
@@ -53,6 +69,10 @@ picks up changes on its own:
 the interface alone in a browser at http://localhost:1420 with made-up local data and the real GameBanana.
 `npm run installer` makes a release build and an installer in `target/release/bundle/nsis`; that one is slow and only
 needed to hand the app to someone else.
+
+`npm run release -- 0.1.1` publishes version 0.1.1: it sets the version, builds the installer, signs the update with
+`%USERPROFILE%\.tauri\gachamod.key`, pushes and makes the GitHub release that installed copies update from. Keep a
+backup of that key. Without it, installed copies can't take another update.
 
 ## Licence
 

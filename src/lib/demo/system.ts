@@ -151,23 +151,21 @@ export function registerSystemDemo() {
     settings_import: async (): Promise<ImportSummary> => { await demoWait(300); return demoImport("demo-backup.json"); },
     settings_import_undo: () => ({}),
     // updates: a pretend newer release so the About section has something to show
-    app_update_check: async (): Promise<UpdateCheck> => {
-      await demoWait(500);
-      const tag = "v0.2.0";
-      return {
-        current: "0.1.0-demo", reachable: true, available: true,
-        release: {
-          version: "0.2.0", name: "gachamod 0.2.0", url: "https://github.com/imanimal/gachamod/releases", notes: "Settings export and import. Update check.",
-          publishedAt: null, asset: { name: "gachamod_0.2.0_x64-setup.exe", url: `https://github.com/imanimal/gachamod/releases/download/${tag}/gachamod_0.2.0_x64-setup.exe`, size: 9_400_000 },
-        },
-      };
-    },
-    app_update_install: async ({ asset }) => {
-      const total = (asset as { size: number }).size;
+    app_update_check: async (): Promise<UpdateCheck> => { await demoWait(500); return demoUpdate(); },
+    app_update_status: (): UpdateCheck => demoUpdate(),
+    app_update_install: async () => {
+      const total = 9_400_000;
       for (let done = 0; done <= total; done += total / 10) { demoEmit("app-update-progress", { done, total }); await demoWait(150); }
-      throw { kind: "invalid", message: "The demo can't install updates. The app would start the installer and close now" };
+      throw { kind: "invalid", message: "The demo can't install updates. The app would close, update and open again now" };
     },
   });
+}
+
+function demoUpdate(): UpdateCheck {
+  return {
+    current: "0.1.0-demo", reachable: true, available: true, ready: false,
+    release: { version: "0.2.0", name: "gachamod 0.2.0", url: "https://github.com/imanimal/gachamod/releases/tag/v0.2.0", notes: "Settings export and import. Update check.", publishedAt: null },
+  };
 }
 
 function demoImport(backup: string): ImportSummary {

@@ -31,9 +31,29 @@
 ; The exe is gone, so its flag goes too (a reinstall puts it back from `admin`). The answer itself stays unless the
 ; player ticked "Delete the application data".
 !macro NSIS_HOOK_POSTUNINSTALL
+  Push $R0
   DeleteRegValue HKCU "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" "$INSTDIR\${MAINBINARYNAME}.exe"
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
     DeleteRegKey HKCU "Software\gachamod"
   ${EndIf}
+  ; The gachamod: link handler and .gachamod files gachamod registers itself at start (platform.rs), while they still
+  ; open this copy. Another copy's, or another program's, stay. An upgrade's next start registers them again.
+  ${If} $UpdateMode <> 1
+    ReadRegStr $R0 HKCU "Software\Classes\gachamod\shell\open\command" ""
+    ${If} $R0 == '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+      DeleteRegKey HKCU "Software\Classes\gachamod"
+    ${EndIf}
+    ReadRegStr $R0 HKCU "Software\Classes\gachamod.pack\shell\open\command" ""
+    ${If} $R0 == '"$INSTDIR\${MAINBINARYNAME}.exe" "%1"'
+      DeleteRegKey HKCU "Software\Classes\gachamod.pack"
+      ReadRegStr $R0 HKCU "Software\Classes\.gachamod" ""
+      ${If} $R0 == "gachamod.pack"
+        DeleteRegKey HKCU "Software\Classes\.gachamod"
+      ${EndIf}
+    ${EndIf}
+    ; SHCNE_ASSOCCHANGED: Explorer drops the old file icon
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+  ${EndIf}
+  Pop $R0
 !macroend
