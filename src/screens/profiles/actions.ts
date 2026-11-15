@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { errorText, hotkeys, profiles, type GameId, type Profile, type ProfilePatch, type ProfileSnapshot } from "../../lib/api";
 import { record } from "../../lib/history";
 import { currentRoute, emitApp, go } from "../../lib/store";
+import { posthog, posthogLogger } from "../../lib/posthog";
 import { toast } from "../../ui/toast";
 import { profilesChanged, switchProfile } from "./data";
 
@@ -16,7 +17,11 @@ const syncKeys = () => void hotkeys.sync().catch(() => {});
 /** Switch with errors as toasts. */
 export async function switchTo(game: GameId, to: Profile, list: Profile[] | null) {
   if (to.active) return;
-  try { await switchProfile(game, to, list?.find((p) => p.active) ?? null); } catch (e) { fail(e); }
+  try {
+    await switchProfile(game, to, list?.find((p) => p.active) ?? null);
+    posthog?.capture("profile_switched", { game_id: game });
+    posthogLogger?.info("profile switched", { game_id: game });
+  } catch (e) { fail(e); }
 }
 
 /** A deleted profile's way back: put it back from the snapshot, then remember the new id. */
@@ -43,6 +48,7 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
       p = await profiles.restore({ profile: blank, mods: [], vars: [] });
     } else p = await profiles.create(game, name, null);
     profilesChanged(game);
+    posthog?.capture("profile_created", { game_id: game, creation_mode: start });
     undoable(game, start === "empty" ? `Made ${p.name}, with no mods on` : `Made ${p.name} from the mods on now`, p);
   } catch (e) { fail(e); return null; }
   // the profile is made either way, so a bad field is a toast, not a second try that would make another
@@ -57,6 +63,7 @@ export async function duplicateProfile(game: GameId, p: Profile): Promise<Profil
   try {
     const c = await profiles.create(game, `${p.name} copy`, p.id);
     profilesChanged(game);
+    posthog?.capture("profile_created", { game_id: game, creation_mode: "duplicate" });
     undoable(game, `Made ${c.name}`, c);
     return c;
   } catch (e) { fail(e); return null; }

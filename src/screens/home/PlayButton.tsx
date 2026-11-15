@@ -9,6 +9,7 @@ import { errorText, games, settings, xxmi, type GameState } from "../../lib/api"
 import { windowAction } from "../../lib/tauri";
 import { go, useGame } from "../../lib/store";
 import { shuffleBeforePlay } from "../library/shuffle";
+import { posthog, posthogLogger } from "../../lib/posthog";
 import "./home.css";
 
 // shared by every Play button, so the sidebar's and Home's agree
@@ -38,6 +39,9 @@ export async function play(game: GameState, vanilla = false) {
   try {
     if (!vanilla) await shuffleBeforePlay(game.id);
     await games.launch(game.id, vanilla);
+    const launchMode = vanilla ? "vanilla" : "modded";
+    posthog?.capture("game_launch_requested", { game_id: game.id, launch_mode: launchMode });
+    posthogLogger?.info("game launch requested", { game_id: game.id, launch_mode: launchMode });
     toast(vanilla ? `Starting ${game.name} without mods` : `Starting ${game.name}`);
     const close = await settings.get(`${game.id}.closeOnLaunch`).catch(() => null);
     if (close === "1") window.setTimeout(() => void windowAction("close"), 1500);

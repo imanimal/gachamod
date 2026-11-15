@@ -8,6 +8,7 @@ import { admin, errorText, report, shell, type AdminState, type FeedbackKind, ty
 import { restartAsAdmin } from "../../lib/elevation";
 import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type FeedbackStart as Start } from "../../lib/feedback";
 import { currentGame, currentRoute } from "../../lib/store";
+import { posthog } from "../../lib/posthog";
 import { SetRow } from "./parts";
 
 // ── the form ──
@@ -37,7 +38,10 @@ function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => vo
     if (busy || !text.trim()) return;
     setBusy(true);
     try {
-      await report.feedback({ kind, text, contact: contact.trim() || undefined, logs, screen: currentRoute().view, game: currentGame()?.id });
+      const screen = currentRoute().view;
+      const game = currentGame()?.id;
+      await report.feedback({ kind, text, contact: contact.trim() || undefined, logs, screen, game });
+      posthog?.capture("feedback_submitted", { feedback_kind: kind, attached_logs: logs, screen, game_id: game });
       toast("Thanks. Your feedback was sent");
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }

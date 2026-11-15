@@ -3,6 +3,7 @@ import { errorText, shell, type GameId } from "../../lib/api";
 import { findMember, queueLatest } from "../../lib/gamebanana";
 import { setCreatorFlag, type CreatorFlag, type CreatorRef } from "../../lib/prefs";
 import { go } from "../../lib/store";
+import { posthog, posthogLogger } from "../../lib/posthog";
 import { toast } from "../../ui/toast";
 
 /** Queue a mod's newest file. `replaces`: the library id it updates. */
@@ -11,6 +12,9 @@ export async function installLatest(game: GameId, modId: number, name: string, r
     const item = await queueLatest(game, modId, replaces);
     if (!item) { toast(`${name} has no file to download`, true); return; }
     const verb = replaces ? "Updating" : archived ? "Reinstalling" : "Downloading";
+    const downloadType = replaces ? "update" : archived ? "reinstall" : "new";
+    posthog?.capture("mod_download_queued", { game_id: game, download_type: downloadType });
+    posthogLogger?.info("mod download queued", { game_id: game, download_type: downloadType });
     toast(`${verb} ${name}`, false, { label: "Show", run: () => go("downloads") });
   } catch (e) { toast(errorText(e), true); }
 }

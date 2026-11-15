@@ -18,6 +18,7 @@ import { App } from "./App";
 import { installDemo } from "./lib/demo";
 import { installTips } from "./lib/keys";
 import { installTelemetry } from "./lib/telemetry";
+import "./lib/posthog";
 
 installDemo();
 installTips();

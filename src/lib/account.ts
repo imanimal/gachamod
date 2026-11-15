@@ -7,6 +7,7 @@ import { errorText, settings } from "./api";
 import { record } from "./history";
 import { creatorsPref, jsonPref, setRemoteFollow, type CreatorFlags } from "./prefs";
 import { call, inTauri, listen } from "./tauri";
+import { posthog } from "./posthog";
 import { toast } from "../ui/toast";
 
 export interface GbAccount { id: number; name: string; avatar: string | null }
@@ -21,7 +22,18 @@ const subs = new Set<() => void>();
 export const accountState = () => state;
 export const useAccount = () => useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => state);
 export function setAccountState(s: AccountState) {
+  const previousUser = state.user;
   state = s;
+
+  if (s.user) {
+    if (previousUser && previousUser.id !== s.user.id) posthog?.reset();
+    if (!previousUser || previousUser.id !== s.user.id) {
+      posthog?.identify(`gamebanana:${s.user.id}`, { gamebanana_username: s.user.name });
+    }
+  } else if (previousUser) {
+    posthog?.reset();
+  }
+
   // following a creator in the app follows them on GameBanana too, while signed in
   setRemoteFollow(s.available && s.user ? followRemote : null);
   subs.forEach((f) => f());

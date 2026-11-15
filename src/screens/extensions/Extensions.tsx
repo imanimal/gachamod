@@ -7,6 +7,7 @@ import { fileUrl, shell, type ExtPermissions, type InstalledExt } from "../../li
 import { extName, installFromDisk, installListed, linkFolder, listedPackages, loadRepos, reloadExtensions, reloadPages, removeExtension,
   setExtensionEnabled, sharePackage, updateFor, useExtensions, useRepos, type Listed } from "../../lib/extensions";
 import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
+import { posthog } from "../../lib/posthog";
 import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ICONS } from "../../ui/icons";
@@ -141,8 +142,14 @@ function ExtIcon({ src, kind }: { src: string | null | undefined; kind: string }
 
 function ListedCard({ p, have }: { p: Listed; have: InstalledExt | null }) {
   const [busy, setBusy] = useState(false);
-  const run = async () => { setBusy(true); try { await installListed(p); } finally { setBusy(false); } };
   const newer = have?.manifest && updateFor(have, [p]);
+  const run = async () => {
+    setBusy(true);
+    try {
+      await installListed(p);
+      posthog?.capture("extension_installed", { extension_kind: p.kind, operation: newer ? "update" : "install" });
+    } finally { setBusy(false); }
+  };
   return (
     <article className="ext-card">
       <ExtIcon src={p.icon} kind={p.kind} />
@@ -179,7 +186,14 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
   const [busy, setBusy] = useState(false);
   const m = e.manifest;
   const name = extName(e);
-  const run = async () => { if (!update) return; setBusy(true); try { await installListed(update); } finally { setBusy(false); } };
+  const run = async () => {
+    if (!update) return;
+    setBusy(true);
+    try {
+      await installListed(update);
+      posthog?.capture("extension_installed", { extension_kind: update.kind, operation: "update" });
+    } finally { setBusy(false); }
+  };
   const menu: MenuEntry[] = [
     m?.page && e.enabled && { label: `Open ${m.page.title}`, icon: extIcon(m.page.icon), onClick: () => go({ view: "extensions", ext: e.id }) },
     { label: "Open folder", icon: "folder", onClick: () => void shell.openPath(e.dir) },

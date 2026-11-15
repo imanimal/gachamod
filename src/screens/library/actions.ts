@@ -8,6 +8,7 @@ import { checkUpdates, modPage, queueLatest } from "../../lib/gamebanana";
 import { fixMods } from "../../lib/fixes";
 import { record } from "../../lib/history";
 import { currentRoute, emitApp, go } from "../../lib/store";
+import { posthog } from "../../lib/posthog";
 import { toast } from "../../ui/toast";
 import { profilesChanged } from "../profiles/data";
 import { changeStates, publish, removeMods, toggleMods } from "./data";
@@ -39,6 +40,7 @@ export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?:
       turnOffOthers = c.turnOffOthers;
     }
     await toggleMods(game, ids, on, all, turnOffOthers);
+    posthog?.capture("mods_enabled_changed", { game_id: game, enabled: on, mod_count: ids.length });
     return true;
   } catch (e) { fail(e); return false; }
 }
