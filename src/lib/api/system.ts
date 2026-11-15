@@ -93,6 +93,8 @@ export const integrations = {
 export const about = {
   /** The app's data folder (database, trash, downloads). */
   dataDir: () => call<string>("app_data_dir"),
+  /** The game a fresh install's setup was named for (gachamod-setup-zzz.exe), once. */
+  setupGame: () => call<GameId | null>("setup_game"),
   /** Keep the look on screen for gachamod setup, which wears it for repair and uninstall (lib/theme.ts sends it). */
   saveLook: (look: Record<string, unknown>) => call<void>("save_look", { look }),
   /** True when gachamod setup sits next to the app (installed copies). */

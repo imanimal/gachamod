@@ -266,6 +266,7 @@ pub fn run() {
             commands::system::xxmi_uninstall,
             commands::system::app_reset,
             commands::system::app_relaunch,
+            commands::system::setup_game,
             commands::system::launch_config_get,
             commands::system::launch_config_set,
             commands::system::game_launch,

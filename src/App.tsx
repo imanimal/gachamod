@@ -8,9 +8,9 @@ import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop } from "./ui/Deco";
 import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
-import { app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi } from "./lib/api";
+import { about as aboutApi, app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi } from "./lib/api";
 import { held } from "./lib/tauri";
-import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
+import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, setOnlyGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
 import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
 import { chillPref, HIDDEN_THEME, onKonami, watchKonamiKeys } from "./lib/fun";
 import { Seasonal } from "./ui/Seasonal";
@@ -72,6 +72,12 @@ export function App() {
     refreshGames().then(async (list) => {
       setLoaded(true);
       const first = (await settingsApi.get("onboarded").catch(() => null)) !== "1";
+      // installed with a game's own setup (gachamod-setup-zzz.exe): start in one-game mode for that game
+      const named = await aboutApi.setupGame().catch(() => null);
+      if (first && named) {
+        setOnlyGame(named);
+        if (list.some((g) => g.id === named && g.shown)) setGame(named);
+      }
       if (!first && list.some((g) => g.modsDir)) { setLooked(true); return; }
       const after = (await recheck(true)) ?? list;
       setLooked(true);

@@ -135,6 +135,19 @@ pub async fn app_reset(st: State<'_, AppState>) -> Result<()> {
     blocking(move || gacha_core::reset::request(&data)).await
 }
 
+/// The game a fresh install's setup was named for (`gachamod-setup-zzz.exe`, src-setup look.rs), read once: the
+/// note is removed. The window turns on one-game mode for it at the first start.
+#[tauri::command]
+pub async fn setup_game(st: State<'_, AppState>) -> Result<Option<String>> {
+    let file = st.data_dir.join("setup-game.json");
+    blocking(move || {
+        let Ok(text) = std::fs::read_to_string(&file) else { return Ok(None) };
+        let _ = std::fs::remove_file(&file);
+        let v: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap_or_default();
+        Ok(v["game"].as_str().filter(|g| games::def(g).is_some()).map(String::from))
+    }).await
+}
+
 /// Close gachamod and open it again.
 #[tauri::command]
 pub fn app_relaunch(app: tauri::AppHandle) {

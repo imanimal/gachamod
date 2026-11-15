@@ -125,6 +125,7 @@ const EXACT: Record<string, Desc> = {
   xxmi_uninstall: ["Uninstalling the mod loaders", "This moves files to the Recycle Bin. A game or XXMI Launcher that has the files open can hold it."],
   app_reset: ["Getting ready to start over", HOLD.disk],
   app_relaunch: ["Restarting gachamod", HOLD.disk],
+  setup_game: ["Reading what setup left", HOLD.disk],
   fixes_apply: ["Updating mods for the new game version", HOLD.disk],
   settings_import: ["Bringing in settings", HOLD.disk],
   settings_export: ["Saving your settings to a file", HOLD.disk],

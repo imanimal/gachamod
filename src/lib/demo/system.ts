@@ -190,6 +190,7 @@ export function registerSystemDemo() {
     setup_open: () => undefined,
     app_reset: () => undefined,
     app_relaunch: () => { location.reload(); },
+    setup_game: () => null,
     integrations_get: () => integrationsState.map((i) => ({ ...i })),
     integration_set: ({ id, on }) => {
       const i = integrationsState.find((x) => x.id === id);

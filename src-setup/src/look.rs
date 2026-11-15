@@ -102,6 +102,22 @@ pub fn from_app() -> Option<Value> {
 
 fn default() -> Value { json!({ "theme": "default", "source": "default" }) }
 
+/// The note a game's own setup leaves for gachamod's first start (src-tauri commands::system::setup_game).
+pub const GAME_NOTE: &str = "setup-game.json";
+
+/// The game this setup was named for (`gachamod-setup-zzz.exe`, a link, `--theme`), not the look gachamod last showed.
+pub fn named_game(look: &Value) -> Option<String> {
+    if matches!(look["source"].as_str(), Some("app" | "default")) { return None; }
+    look["game"]["id"].as_str().map(String::from)
+}
+
+/// After a fresh install from a game's own setup: gachamod starts in one-game mode for that game.
+pub fn leave_game_note(game: &str) {
+    let dir = crate::sys::roaming_appdata().join(crate::sys::IDENTIFIER);
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(dir.join(GAME_NOTE), json!({ "game": game }).to_string());
+}
+
 /// The look for installing.
 pub fn for_install(asked: Option<&str>) -> Value {
     if let Some(l) = asked.and_then(|t| by_name(t, "asked")) { return l; }
@@ -123,6 +139,17 @@ mod tests {
     use super::*;
 
     fn theme(v: Option<Value>) -> String { v.map(|v| v["theme"].as_str().unwrap_or("").to_string()).unwrap_or_default() }
+
+    #[test]
+    fn only_a_named_setup_picks_a_game() {
+        assert_eq!(named_game(&in_text("gachamod-setup-zzz.exe", "file").unwrap()).as_deref(), Some("zzz"));
+        assert_eq!(named_game(&by_name("genshin", "asked").unwrap()).as_deref(), Some("gi"));
+        assert_eq!(named_game(&default()), None);
+        assert_eq!(named_game(&by_name("default", "asked").unwrap()), None);
+        let mut app = in_text("gachamod-setup-zzz.exe", "file").unwrap();
+        app["source"] = json!("app");
+        assert_eq!(named_game(&app), None);
+    }
 
     #[test]
     fn names_in_file_names_and_links() {

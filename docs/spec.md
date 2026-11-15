@@ -711,6 +711,9 @@ UI:
   page that linked the download or the download's address (Windows' Zone.Identifier, `?theme=` or `?game=` too), else
   the look gachamod last showed, else Default. The app writes that look to `look.json` in its data folder when the
   theme changes (`save_look`, from `lib/theme.ts`), so repair and uninstall wear the game in use.
+  - Every setup installs the same gachamod, which manages all games. A fresh install from a game's own setup (named
+    by file, link or `--theme`, not by look.json) leaves `setup-game.json` in the data folder; the first start reads
+    it once (`setup_game`) and turns on one-game mode for that game. `gachamod-setup.exe` leaves none.
   - Install: one button, with Options for the folder, desktop shortcut, starting as administrator, opening when done
     and setup's own look. The choices go to HKCU\Software\gachamod (`adminAsked`, `admin`, `desktopShortcut`), which
     `hooks.nsh` reads instead of asking. An older install shows Update; the same or newer shows Open, Repair and

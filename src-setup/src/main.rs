@@ -266,7 +266,10 @@ async fn install(app: AppHandle, s: State<'_, Setup>, opts: jobs::InstallOpts) -
     let _busy = Busy::start(&s.busy)?;
     let p = s.payload.clone().ok_or("This setup has no installer inside it.")?;
     let temp = s.temp.clone();
+    // a game's own setup (gachamod-setup-zzz.exe) starts a fresh install in one-game mode for that game
+    let game = if sys::installed().is_none() { look::named_game(&s.look) } else { None };
     let dir = tauri::async_runtime::spawn_blocking(move || jobs::install(&app, &p, &temp, &opts)).await.map_err(|e| e.to_string())??;
+    if let Some(g) = game { look::leave_game_note(&g); }
     Ok(dir.display().to_string())
 }
 

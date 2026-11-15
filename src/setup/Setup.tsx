@@ -204,6 +204,8 @@ function Install(p: {
     : inst.version ? `Version ${inst.version} is installed. This updates it to ${info.version}.`
     : `This installs version ${info.version} over the copy you have.`;
   const where = p.dir ?? inst?.dir ?? info.defaultDir;
+  // a fresh install from a game's own setup starts in one-game mode (src-setup look.rs named_game)
+  const named = !inst && !!game && info.look.source !== "app" && info.look.source !== "default";
   const themes = THEMES.filter((t) => !t.hidden || t.id === info.look.theme);
   const themeNow = p.pick.theme ?? (themes.some((t) => t.id === info.look.theme) ? info.look.theme : "default");
   const schemeNow = p.pick.scheme ?? schemeOf(info.look, themeNow);
@@ -212,7 +214,7 @@ function Install(p: {
       <Hero title="gachamod" sub={sub} />
       {!p.open ? (
         <p className="setup-p">{game
-          ? `Browse GameBanana, install with one click and switch ${game.name} skins per character, all from one window.`
+          ? `Browse GameBanana, install with one click and switch ${game.name} skins per character, all from one window.${named ? ` It handles your other games too, and starts with only ${game.short} in the sidebar.` : ""}`
           : "Browse GameBanana, install with one click and switch skins per character in Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves and other 3DMigoto games."}</p>
       ) : (
         <div className="setup-opts">
