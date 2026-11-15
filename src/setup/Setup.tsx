@@ -226,7 +226,7 @@ function Install(p: {
           )}
           <Toggle checked={p.desktop} onChange={p.setDesktop} label="Desktop shortcut" />
           <Toggle checked={p.admin} onChange={p.setAdmin} label="Start gachamod as administrator"
-            hint="Lets it switch skins in games that run as administrator, like Zenless Zone Zero, without you pressing F10. Windows asks for permission each time it starts." />
+            hint="Lets its hotkeys and its menu work in games that run as administrator, like Zenless Zone Zero, and reload their mods without you pressing F10. Windows asks for permission each time it starts." />
           <Toggle checked={p.openAfter} onChange={p.setOpenAfter} label={`Open gachamod when it's ${update ? "updated" : "installed"}`} />
           <div className="setup-row setup-look" title="Only changes how setup looks">
             <Select label="Setup's look" value={themeNow} options={themes.map((t) => ({ value: t.id, label: t.name }))} onChange={(v) => p.setPick({ ...p.pick, theme: v })} />

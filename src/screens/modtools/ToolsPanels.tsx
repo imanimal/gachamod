@@ -2,7 +2,7 @@
 // Owner: MODTOOLS area. SYSTEM's Tools screen renders them.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { inTauri } from "../../lib/tauri";
-import { emitApp, go, useGame, useGames } from "../../lib/store";
+import { emitApp, go, onApp, useGame, useGames } from "../../lib/store";
 import {
   dialogs, errorKind, errorText, imm, modKeys, modtools, type ConflictGroup, type HashHit, type ImmInfo, type KeyClash, type KeyEdit,
   type ModSkip, type OnScreenMod,
@@ -13,7 +13,7 @@ import { Icon } from "../../ui/Icon";
 import { KeyChip, keysChanged, onKeysChanged, recordBackups, recordEdit } from "../../ui/KeyEditor";
 import { toast } from "../../ui/toast";
 import { notesText, oxford } from "../../lib/notes";
-import { conflictKey, setToolsCount, turnOff } from "./toolsBadge";
+import { conflictKey, dropShared, ignoreConflict, setToolsCount, turnOff } from "./toolsBadge";
 import { SharedParts } from "./ModInsides";
 import "./modtools.css";
 
@@ -61,44 +61,84 @@ export function ConflictsPanel() {
   const { game, list, reload } = useGameList<ConflictGroup>(modtools.conflicts);
   const [busy, setBusy] = useState<string | null>(null);
   const live = useMounted();
-  useEffect(() => { if (game && list) setToolsCount(game, "conflicts", list.map(conflictKey)); }, [game, list]);
+  const shown = list?.filter((g) => !g.ignored) ?? null;
+  const ignored = list?.filter((g) => g.ignored) ?? [];
+  useEffect(() => { if (game && shown) setToolsCount(game, "conflicts", shown.map(conflictKey)); }, [game, list]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Undo and changes made elsewhere (a mod's details) show here too
+  useEffect(() => onApp((e) => { if (e.type === "library-refresh" && e.game === game) reload(); }), [game, reload]);
 
-  const keep = (g: ConflictGroup, keepId: string) => {
-    if (!game) return;
-    const others = g.mods.filter((m) => m.modId !== keepId);
-    setBusy(keepId);
-    turnOff(game, others.map((m) => m.modId), others.map((m) => m.name))
-      .then(() => { emitApp({ type: "library-refresh", game }); if (live.current) reload(); })
+  const act = (tag: string, job: () => Promise<unknown>) => {
+    setBusy(tag);
+    job()
+      .then(() => { if (live.current) reload(); })
       .catch((e) => toast(errorText(e), true))
       .finally(() => { if (live.current) setBusy(null); });
   };
+  const keep = (g: ConflictGroup, keepId: string) => {
+    if (!game) return;
+    const others = g.mods.filter((m) => m.modId !== keepId);
+    act(keepId, () => turnOff(game, others.map((m) => m.modId), others.map((m) => m.name)).then(() => emitApp({ type: "library-refresh", game })));
+  };
+  const ids = (g: ConflictGroup) => g.mods.map((m) => m.modId);
+  const names = (g: ConflictGroup) => g.mods.map((m) => m.name);
 
   return (
-    <Panel id="conflicts" title="Conflicts" icon="layers" className="tp tp-conflicts" count={list ? list.length : undefined}
+    <Panel id="conflicts" title="Conflicts" icon="layers" className="tp tp-conflicts" count={shown ? shown.length : undefined}
       actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title="Look for conflicts again">Check again</Button>}>
-      <p className="hint tp-intro">Mods that are on and change the same parts of a model. Only one of them shows in game.</p>
-      {!list ? <Loading /> : list.length === 0 ? (
-        <p className="tp-none muted">No conflicts between the mods that are on. Enjoy it while it lasts.</p>
+      <p className="hint tp-intro">Mods that are on and change the same parts of a model. Only one of them shows in game.
+        Keep one, take the shared parts out of one so each shows the rest, or ignore it.</p>
+      {!shown ? <Loading /> : shown.length === 0 ? (
+        <p className="tp-none muted">No conflicts between the mods that are on{ignored.length ? ", apart from the ones you ignore" : ". Enjoy it while it lasts"}.</p>
       ) : (
         <ul className="tp-list tp-conflict-list">
-          {list.map((g) => (
-            <li key={g.mods.map((m) => m.modId).join(",")} className="tp-conflict">
-              <div className="tp-conflict-h">
-                {g.character && <span className="tp-conflict-char">{g.character}</span>}
-                <SharedParts n={g.hashes.length} parts={g.mods[0]?.parts ?? g.hashes} />
-              </div>
-              <ul className="tp-conflict-mods">
-                {g.mods.map((m) => (
-                  <li key={m.modId} className="tp-conflict-mod row">
-                    <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
-                    <Button size="sm" busy={busy === m.modId} disabled={!!busy} title={`Keep ${m.name} on and turn the others in this group off`}
-                      onClick={() => keep(g, m.modId)}>Keep this one</Button>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
+          {shown.map((g) => {
+            const key = ids(g).join(",");
+            const n = plural(g.hashes.length, "shared part");
+            return (
+              <li key={key} className="tp-conflict">
+                <div className="tp-conflict-h row">
+                  {g.character && <span className="tp-conflict-char">{g.character}</span>}
+                  <span className="grow"><SharedParts n={g.hashes.length} parts={g.mods[0]?.parts ?? g.hashes} /></span>
+                  <Button size="sm" variant="ghost" icon="hide" busy={busy === `i:${key}`} disabled={!!busy}
+                    title="Stop listing this conflict. Nothing in the mods changes, and it moves to Ignored below"
+                    onClick={() => game && act(`i:${key}`, () => ignoreConflict(game, ids(g), names(g)))}>Ignore</Button>
+                </div>
+                <ul className="tp-conflict-mods">
+                  {g.mods.map((m) => {
+                    const others = oxford(g.mods.filter((o) => o.modId !== m.modId).map((o) => o.name));
+                    return (
+                      <li key={m.modId} className="tp-conflict-mod row">
+                        <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
+                        <Button size="sm" variant="ghost" busy={busy === `d:${m.modId}`} disabled={!!busy}
+                          title={`Take the ${n} out of ${m.name}'s files, so ${others} shows them and ${m.name} keeps the rest. Undo puts them back`}
+                          onClick={() => game && act(`d:${m.modId}`, () => dropShared(game, m.modId, g.hashes))}>Remove from this mod</Button>
+                        <Button size="sm" busy={busy === m.modId} disabled={!!busy} title={`Keep ${m.name} on and turn ${others} off`}
+                          onClick={() => keep(g, m.modId)}>Keep this one</Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {ignored.length > 0 && (
+        <details className="tp-ignored">
+          <summary className="hint">Ignored ({ignored.length})</summary>
+          <ul className="tp-list">
+            {ignored.map((g) => {
+              const key = ids(g).join(",");
+              return (
+                <li key={key} className="tp-conflict-mod row">
+                  <span className="grow">{oxford(names(g))} <span className="hint">({plural(g.hashes.length, "shared part")})</span></span>
+                  <Button size="sm" variant="ghost" busy={busy === `u:${key}`} disabled={!!busy} title="Warn about these mods again"
+                    onClick={() => game && act(`u:${key}`, () => ignoreConflict(game, ids(g), names(g), false))}>Stop ignoring</Button>
+                </li>
+              );
+            })}
+          </ul>
+        </details>
       )}
     </Panel>
   );

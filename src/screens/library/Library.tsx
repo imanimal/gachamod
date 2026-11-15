@@ -1,6 +1,7 @@
-// Mods: the current game's library (Installed) and the mods removed from it (Trash). Installed has search,
-// filters, a scrolling row of types and characters, sort, grid or list, and the shared mod grid with selection and its
-// bulk bar. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
+// Mods: the current game's library (Installed) and the mods removed from it (Trash). Installed has one row of search,
+// All/On/Off, sort and layout, then one scrolling row of filters: Updates, Favourites and Problems when there are any,
+// then types and characters. Then the shared mod grid with selection and its bulk bar. Only sort and layout are kept;
+// the filters reset when the page is left, so My Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
 // a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorText, library, settings, type ModEntry } from "../../lib/api";
@@ -24,14 +25,18 @@ import { ModGrid } from "./ModGrid";
 import "./menus";
 import "./library.css";
 
-type Filter = "all" | "on" | "off" | "updates" | "favourites" | "problems";
+type Show = "all" | "on" | "off";
+type Flag = "updates" | "favourites" | "problems";
 type Sort = "added" | "name" | "character" | "size";
-interface Prefs { filter: Filter; sort: Sort; view: "grid" | "list" }
-const DEFAULT_PREFS: Prefs = { filter: "all", sort: "added", view: "grid" };
+interface Prefs { sort: Sort; view: "grid" | "list" }
+const DEFAULT_PREFS: Prefs = { sort: "added", view: "grid" };
 const UPDATE_EVERY = 30 * 60 * 1000;
 
 function loadPrefs(game: string): Prefs {
-  try { return { ...DEFAULT_PREFS, ...(JSON.parse(localStorage.getItem(`gm.lib.${game}`) ?? "{}") as Partial<Prefs>) }; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(`gm.lib.${game}`) ?? "{}") as Partial<Prefs>;
+    return { sort: saved.sort ?? DEFAULT_PREFS.sort, view: saved.view ?? DEFAULT_PREFS.view };
+  }
   catch { return DEFAULT_PREFS; }
 }
 
@@ -72,6 +77,8 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
   const roster = useBackendRoster(gid);
   usePortraitsVersion();
   const [prefs, setPrefsState] = useState<Prefs>(() => loadPrefs(gid));
+  const [show, setShow] = useState<Show>("all");
+  const [flag, setFlag] = useState<Flag | null>(null);
   const [search, setSearch] = useState(() => route.search ?? "");
   const modsRef = useRef(mods);
   modsRef.current = mods;
@@ -142,9 +149,9 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
     const ch = character?.toLowerCase();
     const out = mods.filter((m) => {
       if (m.nsfw && nsfw === "hide") return false;
-      switch (prefs.filter) {
-        case "on": if (!m.enabled) return false; break;
-        case "off": if (m.enabled) return false; break;
+      if (show === "on" && !m.enabled) return false;
+      if (show === "off" && m.enabled) return false;
+      switch (flag) {
         case "updates": if (!m.updateAvailable) return false; break;
         case "favourites": if (!m.favorite) return false; break;
         case "problems": if (!isProblem(m)) return false; break;
@@ -163,19 +170,20 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
       : prefs.sort === "size" ? (a, b) => b.sizeBytes - a.sizeBytes || byName(a, b)
       : (a, b) => b.installedAt - a.installedAt || byName(a, b));
     return out;
-  }, [mods, prefs, search, nsfw, character, kind, kinds, isProblem]);
+  }, [mods, prefs, show, flag, search, nsfw, character, kind, kinds, isProblem]);
 
-  const filtersOn = prefs.filter !== "all" || !!character || !!kind || !!search.trim();
+  const filtersOn = show !== "all" || !!flag || !!character || !!kind || !!search.trim();
   const size = useMemo(() => mods.reduce((n, m) => n + m.sizeBytes, 0), [mods]);
   const setCharacter = (c: string | null) => patchRoute({ character: c ?? undefined, kind: undefined });
   const setKind = (k: LibKind | null) => patchRoute({ kind: k ?? undefined, character: undefined });
 
-  const filterChips: Array<{ id: Filter; label: string; title?: string }> = [
-    { id: "all", label: "All" }, { id: "on", label: "On" }, { id: "off", label: "Off" },
-    { id: "updates", label: "Updates", title: "Mods with a newer version on GameBanana" },
-    { id: "favourites", label: "Favourites" },
-    { id: "problems", label: "Problems", title: "Mods that conflict with another mod that is on, have no .ini file, or were broken by a game update" },
-  ];
+  // shown only while there is something to show (or it is the filter that is on)
+  const flagChips = ([
+    { id: "problems", label: "Problems", icon: "warn", title: "Mods that conflict with another mod that is on, have no .ini file, or were broken by a game update" },
+    { id: "updates", label: "Updates", icon: "update", title: "Mods with a newer version on GameBanana" },
+    { id: "favourites", label: "Favourites", icon: "star", title: "Mods you starred" },
+  ] as const).filter((f) => counts[f.id] > 0 || flag === f.id);
+  const clearFilters = () => { setSearch(""); setShow("all"); setFlag(null); setCharacter(null); };
 
   return (
     <>
@@ -184,22 +192,28 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
         actions={<>
           <LibTabs tab="installed" />
           <SearchField value={search} onChange={setSearch} placeholder="Search name, character, tag, creator" className="library-search" />
-          <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Reads the Mods folder again for changes made outside gachamod, then checks every mod for updates on GameBanana. Opening this screen only reads the folder">Rescan</Button>
-          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
-            onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
-          <Segmented size="sm" label="Layout" value={prefs.view} onChange={(v) => setPrefs({ view: v })}
-            options={[{ value: "grid", label: "", icon: "grid", title: "Grid" }, { value: "list", label: "", icon: "list", title: "List" }]} />
-        </>}>
-        <div className="library-filters">
-          {filterChips.map((f) => (
-            <Chip key={f.id} on={prefs.filter === f.id} title={f.title} count={f.id === "all" ? undefined : counts[f.id]}
-              onClick={() => setPrefs({ filter: f.id })}>{f.label}</Chip>
-          ))}
-          <span className="grow" />
+          <Segmented size="sm" label="Show" value={show} onChange={setShow}
+            options={[
+              { value: "all", label: "All", title: "Every mod" },
+              { value: "on", label: "On", title: `Mods that are on (${counts.on})` },
+              { value: "off", label: "Off", title: `Mods that are off (${counts.off})` },
+            ]} />
           <Select<Sort> value={prefs.sort} onChange={(v) => setPrefs({ sort: v })}
             options={[{ value: "added", label: "Recently added" }, { value: "name", label: "Name" }, { value: "character", label: "Character" }, { value: "size", label: "Size" }]} />
-        </div>
-        {kindRow.length + charRow.length > 0 && <CharRow deps={[kindRow.length, charRow.length, character, kind]}>
+          <Segmented size="sm" label="Layout" value={prefs.view} onChange={(v) => setPrefs({ view: v })}
+            options={[{ value: "grid", label: "", icon: "grid", title: "Grid" }, { value: "list", label: "", icon: "list", title: "List" }]} />
+          <IconButton icon="refresh" className={scanning ? "lib-scanning" : undefined} disabled={scanning} onClick={() => void rescan()}
+            label={scanning ? "Reading the Mods folder" : "Rescan: read the Mods folder again for changes made outside gachamod, then check every mod for updates on GameBanana. Opening this page only reads the folder"} />
+          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
+            onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
+        </>}>
+        {flagChips.length + kindRow.length + charRow.length > 0 && <CharRow deps={[flagChips.length, kindRow.length, charRow.length, character, kind, flag]}>
+          {flagChips.map((f) => (
+            <Chip key={f.id} className="char-chip flag-chip" icon={f.icon} count={counts[f.id]} on={flag === f.id}
+              title={flag === f.id ? `${f.title}. Click again for every mod` : f.title}
+              onClick={() => setFlag(flag === f.id ? null : f.id)}>{f.label}</Chip>
+          ))}
+          {flagChips.length > 0 && kindRow.length + charRow.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
           {kindRow.map((k) => (
             <Chip key={k.value} className="char-chip kind-chip" icon={k.icon} count={k.n} on={kind === k.value}
               title={kind === k.value ? `${k.title}. Click again for every mod` : k.title}
@@ -229,7 +243,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
         ) : (
           <Empty icon="search" title="Nothing matches"
             actions={<>
-              {filtersOn && <Button onClick={() => { setSearch(""); setPrefs({ filter: "all" }); setCharacter(null); }}>Clear filters</Button>}
+              {filtersOn && <Button onClick={clearFilters}>Clear filters</Button>}
               {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title="Settings, Mods">Mods for adults</Button>}
               {search.trim() && <Button variant="ghost" icon="search" onClick={() => openPalette(search.trim())} title="Search pages, settings, GameBanana and the rest (Ctrl+K)">Search everywhere</Button>}
             </>}>

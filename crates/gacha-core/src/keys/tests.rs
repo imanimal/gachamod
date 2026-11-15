@@ -406,6 +406,29 @@ fn finds_real_clashes_only() {
 }
 
 #[test]
+fn mods_on_the_menu_key() {
+    let base = temp("menukey");
+    let write = |name: &str, key: &str| {
+        let d = base.join(name);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("m.ini"), format!("[KeySwap]
+key = {key}
+type = cycle
+$swapvar = 0,1
+")).unwrap();
+        d
+    };
+    let (a, b, c) = (write("a", "VK_F7"), write("b", "shift VK_F7"), write("c", "no_modifiers F8"));
+    let mods = vec![mod_at(&a, "a", None), mod_at(&b, "b", None), mod_at(&c, "c", None)];
+    let names = |key: &str| on_key(&mods, &combo(&crate::hotkeys::migoto_form(key)).unwrap());
+    // plain F7 fires a's toggle; Shift+F7 is b's alone
+    assert_eq!(names("F7"), vec!["Mod a".to_string()]);
+    assert_eq!(names("Shift+F7"), vec!["Mod a".to_string(), "Mod b".to_string()]);
+    assert!(names("Ctrl+Alt+M").is_empty());
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
 fn outline_for_the_ai_helper() {
     let o = outline_docs(&[idoc("a.ini", PLAIN)]);
     assert_eq!(o.len(), 1);

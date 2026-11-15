@@ -83,12 +83,12 @@ export function Chip({ on, onClick, icon, img, count, children, title, className
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange, label, size = "md" }:
-  { value: T; options: Array<{ value: T; label: ReactNode; icon?: IconName; title?: string }>; onChange: (v: T) => void; label?: string; size?: Size }) {
+export function Segmented<T extends string>({ value, options, onChange, label, size = "md", disabled }:
+  { value: T; options: Array<{ value: T; label: ReactNode; icon?: IconName; title?: string }>; onChange: (v: T) => void; label?: string; size?: Size; disabled?: boolean }) {
   return (
-    <div className={cx("seg", `seg-${size}`)} role="radiogroup" aria-label={label}>
+    <div className={cx("seg", `seg-${size}`)} role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
       {options.map((o) => (
-        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={cx("seg-o", value === o.value && "on")}
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} className={cx("seg-o", value === o.value && "on")} disabled={disabled}
           onClick={() => onChange(o.value)} title={o.title ?? (typeof o.label === "string" ? o.label : undefined)}>
           {o.icon && <Icon name={o.icon} />}{o.label !== "" && <span>{o.label}</span>}
         </button>
@@ -136,12 +136,12 @@ export function TextField({ label, value, onChange, placeholder, hint, multiline
   );
 }
 
-export function Select<T extends string>({ label, value, options, onChange, hint }:
-  { label?: ReactNode; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; hint?: ReactNode }) {
+export function Select<T extends string>({ label, value, options, onChange, hint, disabled }:
+  { label?: ReactNode; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; hint?: ReactNode; disabled?: boolean }) {
   return (
     <label className="field">
       {label && <span className="field-l">{label}</span>}
-      <span className="select"><select value={value} onChange={(e) => onChange(e.target.value as T)}>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><Icon name="down" /></span>
+      <span className="select"><select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><Icon name="down" /></span>
       {hint && <span className="hint">{hint}</span>}
     </label>
   );

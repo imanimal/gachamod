@@ -1,11 +1,11 @@
-//! The skin menu over the game (gacha_core::live, menu style "window"): a small always-on-top window with the app's
-//! own UI (src/screens/ingame/Overlay.tsx), opened by the menu key or by pressing both sticks of a controller while a
-//! game runs. A window can't show over a game that holds the screen in exclusive fullscreen, so there the same key
-//! opens the plainer menu the game draws itself. Owner: INGAME area.
+//! The menu over the game (its settings are gacha_core::live's menu settings): a small always-on-top window with the
+//! app's own UI (src/screens/ingame/Overlay.tsx), opened by the menu key or by pressing both sticks of a controller
+//! while a game runs. Picking a character's skin turns it on and the character's other mods off; the menu closes and
+//! the game reloads its mods when it is back in front. A window can't show over a game that holds the screen in
+//! exclusive fullscreen, so there the key only says so. Owner: INGAME area.
 use crate::state::{blocking, AppState};
 use gacha_core::model::events;
-use gacha_core::{devtools, gamecheck, launch, live, Result};
-use std::sync::atomic::{AtomicBool, Ordering};
+use gacha_core::{devtools, gamecheck, launch, library, live, Result};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
@@ -18,24 +18,19 @@ const OPENED: &str = "overlay-open";
 #[derive(Default)]
 pub struct Showing(Mutex<Option<String>>);
 
-/// A pick is being sent to the game. The game comes to the front for it, which must not close the menu.
-static PICKING: AtomicBool = AtomicBool::new(false);
-
 fn window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
     if let Some(w) = app.get_webview_window(LABEL) { return Some(w); }
     let w = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
         .title("gachamod menu").inner_size(960.0, 640.0).decorations(false).resizable(false).always_on_top(true)
         .skip_taskbar(true).visible(false).focused(false).build().ok()?;
-    // clicking back into the game closes the menu. A pick also brings the game forward, and the menu stays for that
+    // clicking back into the game closes the menu
     let handle = app.clone();
-    w.on_window_event(move |e| {
-        if let WindowEvent::Focused(false) = e { if !PICKING.load(Ordering::Relaxed) { hide(&handle); } }
-    });
+    w.on_window_event(move |e| { if let WindowEvent::Focused(false) = e { hide(&handle); } });
     Some(w)
 }
 
-/// Make the window ahead of time when a game with a menu starts, so the first press opens at once, and let it go
-/// when no such game runs any more.
+/// Make the window ahead of time when a game whose menu is on starts, so the first press opens at once, and let it
+/// go when no such game runs any more.
 pub fn on_game_state<R: Runtime>(app: &AppHandle<R>) {
     let Some(st) = app.try_state::<AppState>() else { return };
     let running = launch::running_in(&launch::processes());
@@ -60,14 +55,6 @@ fn place<R: Runtime>(w: &WebviewWindow<R>, game: &str) {
     let _ = w.set_position(PhysicalPosition::new(x + margin.min((gw - width).max(0)), y + (gh - height) / 2));
 }
 
-/// Put the menu back in front with the keyboard, if it is open.
-fn refocus<R: Runtime>(app: &AppHandle<R>) {
-    let Some(w) = app.get_webview_window(LABEL).filter(|w| w.is_visible().unwrap_or(false)) else { return };
-    let _ = w.set_focus();
-    #[cfg(windows)]
-    if let Ok(h) = w.hwnd() { devtools::raise(h.0 as isize); }
-}
-
 /// The menu key or the controller shortcut was pressed while `game` runs.
 pub fn toggle<R: Runtime>(app: &AppHandle<R>, game: &str) {
     if app.get_webview_window(LABEL).is_some_and(|w| w.is_visible().unwrap_or(false)) {
@@ -76,10 +63,11 @@ pub fn toggle<R: Runtime>(app: &AppHandle<R>, game: &str) {
         return;
     }
     if devtools::exclusive_fullscreen() {
-        match live::send_menu_toggle(game) {
-            Ok(()) => gamecheck::note_menu(game, "drawn"),
-            Err(e) => { let _ = app.emit(events::TOAST, serde_json::json!({ "text": e.to_string(), "bad": true })); }
-        }
+        // nothing can show over it: say so in gachamod's window, where it is seen after the game
+        gamecheck::note_menu(game, "fullscreen");
+        let name = gacha_core::games::def(game).map_or("the game", |g| g.name);
+        let text = format!("The menu can't show over {name} in exclusive fullscreen. Set the game to borderless or windowed in its display settings");
+        let _ = app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": true }));
         return;
     }
     let Some(w) = window(app) else { return };
@@ -140,32 +128,29 @@ pub async fn overlay_hide(app: AppHandle, game: Option<String>) -> Result<()> {
     blocking(move || { if let Some(g) = game { let _ = devtools::show_game(&g); } Ok(()) }).await
 }
 
-/// Show a skin from the menu: the same pick as in the app, then the other windows hear the library changed.
+/// Pick a character's skin from the menu: `id` turns on and the character's other mods turn off (no id: all of them
+/// off, so the character wears the game's own look). The game reloads its mods once it is back in front (the menu
+/// closes for that, see Overlay.tsx). Returns what went wrong ("Couldn't change ..."), if anything.
 #[tauri::command]
-pub async fn overlay_pick(app: AppHandle, st: tauri::State<'_, AppState>, game: String, group: u32, slot: u32) -> Result<live::Picked> {
+pub async fn overlay_pick(app: AppHandle, st: tauri::State<'_, AppState>, game: String, character: String, id: Option<String>) -> Result<Vec<String>> {
     let db = st.db.clone();
     let g = game.clone();
-    // the keys go to the game, so the game comes forward while they are sent: the menu stays up through that
-    PICKING.store(true, Ordering::Relaxed);
-    let picked = blocking(move || {
-        let mut picked = {
-            let d = db.lock().map_err(|_| gacha_core::Error::Db("The local database is stuck after an earlier error. Restart gachamod".into()))?;
-            live::pick(&d, &g, group, slot)?
+    let notes = blocking(move || {
+        let d = db.lock().map_err(|_| gacha_core::Error::Db("The local database is stuck after an earlier error. Restart gachamod".into()))?;
+        let change = match id {
+            Some(id) => library::set_enabled_with(&d, &g, &[id], true, Some(true))?,
+            None => {
+                let on: Vec<String> = library::list(&d, &g)?.into_iter()
+                    .filter(|m| m.enabled && m.character.as_deref().is_some_and(|c| c.eq_ignore_ascii_case(&character)))
+                    .map(|m| m.id).collect();
+                if on.is_empty() { return Ok(Vec::new()); }
+                library::set_enabled(&d, &g, &on, false)?
+            }
         };
-        picked.note = live::flush_sends(&db).into_iter().next();
-        Ok(picked)
-    }).await;
-    // and takes the keyboard back. The focus change arrives a moment later: only after it does losing focus close
-    // the menu again
-    refocus(&app);
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(400)).await;
-        refocus(&handle);
-        tokio::time::sleep(Duration::from_millis(150)).await;
-        PICKING.store(false, Ordering::Relaxed);
-    });
-    let picked = picked?;
+        // what went wrong keeps the menu open to say so; the rest (sub-mods that went along) the cards show
+        Ok(change.notes.into_iter().filter(|n| n.starts_with("Couldn't")).collect())
+    }).await?;
+    gamecheck::note_menu(&game, "picked");
     let _ = app.emit(events::LIBRARY_CHANGED, serde_json::json!({ "game": game }));
-    Ok(picked)
+    Ok(notes)
 }

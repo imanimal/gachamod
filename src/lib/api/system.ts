@@ -47,7 +47,8 @@ export const games = {
   detect: () => call<GameState[]>("games_detect"),
   setPaths: (game: GameId, paths: GamePaths) => call<GameState[]>("game_set_paths", { game, paths }),
   setShown: (game: GameId, shown: boolean) => call<GameState[]>("game_set_shown", { game, shown }),
-  launch: (game: GameId, vanilla = false) => call<void>("game_launch", { game, vanilla }),
+  /** Resolves to a note when the player should know something (a community game started without its loader). */
+  launch: (game: GameId, vanilla = false) => call<string | null>("game_launch", { game, vanilla }),
   running: (game: GameId) => call<boolean>("game_running", { game }),
   /** The game's own icon at 256 px, taken from its exe and kept as a PNG in the app's data folder; null when the game
    *  folder isn't known. */

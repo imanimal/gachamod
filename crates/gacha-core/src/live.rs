@@ -11,9 +11,11 @@
 //! `; gachamod:added` before an added line) so taking a mod out again removes exactly what was added. Files are read
 //! byte for byte (each byte one char), so text in any encoding comes back unchanged.
 //!
-//! The player picks a skin in one of two menus (the game's setting "<game>.liveMenu"): gachamod's own window over
-//! the game ("window", src-tauri overlay.rs), or a plainer menu the game draws itself ("game", menu.rs), which is
-//! also what opens when the game holds the screen in exclusive fullscreen. Owner: INGAME area.
+//! Live groups are retired. gachamod no longer makes them: `on_start` takes out the groups an older version made
+//! (each character keeps the skin it showed, the others turn off), and the code below stays so that works. What is
+//! still in use is the menu's settings (`menu_settings`, `menu_keys`, `menu_info`): the menu over the game
+//! (src-tauri overlay.rs) turns mods on and off and the game reloads, with no gating and no menu drawn by the game.
+//! Owner: INGAME area.
 
 mod menu;
 
@@ -108,9 +110,8 @@ pub struct LiveInfo {
     pub blocked: bool,
 }
 
-/// How the skin menu opens while playing. `style`: "window" (gachamod's menu over the game; the game draws its own
-/// when it is in exclusive fullscreen), "game" (always the one the game draws) or "off". `key` is written like a
-/// hotkey ("F7", "Ctrl+Alt+M"). `pad`: pressing both sticks in opens it too.
+/// How the menu opens while playing. `style`: "window" (gachamod's menu over the game) or "off". `key` is written
+/// like a hotkey ("F7", "Ctrl+Alt+M"). `pad`: pressing both sticks in opens it too.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MenuSettings { pub style: String, pub key: String, pub pad: bool }
@@ -459,10 +460,27 @@ pub fn note_elevation(db: &Db, game: &str) {
     menu_sync(db, game);
 }
 
-/// gachamod started: live.ini of every game says who holds the menu key for this run (gachamod may run with other
-/// rights than last time), before a game loads it.
+/// gachamod started: live groups an older version made come out, "every character" goes off, and a menu that the
+/// game drew opens over the game instead.
 pub fn on_start(db: &Db) {
-    for g in crate::games::GAMES { menu_sync(db, g.id); }
+    for g in crate::games::GAMES {
+        if let Err(e) = retire(db, g.id) { crate::logs::warn(format!("Couldn't take {}'s mods out of switching in game: {e}", g.id)); }
+    }
+}
+
+fn retire(db: &Db, game: &str) -> Result<()> {
+    if all_on(db, game) { db.set_setting(&format!("{game}.liveAll"), "0")?; }
+    if db.setting(&format!("{game}.liveMenu"))?.as_deref() == Some("game") { db.set_setting(&format!("{game}.liveMenu"), "window")?; }
+    let store = load(db, game);
+    if store.groups.is_empty() {
+        // a live.ini (or the drawn menu's pictures) left behind: writing no groups deletes them
+        if crate::games::mods_dir(db, game).is_ok_and(|d| d.join(DIR).is_dir()) { write_live_ini(db, game, &store)?; }
+        return Ok(());
+    }
+    let ids: Vec<String> = store.groups.iter().flat_map(|g| g.slots.iter().map(|s| s.mod_id.clone())).collect();
+    let out = remove(db, game, &ids)?;
+    crate::logs::info(format!("{game}: {} mods no longer switch in game; they turn on and off like any other mod", out.changed.len()));
+    Ok(())
 }
 
 /// The groups in the order the menu lists them: by character name.
@@ -574,14 +592,14 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
 
 pub fn menu_settings(db: &Db, game: &str) -> MenuSettings {
     let get = |k: &str| db.setting(&format!("{game}.{k}")).ok().flatten();
-    let style = match get("liveMenu").as_deref() { Some("game") => "game", Some("off") => "off", _ => "window" };
+    let style = if get("liveMenu").as_deref() == Some("off") { "off" } else { "window" };
     let key = get("liveMenuKey").and_then(|k| crate::hotkeys::normalize_menu(&k).ok()).unwrap_or_else(|| MENU_KEY.into());
     MenuSettings { style: style.into(), key, pad: get("liveMenuPad").as_deref() != Some("0") }
 }
 
-/// Change how the menu opens. The game reloads once to pick it up.
+/// Turn the menu on or off, or change its key.
 pub fn set_menu(db: &Db, game: &str, set: &MenuSettings) -> Result<MenuSettings> {
-    if !["window", "game", "off"].contains(&set.style.as_str()) { return Err(Error::Invalid("Pick Over the game, Inside the game or Off".into())); }
+    if !["window", "off"].contains(&set.style.as_str()) { return Err(Error::Invalid("The menu is either on or off".into())); }
     let key = crate::hotkeys::normalize_menu(&set.key)?;
     if crate::hotkeys::combos(db).unwrap_or_default().contains(&key) { return Err(Error::Invalid(format!("{key} already switches a profile. Pick another key"))); }
     db.set_setting(&format!("{game}.liveMenu"), &set.style)?;
@@ -599,10 +617,30 @@ pub(crate) fn menu_sync(db: &Db, game: &str) {
     if write_live_ini(db, game, &store).unwrap_or(false) { crate::devtools::mark_changed(game); }
 }
 
-/// The games whose menu the app opens (style "window") with the key each one uses, for the app's hotkeys.
+/// The games whose menu is on, with the key each one uses, for the app's hotkeys (held only while a game runs).
 pub fn menu_keys(db: &Db) -> Vec<(String, MenuSettings)> {
-    crate::games::GAMES.iter().filter(|g| !load(db, g.id).groups.is_empty())
-        .map(|g| (g.id.to_string(), menu_settings(db, g.id))).filter(|(g, s)| s.style == "window" && reaches(db, g)).collect()
+    crate::games::GAMES.iter().map(|g| (g.id.to_string(), menu_settings(db, g.id)))
+        .filter(|(g, s)| s.style == "window" && reaches(db, g)).collect()
+}
+
+/// The menu's settings for a game, whether the game runs, and whether gachamod's keys reach it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuInfo {
+    pub menu: MenuSettings,
+    pub running: bool,
+    /// The game runs as administrator and gachamod doesn't, so the menu key never reaches gachamod and the game
+    /// doesn't reload by itself.
+    pub blocked: bool,
+    /// gachamod presses F10 for the game when it comes back to the front after a change (not blocked, and the
+    /// setting "<game>.autoReload" isn't off).
+    pub reloads: bool,
+}
+
+pub fn menu_info(db: &Db, game: &str) -> MenuInfo {
+    let blocked = !reaches(db, game);
+    let auto = db.setting(&format!("{game}.autoReload")).ok().flatten().as_deref() != Some("0");
+    MenuInfo { menu: menu_settings(db, game), running: crate::launch::running(game), blocked, reloads: auto && !blocked }
 }
 
 /// With the game closed, the saved value is what it loads next time (it wins over live.ini's default).

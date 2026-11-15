@@ -114,7 +114,9 @@
 /* options share out any spare width, so a Segmented stretched by its parent (a form field) has no empty tail */
 .seg-o { position: relative; display: inline-flex; flex: 1 1 auto; min-width: 0; align-items: center; justify-content: center; gap: .4rem; height: 1.9rem; padding: 0 .85rem; border-radius: calc(var(--radius-sm) - 1px);
   color: var(--text-3); font-weight: 600; white-space: nowrap; transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.seg-o:hover { color: var(--text); }
+.seg-o:hover:not(:disabled) { color: var(--text); }
+.seg-o:disabled { cursor: default; opacity: .55; }
+.select select:disabled { cursor: default; opacity: .55; }
 .seg-o > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .seg-o > .i { flex: none; }
 .seg-o.on { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / .28), inset 0 0 0 1px var(--line); }

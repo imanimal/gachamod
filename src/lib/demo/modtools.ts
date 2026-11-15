@@ -61,16 +61,24 @@ function demoConflicts(game: string): ConflictGroup[] {
   const on = modsOf(game).filter((m) => m.enabled);
   const pool = on.length >= 4 ? on : modsOf(game);
   if (pool.length < 2) return [];
-  const groups: ConflictGroup[] = [{
+  const all: ConflictGroup[] = [{
     mods: pool.slice(0, 2).map((m) => ({ modId: m.id, name: m.name, shared: 8, parts: DEMO_PARTS.slice(0, 8) })),
     hashes: ["2b8f6ab0", "4e5c1d9a", "7a1b9c3e", "9f00a2d1", "c3d4e5f6", "d2e81f04", "e0b7c6a5", "f1a2b3c4"],
     character: pool[0]!.character && pool[0]!.character === pool[1]!.character ? pool[0]!.character : null,
   }];
   if (pool.length >= 4) {
-    groups.push({ mods: pool.slice(2, 4).map((m) => ({ modId: m.id, name: m.name, shared: 3, parts: ["Weapon.IB (0a1b2c3d)", "Weapon.Diffuse (5e6f7a8b)", "Weapon.NormalMap (93cd04ef)"] })), hashes: ["0a1b2c3d", "5e6f7a8b", "93cd04ef"], character: null });
+    all.push({ mods: pool.slice(2, 4).map((m) => ({ modId: m.id, name: m.name, shared: 3, parts: ["Weapon.IB (0a1b2c3d)", "Weapon.Diffuse (5e6f7a8b)", "Weapon.NormalMap (93cd04ef)"] })), hashes: ["0a1b2c3d", "5e6f7a8b", "93cd04ef"], character: null });
   }
-  return groups;
+  return all
+    .filter((g) => !conflictDropped.has(`${game}|${groupKey(g.mods.map((m) => m.modId))}`))
+    .map((g) => ({ ...g, ignored: conflictIgnored.has(`${game}|${groupKey(g.mods.map((m) => m.modId))}`) }));
 }
+
+// Conflicts ignored or taken out of a mod in the demo: "<game>|<mod ids>". Undo (backup_restore) puts a taken one back.
+const groupKey = (ids: string[]) => [...ids].sort().join("+");
+const conflictIgnored = new Set<string>();
+const conflictDropped = new Set<string>();
+const conflictBackups = new Map<string, string>();
 
 // Fixes made in the demo: "<game>|<modId>". Undo (backup_restore) takes one back out.
 const lintFixed = new Set<string>();
@@ -501,6 +509,13 @@ export function registerModtoolsDemo() {
         const [game, modId] = swapped.split("|") as [string, string];
         return { id: bid, game, modId, modDir: "", files: [], created: [], label: "", at: demoNow() };
       }
+      const dropped = conflictBackups.get(String(id));
+      if (dropped) {
+        if (conflictDropped.has(dropped)) conflictDropped.delete(dropped); else conflictDropped.add(dropped);
+        const bid = `conflict-${demoId()}`;
+        conflictBackups.set(bid, dropped);
+        return { id: bid, game: dropped.split("|")[0]!, modId: "", modDir: "", files: [], created: [], label: "", at: demoNow() };
+      }
       const fixed = lintBackups.get(String(id));
       if (fixed) {
         if (lintFixed.has(fixed)) lintFixed.delete(fixed); else lintFixed.add(fixed);
@@ -535,6 +550,23 @@ export function registerModtoolsDemo() {
       saved.set(savedKey(String(game), m.id, v.ini, v.var), v.value);
     },
     conflicts_scan: async ({ game }) => { await demoWait(260); return demoConflicts(String(game)); },
+    conflict_ignore: async ({ game, ids, on }) => {
+      await demoWait(120);
+      const key = `${String(game)}|${groupKey(ids as string[])}`;
+      if (on) conflictIgnored.add(key); else conflictIgnored.delete(key);
+    },
+    conflict_drop: async ({ game, id, hashes }) => {
+      await demoWait(220);
+      const m = findMod(String(game), String(id));
+      const g = demoConflicts(String(game)).find((x) => x.mods.some((r) => r.modId === m.id));
+      if (!g) fail("invalid", `${m.name} no longer changes those parts. Check again`);
+      const key = `${String(game)}|${groupKey(g!.mods.map((r) => r.modId))}`;
+      conflictDropped.add(key);
+      const bid = `conflict-${demoId()}`;
+      conflictBackups.set(bid, key);
+      const n = (hashes as string[]).length;
+      return { id: bid, game: String(game), modId: m.id, modDir: m.path, files: ["mod.ini"], created: [], label: `Took ${n === 1 ? "1 shared part" : `${n} shared parts`} out of ${m.name}`, at: demoNow() };
+    },
     lint_scan: async ({ game }) => { await demoWait(300); return demoLint(String(game)); },
     lint_fix: async ({ game, id, fix }) => {
       await demoWait(220);

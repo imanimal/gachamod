@@ -2,6 +2,7 @@
 // and two tabs: Installed (their mods, in the shared mod grid) and Online (GameBanana, only this character). The
 // route holds it: { view: "characters", character, tab?: "online", modId? }. Back returns to the roster where it was
 // scrolled. O marks the character as owned or not. Owner: LIBRARY area.
+import { rowKeys, useSideScroll } from "../browse/sideScroll";
 import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import { errorText, type GameId, type ModEntry } from "../../lib/api";
 import { characterTabs, useExtensions } from "../../lib/extensions";
@@ -74,6 +75,9 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  // the strip scrolls sideways with the mouse wheel, like the other rows of chips
+  useSideScroll(stripRef, [strip.length]);
+
   // keep the current one in view in the strip
   useEffect(() => {
     stripRef.current?.querySelector<HTMLElement>(".pchip.on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
@@ -116,7 +120,7 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
       </header>
 
       {strip.length > 1 && (
-        <div ref={stripRef} className="pchips char-strip" role="list" aria-label={many}>
+        <div ref={stripRef} className="pchips char-strip" role="list" aria-label={many} onKeyDown={(e) => rowKeys(e, ".pchip")}>
           {strip.map((x) => (
             <button key={x.name} type="button" role="listitem" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
               aria-current={same(x.name, name) ? "page" : undefined} onClick={() => hop(x)}

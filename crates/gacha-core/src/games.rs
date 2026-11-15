@@ -141,7 +141,18 @@ fn user_set(db: &Db, id: &str) -> Result<bool> {
 
 /// Save folders the user picked. Empty strings clear a folder. A missing mods_dir falls back to `<importer_dir>\Mods`.
 /// Detection never overwrites these while they exist.
-pub fn save_paths(db: &Db, id: &str, p: &GamePaths) -> Result<()> { write_paths(db, id, p, true) }
+/// Picking XXMI's own loader folder for a game keeps launching it through XXMI.
+pub fn save_paths(db: &Db, id: &str, p: &GamePaths) -> Result<()> {
+    let mut p = p.clone();
+    if let (false, Some(dir), true) = (p.via_xxmi, p.importer_dir.clone(), def(id).is_some_and(|g| g.xxmi)) {
+        let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
+        let norm = |s: &str| s.trim().trim_end_matches(['/', '\\']).replace('/', "\\").to_lowercase();
+        p.via_xxmi = crate::xxmi::status_cached(root.as_deref()).is_some_and(|x| x.importers.iter().any(|i| {
+            i.game.as_deref() == Some(id) && i.importer_dir.as_deref().is_some_and(|d| norm(d) == norm(&dir))
+        }));
+    }
+    write_paths(db, id, &p, true)
+}
 
 /// Forget a game's mod loader after it was uninstalled (its game folder stays), so detection can find a new one.
 pub fn forget_loader(db: &Db, id: &str) -> Result<()> {

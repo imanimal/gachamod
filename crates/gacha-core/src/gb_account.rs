@@ -8,6 +8,7 @@ use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 const API11: &str = "https://gamebanana.com/apiv11";
 const API13: &str = "https://gamebanana.com/apiv13";
@@ -30,6 +31,14 @@ pub struct AccountState {
 pub fn is_signed_out(e: &Error) -> bool { matches!(e, Error::Invalid(m) if m == SIGNED_OUT) }
 
 // ── the stored cookie ──
+
+/// The sign-in window's browser name. Requests with the session send it too, since GameBanana and Cloudflare may
+/// tie the session to the browser that signed in.
+static BROWSER: RwLock<String> = RwLock::new(String::new());
+
+pub fn set_user_agent(ua: &str) {
+    if let Ok(mut b) = BROWSER.write() { *b = ua.trim().to_string(); }
+}
 
 fn session_file(data_dir: &Path) -> PathBuf { data_dir.join("gb-session.bin") }
 /// The login window's own browser data (its cookies stay out of the app's window).
@@ -68,6 +77,8 @@ async fn send(http: &reqwest::Client, cookie: &str, method: reqwest::Method, url
     if !url.starts_with("https://gamebanana.com/") { return Err(Error::Invalid("Not a GameBanana address".into())); }
     let mut req = http.request(method.clone(), url).header("Cookie", cookie).header("Accept", "application/json")
         .timeout(std::time::Duration::from_secs(20));
+    let browser = BROWSER.read().map(|b| b.clone()).unwrap_or_default();
+    if !browser.is_empty() { req = req.header(reqwest::header::USER_AGENT, browser); }
     if method != reqwest::Method::GET { req = req.header("Content-Type", "application/json").body("{}"); }
     let r = req.send().await?;
     let status = r.status().as_u16();

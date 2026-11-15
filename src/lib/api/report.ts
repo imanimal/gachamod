@@ -35,21 +35,18 @@ export interface CheckSetup {
   /** d3dx.ini check_foreground_window: "1" reads keys only while the game is in front. */
   foregroundCheck: string | null;
   reloadKey: string | null;
-  liveGroups: number;
-  menuStyle: "window" | "game" | "off";
+  menuStyle: "window" | "off";
   menuKey: string;
   menuPad: boolean;
 }
-/** What the game last saved for a live group, and when (ms since 1970). */
-export interface SavedPick { value: number | null; savedAt: number | null }
 /** Each step's answer and what gachamod saw, as short plain values. */
 export type CheckSteps = Record<string, string | number | boolean>;
 export interface CheckReport { game: string; steps: CheckSteps; notes?: string; contact?: string; logs: boolean }
 
 export const gameCheck = {
   setup: (game: string) => call<CheckSetup>("game_check_setup", { game }),
-  saved: (game: string, group: number) => call<SavedPick>("game_check_saved", { game, group }),
-  /** "window" or "drawn" when gachamod opened the skin menu since `since`; null when it didn't (or the game took the key). */
+  /** What gachamod did with the menu since `since`: "window" (it opened over the game), "fullscreen" (the key was
+   *  pressed but the game runs in exclusive fullscreen) or "picked" (a skin was picked in it). Null: nothing yet. */
   menu: (game: string, since: number) => call<string | null>("game_check_menu", { game, since }),
   send: (report: CheckReport) => call<void>("game_check_send", { report }),
 };

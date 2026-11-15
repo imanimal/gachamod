@@ -6,7 +6,7 @@ import { errorKind, errorText, modtools, type ModEntry, type ModInspect, type Pr
 import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, Waiting, plural, type Tone } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
-import { turnOff } from "./toolsBadge";
+import { dropShared, ignoreConflict, turnOff } from "./toolsBadge";
 import { FixButton } from "./FixButton";
 import { onKeysChanged } from "../../ui/KeyEditor";
 import "./modtools.css";
@@ -175,13 +175,14 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
   const [busy, setBusy] = useState<string | null>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  const off = (ids: string[], names: string[], tag: string) => {
+  const act = (tag: string, job: () => Promise<unknown>) => {
     setBusy(tag);
-    turnOff(mod.game, ids, names)
+    job()
       .then(() => { if (live.current) onDone(); })
       .catch((e) => toast(errorText(e), true))
       .finally(() => { if (live.current) setBusy(null); });
   };
+  const off = (ids: string[], names: string[], tag: string) => act(tag, () => turnOff(mod.game, ids, names));
   return (
     <Panel title="Conflicts" icon="layers" className="mi-panel mi-conflicts" count={data.conflicts.length}
       actions={<Button size="sm" busy={busy === "all"} disabled={!!busy || !mod.enabled} icon="check"
@@ -193,6 +194,13 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
           <li key={c.modId} className="mi-conf">
             <div className="mi-conf-row">
               <span className="mi-conf-name">{c.name}</span>
+              {(c.hashes?.length ?? 0) > 0 && (
+                <Button size="sm" variant="ghost" busy={busy === `d:${c.modId}`} disabled={!!busy}
+                  title={`Take the ${plural(c.shared, "shared part")} out of ${mod.name}, so ${c.name} shows them and ${mod.name} keeps the rest. Undo puts them back`}
+                  onClick={() => act(`d:${c.modId}`, () => dropShared(mod.game, mod.id, c.hashes!))}>Remove from this mod</Button>
+              )}
+              <IconButton icon="hide" size="sm" label={`Ignore the conflict with ${c.name}. Tools, Conflicts lists ignored ones`} disabled={!!busy}
+                onClick={() => act(`i:${c.modId}`, () => ignoreConflict(mod.game, [mod.id, c.modId], [mod.name, c.name]))} />
               <IconButton icon="power" size="sm" label={`Turn off ${c.name}`} disabled={!!busy} onClick={() => off([c.modId], [c.name], c.modId)} />
             </div>
             <SharedParts n={c.shared} parts={c.parts} />

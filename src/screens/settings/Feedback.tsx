@@ -98,7 +98,7 @@ export function FeedbackSection() {
 }
 
 const ADMIN_TIP = "Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. "
-  + "As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. "
+  + "As administrator, gachamod presses F10 for you after a change, its hotkeys work while you play and its menu opens over the game. "
   + "Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way";
 
 // the row shows on two pages (Games, In-game hotkeys), so its state is shared and both copies agree

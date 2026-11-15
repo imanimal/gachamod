@@ -170,7 +170,7 @@ export function openDetails(m: Pick<ModEntry, "id">, section?: DrawerSection) {
 }
 /** A part of the drawer to scroll to when it opens: its parts, toggles, conflicts, files and size, or its 3D view. It stays until
  *  the drawer has scrolled there (clearDrawerSection), so an effect that runs twice still finds it. */
-export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "ingame" | "parts";
+export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "parts";
 let drawerSection: { id: string; section: DrawerSection } | null = null;
 export const drawerSectionFor = (id: string): DrawerSection | null => (drawerSection?.id === id ? drawerSection.section : null);
 export function clearDrawerSection() { drawerSection = null; }

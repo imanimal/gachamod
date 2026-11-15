@@ -34,14 +34,18 @@ Caveats, in order of weight:
 3. The user signs in on GameBanana's page. Username and password, or the email-code tab. If GameBanana asks for a
    captcha (Cloudflare Turnstile) or a 6-digit authenticator code, its page handles that itself. The app never sees the
    password and never types anything into the page.
-4. When the window finishes loading any gamebanana.com page (and when it is closed), the app reads the cookies for
-   `https://gamebanana.com/` and calls `GET /apiv13/Member/UiConfig` with them (what the site itself reads: `_bIsLoggedIn`,
-   `_idMemberRow`, `_sAvatarUrl`; `apiv11/Member/Session` only has `_bIsLoggedIn` and is the fallback). The
-   login script itself redirects away after success (to the previous page or the home page).
-5. The app asks for `Member/UiConfig` and `Member/{id}/ProfilePage`, fills `AccountState.user` ({ id, name, avatar }),
-   stores the cookie header encrypted, and closes the window. Closing the window by hand checks once more, then a
-   toast says you are not signed in (with the error, if GameBanana gave one) and offers to try again.
-6. Later calls go from Rust with `Cookie: <stored header>`. Sign out deletes the stored header and the login window's
+4. When the window finishes loading any gamebanana.com page (and when it is closed), the page itself is asked: a
+   script run with `eval_with_callback` makes a synchronous `GET /apiv13/Member/UiConfig` and returns `_bIsLoggedIn`,
+   `_idMemberRow`, the name, `_sAvatarUrl` and `navigator.userAgent`. Asking from inside the page uses that window's
+   own cookies and browser, so Cloudflare and a session tied to the browser both see the same client that signed in.
+   The login script itself redirects away after success (to the previous page or the home page).
+5. Once the page says someone is signed in, the app reads the window's gamebanana.com cookies (on another thread, with
+   a 10 second limit, since the read runs on the main thread), keeps the member from the page (the API fills in the
+   name and picture when it answers), stores the cookie header encrypted and the browser's User-Agent in settings, and
+   closes the window. Closing the window by hand checks once more and always closes; a toast says you are not signed
+   in (with the reason, if there is one) and offers to try again. Every failed step is in the log as
+   "GameBanana sign-in: ...".
+6. Later calls go from Rust with `Cookie: <stored header>` and the sign-in window's User-Agent. Sign out deletes the stored header and the login window's
    data folder. The server session stays valid until it expires (the site's logout call was not found, so don't invent
    one).
 

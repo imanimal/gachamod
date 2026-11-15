@@ -18,7 +18,6 @@ import { KeyEditor } from "../../ui/KeyEditor";
 import { CharLink, CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { record } from "../../lib/history";
-import { InGameOptions } from "../ingame/InGameOptions";
 import { ModInsides } from "../modtools/ModInsides";
 import { characterNames } from "../characters/roster";
 import {
@@ -86,7 +85,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
     const sec = drawerSectionFor(mod.id);
     if (!sec) return;
     if (sec === "model") { setModel(true); clearDrawerSection(); return; }
-    const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts", ingame: ".mi-ingame" }[sec];
+    const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts" }[sec];
     let tries = 0;
     const find = () => {
       const el = document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
@@ -277,7 +276,6 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
       <section id="mod-keys" className="mod-drawer-sec">
         <ModParts game={game} mod={mod} />
         <KeyEditor game={game} modId={mod.id} />
-        <InGameOptions game={game} modId={mod.id} />
         <ModInsides mod={mod} />
       </section>
 

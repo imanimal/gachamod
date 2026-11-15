@@ -174,10 +174,14 @@ pub async fn launch_config_set(st: State<'_, AppState>, game: String, config: La
 }
 
 #[tauri::command]
-pub async fn game_launch(st: State<'_, AppState>, game: String, vanilla: bool) -> Result<()> {
+pub async fn game_launch(st: State<'_, AppState>, game: String, vanilla: bool) -> Result<Option<String>> {
     let db = st.db.clone();
     // game-state events come from devtools::watch, which checks processes every 3 seconds
-    blocking(move || { let plan = launch::plan(&*lock(&db)?, &game, vanilla)?; launch::start(plan) }).await
+    blocking(move || {
+        let (plan, note) = { let d = lock(&db)?; let p = launch::plan(&d, &game, vanilla)?; let n = launch::plan_note(&d, &game, &p, vanilla); (p, n) };
+        launch::start(plan)?;
+        Ok(note)
+    }).await
 }
 
 #[tauri::command]

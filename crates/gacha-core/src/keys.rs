@@ -1354,6 +1354,27 @@ pub fn clashes(db: &Db, game: &str) -> Result<Vec<KeyClash>> {
     Ok(find_clashes(&mods))
 }
 
+/// Mods that are on and react to `key` (written like a hotkey, "F7" or "Ctrl+Alt+M"), by name: they fire too when the
+/// key opens gachamod's menu while playing.
+pub fn mods_on_key(db: &Db, game: &str, key: &str) -> Vec<String> {
+    let Some(want) = combo(&crate::hotkeys::migoto_form(key)) else { return Vec::new() };
+    let mods = crate::library::list(db, game).unwrap_or_default();
+    on_key(&mods, &want)
+}
+
+fn on_key(mods: &[ModEntry], want: &Combo) -> Vec<String> {
+    let mut out = Vec::new();
+    for m in mods.iter().filter(|m| m.enabled && m.has_keys) {
+        let dir = Path::new(&m.path);
+        if !dir.is_dir() { continue; }
+        let k = keys_in(&m.id, dir);
+        let hit = k.keys.iter().filter(|e| !e.off)
+            .any(|e| e.lines.iter().filter(|l| !l.off).any(|l| combo(&l.value).is_some_and(|c| overlap(&c, want))));
+        if hit { out.push(m.name.clone()); }
+    }
+    out
+}
+
 fn find_clashes(mods: &[ModEntry]) -> Vec<KeyClash> {
     let mut lines: Vec<ClashLine> = Vec::new();
     for m in mods.iter().filter(|m| m.enabled && m.has_keys) {

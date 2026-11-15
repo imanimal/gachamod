@@ -4,9 +4,8 @@
 /* the action row always has its own line under the title, so the Installed/Trash switch at its start sits in the same
    place on both pages at any window width */
 .library > .page-h .page-h-a { flex-basis: 100%; }
-.library > .page-h .library-search { flex: 0 1 24rem; }
-.library-filters, .library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
-.library-filters .field { min-width: 11rem; }
+.library > .page-h .library-search { flex: 1 1 14rem; min-width: 12rem; }
+.library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
 /* types (UI, Tools and fixes ...) then characters, in one row that scrolls sideways (Library.tsx CharRow) */
 .library-chars-wrap { display: flex; align-items: center; gap: .25rem; width: 100%; min-width: 0; }
 .library-chars-wrap > .ibtn:disabled { opacity: .25; }
@@ -144,3 +143,5 @@
 .mod-viewer.is-wait { display: grid; place-items: center; }
 .mod-viewer-msg { display: inline-flex; align-items: center; gap: .5rem; max-width: 80%; text-align: center; color: var(--text-2); }
 .mod-viewer-note { margin: 0; }
+/* Rescan's icon turns while the folder is read */
+.lib-scanning .i { animation: spin 1s linear infinite; }

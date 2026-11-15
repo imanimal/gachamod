@@ -107,6 +107,9 @@ pub struct ConflictRef {
     /// The shared parts by their section names in the mod's ini ("ZhuYuan.Body.IB"), at most 40.
     #[serde(default)]
     pub parts: Vec<String>,
+    /// The hashes this mod shares with the one whose details are open (empty in a group: the group has them).
+    #[serde(default)]
+    pub hashes: Vec<String>,
 }
 
 /// Everything the mod detail drawer shows about a mod's insides.
@@ -131,6 +134,9 @@ pub struct ConflictGroup {
     pub mods: Vec<ConflictRef>,
     pub hashes: Vec<String>,
     pub character: Option<String>,
+    /// The user said to ignore it (every pair of its mods is on the ignore list).
+    #[serde(default)]
+    pub ignored: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1284,15 +1290,19 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
         let mods = mods_or_empty(db, game).unwrap_or_default();
         let mine: HashSet<String> = quick_facts(&dir).active.into_iter().collect();
         let (_, by_hash) = enabled_hashes(&mods);
+        let ignored = ignored_pairs(db, game);
         let mut shared: HashMap<usize, Vec<String>> = HashMap::new();
         for h in &mine {
             let Some(list) = by_hash.get(h) else { continue };
             if list.len() >= COMMON_HASH { continue; }
-            for &i in list { if mods[i].id != m.id { shared.entry(i).or_default().push(h.clone()); } }
+            for &i in list {
+                if mods[i].id != m.id && !ignored.contains(&pair_key(&m.id, &mods[i].id)) { shared.entry(i).or_default().push(h.clone()); }
+            }
         }
         let parts = if shared.is_empty() { HashMap::new() } else { parts_by_hash(&dir) };
         let mut c: Vec<ConflictRef> = shared.into_iter().map(|(i, hs)| ConflictRef {
             mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: hs.len() as u32, parts: part_names(&parts, &hs),
+            hashes: { let mut v = hs.clone(); v.sort(); v },
         }).collect();
         c.sort_by(|a, b| b.shared.cmp(&a.shared).then_with(|| a.name.cmp(&b.name)));
         out.conflicts = c;
@@ -1322,8 +1332,74 @@ pub fn set_var(db: &Db, game: &str, id: &str, value: &VarValue) -> Result<()> {
 
 /// Group enabled mods by the hashes they share (each group is an exact set of mods with the hashes they all
 /// override). Hashes five or more enabled mods share are left out.
+// ── ignored conflicts ──
+
+fn ignored_key(game: &str) -> String { format!("{game}.conflicts.ignored") }
+
+/// Two mods as one ignore-list entry, the same whichever comes first.
+pub(crate) fn pair_key(a: &str, b: &str) -> String { if a <= b { format!("{a}+{b}") } else { format!("{b}+{a}") } }
+
+/// Pairs of mods whose conflict the user said to ignore.
+pub(crate) fn ignored_pairs(db: &Db, game: &str) -> HashSet<String> {
+    db.setting_json::<Vec<String>>(&ignored_key(game)).ok().flatten().unwrap_or_default().into_iter().collect()
+}
+
+/// Ignore the conflict between these mods (every pair of them), or stop ignoring it. The mods stay as they are.
+pub fn ignore_conflict(db: &Db, game: &str, ids: &[String], on: bool) -> Result<()> {
+    let mut set = ignored_pairs(db, game);
+    for a in ids {
+        for b in ids {
+            if a == b { continue; }
+            if on { set.insert(pair_key(a, b)); } else { set.remove(&pair_key(a, b)); }
+        }
+    }
+    let mut list: Vec<String> = set.into_iter().collect();
+    list.sort();
+    db.set_setting_json(&ignored_key(game), &list)
+}
+
+/// Take a conflict's shared parts out of one mod: each override section in its inis that changes one of `hashes`
+/// is commented out with ";", so the other mod shows those parts and this one keeps the rest. A backup undoes it.
+pub fn drop_overrides(db: &Db, game: &str, id: &str, hashes: &[String]) -> Result<crate::backups::Backup> {
+    let m = library::get(db, game, id)?;
+    let dir = PathBuf::from(&m.path);
+    if !dir.is_dir() { return Err(Error::Invalid(format!("{}'s folder isn't there any more. Rescan to update the list", m.name))); }
+    let want: HashSet<String> = hashes.iter().filter_map(|h| norm_hash(h)).collect();
+    let mut edits: Vec<(PathBuf, String, Vec<u8>)> = Vec::new();
+    let mut sections = 0;
+    for (path, rel) in mod_inis(&dir) {
+        let Ok(raw) = std::fs::read(&path) else { continue };
+        let mut doc = crate::keys::Doc::from_bytes(&raw);
+        let heads: Vec<(usize, String)> = doc.lines.iter().enumerate()
+            .filter_map(|(i, l)| crate::keys::header_name(l).map(|n| (i, n.to_ascii_lowercase()))).collect();
+        let mut hit = false;
+        for (k, (start, name)) in heads.iter().enumerate() {
+            if !is_override(name) { continue; }
+            let end = heads.get(k + 1).map(|(i, _)| *i).unwrap_or(doc.lines.len());
+            let shared = doc.lines[start + 1..end].iter()
+                .any(|l| crate::keys::kv(l).is_some_and(|(key, v)| key == "hash" && norm_hash(v).is_some_and(|h| want.contains(&h))));
+            if !shared { continue; }
+            for line in &mut doc.lines[*start..end] {
+                let t = line.trim_start();
+                if !t.is_empty() && !t.starts_with(';') { *line = format!(";{line}"); }
+            }
+            hit = true;
+            sections += 1;
+        }
+        if hit { edits.push((path, rel.replace('\\', "/"), doc.to_bytes())); }
+    }
+    if edits.is_empty() { return Err(Error::Invalid(format!("{} no longer changes those parts. Check again", m.name))); }
+    let files: Vec<String> = edits.iter().map(|(_, rel, _)| rel.clone()).collect();
+    let label = format!("Took {} out of {}", if sections == 1 { "1 shared part".to_string() } else { format!("{sections} shared parts") }, m.name);
+    let backup = crate::backups::take(db, game, &m.id, &dir, &files, &label)?;
+    for (path, _, bytes) in &edits { std::fs::write(path, bytes)?; }
+    if m.loaded() { crate::devtools::mark_changed(game); }
+    Ok(backup)
+}
+
 pub fn conflicts(db: &Db, game: &str) -> Result<Vec<ConflictGroup>> {
     let mods = mods_or_empty(db, game)?;
+    let ignored = ignored_pairs(db, game);
     let (_, by_hash) = enabled_hashes(&mods);
     let mut groups: BTreeMap<Vec<usize>, Vec<String>> = BTreeMap::new();
     for (h, mut list) in by_hash {
@@ -1338,7 +1414,11 @@ pub fn conflicts(db: &Db, game: &str) -> Result<Vec<ConflictGroup>> {
         let first = mods[idx[0]].character.clone();
         let character = first.filter(|c| idx.iter().all(|&i| mods[i].character.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(c))));
         let parts = part_names(&parts_by_hash(Path::new(&mods[idx[0]].path)), &hashes);
-        ConflictGroup { mods: idx.iter().map(|&i| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n, parts: parts.clone() }).collect(), hashes, character }
+        let all_ignored = idx.iter().all(|&a| idx.iter().all(|&b| a == b || ignored.contains(&pair_key(&mods[a].id, &mods[b].id))));
+        ConflictGroup {
+            mods: idx.iter().map(|&i| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n, parts: parts.clone(), hashes: Vec::new() }).collect(),
+            hashes, character, ignored: all_ignored,
+        }
     }).collect();
     out.sort_by(|a, b| b.hashes.len().cmp(&a.hashes.len()));
     Ok(out)
@@ -1669,6 +1749,67 @@ mod tests {
         let bad = ProblemFix { to: Some(r"..\..\..\x.buf".into()), ..point };
         assert!(apply_fix(&db, "zzz", &id, &bad).is_err());
         drop(db);
+        drop(shared);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn conflicts_can_be_ignored_or_taken_out_of_one_mod() {
+        let root = temp("conflict");
+        let mods = root.join("Mods");
+        let ini = "[TextureOverrideBody]
+hash = 11111111
+ib = Body.ib
+
+[TextureOverrideHair]
+hash = 33333333
+ib = Hair.ib
+";
+        for n in ["A", "B"] {
+            fs::create_dir_all(mods.join(n)).unwrap();
+            fs::write(mods.join(n).join("mod.ini"), ini).unwrap();
+        }
+        // B changes the hair only
+        fs::write(mods.join("B/mod.ini"), "[TextureOverrideHair]
+hash = 33333333
+ib = Hair.ib
+").unwrap();
+        let db = crate::db::Db::open(&root.join("gachamod.db")).unwrap();
+        crate::games::save_paths(&db, "zzz", &crate::games::GamePaths { mods_dir: Some(mods.to_string_lossy().into_owned()), ..Default::default() }).unwrap();
+        let shared = Arc::new(Mutex::new(db));
+        let list = library::scan(&shared, "zzz").unwrap();
+        assert!(list.iter().all(|m| m.conflicts == 1));
+        let a = list.iter().find(|m| m.name == "A").unwrap().id.clone();
+        let b = list.iter().find(|m| m.name == "B").unwrap().id.clone();
+        {
+            let db = shared.lock().unwrap();
+            let g = conflicts(&db, "zzz").unwrap();
+            assert_eq!(g.len(), 1);
+            assert_eq!(g[0].hashes, vec!["33333333".to_string()]);
+            assert!(!g[0].ignored);
+
+            // taking the shared part out of A comments out its hair section only, and undo puts it back
+            let backup = drop_overrides(&db, "zzz", &a, &g[0].hashes).unwrap();
+            let after = fs::read_to_string(mods.join("A/mod.ini")).unwrap();
+            assert!(after.contains("[TextureOverrideBody]
+hash = 11111111"));
+            assert!(after.contains(";[TextureOverrideHair]
+;hash = 33333333
+;ib = Hair.ib"));
+            assert!(conflicts(&db, "zzz").unwrap().is_empty());
+            crate::backups::restore(&db, &backup.id).unwrap();
+            assert_eq!(fs::read_to_string(mods.join("A/mod.ini")).unwrap(), ini);
+
+            ignore_conflict(&db, "zzz", &[a.clone(), b.clone()], true).unwrap();
+            assert!(conflicts(&db, "zzz").unwrap()[0].ignored);
+            assert!(inspect(&db, "zzz", &a).unwrap().conflicts.is_empty());
+        }
+        assert!(library::scan(&shared, "zzz").unwrap().iter().all(|m| m.conflicts == 0), "mod cards stop counting it");
+        {
+            let db = shared.lock().unwrap();
+            ignore_conflict(&db, "zzz", &[a.clone(), b.clone()], false).unwrap();
+            assert!(!conflicts(&db, "zzz").unwrap()[0].ignored);
+        }
         drop(shared);
         let _ = fs::remove_dir_all(&root);
     }

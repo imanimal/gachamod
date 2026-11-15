@@ -37,34 +37,35 @@ export function FixesPanel({ game }: { game: GameId }) {
   // failed on, or one whose model changed, is tried from its own row
   const fixable = [...broken, ...stuck.filter((r) => r.tool && !r.tried && !r.needsAuthor)];
   const listed = [...broken, ...stuck].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
-  const noData = info && !info.pairs && !info.sources.length;
+  // no hash changes or fixers known for this game: nothing can be found broken, so there is nothing to list or check
+  const noData = !!info && !info.pairs && !info.sources.length;
 
   return (
     <Panel id="fixes" title="Fixes" icon="wand" className="tp tp-fixes" count={rows && warn ? listed.length : undefined}
       actions={<>
-        <Button size="sm" variant="ghost" icon={warn ? "bell" : "bell-off"}
+        {!noData && <Button size="sm" variant="ghost" icon={warn ? "bell" : "bell-off"}
           title={warn ? "Stop warning about mods a game update broke, here, on mod cards and in a mod's details. Nothing changes in the mods"
             : "Warn again about mods a game update broke"}
-          onClick={() => void fixWarningsPref.set(!warn, warn ? "Muted the broken mod warnings" : "Showing the broken mod warnings again")}>{warn ? "Mute" : "Unmute"}</Button>
+          onClick={() => void fixWarningsPref.set(!warn, warn ? "Muted the broken mod warnings" : "Showing the broken mod warnings again")}>{warn ? "Mute" : "Unmute"}</Button>}
         {waiting && (
           <Button size="sm" variant="ghost" onClick={stopWaiting}
             title="The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far">Stop waiting</Button>
         )}
-        {warn && fixable.length > 0 && (
+        {warn && !noData && fixable.length > 0 && (
           <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}
             title={`Outdated hashes are swapped, and a mod that needs more gets its fixer run on it. A fix isn't certain: a mod the fixer can't repair says so afterwards. Each gets a backup, and Undo puts it back`}
             onClick={() => void run("all", () => fixMods(game, fixable.map((r) => r.modId)))}>Attempt fix on {plural(fixable.length, "mod")}</Button>
         )}
-        {warn && <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title="Check every mod again"
+        {warn && !noData && <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title="Check every mod again"
           onClick={() => void run("check", () => reloadHealth(game))}>Check again</Button>}
       </>}>
-      {!warn ? (
+      {noData ? (
+        <p className="hint tp-intro">gachamod has no hash fixes for this game, so it can't tell which mods a game update broke.</p>
+      ) : !warn ? (
         <p className="tp-none muted">Warnings about mods a game update broke are muted. Unmute to see them and fix them.</p>
       ) : (<>
       <p className="hint tp-intro">
-        {noData
-          ? "gachamod has no fix data for this game yet. The fixers below may still help."
-          : `A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A mod that needs more gets its fixer downloaded and run on it. Some mods can't be repaired this way (the game changed the model itself) and need an update from their author. A backup is kept, and Undo puts the files back.`}
+        {`A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A mod that needs more gets its fixer downloaded and run on it. Some mods can't be repaired this way (the game changed the model itself) and need an update from their author. A backup is kept, and Undo puts the files back.`}
       </p>
       {!rows ? (
         <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>

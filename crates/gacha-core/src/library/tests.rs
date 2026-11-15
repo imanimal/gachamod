@@ -894,3 +894,36 @@ fn a_new_group_asks_for_its_pick() {
     assert_eq!(info.groups[0].active, 1);
     crate::launch::TEST_RUNNING.with(|r| r.set(false));
 }
+
+#[test]
+fn live_groups_from_an_older_version_come_out_at_start() {
+    let t = Tree::new("retire");
+    let ini = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
+    for rel in ["Ellen Joe/Maid Ellen", "Ellen Joe/DISABLED Bunny"] {
+        let d = t.mods.join(rel);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("mod.ini"), ini).unwrap();
+    }
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let (maid, bunny) = (by_name(&list, "Maid Ellen").id.clone(), by_name(&list, "Bunny").id.clone());
+    let d = db.lock().unwrap();
+    crate::live::add(&d, "zzz", &[maid.clone(), bunny.clone()]).unwrap();
+    d.set_setting("zzz.liveAll", "1").unwrap();
+    d.set_setting("zzz.liveMenu", "game").unwrap();
+    let maid_ini = Path::new(&get(&d, "zzz", &maid).unwrap().path).join("mod.ini");
+    assert!(fs::read_to_string(&maid_ini).unwrap().contains("; gachamod:begin"));
+
+    crate::live::on_start(&d);
+    // the one showing stays on as a plain mod, the other goes off, and the inis are as they were
+    let row = |id: &str| get(&d, "zzz", id).unwrap();
+    assert!(row(&maid).enabled && !row(&maid).standby);
+    assert!(!row(&bunny).enabled && !row(&bunny).standby && rel_disabled(&row(&bunny).rel_path));
+    assert_eq!(fs::read_to_string(&maid_ini).unwrap(), ini);
+    assert!(crate::live::groups_by_mod(&d, "zzz").is_empty());
+    assert!(!t.mods.join(crate::live::DIR).exists());
+    assert!(!crate::live::all_on(&d, "zzz"));
+    assert_eq!(crate::live::menu_settings(&d, "zzz").style, "window");
+    // the menu's key is held for the game without any live group
+    assert!(crate::live::menu_keys(&d).iter().any(|(g, s)| g == "zzz" && s.key == "F7"));
+}

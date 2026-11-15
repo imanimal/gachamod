@@ -38,8 +38,8 @@ export async function play(game: GameState, vanilla = false) {
   changed();
   try {
     if (!vanilla) await shuffleBeforePlay(game.id);
-    await games.launch(game.id, vanilla);
-    toast(vanilla ? `Starting ${game.name} without mods` : `Starting ${game.name}`);
+    const note = await games.launch(game.id, vanilla);
+    toast(note ?? (vanilla ? `Starting ${game.name} without mods` : `Starting ${game.name}`));
     const close = await settings.get(`${game.id}.closeOnLaunch`).catch(() => null);
     if (close === "1") window.setTimeout(() => void windowAction("close"), 1500);
   } catch (e) {

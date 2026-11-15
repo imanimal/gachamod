@@ -670,8 +670,7 @@ UI:
     opened. Settings, Appearance, First-start hints turns them off ("hints.on"). There is no tour.
 - New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
-  rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
-  more skins and isn't switched in game yet, the toast offers "Switch in game" (live switching).
+  rule and one quiet Undo step. The first time it says so with "Keep new mods off".
 - One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
@@ -686,9 +685,10 @@ UI:
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
   (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
 - Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and
-  data, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
-  what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
-  the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
+  data, and the search): three steps through the menu over the game while playing, each answered Yes, No or Skip,
+  next to what gachamod saw by itself (it heard the menu key, the game was in exclusive fullscreen, a pick came from
+  the menu). The answers and the game's setup go to PostHog as one `game check` event (`check_version` 2).
+  docs/testing.md is the tester's side.
 - `npm run installer` builds the installer and gachamod setup with build-machine folders written as `~`
   (scripts/build-installer.mjs).
 - gachamod's own updates (`src-tauri/src/commands/app.rs`, Tauri's updater plugin; `app_update.rs` keeps version
@@ -822,10 +822,10 @@ together. A panel that renders nothing (IMM when it isn't installed) is left out
 setting XXMI Launcher owns (the backend's lock message says "in XXMI Launcher" or "Only XXMI Launcher") shows an
 "Open XXMI Launcher" button next to it. "Start with" is hidden for community games.
 
-The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
-(docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
-window label `overlay`), or a plainer menu the game draws itself (`crates/gacha-core/src/live/menu.rs`), which is also
-what opens in exclusive fullscreen. The panel says which one is better and why.
+The "ingame" page (Menu while playing) turns the menu over the game on or off and sets its key and the controller
+shortcut (docs/ingame.md, section 11; `src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`, window label
+`overlay`). Picking a skin there turns it on and the character's other mods off, the menu closes and the game reloads
+its mods. It needs the game borderless or windowed.
 
 ### The AI helper
 

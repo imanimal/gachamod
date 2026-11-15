@@ -89,7 +89,8 @@ export async function getReady(id: GameId): Promise<boolean> {
   if (g.modsDir) return true;
   if (canInstallLoader(g)) return has(await installLoaders([id]));
   if (has(await recheck(true))) return true;
-  toast(`Still no Mods folder for ${g.short}. Pick it, or open the game once with XXMI Launcher`, false,
+  toast(g.xxmi ? `Still no Mods folder for ${g.short}. Pick it, or open the game once with XXMI Launcher`
+    : `Still no Mods folder for ${g.short}. Install a 3DMigoto loader for it, then pick the Mods folder next to the loader's d3dx.ini`, false,
     { label: "Pick folder", run: () => void pickModsFolder(id) });
   return false;
 }

@@ -29,12 +29,13 @@ export interface Problem {
  *  "keep": `ini` stays on and the other `inis` are renamed DISABLED_<name>. Set `ini` to the one to keep. */
 export interface ProblemFix { kind: "point" | "keep" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
 /** `parts`: the shared parts by their section names ("ZhuYuan.Body.IB (6619364f)"), at most 40. */
-export interface ConflictRef { modId: string; name: string; shared: number; parts?: string[] }
+/** In a mod's details, `hashes` are the ones it shares with this mod (a group lists them once instead). */
+export interface ConflictRef { modId: string; name: string; shared: number; parts?: string[]; hashes?: string[] }
 export interface ModInspect {
   modId: string; inis: string[]; keys: KeyBinding[]; vars: VarInfo[]; hashCount: number;
   conflicts: ConflictRef[]; problems: Problem[]; readmes: Array<[string, string]>;
 }
-export interface ConflictGroup { mods: ConflictRef[]; hashes: string[]; character: string | null }
+export interface ConflictGroup { mods: ConflictRef[]; hashes: string[]; character: string | null; ignored?: boolean }
 export interface ModProblems { modId: string; name: string; enabled: boolean; source: ModSource | null; problems: Problem[] }
 export interface HashHit { modId: string; name: string; ini: string; section: string; enabled: boolean }
 
@@ -108,6 +109,10 @@ export const modtools = {
   mesh: (game: GameId, id: string) => call<ModMesh>("mod_mesh", { game, id }),
   setVar: (game: GameId, id: string, value: VarValue) => call<void>("mod_set_var", { game, id, value }),
   conflicts: (game: GameId) => call<ConflictGroup[]>("conflicts_scan", { game }),
+  /** Ignore the conflict between these mods (or stop). Nothing in the mods changes. */
+  ignoreConflict: (game: GameId, ids: string[], on: boolean) => call<void>("conflict_ignore", { game, ids, on }),
+  /** Take the shared parts out of one mod. The backup undoes it (backups.restore). */
+  dropShared: (game: GameId, id: string, hashes: string[]) => call<Backup>("conflict_drop", { game, id, hashes }),
   lint: (game: GameId) => call<ModProblems[]>("lint_scan", { game }),
   /** Make a fix lint offered. The backup undoes it (backups.restore). */
   fix: (game: GameId, id: string, fix: ProblemFix) => call<Backup>("lint_fix", { game, id, fix }),

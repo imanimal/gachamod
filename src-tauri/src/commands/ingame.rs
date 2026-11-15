@@ -1,6 +1,7 @@
-//! Switching skins in game without a reload (gacha-core live.rs, docs/ingame.md). Owner: INGAME area.
+//! The menu over the game while playing: its settings, and restarting as administrator so its key reaches a game
+//! that runs as one (gacha-core live.rs, src-tauri overlay.rs, docs/ingame.md). Owner: INGAME area.
 use crate::state::{blocking, AppState};
-use gacha_core::live::{self, LiveChange, LiveInfo, MenuSettings, Picked};
+use gacha_core::live::{self, MenuInfo, MenuSettings};
 use gacha_core::Result;
 use tauri::State;
 
@@ -9,56 +10,30 @@ fn lock(db: &gacha_core::db::Shared) -> Result<std::sync::MutexGuard<'_, gacha_c
 }
 
 #[tauri::command]
-pub async fn live_info(st: State<'_, AppState>, game: String) -> Result<LiveInfo> {
+pub async fn menu_info(st: State<'_, AppState>, game: String) -> Result<MenuInfo> {
     let db = st.db.clone();
-    blocking(move || live::info(&*lock(&db)?, &game)).await
+    blocking(move || Ok(live::menu_info(&*lock(&db)?, &game))).await
 }
 
+/// Mods that are on and use the menu's key themselves, by name (they fire too when it opens the menu).
 #[tauri::command]
-pub async fn live_add(app: tauri::AppHandle, st: State<'_, AppState>, game: String, ids: Vec<String>) -> Result<LiveChange> {
+pub async fn menu_key_users(st: State<'_, AppState>, game: String) -> Result<Vec<String>> {
     let db = st.db.clone();
     blocking(move || {
-        let out = live::add(&*lock(&db)?, &game, &ids)?;
-        menu_key(&app);
-        Ok(out)
+        let d = lock(&db)?;
+        let set = live::menu_settings(&d, &game);
+        Ok(if set.style == "off" { Vec::new() } else { gacha_core::keys::mods_on_key(&d, &game, &set.key) })
     }).await
 }
 
+/// Turn the menu on or off or change its key, then hold or let go of the key and make or drop its window to match.
 #[tauri::command]
-pub async fn live_remove(app: tauri::AppHandle, st: State<'_, AppState>, game: String, ids: Vec<String>) -> Result<LiveChange> {
-    let db = st.db.clone();
-    blocking(move || {
-        let out = live::remove(&*lock(&db)?, &game, &ids)?;
-        menu_key(&app);
-        Ok(out)
-    }).await
-}
-
-/// Make every mod that has a character switch in game (and new ones as they arrive), or stop adding new ones.
-#[tauri::command]
-pub async fn live_set_all(app: tauri::AppHandle, st: State<'_, AppState>, game: String, on: bool) -> Result<LiveChange> {
-    let db = st.db.clone();
-    blocking(move || {
-        let out = live::set_all(&*lock(&db)?, &game, on)?;
-        menu_key(&app);
-        Ok(out)
-    }).await
-}
-
-/// The first live character gives a game its menu and the last one leaving takes it away: hold or let go of the
-/// menu key, and make or drop the menu window, to match.
-fn menu_key(app: &tauri::AppHandle) {
-    crate::hotkeys::sync(app);
-    crate::overlay::on_game_state(app);
-}
-
-/// Change how the skin menu opens while playing, then hold or let go of its key.
-#[tauri::command]
-pub async fn live_menu_set(app: tauri::AppHandle, st: State<'_, AppState>, game: String, menu: MenuSettings) -> Result<MenuSettings> {
+pub async fn menu_set(app: tauri::AppHandle, st: State<'_, AppState>, game: String, menu: MenuSettings) -> Result<MenuSettings> {
     let db = st.db.clone();
     blocking(move || {
         let set = live::set_menu(&*lock(&db)?, &game, &menu)?;
-        menu_key(&app);
+        crate::hotkeys::sync(&app);
+        crate::overlay::on_game_state(&app);
         Ok(set)
     }).await
 }
@@ -82,15 +57,4 @@ pub async fn app_restart_admin(app: tauri::AppHandle, window: tauri::WebviewWind
     crate::commands::app::skip_update_on_quit(&app);
     app.exit(0);
     Ok(true)
-}
-
-/// Pick what a character shows. While the game runs the pick is sent to it (the database isn't held meanwhile).
-#[tauri::command]
-pub async fn live_pick(st: State<'_, AppState>, game: String, group: u32, slot: u32) -> Result<Picked> {
-    let db = st.db.clone();
-    blocking(move || {
-        let mut picked = live::pick(&*lock(&db)?, &game, group, slot)?;
-        picked.note = live::flush_sends(&db).into_iter().next();
-        Ok(picked)
-    }).await
 }

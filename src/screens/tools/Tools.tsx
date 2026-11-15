@@ -1,5 +1,5 @@
 // Tools, one page at a time like Settings (settings/Paged.tsx): problems and fixes after a game update, conflicts and
-// key clashes, launch options, switching skins in game, sharing or moving mods, and the mod maker tools (3DMigoto
+// key clashes, launch options, the menu while playing, sharing or moving mods, and the mod maker tools (3DMigoto
 // switches, files and logs, finding a hash). Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels.
 // Launch fields save on change (400 ms after the last one) with a small "Saved". Every page and panel is a route:
 // go({ view: "tools", section: "launch" }) or section: "fixes".
@@ -65,7 +65,7 @@ registerCommands("tools", () => {
   return [
     { id: "tools:fixes", title: "Fix mods after a game update", section: "Pages", icon: "wand", where: "Tools › Problems and fixes", keywords: "fixer fixes broken mods hash game update patch repair",
       run: () => go({ view: "tools", section: "fixes" }) },
-    { id: "tools:ingame", title: "In-game menu", section: "Pages", icon: "gamepad", where: "Tools › Switch skins in game", keywords: "in game overlay switch mods without reload f10 toggle menu",
+    { id: "tools:ingame", title: "Menu while playing", section: "Pages", icon: "gamepad", where: "Tools › Menu while playing", keywords: "in game overlay menu switch skins f7 controller",
       run: () => go({ view: "tools", section: "ingame" }) },
     { id: "tools:migoto", title: "Mod maker switches", section: "Pages", icon: "code", where: "Tools › Mod makers", keywords: "hunting mode dump shaders log 3dmigoto debug warnings",
       run: () => go({ view: "tools", section: "migoto" }) },
@@ -90,7 +90,7 @@ const PAGES: PageInfo[] = [
   { id: "problems", label: "Problems and fixes", icon: "warn", tip: "What stops a mod from showing right in game, and the fixers for mods a game update broke" },
   { id: "conflicts", label: "Conflicts", icon: "layers", tip: "Mods that are on and change the same parts of a model, or use the same keys" },
   { id: "launch", label: "Launch", icon: "play", tip: "How the game starts: arguments, window, commands before and after" },
-  { id: "ingame", label: "Switch skins in game", icon: "swap" },
+  { id: "ingame", label: "Menu while playing", icon: "gamepad", tip: "The menu that opens over the game while you play, to pick skins without leaving it" },
   { id: "packs", label: "Share and move", icon: "package", tip: "Share mods and profiles as a .gachamod file, or move mods out of Integrated Mod Manager" },
   { id: "migoto", label: "Mod makers", icon: "code", tip: "3DMigoto's hunting mode and logging, the shader cache and logs, and looking up a hash" },
 ];
@@ -231,7 +231,7 @@ function LaunchPanel({ game, l }: { game: GameState; l: Launch }) {
       <Blocked l={l} />
       <div className="tools-grid">
         {game.xxmi && <Field label="Start with" hint={lock("via") ?? (viaXxmi ? "XXMI Launcher loads the mods and applies these settings" : "gachamod starts the game's exe. Mods need another loader")}>
-          <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label="Start with"
+          <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label="Start with" disabled={!!cfg.locked.via}
             options={[{ value: "xxmi", label: "XXMI" }, { value: "direct", label: "Game exe" }]} />
         </Field>}
         <TextField label="Arguments" mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
@@ -240,10 +240,10 @@ function LaunchPanel({ game, l }: { game: GameState; l: Launch }) {
           <TextField label="Different exe" mono value={cfg.customExe ?? ""} placeholder="Leave empty for the game's own exe"
             onChange={(v) => update({ customExe: v || null })} disabled={!!lock("customExe")} hint={lock("customExe")} />
         )}
-        <Select label="Priority" value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })}
+        <Select label="Priority" value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })} disabled={!!cfg.locked.processPriority}
           options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] ?? p }))} hint={lock("processPriority") ?? "Which programs Windows runs first when the CPU is busy. It doesn't raise FPS. Normal is best: High and Realtime can make sound, input and other apps stutter"} />
         <Select label="Window" value={cfg.windowMode || "BORDERLESS"} onChange={(v) => update({ windowMode: v })}
-          options={WINDOW_MODES} hint={lock("windowMode")} />
+          options={WINDOW_MODES} hint={lock("windowMode")} disabled={!!cfg.locked.windowMode} />
       </div>
       <div className="tools-hooks">
         <HookField title="Before the game starts" hook={cfg.preLaunch} locked={lock("preLaunch")} onChange={(h) => update({ preLaunch: h })} />

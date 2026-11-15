@@ -40,6 +40,20 @@ pub async fn conflicts_scan(st: State<'_, AppState>, game: String) -> Result<Vec
     blocking(move || ini::conflicts(&db.lock().unwrap(), &game)).await
 }
 
+/// Ignore a conflict between these mods, or stop ignoring it. Nothing in the mods changes.
+#[tauri::command]
+pub async fn conflict_ignore(st: State<'_, AppState>, game: String, ids: Vec<String>, on: bool) -> Result<()> {
+    let db = st.db.clone();
+    blocking(move || ini::ignore_conflict(&db.lock().unwrap(), &game, &ids, on)).await
+}
+
+/// Take shared parts out of one mod (its override sections for `hashes` are commented out); the backup undoes it.
+#[tauri::command]
+pub async fn conflict_drop(st: State<'_, AppState>, game: String, id: String, hashes: Vec<String>) -> Result<Backup> {
+    let db = st.db.clone();
+    blocking(move || ini::drop_overrides(&db.lock().unwrap(), &game, &id, &hashes)).await
+}
+
 #[tauri::command]
 pub async fn lint_scan(st: State<'_, AppState>, game: String) -> Result<Vec<ModProblems>> {
     let db = st.db.clone();

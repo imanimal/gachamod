@@ -6,7 +6,6 @@
 import { settings, type GameId, type ModEntry } from "../../lib/api";
 import { record } from "../../lib/history";
 import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
-import { liveCharacterOf } from "../ingame/data";
 
 /** The user's answer. `turnOffOthers` goes to library.setEnabled; `parent` makes the mod a sub-mod of that one. */
 export interface OnChoice { turnOffOthers?: boolean; parent?: string }
@@ -52,7 +51,6 @@ async function stopAsking(game: GameId) {
 /** Ask before turning `mod` on when its character has another mod on. Resolves {} when there's nothing to ask, the
  *  answer when there was, or null when the menu closed without one (leave the mod off). */
 export async function askOverlap(game: GameId, mod: ModEntry, all: ModEntry[], at?: Element | null): Promise<OnChoice | null> {
-  if (liveCharacterOf(game, mod.id)) return {};
   const others = overlapping(mod, all);
   if (!others.length) return {};
   const rule = await settings.get(`${game}.oneSkin`).catch(() => null);

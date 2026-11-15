@@ -150,8 +150,8 @@ const PREFIX: Array<[string, Desc]> = [
   ["characters", ["Reading the character list", HOLD.db]],
   ["profile", ["Working on profiles", HOLD.disk]],
   ["keys_", ["Reading mod keys", HOLD.disk]],
-  ["live_", ["Talking to the running game", HOLD.disk]],
-  ["overlay_", ["Updating the in-game menu", HOLD.disk]],
+  ["menu_", ["Reading the menu's settings", HOLD.disk]],
+  ["overlay_", ["Updating the menu over the game", HOLD.disk]],
   ["mod_", ["Working on a mod", HOLD.disk]],
   ["mods", ["Working on mods", HOLD.disk]],
   ["library_", ["Working on your mods", HOLD.disk]],
@@ -172,7 +172,7 @@ const PREFIX: Array<[string, Desc]> = [
 
 /** Commands that wait on the person (a file dialog, a sign-in window), or run in the background where nobody waits on
  *  them (usage counts, log lines), and so never count as slow. */
-const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "game_check_saved", "game_check_menu", "save_look"]);
+const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "game_check_menu", "save_look"]);
 
 /** What a backend command does and what can hold it. */
 export function describeCall(cmd: string): Desc | null {

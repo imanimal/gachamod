@@ -519,7 +519,7 @@ fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 64 && id.chars().a
 
 /// Counts, for each enabled mod, the other enabled mods that override any of the same hashes. Hashes that 5 or more
 /// enabled mods share are left out (shared buffers, UI, effects).
-fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>], live: &HashMap<String, u32>) {
+fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>], live: &HashMap<String, u32>, ignored: &HashSet<String>) {
     let mut by_hash: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, e) in entries.iter().enumerate() {
         if !e.enabled { continue; }
@@ -533,7 +533,7 @@ fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>], live: &Ha
             for &b in v {
                 // two live mods of one character never show together
                 let same_group = live.get(&entries[a].id).is_some_and(|g| live.get(&entries[b].id) == Some(g));
-                if a != b && !same_group { others[a].insert(b); }
+                if a != b && !same_group && !ignored.contains(&ini::pair_key(&entries[a].id, &entries[b].id)) { others[a].insert(b); }
             }
         }
     }
@@ -606,8 +606,11 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         entries.push(e);
     }
     // live skins that aren't showing count as off (live.rs)
-    let live = lock(db).map(|d| { crate::live::overlay(&d, game, &mut entries); crate::live::groups_by_mod(&d, game) }).unwrap_or_default();
-    compute_conflicts(&mut entries, &hashes, &live);
+    let (live, ignored) = lock(db).map(|d| {
+        crate::live::overlay(&d, game, &mut entries);
+        (crate::live::groups_by_mod(&d, game), ini::ignored_pairs(&d, game))
+    }).unwrap_or_default();
+    compute_conflicts(&mut entries, &hashes, &live, &ignored);
 
     let d = lock(db)?;
     let stamp = now();

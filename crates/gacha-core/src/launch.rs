@@ -340,10 +340,23 @@ pub fn start(plan: Plan) -> Result<()> {
         Plan::Xxmi { root, importer } => crate::xxmi::launch(root.as_deref(), importer),
         Plan::Direct { exe, args, dir, pre_launch, loader } => {
             if let Some((hook, at)) = pre_launch { run_hook(&hook, &at)?; }
-            if let Some((l, at)) = loader { shell_start(&l, "", &at)?; }
+            if let Some((l, at)) = loader {
+                // one left open from the last run still waits for the game: a second copy would only get in its way
+                let name = l.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                if !processes().iter().any(|p| name_matches(&p.name, &name)) { shell_start(&l, "", &at)?; }
+            }
             shell_start(&exe, &args, &dir)
         }
     }
+}
+
+/// What to tell the player as the game starts: a community game whose loader gachamod couldn't find starts alone,
+/// so its mods only show if the player started the loader.
+pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool) -> Option<String> {
+    let g = games::def(game)?;
+    if vanilla || g.xxmi || !matches!(plan, Plan::Direct { loader: None, .. }) { return None; }
+    let dir = games::importer_dir(db, game).ok().map_or_else(|| "the mod loader's folder".to_string(), |d| d.display().to_string());
+    Some(format!("Started {} without a mod loader. gachamod found no loader exe in {dir}, so start yours first if mods don't show", g.name))
 }
 
 /// The first of the game's exe names that exists in its folder.
@@ -351,13 +364,16 @@ pub fn game_exe(g: &GameDef, dir: &Path) -> Option<PathBuf> {
     g.exe_names.iter().map(|n| dir.join(n)).find(|p| p.is_file())
 }
 
-/// "3DMigoto Loader.exe" or another "*loader*.exe" in a community loader's folder.
+/// "3DMigoto Loader.exe", or another "*loader*.exe", or a "*launcher*.exe" (Identity V's "Doll Game Mod Launcher") in
+/// a community loader's folder.
 fn find_loader(importer: &Path) -> Option<PathBuf> {
     let exact = importer.join("3DMigoto Loader.exe");
     if exact.is_file() { return Some(exact); }
-    std::fs::read_dir(importer).ok()?.flatten().map(|e| e.path()).find(|p| {
-        p.is_file() && p.file_name().is_some_and(|n| { let n = n.to_string_lossy().to_lowercase(); n.ends_with(".exe") && n.contains("loader") })
-    })
+    let exes: Vec<(PathBuf, String)> = std::fs::read_dir(importer).ok()?.flatten().map(|e| e.path())
+        .filter(|p| p.is_file())
+        .filter_map(|p| { let n = p.file_name()?.to_string_lossy().to_lowercase(); n.ends_with(".exe").then_some((p, n)) })
+        .collect();
+    ["loader", "launcher"].iter().find_map(|word| exes.iter().find(|(_, n)| n.contains(word)).map(|(p, _)| p.clone()))
 }
 
 fn run_hook(h: &Hook, dir: &Path) -> Result<()> {

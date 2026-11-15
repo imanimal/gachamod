@@ -102,8 +102,7 @@ pub fn run() {
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
             if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
-            // INGAME: live.ini says who holds the menu key for this run (its pictures may be drawn again: off the
-            // main thread)
+            // INGAME: live groups an older version made come out (that rewrites mod inis: off the main thread)
             let live_db = app.state::<state::AppState>().db.clone();
             std::thread::spawn(move || { if let Ok(d) = live_db.lock() { gacha_core::live::on_start(&d); } });
             // SYSTEM: game start/stop events and automatic F10 reloads; links and .gachamod files nobody else holds
@@ -111,7 +110,7 @@ pub fn run() {
             let notes = app.handle().clone();
             gacha_core::devtools::watch(app.state::<state::AppState>().db.clone(), move |g, r| {
                 let _ = handle.emit(events::GAME_STATE, serde_json::json!({ "game": g, "running": r }));
-                // INGAME: a game that runs as administrator decides who holds the menu key
+                // INGAME: a game that runs as administrator keeps the menu key from gachamod
                 if r { if let Ok(d) = handle.state::<state::AppState>().db.lock() { gacha_core::live::note_elevation(&d, g); } }
                 hotkeys::on_game_state(&handle, r);
                 overlay::on_game_state(&handle);
@@ -191,6 +190,8 @@ pub fn run() {
             commands::modtools::mod_inspect,
             commands::modtools::mod_set_var,
             commands::modtools::conflicts_scan,
+            commands::modtools::conflict_ignore,
+            commands::modtools::conflict_drop,
             commands::modtools::lint_scan,
             commands::modtools::lint_fix,
             commands::account::gb_account,
@@ -209,12 +210,9 @@ pub fn run() {
             commands::modtools::fixers_run_all,
             commands::modtools::fixers_stop_waiting,
             commands::modtools::mod_mesh,
-            commands::ingame::live_info,
-            commands::ingame::live_add,
-            commands::ingame::live_remove,
-            commands::ingame::live_pick,
-            commands::ingame::live_menu_set,
-            commands::ingame::live_set_all,
+            commands::ingame::menu_info,
+            commands::ingame::menu_set,
+            commands::ingame::menu_key_users,
             commands::ingame::app_restart_admin,
             // ── SYSTEM: logs, crash reports, usage counts, feedback, administrator ──
             commands::report::report_state,
@@ -226,7 +224,6 @@ pub fn run() {
             commands::report::admin_state,
             commands::report::admin_set_always,
             commands::report::game_check_setup,
-            commands::report::game_check_saved,
             commands::report::game_check_menu,
             commands::report::game_check_send,
             overlay::overlay_game,
