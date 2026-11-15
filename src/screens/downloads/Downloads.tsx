@@ -14,6 +14,7 @@ import { EnableNewSwitch } from "../settings/Sections";
 import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/setup";
 import "./downloads.css";
 import { LazyImg } from "../../ui/LazyImg";
+import { notesText } from "../../lib/notes";
 
 const ALL_KEY = "gm.downloads.all";
 const readAll = () => { try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; } };
@@ -99,7 +100,7 @@ export function Downloads() {
       const paths = await dialogs.pickFiles({ title: "Pick mod archives", extensions: ["zip", "7z", "rar"], multiple: true });
       if (!paths) { if (!("__TAURI_INTERNALS__" in window)) toast("Picking files works in the app. Drop archives on the window there"); return; }
       const o = await installs.local(game.id, paths);
-      toast(o.notes[0] ?? `Installing ${plural(paths.length, "mod")}`);
+      toast(o.notes.length ? notesText(o.notes) : `Installing ${plural(paths.length, "mod")}`);
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };
@@ -149,7 +150,7 @@ export function Downloads() {
               </>
             : <Button size="sm" icon="refresh" onClick={() => act(() => queue.retry(i.id))}>Retry</Button>)}
           {!finished(i) && i.state !== "installing" && <IconButton icon="x" label="Cancel" onClick={() => act(() => queue.cancel(i.id))} />}
-          {finished(i) && <IconButton icon="trash" label="Remove from the list" onClick={() => act(() => queue.remove(i.id))} />}
+          {finished(i) && <IconButton icon="x" label="Clear from list" title="Clear from list. The mod stays installed" onClick={() => act(() => queue.remove(i.id))} />}
         </div>
       </li>
     );
@@ -181,6 +182,7 @@ export function Downloads() {
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title="Install .zip, .7z or .rar files from this PC (or drop them on the window)">Install from files</Button>
           <Button variant="ghost" icon="trash" disabled={!done.length} title={all ? "Clear every finished download" : `Clear ${game?.short ?? "this game"}'s finished downloads`}
             onClick={clearFinished}>Clear finished</Button>
+          <IconButton icon="settings" label="Download settings (Settings, Automatic)" onClick={() => go({ view: "settings", section: "set-archives" })} />
         </>} />
       {mine.length === 0 ? (
         <Empty icon="downloads" title={elsewhere ? `Nothing downloading for ${game?.short ?? "this game"}` : "Nothing downloading"}

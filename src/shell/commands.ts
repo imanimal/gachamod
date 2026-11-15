@@ -24,11 +24,13 @@ export async function rescan(game: GameState) {
     const l = await library.scan(game.id);
     emitApp({ type: "library-refresh", game: game.id });
     toast(`Found ${l.length === 1 ? "1 mod" : `${l.length} mods`} in ${game.name}`);
-  } catch (e) { toast(errorText(e), true); }
+  } catch (e) { toast(errorText(e), true); return; }
+  // a rescan asked for by hand also looks for updates
+  await checkModUpdates(game, true);
 }
 
-export async function checkModUpdates(game: GameState) {
-  toast(`Checking ${game.name}'s mods for updates`);
+export async function checkModUpdates(game: GameState, quiet = false) {
+  if (!quiet) toast(`Checking ${game.name}'s mods for updates`);
   try {
     const ids = await checkUpdates(await library.list(game.id));
     await library.markUpdates(game.id, ids);
@@ -90,7 +92,7 @@ registerMenu("game", ({ id }) => {
     { label: "Play without mods", icon: "play", title: "Starts the game with no mods, the way the developers intended. Brave", disabled: g.running || !g.gameDir, onClick: () => void play(g, true) },
     "-",
     { label: "Open Mods folder", icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
-    { label: "Rescan mods", icon: "refresh", disabled: !g.modsDir, onClick: () => void rescan(g) },
+    { label: "Rescan mods", icon: "refresh", title: "Reads the Mods folder again, then checks every mod for updates on GameBanana", disabled: !g.modsDir, onClick: () => void rescan(g) },
     { label: "Game settings", icon: "settings", onClick: () => { setGame(id); go({ view: "settings", section: "games" }); } },
     { label: "Reload the icon", icon: "image", title: "After setting the game folder, the icon comes from the game itself", onClick: () => refreshGameIcon(id) },
     "-",
@@ -104,26 +106,26 @@ registerMenu("game", ({ id }) => {
 
 // ── palette commands ──
 
-const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords: string; icon: Command["icon"]; hint?: string }> = [
+const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords: string; icon: Command["icon"]; hint?: string; where?: string }> = [
   { route: { view: "home" }, title: () => "Home", keywords: "start main dashboard overview front", icon: "home", hint: "Ctrl+1" },
-  { route: { view: "library" }, title: () => "Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+3" },
+  { route: { view: "library" }, title: () => "My Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+3" },
   { route: { view: "characters" }, title: (g) => charNoun(g), keywords: "characters agents resonators roster heroes cast skins", icon: "characters", hint: "Ctrl+4" },
   { route: { view: "browse" }, title: () => "Browse GameBanana", keywords: "browse gamebanana online find new mods download discover store shop", icon: "browse", hint: "Ctrl+2" },
   { route: { view: "downloads" }, title: () => "Downloads", keywords: "queue downloading progress installs transfers", icon: "downloads", hint: "Ctrl+5" },
   { route: { view: "profiles" }, title: () => "Profiles", keywords: "presets loadouts sets outfits teams switch save", icon: "profiles", hint: "Ctrl+6" },
   { route: { view: "tools" }, title: () => "Tools", keywords: "utilities fixes launch options shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
   { route: { view: "settings" }, title: () => "Settings", keywords: "options preferences config configuration setup", icon: "settings", hint: "Ctrl+8" },
-  { route: { view: "library", tab: "archive" }, title: () => "Trash", keywords: "removed deleted trash bin recycle restore redownload archive history", icon: "trash", hint: "In Mods" },
-  { route: { view: "settings", section: "games" }, title: () => "Game folders", keywords: "paths folders setup add game xxmi location directory", icon: "folder", hint: "In Settings" },
-  { route: { view: "settings", section: "appearance" }, title: () => "Appearance", keywords: "theme dark light mode colours colors accent look skin", icon: "palette", hint: "In Settings" },
-  { route: { view: "tools", section: "launch" }, title: () => "Launch options", keywords: "start arguments args priority window mode exe xxmi", icon: "sliders", hint: "In Tools" },
+  { route: { view: "library", tab: "archive" }, title: () => "Trash", keywords: "removed deleted trash bin recycle restore redownload archive history", icon: "trash", where: "Mods › Trash" },
+  { route: { view: "settings", section: "games" }, title: () => "Game folders", keywords: "paths folders setup add game xxmi location directory", icon: "folder", where: "Settings › Games" },
+  { route: { view: "settings", section: "appearance" }, title: () => "Appearance", keywords: "theme dark light mode colours colors accent look skin", icon: "palette", where: "Settings › Appearance" },
+  { route: { view: "tools", section: "launch" }, title: () => "Launch options", keywords: "start arguments args priority window mode exe xxmi", icon: "sliders", where: "Tools › Launch" },
 ];
 
 registerCommands("shell.pages", () => {
   const gid = currentGame()?.id ?? null;
   return PAGES.map((p, i) => ({
     id: `page:${p.route.view}${p.route.section ? `:${p.route.section}` : ""}${p.route.tab ? `:${p.route.tab}` : ""}`,
-    title: p.title(gid), section: "Pages", icon: p.icon, keywords: p.keywords, hint: p.hint, priority: 8 - i / 2, run: () => go(p.route),
+    title: p.title(gid), section: "Pages", icon: p.icon, keywords: p.keywords, hint: p.hint, where: p.where, priority: 8 - i / 2, run: () => go(p.route),
   }));
 });
 
@@ -154,7 +156,7 @@ registerCommands("shell.actions", () => {
       { id: "act:play", title: `Play ${g.name}`, section: "Actions", icon: "play", keywords: "start launch run game", hint: "Ctrl+Enter", priority: 6, run: () => void play(g) },
       { id: "act:vanilla", title: "Play without mods", section: "Actions", icon: "play", keywords: "vanilla clean start launch no mods", run: () => void play(g, true) },
       { id: "act:shuffle", title: "Shuffle outfits", section: "Actions", icon: "dice", keywords: "random randomize randomise outfits skins surprise mix", run: () => void shuffleOutfits(g.id).catch((e) => toast(String(e), true)) },
-      { id: "act:rescan", title: "Rescan mods", section: "Actions", icon: "refresh", keywords: "refresh reload scan look again find new", run: () => void rescan(g) },
+      { id: "act:rescan", title: "Rescan mods", section: "Actions", icon: "refresh", keywords: "refresh reload scan look again find new check updates force", run: () => void rescan(g) },
       { id: "act:updates", title: "Check mods for updates", section: "Actions", icon: "update", keywords: "update outdated new version gamebanana", run: () => void checkModUpdates(g) },
       { id: "act:folder", title: "Open the Mods folder", section: "Actions", icon: "folder", keywords: "explorer files directory location show in folder", run: () => openModsFolder(g) },
     );

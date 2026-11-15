@@ -189,7 +189,7 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
       <div className="home-quick-bar">
         <ProfileRow game={game} />
         <div className="home-quick-acts" role="toolbar" aria-label="Quick actions">
-          <IconButton icon="refresh" label="Rescan" title="Look through the Mods folder again" disabled={!game.modsDir || busy === "scan"} onClick={() => void job("scan", () => rescan(game))()} />
+          <IconButton icon="refresh" label="Rescan" title="Reads the Mods folder again, then checks every mod for updates on GameBanana" disabled={!game.modsDir || busy === "scan"} onClick={() => void job("scan", () => rescan(game))()} />
           <IconButton icon="update" label="Check for updates" title="Check your mods for updates on GameBanana" disabled={busy === "upd"} onClick={() => void job("upd", () => checkModUpdates(game))()} />
           <IconButton icon="folder" label="Open the Mods folder" title={game.modsDir ? `Open the Mods folder (${game.modsDir})` : "No Mods folder yet"} disabled={!game.modsDir} onClick={() => openModsFolder(game)} />
           <IconButton icon="import" label="Import .gachamod" title="Add mods from a .gachamod file" onClick={() => void job("imp", importPack)()} />

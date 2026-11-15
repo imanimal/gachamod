@@ -44,8 +44,12 @@ function start() {
     if (s.user && !was) toast(`Signed in to GameBanana as ${s.user.name}`);
     else if (!s.user && was) toast("You're signed out of GameBanana", false, { label: "Sign in", run: () => void signIn() });
   }).catch(() => {});
-  // the sign-in window was closed before signing in
-  void listen<null>("gb-login-closed", () => { if (state.signing) setAccountState({ ...state, signing: false }); }).catch(() => {});
+  // the sign-in window closed without a sign-in: say so, and why when there was an error
+  void listen<string | null>("gb-login-closed", (why) => {
+    if (!state.signing) return;
+    setAccountState({ ...state, signing: false });
+    toast(why ? `Couldn't finish signing in to GameBanana. ${why}` : "You're not signed in to GameBanana", !!why, { label: why ? "Try again" : "Sign in", run: () => void signIn() });
+  }).catch(() => {});
 }
 export const useAccount = () => useSyncExternalStore((f) => { start(); subs.add(f); return () => { subs.delete(f); }; }, () => state);
 

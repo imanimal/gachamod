@@ -206,6 +206,8 @@ pub fn run() {
             commands::modtools::fixers_download,
             commands::modtools::fixers_github,
             commands::modtools::fixers_run,
+            commands::modtools::fixers_run_all,
+            commands::modtools::fixers_stop_waiting,
             commands::modtools::mod_mesh,
             commands::ingame::live_info,
             commands::ingame::live_add,

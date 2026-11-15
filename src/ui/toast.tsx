@@ -9,6 +9,8 @@ let next = 1;
 const subs = new Set<(t: Toast) => void>();
 const updates = new Set<(id: number, patch: Partial<Toast>) => void>();
 const live = new Set<number>();
+/** The text of each toast on screen, so the same message twice refreshes the one showing instead of stacking. */
+const texts = new Map<number, string>();
 
 const helpers: Array<{ test: (text: string) => boolean; action: ToastAction }> = [];
 /** Give every toast whose text passes `test`, and has no button of its own, this button. The F10 note from the
@@ -18,14 +20,20 @@ export function toastHelper(test: (text: string) => boolean, action: ToastAction
 /** Show a short message. With an action, it stays longer and offers one button. Returns its id. */
 export function toast(text: string, bad = false, action?: ToastAction): number {
   action ??= helpers.find((h) => h.test(text))?.action;
+  // the same message while it still shows (a retry, a key held down): restart that one
+  for (const [id, t] of texts) {
+    if (t === text && live.has(id) && retoast(id, text, action, bad)) return id;
+  }
   const t: Toast = { id: next++, text, bad, action, ms: action ? 9000 : bad ? 7000 : 4600 };
+  texts.set(t.id, text);
   subs.forEach((s) => s(t));
   return t.id;
 }
 /** Change a toast in place (an Undo that became a Redo) and restart its timer. False when it has gone. */
 export function retoast(id: number, text: string, action?: ToastAction, bad = false): boolean {
   if (!live.has(id)) return false;
-  updates.forEach((u) => u(id, { text, action, bad, ms: action ? 9000 : 4600 }));
+  texts.set(id, text);
+  updates.forEach((u) => u(id, { text, action, bad, ms: action ? 9000 : bad ? 7000 : 4600 }));
   return true;
 }
 
@@ -40,13 +48,14 @@ export function Toasts() {
     };
     const leave = (id: number) => {
       live.delete(id);
+      texts.delete(id);
       setList((l) => l.map((x) => x.id === id ? { ...x, leaving: true } : x));
       window.setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 220);
       timers.current.delete(id);
     };
     const add = (t: Toast) => {
       live.add(t.id);
-      setList((l) => { const keep = [...l.filter((x) => !x.leaving).slice(-3), t]; for (const x of l) if (!keep.includes(x)) live.delete(x.id); return keep; });
+      setList((l) => { const keep = [...l.filter((x) => !x.leaving).slice(-3), t]; for (const x of l) if (!keep.includes(x)) { live.delete(x.id); texts.delete(x.id); } return keep; });
       arm(t);
     };
     const patch = (id: number, p: Partial<Toast>) => setList((l) => l.map((x) => { if (x.id !== id) return x; const n = { ...x, ...p, leaving: false }; arm(n); return n; }));
@@ -72,7 +81,7 @@ export function Toasts() {
           <Icon name={t.bad ? "warn" : t.action?.label === "Redo" ? "redo" : "check"} />
           <span className="tt" key={t.text} title={t.text.length > 110 ? t.text : undefined}>{t.text}</span>
           {t.action && <button type="button" className="toast-act" onClick={() => void t.action!.run()}>{t.action.label}</button>}
-          <button type="button" className="toast-x" aria-label="Dismiss" title="Dismiss" onClick={() => { live.delete(t.id); setList((l) => l.filter((x) => x.id !== t.id)); }}><Icon name="x" size={12} /></button>
+          <button type="button" className="toast-x" aria-label="Dismiss" title="Dismiss" onClick={() => { live.delete(t.id); texts.delete(t.id); setList((l) => l.filter((x) => x.id !== t.id)); }}><Icon name="x" size={12} /></button>
           <i key={`${t.text}-${t.ms}`} className="t-life" style={{ animationDuration: `${t.ms}ms` }} aria-hidden="true" />
         </div>
       ))}

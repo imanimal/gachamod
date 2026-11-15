@@ -19,6 +19,7 @@ import { withCreator, openCreator } from "./actions";
 import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
 import { LazyImg } from "../../ui/LazyImg";
+import { notesText } from "../../lib/notes";
 
 registerBrowseMenus();
 
@@ -73,7 +74,7 @@ export function OnlineOverlays() {
       const game = currentGame();
       if (!game) { toast("Set up a game first, then add mods", true); return; }
       installs.local(game.id, e.paths)
-        .then((o) => toast(o.notes[0] ?? `Installing ${plural(e.paths.length, "mod")}`, false, { label: "Show", run: () => go("downloads") }))
+        .then((o) => toast(o.notes.length ? notesText(o.notes) : `Installing ${plural(e.paths.length, "mod")}`, false, { label: "Show", run: () => go("downloads") }))
         .catch((err) => toast(errorText(err), true));
     } else if (e.type === "open-gb-link") {
       void openLink(e.url, gamesRef.current);

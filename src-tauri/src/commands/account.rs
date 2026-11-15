@@ -42,7 +42,34 @@ fn check<T>(app: &AppHandle, st: &AppState, r: Result<T>) -> Result<T> {
 #[tauri::command]
 pub async fn gb_account(st: State<'_, AppState>) -> Result<AccountState> { Ok(state_of(&st)) }
 
+/// Read the login window's cookies and ask GameBanana who they belong to. Ok(true) once signed in (the cookie is
+/// stored and the UI told), Ok(false) when nobody is signed in there yet. Never logs the cookie.
+fn finish_sign_in(w: &tauri::WebviewWindow, data_dir: &std::path::Path, db: &gacha_core::db::Shared, http: &reqwest::Client, done: &AtomicBool, app: &AppHandle) -> std::result::Result<bool, String> {
+    if done.load(Ordering::SeqCst) { return Ok(true); }
+    let url = "https://gamebanana.com/".parse().map_err(|_| "bad address".to_string())?;
+    let jar = w.cookies_for_url(url).map_err(|e| format!("couldn't read the window's cookies: {e}"))?;
+    let header = acc::cookie_header(jar.iter().map(|c| (c.name(), c.value())));
+    if header.is_empty() { return Ok(false); }
+    let user = match tauri::async_runtime::block_on(acc::whoami(http, &header)) {
+        Ok(Some(u)) => u,
+        Ok(None) => return Ok(false),
+        Err(e) => return Err(format!("GameBanana didn't answer: {e}")),
+    };
+    if done.swap(true, Ordering::SeqCst) { return Ok(true); }
+    if let Err(e) = acc::save_cookie(data_dir, &header) { done.store(false, Ordering::SeqCst); return Err(e.to_string()); }
+    let available = if let Ok(d) = db.lock() {
+        let _ = d.set_setting_json(USER_KEY, &user);
+        d.setting(ON_KEY).ok().flatten().as_deref() != Some("0")
+    } else { true };
+    gacha_core::logs::info(format!("Signed in to GameBanana as member {}", user.id));
+    let _ = app.emit("gb-account", AccountState { available, user: Some(user) });
+    let _ = w.close();
+    Ok(true)
+}
+
 /// Open GameBanana's login page. Resolves when the window is open; the result arrives as the "gb-account" event.
+/// Every page the window finishes loading (after the login page) is checked, and closing the window checks once
+/// more, so a sign-in that landed on any page still counts.
 #[tauri::command]
 pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
     if let Some(w) = app.get_webview_window(LABEL) {
@@ -72,36 +99,41 @@ pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
     } else {
         builder = builder.center();
     }
-    let closed = done.clone();
+    let (data2, db2, http2, done2, app2) = (data_dir.clone(), db.clone(), http.clone(), done.clone(), app.clone());
     let window = builder
         .on_page_load(move |w, p| {
-            if p.event() != PageLoadEvent::Finished || p.url().host_str() != Some("gamebanana.com") { return; }
-            // still on the login or code pages: nothing to read yet
-            if p.url().path().starts_with("/members/account") || done.load(Ordering::SeqCst) { return; }
+            let host = p.url().host_str().unwrap_or_default().to_ascii_lowercase();
+            if p.event() != PageLoadEvent::Finished || !(host == "gamebanana.com" || host.ends_with(".gamebanana.com")) { return; }
+            // the login page is checked too: a member already signed in there is done at once
+            if done.load(Ordering::SeqCst) { return; }
             let (w, data_dir, db, http, done, app) = (w.clone(), data_dir.clone(), db.clone(), http.clone(), done.clone(), handle.clone());
             // cookies are read off this callback's thread: WebView2's cookie calls deadlock inside it
             std::thread::spawn(move || {
-                let Ok(url) = "https://gamebanana.com/".parse() else { return };
-                let Ok(jar) = w.cookies_for_url(url) else { return };
-                let header = acc::cookie_header(jar.iter().map(|c| (c.name(), c.value())));
-                if header.is_empty() { return; }
-                let Ok(Some(user)) = tauri::async_runtime::block_on(acc::whoami(&http, &header)) else { return };
-                if done.swap(true, Ordering::SeqCst) { return; }
-                if acc::save_cookie(&data_dir, &header).is_err() { done.store(false, Ordering::SeqCst); return; }
-                let available = if let Ok(d) = db.lock() {
-                    let _ = d.set_setting_json(USER_KEY, &user);
-                    d.setting(ON_KEY).ok().flatten().as_deref() != Some("0")
-                } else { true };
-                let _ = app.emit("gb-account", AccountState { available, user: Some(user) });
-                let _ = w.close();
+                if let Err(e) = finish_sign_in(&w, &data_dir, &db, &http, &done, &app) { gacha_core::logs::warn(format!("GameBanana sign-in: {e}")); }
             });
         })
         .build()
         .map_err(|e| Error::Invalid(format!("Couldn't open the sign-in window: {e}")))?;
-    // closed by hand before signing in: the account card stops waiting
-    let app2 = app.clone();
-    window.on_window_event(move |e| {
-        if matches!(e, tauri::WindowEvent::Destroyed) && !closed.load(Ordering::SeqCst) { let _ = app2.emit("gb-login-closed", ()); }
+    // closing the window checks once more (the user may have signed in and closed it from GameBanana's home page)
+    let closing = Arc::new(AtomicBool::new(false));
+    let w2 = window.clone();
+    window.on_window_event(move |e| match e {
+        tauri::WindowEvent::CloseRequested { api, .. } if !done2.load(Ordering::SeqCst) && !closing.swap(true, Ordering::SeqCst) => {
+            api.prevent_close();
+            let (w, data_dir, db, http, done, app) = (w2.clone(), data2.clone(), db2.clone(), http2.clone(), done2.clone(), app2.clone());
+            std::thread::spawn(move || {
+                let r = finish_sign_in(&w, &data_dir, &db, &http, &done, &app);
+                if !matches!(r, Ok(true)) {
+                    let why = match r {
+                        Err(e) => { gacha_core::logs::warn(format!("GameBanana sign-in: {e}")); Some(e) }
+                        _ => None,
+                    };
+                    let _ = app.emit("gb-login-closed", why);
+                    let _ = w.destroy();
+                }
+            });
+        }
+        _ => {}
     });
     Ok(())
 }

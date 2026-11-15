@@ -238,8 +238,8 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
           <Button size="sm" variant="ghost" icon="tag" onClick={() => askLib({ kind: "tags", game, mods: picked })} title="Add or remove tags on these mods">Tags</Button>
           <IconButton size="sm" icon="star" on={allFav} label={allFav ? "Remove from favourites" : "Add to favourites"} onClick={() => void setFavourite(game, picked, !allFav)} />
           {broken.length > 0 && (
-            <Button size="sm" variant="ghost" icon="wand" title="A game update broke these and a fix is known" onClick={() => void fixForUpdate(game, broken)}>
-              Fix {broken.length === picked.length ? "" : `${broken.length} `}for the update
+            <Button size="sm" variant="ghost" icon="wand" title="A game update broke these. Swaps their outdated hashes, or runs the fixer they need. A backup is kept and Undo puts them back" onClick={() => void fixForUpdate(game, broken)}>
+              Attempt fix{broken.length === picked.length ? "" : ` on ${broken.length}`}
             </Button>
           )}
           {onScreen && picked.some((m) => m.hasKeys) && (

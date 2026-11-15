@@ -2,6 +2,7 @@
 // (gacha-core xxmi_setup.rs), and while a game is still missing its Mods folder the app looks again by itself, when the
 // window comes back to the front and every 30 seconds. Every place that offers setup uses this: the first start,
 // Settings, Games, and a download that had nowhere to go. Owner: SYSTEM area.
+import { oxford } from "./notes";
 import { useSyncExternalStore } from "react";
 import { dialogs, errorText, games as gamesApi, xxmi, type GameId, type GameState, type SetupProgress } from "./api";
 import { allGames, refreshGames, setGames } from "./store";
@@ -31,10 +32,7 @@ function wire() {
 /** XXMI Launcher can give this game a mod loader: the game is on this PC and has no Mods folder yet. */
 export const canInstallLoader = (g: GameState) => g.xxmi && !g.modsDir && (g.installed || !!g.gameDir);
 
-const names = (list: GameState[]) => {
-  const n = list.map((g) => g.short);
-  return n.length <= 1 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
-};
+const names = (list: GameState[]) => oxford(list.map((g) => g.short), 12);
 
 /** Install XXMI Launcher and the mod loaders of `ids` (every XXMI game found on this PC when left out). Resolves with
  *  the games after, or null when it failed (the error is toasted with Try again). */

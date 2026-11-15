@@ -15,8 +15,10 @@ export interface Command {
   img?: string | null;
   /** Other words people might type for it. */
   keywords?: string;
-  /** Shown on the right: a shortcut or where it is ("Ctrl+Z", "In Settings"). */
+  /** Shown on the right: a shortcut or a state ("Ctrl+Z", "On"). */
   hint?: string;
+  /** Where it lives, shown under the title: "Settings › Mods › Storage". Matched by the search too. */
+  where?: string;
   /** Higher shows first among equal matches. */
   priority?: number;
   run: () => void;
@@ -75,20 +77,21 @@ function wordScore(q: string, targets: string[], joined: string): number {
     else if (q.length >= 4 && editWithin(q, t.slice(0, q.length + 1), q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
     else if (q.length >= 4 && editWithin(q, t, q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
   }
-  if (!best && q.length >= 3 && subsequence(q, joined.replace(/ /g, ""))) best = 1.5;
+  // skipped letters ("rscn" finds Rescan) only inside one title word: across several words nearly anything matches
+  if (!best && q.length >= 3 && joined && targets.some((t) => t.length <= q.length * 2 + 2 && subsequence(q, t))) best = 1.5;
   return best;
 }
 
 /** A match score for a command (0 = no match). */
-export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords" | "priority">): number {
+export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords" | "priority" | "where">): number {
   const qs = words(query);
   if (!qs.length) return 1 + (c.priority ?? 0) / 10;
-  const title = words(c.title), kw = words(c.keywords ?? "");
+  const title = words(c.title), kw = words(`${c.keywords ?? ""} ${c.where ?? ""}`);
   const joinedTitle = title.join(" ");
   let total = 0;
   for (const q of qs) {
     const inTitle = wordScore(q, title, joinedTitle);
-    const inKw = wordScore(q, kw, kw.join(" ")) * 0.8;
+    const inKw = wordScore(q, kw, "") * 0.8;
     const s = Math.max(inTitle, inKw);
     if (!s) return 0;
     total += s;

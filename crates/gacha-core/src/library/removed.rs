@@ -1,6 +1,6 @@
 //! Removed mods: the trash and the archive. Owner: BACKEND area (docs/spec.md, "Trash and archive").
 //!
-//! A removed mod's folder sits in `<data>/trash/<game>/<trash id>/` for "trash.days" days (setting, default 14; 0
+//! A removed mod's folder sits in `<data>/trash/<game>/<trash id>/` for "trash.days" days (setting, default 0; 0
 //! deletes the files right away). After that the files go, but its details move to the `archive` table: name,
 //! character, GameBanana link, tags, favourite, a small copy of its preview under `<data>/archive/<id>/`. Its kept
 //! option values (`mod_vars`) and profile places (`profile_mods`, `profile_vars`) stay, keyed by its mod id. When the
@@ -59,9 +59,9 @@ const ARCHIVE_PREVIEW_MAX: u64 = 3 * 1024 * 1024;
 /// A copy an update replaced stays at least this long, even with "trash.days" at 0, so the update can finish.
 const REPLACED_MIN_SECS: i64 = 600;
 
-/// How many days removed mods keep their files ("trash.days", default 14, 0 to 3650).
+/// How many days removed mods keep their files ("trash.days", default 0 so the files go at once, 0 to 3650).
 pub fn trash_days(db: &Db) -> i64 {
-    db.setting("trash.days").ok().flatten().and_then(|v| v.trim().parse::<i64>().ok()).map(|d| d.clamp(0, 3650)).unwrap_or(14)
+    db.setting("trash.days").ok().flatten().and_then(|v| v.trim().parse::<i64>().ok()).map(|d| d.clamp(0, 3650)).unwrap_or(0)
 }
 
 struct TrashRow { id: i64, game: String, mod_id: String, name: String, kept: PathBuf, reason: String, removed_at: i64, size: u64, entry: ModEntry }

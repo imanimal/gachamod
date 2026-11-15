@@ -121,6 +121,7 @@ const EXACT: Record<string, Desc> = {
   extensions_install: ["Installing an extension", HOLD.github],
   fixers_download: ["Downloading a fix tool", HOLD.github],
   fixers_github: ["Downloading a fix tool from GitHub", HOLD.github],
+  fixers_run_all: ["Watching what the fixer changes", "The fixer opened in its own window. Run it there. gachamod carries on a few seconds after it stops changing files, or when you choose Stop waiting. The window can stay open."],
   fixers_run: ["Running the fixer on the mod", "A fixer with its own window waits until you close it. One that waits for a key press is stopped after 2 minutes."],
   xxmi_uninstall: ["Uninstalling the mod loaders", "This moves files to the Recycle Bin. A game or XXMI Launcher that has the files open can hold it."],
   app_reset: ["Getting ready to start over", HOLD.disk],

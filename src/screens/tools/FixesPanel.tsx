@@ -2,7 +2,7 @@
 // from, and new fixers posted on GameBanana. Owner: FIXES area.
 import { useEffect, useRef, useState } from "react";
 import { fixes, type FixInfo, type GameId, type ModHealthRow } from "../../lib/api";
-import { downloadNewestFixer, fixMods, reloadHealth, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
+import { downloadNewestFixer, fixLabel, fixMods, fixWarningsPref, fixerName, reloadHealth, stopWaiting, triedNote, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
 import { gameTools, gbToolId, type GbTool } from "../../lib/gamebanana";
 import { openGbTool } from "../browse/state";
 import { jsonPref } from "../../lib/prefs";
@@ -20,6 +20,8 @@ export function FixesPanel({ game }: { game: GameId }) {
   const rows = useHealthRows(game);
   const [info, setInfo] = useState<FixInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const waiting = useFixerBusy().has("waiting");
+  const warn = fixWarningsPref.use();
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   useEffect(() => { let on = true; fixes.info(game).then((i) => { if (on) setInfo(i); }).catch(() => {}); return () => { on = false; }; }, [game]);
@@ -31,26 +33,38 @@ export function FixesPanel({ game }: { game: GameId }) {
   const broken = (rows ?? []).filter((r) => r.status === "broken");
   const stuck = (rows ?? []).filter((r) => r.status === "unfixable");
   const fixed = (rows ?? []).filter((r) => r.status === "fixed");
-  // everything gachamod can fix: hash swaps here, and mods whose fixer it can get and run
-  const fixable = [...broken, ...stuck.filter((r) => r.tool)];
+  // everything worth a first try: hash swaps here, and mods whose fixer it can get and run. A mod a fixer already
+  // failed on, or one whose model changed, is tried from its own row
+  const fixable = [...broken, ...stuck.filter((r) => r.tool && !r.tried && !r.needsAuthor)];
   const listed = [...broken, ...stuck].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
   const noData = info && !info.pairs && !info.sources.length;
 
   return (
-    <Panel id="fixes" title="Fixes" icon="wand" className="tp tp-fixes" count={rows ? listed.length : undefined}
+    <Panel id="fixes" title="Fixes" icon="wand" className="tp tp-fixes" count={rows && warn ? listed.length : undefined}
       actions={<>
-        {fixable.length > 0 && (
-          <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}
-            title={`Fix ${plural(fixable.length, "mod")}: outdated hashes are swapped, and a mod that needs more gets its fixer run on it. Each gets a backup, and Undo puts it back`}
-            onClick={() => void run("all", () => fixMods(game, fixable.map((r) => r.modId)))}>{fixable.length === 1 ? "Fix 1 mod" : `Fix ${fixable.length} mods`}</Button>
+        <Button size="sm" variant="ghost" icon={warn ? "bell" : "bell-off"}
+          title={warn ? "Stop warning about mods a game update broke, here, on mod cards and in a mod's details. Nothing changes in the mods"
+            : "Warn again about mods a game update broke"}
+          onClick={() => void fixWarningsPref.set(!warn, warn ? "Muted the broken mod warnings" : "Showing the broken mod warnings again")}>{warn ? "Mute" : "Unmute"}</Button>
+        {waiting && (
+          <Button size="sm" variant="ghost" onClick={stopWaiting}
+            title="The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far">Stop waiting</Button>
         )}
-        <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title="Check every mod again"
-          onClick={() => void run("check", () => reloadHealth(game))}>Check again</Button>
+        {warn && fixable.length > 0 && (
+          <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}
+            title={`Outdated hashes are swapped, and a mod that needs more gets its fixer run on it. A fix isn't certain: a mod the fixer can't repair says so afterwards. Each gets a backup, and Undo puts it back`}
+            onClick={() => void run("all", () => fixMods(game, fixable.map((r) => r.modId)))}>Attempt fix on {plural(fixable.length, "mod")}</Button>
+        )}
+        {warn && <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title="Check every mod again"
+          onClick={() => void run("check", () => reloadHealth(game))}>Check again</Button>}
       </>}>
+      {!warn ? (
+        <p className="tp-none muted">Warnings about mods a game update broke are muted. Unmute to see them and fix them.</p>
+      ) : (<>
       <p className="hint tp-intro">
         {noData
           ? "gachamod has no fix data for this game yet. The fixers below may still help."
-          : `A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A mod that needs more gets its fixer downloaded and run on it. A backup is kept, and Undo puts the files back.`}
+          : `A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A mod that needs more gets its fixer downloaded and run on it. Some mods can't be repaired this way (the game changed the model itself) and need an update from their author. A backup is kept, and Undo puts the files back.`}
       </p>
       {!rows ? (
         <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>
@@ -73,6 +87,7 @@ export function FixesPanel({ game }: { game: GameId }) {
           </ul>
         </details>
       )}
+      </>)}
       <NewFixers game={game} />
       {info && info.sources.length > 0 && (
         <details className="tp-ignored fx-sources">
@@ -99,6 +114,9 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
   const can = r.status === "broken" || !!r.tool;
   const fix = () => void run(r.modId, () => fixMods(game, [r.modId]));
   const from = r.tool && (gbToolId(r.tool.url) !== null ? "GameBanana" : "GitHub");
+  const note = triedNote(r);
+  const [all, setAll] = useState(false);
+  const again = r.tried ? "It gets the fixer's newest version first. " : "";
   return (
     <li className="tp-problem">
       <div className="tp-problem-h row">
@@ -107,23 +125,32 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
         {can && (
           <Button size="sm" icon="wand" busy={busy === r.modId || fixerBusy.has(`mod:${r.modId}`)} disabled={!!busy}
             title={r.status === "broken"
-              ? `Swap ${plural(r.swaps, "outdated hash", "outdated hashes")}. A backup is kept and Undo puts it back`
-              : `It needs more than a hash swap. Gets ${r.tool!.name} from ${from} and runs it on this mod. A backup is kept and Undo puts it back`}
-            onClick={fix}>Fix</Button>
+              ? `Swaps ${plural(r.swaps, "outdated hash", "outdated hashes")}. A backup is kept and Undo puts it back`
+              : `Gets ${r.tool!.name} from ${from} and runs it on this mod. ${again}${r.needsAuthor ? "It may not help: the game changed the model, which a fixer can't redo. " : ""}A backup is kept and Undo puts it back`}
+            onClick={fix}>{fixLabel(r)}</Button>
         )}
       </div>
       <ul className="tp-problem-items">
-        {r.reasons.slice(0, 4).map((t) => (
-          <li key={t} className="tp-problem-item row">
-            <Badge tone={r.status === "broken" ? "warn" : "bad"}
-              title={r.status === "broken" ? "gachamod can fix this. Click to fix it" : r.tool ? `${r.tool.name} fixes this. Click to get it and run it on this mod` : "No fixer handles this yet. The mod needs an update from its author"}
-              onClick={busy || !can ? undefined : fix}>
-              {r.status === "broken" ? "Fixable" : r.tool ? `Needs ${r.tool.name}` : "Needs its author"}
-            </Badge>
-            <span className="grow tp-problem-t">{t}</span>
-          </li>
-        ))}
-        {r.reasons.length > 4 && <li className="hint">And {r.reasons.length - 4} more</li>}
+        {(all ? r.reasons : r.reasons.slice(0, 4)).map((t, i) => {
+          // a model change is the first reason of a mod that has one
+          const author = !r.tool || (r.needsAuthor && i === 0);
+          return (
+            <li key={t} className="tp-problem-item row">
+              <Badge tone={r.status === "broken" ? "warn" : "bad"}
+                title={r.status === "broken" ? "gachamod knows the new hashes. Click to swap them"
+                  : author ? `A fixer can't redo a changed model, so the mod needs an update from its author${can ? ". Click to try the fixer anyway" : ""}`
+                  : `${r.tool!.name} handles this kind of change. Click to get it and run it on this mod`}
+                onClick={busy || !can ? undefined : fix}>
+                {r.status === "broken" ? "Outdated hashes" : author ? "Needs its author" : `Needs ${fixerName(r.tool!.name)}`}
+              </Badge>
+              <span className="grow tp-problem-t">{t}</span>
+            </li>
+          );
+        })}
+        {r.reasons.length > 4 && (
+          <li><Button size="sm" variant="ghost" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show ${r.reasons.length - 4} more`}</Button></li>
+        )}
+        {note && <li className="hint tp-problem-tried">{note}.</li>}
       </ul>
     </li>
   );

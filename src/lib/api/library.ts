@@ -32,7 +32,7 @@ export interface TrashEntry {
 
 export interface SwitchReport { profile: Profile; change: ModChange; varsPending: boolean }
 
-/** A removed mod. Its files stay in the trash for a while (setting "trash.days", default 14); after that only its
+/** A removed mod. Its files stay in the trash for a while (setting "trash.days", default 0: deleted at once); after that only its
  *  details stay: name, character, tags, notes, saved options, profiles it was in and the GameBanana link, so
  *  installing it again from GameBanana brings all of that back. */
 export interface ArchiveEntry {
@@ -99,7 +99,7 @@ export const library = {
    *  already there are kept as preview-original.<ext>. Not a custom preview: one the user picked stays in front. */
   fetchPreview: (game: GameId, id: string, url: string) => call<ModEntry>("mod_fetch_preview", { game, id, url }),
   /** Removed mods of one game (or every game with null), newest first: trash entries (files kept "trash.days" days,
-   *  default 14) and archived ones (details only). Installing the same GameBanana mod again restores either. */
+   *  default 0) and archived ones (details only). Installing the same GameBanana mod again restores either. */
   archive: (game: GameId | null) => call<ArchiveEntry[]>("archive_list", { game }),
   /** Forget archived mods for good (their details, saved options and profile places). Keys from ArchiveEntry. */
   archiveForget: (keys: string[]) => call<number>("archive_forget", { keys }),

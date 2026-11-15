@@ -284,6 +284,8 @@ fn remove_and_restore() {
     profiles::list(&d, "zzz").unwrap();
     let maid = by_name(&list, "Maid Ellen").clone();
     let bunny = by_name(&list, "Bunny").clone();
+    // the files go at once by default; this test keeps them
+    d.set_setting("trash.days", "14").unwrap();
 
     let ch = remove(&d, &t.data, "zzz", &[maid.id.clone(), bunny.id.clone()], "removed").unwrap();
     assert_eq!(ch.removed.len(), 2);
@@ -319,6 +321,23 @@ fn remove_and_restore() {
 }
 
 fn restore_ok(d: &Db, id: i64) -> ModChange { trash_restore(d, id).unwrap() }
+
+#[test]
+fn remove_deletes_files_by_default() {
+    let t = Tree::new("trash0");
+    t.add("Ellen Joe/Maid Ellen");
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let d = db.lock().unwrap();
+    let maid = by_name(&list, "Maid Ellen").clone();
+    remove(&d, &t.data, "zzz", std::slice::from_ref(&maid.id), "removed").unwrap();
+    // nothing kept on disk, but the record stays so it can be downloaded again
+    assert!(trash_list(&d, "zzz").unwrap().is_empty());
+    assert!(!t.data.join("trash").join("zzz").read_dir().is_ok_and(|mut r| r.next().is_some()));
+    let a = archive_list(&d, Some("zzz")).unwrap();
+    assert_eq!(a.len(), 1);
+    assert!(a[0].trash_id.is_none() && a[0].mod_id == maid.id);
+}
 
 #[test]
 fn move_meta_and_add_folder() {

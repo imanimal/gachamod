@@ -851,6 +851,7 @@
         {"old":"287c161c","new":"014159dd","character":"Ye Shunguang","part":"Eyebrow Texcoord VB","kind":"texcoord","from":"2.5","also":["Ye Shunguang Touch Of Dawnlight","Ye Shunguang Ult","Ye Shunguang Skin"],"current":true,"note":"also in hefeng-zzz-model-hash"}
       ],
       "rules": [
+        {"kind":"model_change","character":"Belle","detail":"3.0 rebuilt Belle's default model (hefeng log, 3.0). The hair IB bea4a483 is gone: the hair now uses aa9ffb85 (position 71d2bf80), and the hairpin (3acf9aea) and ear pendant (07920753) are parts of their own. The body IB 1817f3ca -> c2b4ce3a was split into body and earrings, and all four body buffers changed (position d2844c01 -> 5838ad30). A mod made for the old model draws one hair mesh where the game now has three parts, so no hash swap repairs it. ZZZ Mod Fixer 3.2 swaps the IB and texture hashes and leaves the mesh hashes, which is why a run changes files and the mod still doesn't show. trigger_hash lists the old model's hair IB, hair position and body position.","auto":false,"binary":false,"tool":"https://github.com/Vonksdesu/ZZZ-Mod-Fixer","trigger_hash":["bea4a483","a9673001","d2844c01"]}
       ]
     },
     {

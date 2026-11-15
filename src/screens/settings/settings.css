@@ -31,6 +31,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-row { display: flex; align-items: center; gap: 1rem; padding: .7rem 0; border-bottom: 1px solid var(--line); }
 .set-row:last-child { border-bottom: 0; }
 .set-row > span:first-child { flex: 1; display: flex; flex-direction: column; }
+.set-inline { display: flex; align-items: center; gap: .6rem; flex: none; }
 .set-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .8rem; margin: .5rem 0 1rem; }
 .theme-card { padding: .5rem; gap: .5rem; }
 .theme-preview { display: flex; height: 5rem; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--line); }

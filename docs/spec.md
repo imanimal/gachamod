@@ -21,8 +21,9 @@ http://localhost:1420) so screens can be built without Tauri.
   colour (never a hex value in a screen's CSS). Screen CSS lives next to the screen (`screens/<area>/<name>.css`,
   imported by the screen) and only does layout.
 - Advanced options exist for tinkerers but sit out of the way (a "More" section, a Tools screen).
-- Nothing destructive happens to user files without a way back: removed mods go to the app's trash ("trash.days",
-  default 14) and their details stay in the archive after that;
+- Nothing destructive happens to user files without a way back: removed mods keep a record (name, settings,
+  GameBanana link) so they can be downloaded again. Their files are deleted at once unless "Keep removed mods' files"
+  is on ("trash.days", default 0);
   config files get a backup before the first write of a session.
 - Anything automatic that might not work for every mod (like "toggles only while on screen") keeps the author's
   files and can be undone for one mod at a time, not only for all of them at once.
@@ -255,7 +256,7 @@ Otherwise none, and the UI offers GameBanana's picture.
 
 ### Trash and archive
 
-- Trash files are kept "trash.days" days (setting, default 14, 0 to 3650; 0 deletes them right away). Expired trash
+- Trash files are kept "trash.days" days (setting, default 0, 0 to 3650; 0 deletes them right away). Expired trash
   is purged at startup, when the setting is saved (settings_set), on every archive or trash listing and after a
   remove at 0 days. A copy an update replaced (reason "replaced") is kept at least 10 minutes.
 - Purging deletes the files and moves the record to the `archive` table: name, character, GameBanana source, tags,
@@ -783,7 +784,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
-- Storage: `trashDaysPref` ("trash.days", 0 to 3650, default 14; 0 deletes files at once, the record stays in
+- Storage: `trashDaysPref` ("trash.days", 0 to 3650, default 0; 0 deletes files at once, the record stays in
   Mods, Trash). Lowering it asks first when files would go now (that can't be undone). `trashPhrase()` finishes a
   sentence about it for LIBRARY's texts ("stay on your PC for 14 days").
 - Creators: followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the

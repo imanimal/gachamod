@@ -602,7 +602,7 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         let qf = ini::quick_facts(&f.dir);
         let mut e = build_entry(game, &root, &f.rel, enabled, &sc, &qf, &chars);
         if let Some(p) = prev.get(&e.id) { e.update_available = p.update_available; }
-        hashes.push(qf.hashes);
+        hashes.push(qf.active);
         entries.push(e);
     }
     // live skins that aren't showing count as off (live.rs)

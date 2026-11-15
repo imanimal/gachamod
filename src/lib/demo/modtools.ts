@@ -43,23 +43,31 @@ function demoInspect(game: string, id: string): ModInspect {
   const others = modsOf(game).filter((o) => o.id !== m.id && o.enabled && o.character && o.character === m.character);
   return {
     modId: m.id, inis: [ini], keys, vars, hashCount: 14 + (n % 20),
-    conflicts: m.enabled ? others.slice(0, 2).map((o) => ({ modId: o.id, name: o.name, shared: 6 + (seed(o.name) % 9) })) : [],
+    conflicts: m.enabled ? others.slice(0, 2).map((o) => {
+      const shared = 6 + (seed(o.name) % 9);
+      return { modId: o.id, name: o.name, shared, parts: DEMO_PARTS.slice(0, shared) };
+    }) : [],
     problems: n % 4 === 0 ? [{ kind: "missing_file", detail: `${ini} needs Textures/Face.dds, which isn't in the mod folder`, ini, severity: "bad", fix: null }] : [],
     readmes: [["readme.txt", `${m.name}\n\nCtrl+Alt+J takes the jacket off and puts it back.\nCtrl+Alt+C changes the colour (4 colours).\n\nPress F10 in game after changing files.`]],
   };
 }
+
+const DEMO_PARTS = ["Body.IB (2b8f6ab0)", "BodyA.Diffuse (4e5c1d9a)", "BodyA.LightMap (7a1b9c3e)", "BodyA.MaterialMap (9f00a2d1)",
+  "BodyA.NormalMap (c3d4e5f6)", "Hair.IB (d2e81f04)", "HairA.Diffuse (e0b7c6a5)", "HairA.LightMap (f1a2b3c4)", "Face.IB (11aa22bb)",
+  "FaceA.Diffuse (33cc44dd)", "Extras.IB (55ee66ff)", "Weapon.IB (0a1b2c3d)", "Weapon.Diffuse (5e6f7a8b)", "Weapon.NormalMap (93cd04ef)",
+  "Blend (a0b1c2d3)"];
 
 function demoConflicts(game: string): ConflictGroup[] {
   const on = modsOf(game).filter((m) => m.enabled);
   const pool = on.length >= 4 ? on : modsOf(game);
   if (pool.length < 2) return [];
   const groups: ConflictGroup[] = [{
-    mods: pool.slice(0, 2).map((m) => ({ modId: m.id, name: m.name, shared: 8 })),
+    mods: pool.slice(0, 2).map((m) => ({ modId: m.id, name: m.name, shared: 8, parts: DEMO_PARTS.slice(0, 8) })),
     hashes: ["2b8f6ab0", "4e5c1d9a", "7a1b9c3e", "9f00a2d1", "c3d4e5f6", "d2e81f04", "e0b7c6a5", "f1a2b3c4"],
     character: pool[0]!.character && pool[0]!.character === pool[1]!.character ? pool[0]!.character : null,
   }];
   if (pool.length >= 4) {
-    groups.push({ mods: pool.slice(2, 4).map((m) => ({ modId: m.id, name: m.name, shared: 3 })), hashes: ["0a1b2c3d", "5e6f7a8b", "93cd04ef"], character: null });
+    groups.push({ mods: pool.slice(2, 4).map((m) => ({ modId: m.id, name: m.name, shared: 3, parts: ["Weapon.IB (0a1b2c3d)", "Weapon.Diffuse (5e6f7a8b)", "Weapon.NormalMap (93cd04ef)"] })), hashes: ["0a1b2c3d", "5e6f7a8b", "93cd04ef"], character: null });
   }
   return groups;
 }
@@ -82,7 +90,7 @@ function demoLint(game: string): ModProblems[] {
   const v = ["1/Variant.ini", "2/Variant.ini", "3/Variant.ini"];
   add(list[2], [{
     kind: "overlap", severity: "bad", ini: v[0]!,
-    detail: `${v[0]}, ${v[1]} and ${v[2]} change the same parts of the model, so they draw over each other in game. Keep one of them on`,
+    detail: `${v[0]}, ${v[1]}, and ${v[2]} change the same parts of the model, so they draw over each other in game. Keep one of them on`,
     fix: { kind: "keep", ini: v[0]!, from: null, to: null, inis: v },
   }]);
   if (list[3]) add(list[3], [{ kind: "missing_file", detail: `${iniOf(list[3])} needs Textures/Face.dds, which isn't in the mod folder`, ini: iniOf(list[3]), severity: "bad", fix: null }]);
@@ -92,6 +100,8 @@ function demoLint(game: string): ModProblems[] {
 
 // Mod fixes: the 6th mod of each game uses outdated hashes gachamod swaps, the 7th needs a fixer it can't run.
 const fixDone = new Set<string>();
+/** Mods a demo fixer ran on and left broken. */
+const fixTried = new Map<string, { tool: string; at: number; changed: number }>();
 const fixBackups = new Map<string, string>();
 /** Fixers "downloaded" in the demo, per game. */
 const fixerFiles = new Map<string, FixerFile[]>();
@@ -107,18 +117,22 @@ function demoHealth(game: string): ModHealthRow[] {
   if (!f) return [];
   const list = modsOf(game);
   const out: ModHealthRow[] = [];
-  const broken = list[5], stuck = list[6];
+  const broken = list[5], stuck = list[6], old = list[7], remade = list[8];
   const who = (m: ModEntry) => m.character ?? "the character";
+  const more = { needsAuthor: false, tried: null };
   if (broken) {
     out.push(fixDone.has(`${game}|${broken.id}`)
-      ? { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "fixed", reasons: ["gachamod swapped its outdated hashes"], since: null, tool: null, swaps: 0 }
-      : { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "broken", reasons: [`Uses ${who(broken)}'s Body hash from before ${f.version}`, `Uses ${who(broken)}'s Hair hash from before ${f.version}`], since: f.version, tool: null, swaps: 3 });
+      ? { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "fixed", reasons: ["gachamod swapped its outdated hashes"], since: null, tool: null, swaps: 0, ...more }
+      : { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "broken", reasons: [`Uses ${who(broken)}'s Body hash from before ${f.version}`, `Uses ${who(broken)}'s Hair hash from before ${f.version}`], since: f.version, tool: null, swaps: 3, ...more });
   }
   if (stuck) {
     out.push(fixDone.has(`${game}|${stuck.id}`)
-      ? { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "fixed", reasons: [`${f.tool.name} fixed it`], since: null, tool: null, swaps: 0 }
-      : { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(stuck)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0 });
+      ? { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "fixed", reasons: [`${f.tool.name} fixed it`], since: null, tool: null, swaps: 0, ...more }
+      : { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(stuck)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0, ...more });
   }
+  // one the fixer finds nothing in, and one whose model the game changed
+  if (old) out.push({ modId: old.id, name: old.name, enabled: old.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(old)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0, needsAuthor: false, tried: fixTried.get(`${game}|${old.id}`) ?? null });
+  if (remade) out.push({ modId: remade.id, name: remade.name, enabled: remade.enabled, status: "unfixable", reasons: [`The ${f.version} update changed ${who(remade)}'s model, so this mod needs an update from its author`], since: f.version, tool: f.tool, swaps: 0, needsAuthor: true, tried: fixTried.get(`${game}|${remade.id}`) ?? null });
   return out;
 }
 
@@ -368,6 +382,26 @@ function gate(s: DemoKeys, on: boolean) {
   for (const k of s.keys) k.onScreen = on;
 }
 
+/** What a demo fixer does to one mod. */
+async function demoFixerRun(game: unknown, fileId: unknown, modId: unknown): Promise<FixerRun> {
+    await demoWait(1600);
+    const g = String(game);
+    const m = findMod(g, String(modId));
+    const tool = (fixerFiles.get(g) ?? []).find((x) => x.fileId === fileId)?.tool ?? "The fixer";
+    const key = `${g}|${m.id}`;
+    const list = modsOf(g);
+    if (m.id === list[7]?.id || m.id === list[8]?.id) {
+      // the fixer finds nothing it knows in these two
+      fixTried.set(key, { tool, at: demoNow(), changed: 0 });
+      return { modId: m.id, name: m.name, changed: 0, stopped: false, output: "0 files updated", backup: null };
+    }
+    fixDone.add(key);
+    const bid = `fix-${demoId()}`;
+    fixBackups.set(bid, key);
+    return { modId: m.id, name: m.name, changed: 2, stopped: false, output: "Done",
+      backup: { id: bid, game: g, modId: m.id, modDir: m.path, files: [iniOf(m)], created: [], label: `Ran ${tool} on ${m.name}`, at: demoNow() } };
+}
+
 export function registerModtoolsDemo() {
   registerDemo({
     keys_list: async ({ game, id }) => { await demoWait(120); return demoModKeys(String(game), String(id)); },
@@ -549,17 +583,12 @@ export function registerModtoolsDemo() {
       fixerFiles.set(String(game), [...(fixerFiles.get(String(game)) ?? []).filter((x) => x.fileId !== f.fileId), f]);
       return f;
     },
-    fixers_run: async ({ game, fileId, modId }): Promise<FixerRun> => {
-      await demoWait(1600);
-      const g = String(game);
-      const m = findMod(g, String(modId));
-      const tool = (fixerFiles.get(g) ?? []).find((x) => x.fileId === fileId)?.tool ?? "The fixer";
-      const key = `${g}|${m.id}`;
-      fixDone.add(key);
-      const bid = `fix-${demoId()}`;
-      fixBackups.set(bid, key);
-      return { modId: m.id, name: m.name, changed: 2, stopped: false, output: "Done",
-        backup: { id: bid, game: g, modId: m.id, modDir: m.path, files: [iniOf(m)], created: [], label: `Ran ${tool} on ${m.name}`, at: demoNow() } };
+    fixers_stop_waiting: async () => {},
+    fixers_run: async ({ game, fileId, modId }) => demoFixerRun(game, fileId, modId),
+    fixers_run_all: async ({ game, fileId, modIds }): Promise<FixerRun[]> => {
+      const out: FixerRun[] = [];
+      for (const modId of modIds as string[]) out.push(await demoFixerRun(game, fileId, modId));
+      return out;
     },
     fixers_download: async ({ game, req }) => {
       const r = req as FixerRequest;

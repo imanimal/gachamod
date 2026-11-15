@@ -2,7 +2,7 @@
 // export-mods, export-profile, export-pack), and the "tools" nav badge. Owner: MODTOOLS area.
 import { useEffect, useRef, useState } from "react";
 import { held, inTauri } from "../../lib/tauri";
-import { emitApp, go, onApp, useGameId, useGames } from "../../lib/store";
+import { emitApp, go, onApp, useGameId, useGames, useRoute } from "../../lib/store";
 import {
   dialogs, errorText, fileUrl, library, modtools, packs, shell,
   type ExportPlan, type GameId, type PackFiles, type PackPreview, type PackPreviewMod, type PackScope,
@@ -11,8 +11,9 @@ import { modThumbs } from "../../lib/gamebanana";
 import { Badge, Button, Checkbox, Dialog, Progress, Segmented, Skeleton, TextField, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
-import { fileName, setToolsCount } from "./toolsBadge";
-import { badgeCount, loadLint, useIgnored, useLint } from "./problems";
+import { notesText, oxford } from "../../lib/notes";
+import { conflictKey, fileName, markModSeen, markToolsSeen, setToolsCount } from "./toolsBadge";
+import { badgeKeys, loadLint, useIgnored, useLint } from "./problems";
 import "./modtools.css";
 import { LazyImg } from "../../ui/LazyImg";
 
@@ -22,6 +23,7 @@ export function ModtoolsOverlays() {
   const [importPath, setImportPath] = useState<string | null>(null);
   const [exportJob, setExportJob] = useState<ExportJob | null>(null);
   const game = useGameId();
+  const route = useRoute();
 
   useEffect(() => onApp((e) => {
     if (e.type === "open-pack") setImportPath(e.path);
@@ -34,13 +36,19 @@ export function ModtoolsOverlays() {
   // after library changes
   const lint = useLint(game);
   const ignored = useIgnored();
-  useEffect(() => { if (game && lint) setToolsCount(game, "problems", badgeCount(lint, ignored, game)); }, [game, lint, ignored]);
+  useEffect(() => { if (game && lint) setToolsCount(game, "problems", badgeKeys(lint, ignored, game)); }, [game, lint, ignored]);
+  // looking at Tools, or at a mod, clears what it shows from the badge
+  const seenView = route.view === "tools" ? "tools" : "modId" in route && typeof route.modId === "string" ? route.modId : null;
+  useEffect(() => {
+    if (!game || !seenView) return;
+    if (seenView === "tools") markToolsSeen(game); else markModSeen(game, seenView);
+  }, [game, seenView]);
   useEffect(() => {
     if (!game) return;
     let live = true;
     let timer = 0;
     const count = () => {
-      modtools.conflicts(game).then((g) => { if (live) setToolsCount(game, "conflicts", g.length); }).catch(() => {});
+      modtools.conflicts(game).then((g) => { if (live) setToolsCount(game, "conflicts", g.map(conflictKey)); }).catch(() => {});
       void loadLint(game);
     };
     count();
@@ -154,7 +162,10 @@ function PackExport({ job, onClose }: { job: ExportJob; onClose: () => void }) {
 
   const est = plan ? estimate(plan, files) : null;
   const unnamed = plan && plan.unlinked > 0
-    ? `${plan.unlinkedNames.slice(0, 3).join(", ")}${plan.unlinked > 3 ? ` and ${plan.unlinked - 3} more` : ""}`
+    ? (() => {
+      const list = plan.unlinkedNames.slice(0, 8);
+      return oxford(plan.unlinked > list.length ? [...list, `${plan.unlinked - list.length} more`] : list, 99);
+    })()
     : "";
   const them = plan?.unlinked === 1 ? "it" : "them";
   const note = !plan || !est ? "" : files === "links"
@@ -288,9 +299,9 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
           },
         });
       } else toast(text);
-      if (r.notes.length) toast(r.notes.join(" "), true);
+      if (r.notes.length) toast(notesText(r.notes), true);
       if (r.missing.length) {
-        toast(`The file only names ${r.missing.slice(0, 5).join(", ")}${r.missing.length > 5 ? ` and ${r.missing.length - 5} more` : ""}. Ask the sender for ${r.missing.length === 1 ? "it" : "those"}.`);
+        toast(`The file only names ${oxford(r.missing, 12)}. Ask the sender for ${r.missing.length === 1 ? "it" : "those"}.`);
       }
       if (live.current) onClose();
     } catch (e) {

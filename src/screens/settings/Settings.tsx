@@ -4,6 +4,7 @@
 // Owner: SETTINGS/AI area.
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Badge, Button, Confirm, PageHeader, Panel, Select, Toggle } from "../../ui/kit";
+import { openPalette } from "../../shell/state";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
 import { about, app, dialogs, errorText, games, integrations, settings, shell, xxmi, type GameId, type GameState, type Integration, type XxmiStatus } from "../../lib/api";
@@ -35,7 +36,8 @@ export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releas
 export function Settings() {
   return (
     <div className="page settings pg-screen">
-      <PageHeader title="Settings" icon="settings" />
+      <PageHeader title="Settings" icon="settings"
+        actions={<Button icon="search" onClick={() => openPalette()} title="Every setting is in the search (Ctrl+K, or just start typing)">Find a setting</Button>} />
       <Paged name="settings" label="Settings pages" pages={PAGES} fallback={sectionOf}>
         {{
           games: <><GamesSection /><XxmiSection /></>,

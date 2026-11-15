@@ -5,7 +5,19 @@
 .gbb { display: flex; flex-direction: column; gap: .7rem; min-width: 0; }
 .gbb-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .gbb-search { flex: 1 1 15rem; min-width: 11rem; }
-.gbb-sort .btn-t, .gbb-cat .btn-t { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gbb-bar > .chip { align-self: stretch; height: auto; }
+.gbb-sort .btn-t, .gbb-filters .btn-t { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gbb-filters .btn-t { display: inline-flex; align-items: center; gap: .4rem; }
+.gbb-filters.is-on { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.gbb-fp { display: flex; flex-direction: column; gap: .9rem; padding: .7rem .8rem .8rem; }
+.gbb-fp-s { display: flex; flex-direction: column; gap: .45rem; }
+.gbb-fp-h { font-weight: 650; color: var(--text-2); }
+.gbb-fp-o { display: flex; flex-wrap: wrap; gap: .35rem; }
+.gbb-fp-o .chip { height: 1.8rem; padding: 0 .7rem; }
+.gbb-fp-t { gap: .6rem; }
+.gbb-fp-row { flex-direction: row; align-items: center; justify-content: space-between; gap: .6rem; }
+.gbb-fp .gbb-saved { padding: 0; }
+.gbb-fp-clear { align-self: flex-start; }
 .gbb-chips { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .gbb-fchip { padding-right: .3rem; cursor: default; }
 .gbb-fchip-x { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; color: inherit; opacity: .8; }

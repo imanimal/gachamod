@@ -118,7 +118,7 @@ export function Titlebar() {
         <span className="sp" data-tauri-drag-region><Glyphs run /></span>
       </div>
 
-      <button key={introN} type="button" className="tb-search intro" onClick={() => openPalette()} title="Search pages, mods, characters, settings and actions (Ctrl+K)">
+      <button key={introN} type="button" className="tb-search intro" onClick={() => openPalette()} title="Search pages, mods, characters, settings and actions (Ctrl+K, or just start typing)">
         <Icon name="search" /><span className="tb-search-t">Search anything</span><kbd className="kbd">Ctrl K</kbd>
       </button>
 

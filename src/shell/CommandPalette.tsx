@@ -50,17 +50,24 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null);
   const back = useRef<Element | null>(null);
   const seq = useRef(0);
+  // opened by typing: the caret goes after the typed letter instead of selecting it
+  const keepText = useRef(false);
 
   useEffect(() => onApp((e) => {
     if (e.type !== "palette") return;
     if (!open) back.current = document.activeElement;
     setText(e.text ?? "");
+    keepText.current = !!e.text;
     setSel(0);
     setOpen(true);
     setFocusTick((n) => n + 1);
   }), [open]);
   // focus the field once it is on screen (and again when opened anew while open)
-  useLayoutEffect(() => { if (open) { input.current?.focus(); input.current?.select(); } }, [open, focusTick]);
+  useLayoutEffect(() => {
+    if (!open || !input.current) return;
+    input.current.focus();
+    if (keepText.current) { const n = input.current.value.length; input.current.setSelectionRange(n, n); } else input.current.select();
+  }, [open, focusTick]);
 
   // the list for what is typed (sources may be slow: a newer query wins)
   useEffect(() => {
@@ -134,7 +141,10 @@ export function CommandPalette() {
                     className={`palette-i${n === sel ? " on" : ""}`}
                     onMouseMove={() => { if (sel !== n) setSel(n); }} onFocus={() => setSel(n)} onClick={() => run(c)}>
                     {c.img ? <LazyImg className="palette-img" src={c.img} alt="" /> : <Icon name={c.icon ?? "chevron"} />}
-                    <span className="palette-t">{c.title}</span>
+                    <span className="palette-tw">
+                      <span className="palette-t">{c.title}</span>
+                      {c.where && <span className="palette-where">{c.where}</span>}
+                    </span>
                     {c.hint && <span className="palette-hint">{c.hint}</span>}
                   </button>
                 );

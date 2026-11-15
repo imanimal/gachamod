@@ -1,7 +1,30 @@
 // A row that scrolls sideways: the mouse wheel scrolls it (when it can still move that way), and it says whether
 // there is more to the left or right for its arrow buttons. Owner: BROWSE area.
+//
+// A wheel gesture belongs to whatever it started over. Scrolling the page down and passing a row keeps scrolling
+// the page, however fast or bumpy the wheel is; the row only takes the wheel when a gesture starts on it (the wheel
+// rested for a moment first) or with Shift.
 import { useCallback, useEffect, useState, type RefObject } from "react";
 import { glide } from "../../lib/smoothScroll";
+
+/** A gap this long between wheel events starts a new gesture. Free-spinning and "jumpy" wheels send events closer
+ *  together than this while they turn. */
+const GESTURE_GAP = 450;
+let lastWheel = 0;
+/** What the current gesture scrolls: a row, "page", or null before anything claimed it. */
+let owner: HTMLElement | "page" | null = null;
+let wired = false;
+function wireGestures() {
+  if (wired) return;
+  wired = true;
+  // capture runs before any row's handler: a long enough gap starts a new gesture nobody owns yet
+  window.addEventListener("wheel", (e) => {
+    if (e.timeStamp - lastWheel > GESTURE_GAP) owner = null;
+    lastWheel = e.timeStamp;
+  }, { capture: true, passive: true });
+  // bubbling ends after the rows: a gesture no row claimed is the page's
+  window.addEventListener("wheel", () => { if (owner === null) owner = "page"; }, { passive: true });
+}
 
 export function useSideScroll(ref: RefObject<HTMLElement | null>, deps: unknown[] = []) {
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -18,12 +41,16 @@ export function useSideScroll(ref: RefObject<HTMLElement | null>, deps: unknown[
     const el = ref.current;
     if (!el) return;
     measure();
+    wireGestures();
     const wheel = (e: WheelEvent) => {
       if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       const max = el.scrollWidth - el.clientWidth;
       if (max <= 0) return;
+      // the page (or another row) is mid-scroll: this row just passed under the pointer. Shift always means sideways
+      if (!e.shiftKey && owner !== null && owner !== el) return;
       // let the page scroll once the row is at its end
-      if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max - 1)) return;
+      if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max - 1)) { if (owner === null) owner = "page"; return; }
+      owner = el;
       e.preventDefault();
       glide(el, "x", e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY);
     };

@@ -1,6 +1,7 @@
 // Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own updates for the
 // About section. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
 import { useEffect, useState } from "react";
+import { oxford } from "../../lib/notes";
 import { Button, Checkbox, Confirm, Panel, Progress, Toggle, formatBytes, plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
@@ -81,7 +82,7 @@ export function TransferSection() {
       redo: async () => { const again = await settingsFile.import(path, readUi()); backup = again.backup; writeUi(again.ui, false); await refreshGamesSafe(); },
     }, true);
     const skipped = r.skippedPaths.length ? ` Skipped what isn't on this PC: ${r.skippedPaths.join("; ")}.` : "";
-    const missing = r.missingMods ? ` ${plural(r.missingMods, "mod")} in profiles aren't here.` : "";
+    const missing = r.missingMods ? ` Profiles name ${r.missingNames?.length ? oxford(r.missingNames) : plural(r.missingMods, "mod")}, which ${r.missingMods === 1 ? "isn't" : "aren't"} on this PC.` : "";
     const id: number = toast(`Imported settings.${skipped}${missing}`, false, { label: "Undo import", run: () => void undo(entry, id) });
   };
 
@@ -115,7 +116,7 @@ function ImportPlan({ plan }: { plan: ImportSummary }) {
     <div className="set-import">
       <p className="hint">From gachamod {plan.appVersion || "?"}{when ? `, exported ${when}` : ""}. A backup of your current settings is kept, and the toast after offers Undo.</p>
       {lines.length ? <ul>{lines.map((l) => <li key={l}>{l}</li>)}</ul> : <p>Nothing changes: your settings already match the file.</p>}
-      {plan.missingMods > 0 && <p className="hint">{plural(plan.missingMods, "mod")} in the file's profiles aren't on this PC and are left out.</p>}
+      {plan.missingMods > 0 && <p className="hint">The file's profiles name {plan.missingNames?.length ? oxford(plan.missingNames, 20) : plural(plan.missingMods, "mod")}, which {plan.missingMods === 1 ? "isn't" : "aren't"} on this PC. Profiles get the rest.</p>}
       {plan.skippedPaths.length > 0 && (
         <>
           <p className="hint">Not on this PC, so skipped:</p>

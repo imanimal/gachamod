@@ -114,17 +114,19 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
 
   return (
     <>
-    <PageHeader title="Mods" icon="mods" sub="Mods you removed"
+    <PageHeader title="My Mods" icon="mods" sub="Mods you removed"
       actions={<>{tabs}<SearchField value={search} onChange={setSearch} placeholder="Search removed mods" className="library-search" /></>} />
     <div className="archive">
       {items !== null && items.length > 0 && (
         <div className="archive-top">
           <span className="hint archive-hint">
-            Files of removed mods {trashDays > 0 ? `${trashPhrase(trashDays)}, then they're deleted` : trashPhrase(trashDays)}. A short record of
-            each mod (name, settings, GameBanana link) stays here so you can download it again.
+            {trashDays > 0
+              ? `Files of removed mods ${trashPhrase(trashDays)}, then they're deleted. `
+              : "Removing a mod deletes its files. "}
+            Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.
           </span>
-          <Button size="sm" variant="ghost" icon="settings" title="How long removed mods keep their files (Settings, Storage)"
-            onClick={() => go({ view: "settings", section: "set-trash-days" })}>Change</Button>
+          <Button size="sm" variant="ghost" icon="settings" title="Keep removed mods' files (Settings, Storage)"
+            onClick={() => go({ view: "settings", section: "set-trash-days" })}>{trashDays > 0 ? "Change" : "Keep files"}</Button>
         </div>
       )}
       {items === null ? (

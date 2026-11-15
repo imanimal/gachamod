@@ -9,7 +9,7 @@ import { toast } from "../../ui/toast";
 import { errorText, fileUrl, gameCheck, live, type CheckSetup, type CheckSteps, type GameState, type LiveGroup, type LiveInfo } from "../../lib/api";
 import { closeGameCheck, useGameCheckOpen } from "../../lib/feedback";
 import { restartAsAdmin } from "../../lib/elevation";
-import { emitApp, useGame } from "../../lib/store";
+import { emitApp, go, useGame } from "../../lib/store";
 import { reloadLive, setAll, useLive } from "../ingame/data";
 import { play } from "../home/PlayButton";
 import "../ingame/ingame.css";
@@ -19,6 +19,14 @@ import { LazyImg } from "../../ui/LazyImg";
 export function GameCheckHost() {
   const open = useGameCheckOpen();
   return open ? <Opened /> : null;
+}
+
+/** Closes the check and opens Tools, Switch skins in game, where the menu's settings are. */
+function OpenInGameTools() {
+  return (
+    <Button size="sm" icon="swap" title="Closes the check and opens Tools, Switch skins in game"
+      onClick={() => { closeGameCheck(); go({ view: "tools", section: "ingame" }); }}>Switch skins in game</Button>
+  );
 }
 
 function Opened() {
@@ -275,6 +283,7 @@ function MenuStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   if (off) {
     return <>
       <p>The menu while you play is off for {setup.name}. Turn it on in Tools, Switch skins in game, or skip this step.</p>
+      <OpenInGameTools />
     </>;
   }
   return <>
@@ -317,7 +326,10 @@ function PadStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   const [heard, setHeard] = useState(false);
   const on = setup.menuPad && setup.menuStyle !== "off";
   useEvery(1000, () => { gameCheck.menu(setup.game, since).then((h) => { if (h) setHeard(true); }, () => {}); }, on && !heard);
-  if (!on) return <p>Opening the menu with a controller is off for {setup.name}. Turn on "Pressing both sticks in opens it too" in Tools, Switch skins in game, or skip this step.</p>;
+  if (!on) return <>
+    <p>Opening the menu with a controller is off for {setup.name}. Turn on "Pressing both sticks in opens it too" in Tools, Switch skins in game, or skip this step.</p>
+    <OpenInGameTools />
+  </>;
   return <>
     <p>With a controller, press both sticks in while you play.</p>
     {heard && <Seen ok>gachamod saw both sticks pressed and opened the menu.</Seen>}

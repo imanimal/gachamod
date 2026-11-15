@@ -28,6 +28,16 @@ pub struct Backup {
     /// What the change was ("Rebound F6 to F7").
     pub label: String,
     pub at: i64,
+    /// Taken before a change whose files weren't known in advance (a fixer run), and not trimmed to what changed
+    /// yet. One left like this by a run that never finished (the app was closed) is trimmed when backups are listed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub open: bool,
+}
+
+/// Open backups a change in this run of the app is still working on.
+fn active() -> std::sync::MutexGuard<'static, std::collections::HashSet<String>> {
+    static ACTIVE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    ACTIVE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn root(db: &Db) -> PathBuf { crate::pack::data_dir_of(db).join("backups") }
@@ -58,7 +68,7 @@ fn take_in(root: &Path, game: &str, mod_id: &str, mod_dir: &Path, files: &[Strin
     std::fs::create_dir_all(&dir)?;
     let mut b = Backup {
         id, game: game.into(), mod_id: mod_id.into(), mod_dir: mod_dir.to_string_lossy().into_owned(),
-        files: vec![], created: vec![], label: label.into(), at: now(),
+        files: vec![], created: vec![], label: label.into(), at: now(), open: false,
     };
     for rel in files {
         let rel = rel.replace('\\', "/");
@@ -74,6 +84,32 @@ fn take_in(root: &Path, game: &str, mod_id: &str, mod_dir: &Path, files: &[Strin
     }
     std::fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(&b)?)?;
     Ok(b)
+}
+
+/// Copy every one of `files` before a change that may touch any of them (a fixer). `keep_only` trims it afterwards
+/// to the files that did change.
+pub fn take_open(db: &Db, game: &str, mod_id: &str, mod_dir: &Path, files: &[String], label: &str) -> Result<Backup> {
+    let mut b = take(db, game, mod_id, mod_dir, files, label)?;
+    b.open = true;
+    active().insert(b.id.clone());
+    std::fs::write(root(db).join(&b.id).join("manifest.json"), serde_json::to_vec_pretty(&b)?)?;
+    Ok(b)
+}
+
+/// Trim an open backup whose change never reported back: keep the copies that differ from the mod's files now.
+fn settle_open(db: &Db, b: Backup) -> Option<Backup> {
+    let dir = root(db).join(&b.id);
+    let mod_dir = crate::library::mod_path(db, &b.game, &b.mod_id).ok().filter(|p| p.is_dir()).unwrap_or_else(|| PathBuf::from(&b.mod_dir));
+    if !mod_dir.is_dir() { return Some(b); }
+    let same = |rel: &String| -> bool {
+        let (Ok(a), Ok(c)) = (inside(&dir, rel), inside(&mod_dir, rel)) else { return false };
+        match (std::fs::metadata(&a), std::fs::metadata(&c)) {
+            (Ok(x), Ok(y)) if x.len() == y.len() => std::fs::read(&a).ok() == std::fs::read(&c).ok(),
+            _ => false,
+        }
+    };
+    let changed: Vec<String> = b.files.iter().filter(|r| !same(r)).cloned().collect();
+    keep_only(db, b, &changed, &[]).ok().flatten()
 }
 
 fn read_manifest(root: &Path, id: &str) -> Result<Backup> {
@@ -115,6 +151,8 @@ pub fn keep_only(db: &Db, mut b: Backup, changed: &[String], created: &[String])
         let _ = std::fs::remove_file(inside(&dir, rel)?);
     }
     b.files.retain(|r| changed.contains(r));
+    b.open = false;
+    active().remove(&b.id);
     for c in created { if !b.created.contains(c) { b.created.push(c.clone()); } }
     if b.files.is_empty() && b.created.is_empty() {
         let _ = std::fs::remove_dir_all(&dir);
@@ -133,6 +171,12 @@ pub fn list(db: &Db, game: Option<&str>, mod_id: Option<&str>) -> Result<Vec<Bac
         let Some(id) = e.file_name().to_str().map(String::from) else { continue };
         let Ok(b) = read_manifest(&root, &id) else { continue };
         if game.is_some_and(|g| g != b.game) || mod_id.is_some_and(|m| m != b.mod_id) { continue; }
+        // left open by a run that never finished: trim it now (one a run is still working on is left out)
+        if b.open {
+            if active().contains(&b.id) { continue; }
+            if let Some(b) = settle_open(db, b) { out.push(b); }
+            continue;
+        }
         out.push(b);
     }
     out.sort_by(|a, b| b.at.cmp(&a.at).then_with(|| b.id.cmp(&a.id)));

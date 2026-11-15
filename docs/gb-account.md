@@ -34,11 +34,13 @@ Caveats, in order of weight:
 3. The user signs in on GameBanana's page. Username and password, or the email-code tab. If GameBanana asks for a
    captcha (Cloudflare Turnstile) or a 6-digit authenticator code, its page handles that itself. The app never sees the
    password and never types anything into the page.
-4. When the window finishes loading a page that is not under `/members/account/`, the app reads the cookies for
-   `https://gamebanana.com/` and calls `GET /apiv11/Member/Session` with them. `_bIsLoggedIn: true` means done. The
+4. When the window finishes loading any gamebanana.com page (and when it is closed), the app reads the cookies for
+   `https://gamebanana.com/` and calls `GET /apiv13/Member/UiConfig` with them (what the site itself reads: `_bIsLoggedIn`,
+   `_idMemberRow`, `_sAvatarUrl`; `apiv11/Member/Session` only has `_bIsLoggedIn` and is the fallback). The
    login script itself redirects away after success (to the previous page or the home page).
 5. The app asks for `Member/UiConfig` and `Member/{id}/ProfilePage`, fills `AccountState.user` ({ id, name, avatar }),
-   stores the cookie header encrypted, and closes the window. Closing the window by hand cancels with no message.
+   stores the cookie header encrypted, and closes the window. Closing the window by hand checks once more, then a
+   toast says you are not signed in (with the error, if GameBanana gave one) and offers to try again.
 6. Later calls go from Rust with `Cookie: <stored header>`. Sign out deletes the stored header and the login window's
    data folder. The server session stays valid until it expires (the site's logout call was not found, so don't invent
    one).

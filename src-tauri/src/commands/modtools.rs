@@ -99,6 +99,17 @@ pub async fn fixers_run(st: State<'_, AppState>, game: String, file_id: u64, mod
     blocking(move || fixers::run_on_mod(&db, &data, &game, file_id, &mod_id)).await
 }
 
+/// Stop watching a fixer's window and go by what it changed so far.
+#[tauri::command]
+pub fn fixers_stop_waiting() { fixers::stop_waiting(); }
+
+/// Run a fixer that has its own window once for several mods.
+#[tauri::command]
+pub async fn fixers_run_all(st: State<'_, AppState>, game: String, file_id: u64, mod_ids: Vec<String>) -> Result<Vec<fixers::FixerRun>> {
+    let (db, data) = (st.db.clone(), st.data_dir.clone());
+    blocking(move || fixers::run_on_mods(&db, &data, &game, file_id, &mod_ids)).await
+}
+
 #[tauri::command]
 pub async fn hash_lookup(st: State<'_, AppState>, game: String, hash: String) -> Result<Vec<HashHit>> {
     let db = st.db.clone();

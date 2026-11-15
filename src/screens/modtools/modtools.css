@@ -18,7 +18,11 @@
 .mi-prob-list, .mi-conf-list { display: flex; flex-direction: column; gap: .4rem; }
 .mi-prob { display: flex; align-items: baseline; gap: .5rem; }
 .mi-prob-t { min-width: 0; overflow-wrap: anywhere; }
-.mi-conf { display: flex; align-items: center; gap: .5rem; }
+.mi-conf { display: flex; flex-direction: column; gap: .1rem; }
+.mi-conf-row { display: flex; align-items: center; gap: .5rem; }
+.mi-parts > summary { cursor: pointer; width: fit-content; }
+.mi-parts > summary:hover { color: var(--text); }
+.mi-parts-l { list-style: none; margin: .3rem 0 .2rem; padding: .4rem .6rem; border-radius: var(--radius-sm); background: var(--surface-2); font-size: .85em; display: flex; flex-direction: column; gap: .15rem; max-height: 14rem; overflow: auto; }
 .mi-conf-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .mi-readmes .panel-b { gap: .4rem; }

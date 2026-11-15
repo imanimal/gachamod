@@ -8,6 +8,7 @@ import { emitApp, go } from "../../lib/store";
 import { onKeysChanged, recordBackups } from "../../ui/KeyEditor";
 import { plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
+import { problemSeenKey } from "./toolsBadge";
 
 // ── ignoring ──
 
@@ -27,9 +28,10 @@ export const shownProblems = (ign: Ignored, game: GameId, m: ModProblems) =>
 export const ignoredProblems = (ign: Ignored, game: GameId, m: ModProblems) =>
   m.problems.filter((p) => p.severity !== "info" && isIgnored(ign, game, m.modId, p));
 
-/** The nav badge's part: broken parts of mods that are on, not ignored. Warnings and mods that are off don't count. */
-export const badgeCount = (list: ModProblems[], ign: Ignored, game: GameId) =>
-  list.reduce((s, m) => s + (m.enabled ? shownProblems(ign, game, m).filter((p) => p.severity === "bad").length : 0), 0);
+/** The nav badge's part: broken parts of mods that are on, not ignored, one key each (toolsBadge.ts). Warnings and
+ *  mods that are off don't count. */
+export const badgeKeys = (list: ModProblems[], ign: Ignored, game: GameId) =>
+  list.flatMap((m) => (m.enabled ? shownProblems(ign, game, m).filter((p) => p.severity === "bad").map((p) => problemSeenKey(m.modId, problemKey(p))) : []));
 
 /** A broken part with no fix in the mod's files: downloading the mod again may bring the file back. */
 export const needsDownload = (shown: Problem[]) => shown.some((p) => p.severity === "bad" && !p.fix);

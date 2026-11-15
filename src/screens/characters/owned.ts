@@ -8,6 +8,7 @@ import { record } from "../../lib/history";
 import { allGames } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
+import { notesText } from "../../lib/notes";
 
 // lowercased name -> name, per game
 const cache = new Map<GameId, Map<string, string>>();
@@ -166,7 +167,7 @@ export async function importForeign(game: GameId, onDone?: () => void) {
     foreign.set(game, { managers: [], fillable: 0 });
     emit();
     onDone?.();
-    r.notes.forEach((n) => toast(n, true));
+    if (r.notes.length) toast(notesText(r.notes), true);
     if (!r.changed) { toast("Nothing new to bring in"); return; }
     const from = r.managers.length ? ` from ${r.managers.join(" and ")}` : "";
     record({

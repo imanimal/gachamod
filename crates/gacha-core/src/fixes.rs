@@ -70,6 +70,21 @@ pub struct ModHealth {
     pub tool: Option<ToolLink>,
     /// How many hash lines a fix would change.
     pub swaps: u32,
+    /// The game changed the model itself, so no fixer can repair the mod: it needs an update from its author.
+    pub needs_author: bool,
+    /// The last fixer run on it that left it broken.
+    pub tried: Option<Tried>,
+}
+
+/// A fixer run that didn't fix a mod.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Tried {
+    /// The fixer's name ("ZZZ Mod Fixer").
+    pub tool: String,
+    pub at: i64,
+    /// Files it changed. 0: it found nothing in the mod it knows how to fix.
+    pub changed: u32,
 }
 
 /// What the fix data holds for a game, for Tools > Fixes.
@@ -118,6 +133,8 @@ struct Rule {
     lines: Option<(String, Vec<String>)>,
     version: String,
     tool: String,
+    /// The model itself changed: a mod with a trigger hash needs remaking by its author.
+    model: bool,
 }
 
 struct Index {
@@ -167,8 +184,15 @@ impl Index {
             }
             for r in b.rules {
                 let get = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-                let mut triggers: Vec<String> = strings(r.get("trigger_hash")).iter().chain(&strings(r.get("blend_hash"))).filter_map(|h| hex8(h)).collect();
-                if let Some(Value::Object(m)) = r.get("position_to_blend") { triggers.extend(m.keys().filter_map(|h| hex8(h))); }
+                // `trigger_hash` says which mods need the change. `blend_hash` only says which buffer it rewrites, so it
+                // is the trigger only for a rule that names nothing else (Belle's 1.1 remap names her position hash as
+                // the buffer, and that hash stayed live until 3.0)
+                let mut triggers: Vec<String> = strings(r.get("trigger_hash")).iter().filter_map(|h| hex8(h)).collect();
+                if triggers.is_empty() {
+                    triggers = strings(r.get("blend_hash")).iter().filter_map(|h| hex8(h)).collect();
+                    if let Some(Value::Object(m)) = r.get("position_to_blend") { triggers.extend(m.keys().filter_map(|h| hex8(h))); }
+                }
+                let model = get("kind") == "model_change";
                 // WW line value changes: only the index ranges with large old values, which can't be anything else
                 let mut lines = None;
                 let prefix = get("line_prefix");
@@ -178,12 +202,13 @@ impl Index {
                     if !olds.is_empty() && olds.iter().all(|o| o.parse::<u64>().is_ok_and(|n| n >= 1000)) { lines = Some((prefix, olds)); }
                 }
                 if triggers.is_empty() && lines.is_none() { continue; }
-                idx.rules.push(Rule { character: get("character"), triggers, lines, version: b.version.clone(), tool: get("tool") });
+                idx.rules.push(Rule { character: get("character"), triggers, lines, version: b.version.clone(), tool: get("tool"), model });
             }
         }
         // a trigger only counts when it is an old hash: a live one would flag every mod of that character
         let olds: HashSet<String> = idx.steps.keys().cloned().collect();
-        for r in &mut idx.rules { r.triggers.retain(|h| olds.contains(h)); }
+        // (a model change lists hashes the game dropped, which have no new hash to be the old one of)
+        for r in idx.rules.iter_mut().filter(|r| !r.model) { r.triggers.retain(|h| olds.contains(h)); }
         idx.rules.retain(|r| !r.triggers.is_empty() || r.lines.is_some());
         idx
     }
@@ -274,7 +299,7 @@ fn resolve(idx: &Index, h: &str, character: Option<&str>, who: &mut Who) -> Opti
 
 /// What is wrong with one mod folder: the swaps a fix makes (old -> hop) and the fixers it needs instead.
 #[derive(Debug, Default)]
-struct Check { swaps: Vec<(String, Hop)>, needs: Vec<(String, ToolLink)>, since_rank: Option<(usize, String)> }
+struct Check { swaps: Vec<(String, Hop)>, needs: Vec<(String, ToolLink)>, since_rank: Option<(usize, String)>, needs_author: bool }
 
 fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) -> Check {
     let facts = crate::ini::quick_facts(dir);
@@ -287,7 +312,10 @@ fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) ->
     }
     let mut texts: Option<Vec<String>> = None;
     for r in &idx.rules {
-        let hit = if !r.triggers.is_empty() {
+        let hit = if r.model {
+            // a hash of the old model, in a mod of that character (or of nobody known)
+            r.triggers.iter().any(|t| has.contains(t.as_str())) && character.is_none_or(|ch| who.is(&r.character, ch))
+        } else if !r.triggers.is_empty() {
             // the trigger is an old hash of this mod's character, and the mod doesn't have its new hash yet
             r.triggers.iter().any(|t| has.contains(t.as_str()) && resolve(idx, t, character, who).is_some_and(|hop| !has.contains(hop.new.as_str())))
         } else if let (Some((prefix, olds)), Some(ch)) = (&r.lines, character) {
@@ -296,8 +324,15 @@ fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) ->
         if !hit { continue; }
         let tool = idx.tool_link(&r.tool);
         let who_s = if r.character.is_empty() || r.character.starts_with("all") || r.character.starts_with("see ") { String::new() } else { format!("{}'s ", r.character) };
-        let why = format!("Needs {} for {who_s}{} change", tool.name, r.version);
-        if !c.needs.iter().any(|(w, _)| *w == why) { c.needs.push((why, tool)); }
+        let why = if r.model {
+            c.needs_author = true;
+            format!("The {} update changed {}model, so this mod needs an update from its author", r.version, if who_s.is_empty() { "the ".into() } else { who_s })
+        } else {
+            format!("Needs {} for {who_s}{} change", tool.name, r.version)
+        };
+        if c.needs.iter().any(|(w, _)| *w == why) { continue; }
+        // the model change goes first: it is why nothing else will fix the mod
+        if r.model { c.needs.insert(0, (why, tool)); } else { c.needs.push((why, tool)); }
     }
     for (_, hop) in &c.swaps {
         let rank = idx.steps.values().flatten().find(|s| s.version == hop.version).map(|s| s.rank).unwrap_or(0);
@@ -334,17 +369,20 @@ fn reasons(c: &Check) -> Vec<String> {
     out
 }
 
-fn health_of(m: &ModEntry, c: &Check, fixed: &HashSet<String>) -> Option<ModHealth> {
+fn health_of(m: &ModEntry, c: &Check, fixed: &HashSet<String>, tried: &HashMap<String, Tried>) -> Option<ModHealth> {
     let since = c.since_rank.as_ref().map(|(_, v)| v.clone());
     let base = ModHealth {
         mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, reasons: reasons(c), since, swaps: c.swaps.len() as u32,
+        needs_author: c.needs_author, tried: tried.get(&m.id).cloned(),
         ..Default::default()
     };
-    if let Some((_, tool)) = c.needs.first() {
-        return Some(ModHealth { status: "unfixable".into(), tool: Some(tool.clone()), ..base });
+    // the fixer to try: the first one a rule links to
+    if !c.needs.is_empty() {
+        let tool = c.needs.iter().map(|(_, t)| t).find(|t| t.url.starts_with("http")).cloned();
+        return Some(ModHealth { status: "unfixable".into(), tool, ..base });
     }
     if !c.swaps.is_empty() { return Some(ModHealth { status: "broken".into(), ..base }); }
-    fixed.contains(&m.id).then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], ..base })
+    fixed.contains(&m.id).then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], tried: None, ..base })
 }
 
 fn matcher(game: &str, mods: &[ModEntry]) -> Matcher {
@@ -353,6 +391,22 @@ fn matcher(game: &str, mods: &[ModEntry]) -> Matcher {
 }
 
 fn fixed_key(game: &str) -> String { format!("fixes.fixed.{game}") }
+fn tried_key(game: &str) -> String { format!("fixes.tried.{game}") }
+
+/// Remember that a fixer ran on a mod and how many files it changed. Health shows it for as long as the mod stays
+/// broken, so "the fixer did nothing here" is still said after the toast is gone.
+pub fn note_attempt(db: &Db, game: &str, mod_id: &str, tool: &str, changed: usize) -> Result<()> {
+    let mut all: HashMap<String, Tried> = db.setting_json(&tried_key(game))?.unwrap_or_default();
+    if all.len() > 2000 {
+        // drop the older half
+        let mut ats: Vec<i64> = all.values().map(|t| t.at).collect();
+        ats.sort_unstable();
+        let cut = ats[ats.len() / 2];
+        all.retain(|_, t| t.at > cut);
+    }
+    all.insert(mod_id.into(), Tried { tool: tool.into(), at: crate::db::now(), changed: changed as u32 });
+    db.set_setting_json(&tried_key(game), &all)
+}
 
 fn mods_of(db: &Db, game: &str) -> Result<Vec<ModEntry>> {
     match crate::library::list(db, game) { Ok(l) => Ok(l), Err(Error::Todo(_)) => Ok(Vec::new()), Err(e) => Err(e) }
@@ -371,6 +425,7 @@ pub fn health(db: &Db, game: &str) -> Result<Vec<ModHealth>> {
     let Some(idx) = Index::get(game) else { return Ok(vec![]) };
     let mods = mods_of(db, game)?;
     let fixed: HashSet<String> = db.setting_json::<Vec<String>>(&fixed_key(game))?.unwrap_or_default().into_iter().collect();
+    let tried: HashMap<String, Tried> = db.setting_json(&tried_key(game))?.unwrap_or_default();
     let mt = matcher(game, &mods);
     let mut who = Who::new(&mt);
     let mut out = Vec::new();
@@ -378,7 +433,7 @@ pub fn health(db: &Db, game: &str) -> Result<Vec<ModHealth>> {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
         let c = check_dir(idx, dir, m.character.as_deref(), &mut who);
-        if let Some(h) = health_of(m, &c, &fixed) { out.push(h); }
+        if let Some(h) = health_of(m, &c, &fixed, &tried) { out.push(h); }
     }
     Ok(out)
 }
@@ -512,7 +567,51 @@ mod tests {
         assert!(!c.needs.is_empty(), "the stride rule should fire");
         assert!(c.needs[0].1.url.contains("github.com"));
         let m = ModEntry { id: "x".into(), ..Default::default() };
-        assert_eq!(health_of(&m, &c, &HashSet::new()).unwrap().status, "unfixable");
+        assert_eq!(health_of(&m, &c, &HashSet::new(), &HashMap::new()).unwrap().status, "unfixable");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn belle(ini: &str) -> (Check, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("gachamod-fixes-{}", crate::library::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("mod.ini"), ini).unwrap();
+        let mt = Matcher::new("zzz", &["Belle".to_string()]);
+        let mut who = Who::new(&mt);
+        let c = check_dir(idx(), &dir, Some("Belle"), &mut who);
+        (c, dir)
+    }
+
+    #[test]
+    fn the_buffer_a_rule_rewrites_is_not_its_trigger() {
+        // Belle's 1.1 remap rewrites the buffer of her position hash d2844c01. A mod made after 1.1 (new texcoord
+        // hash) doesn't need it, even once 3.0 replaced d2844c01
+        let (c, dir) = belle("[TextureOverrideBelleBodyPosition]\nhash = d2844c01\n[TextureOverrideBelleBodyTexcoord]\nhash = 801edbf4\n");
+        assert!(!c.needs.iter().any(|(w, _)| w.contains("1.1")), "{:?}", c.needs);
+        let _ = std::fs::remove_dir_all(&dir);
+        // one from 1.0 still does
+        let (c, dir) = belle("[TextureOverrideBelleBodyTexcoord]\nhash = caf95576\n");
+        assert!(c.needs.iter().any(|(w, _)| w.contains("1.1")), "{:?}", c.needs);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_changed_model_needs_the_author() {
+        // 3.0 rebuilt Belle: her old body position hash means the mod was made for the old model
+        let (c, dir) = belle("[TextureOverrideBelleBodyPosition]\nhash = d2844c01\n");
+        assert!(c.needs_author);
+        let m = ModEntry { id: "x".into(), ..Default::default() };
+        let tried: HashMap<String, Tried> = [("x".to_string(), Tried { tool: "ZZZ Mod Fixer".into(), at: 1, changed: 0 })].into_iter().collect();
+        let h = health_of(&m, &c, &HashSet::new(), &tried).unwrap();
+        assert_eq!(h.status, "unfixable");
+        assert!(h.needs_author);
+        assert!(h.reasons[0].contains("needs an update from its author"), "{:?}", h.reasons);
+        // the fixer can still be tried again, and the last try is remembered
+        assert!(h.tool.is_some());
+        assert_eq!(h.tried.unwrap().changed, 0);
+        let _ = std::fs::remove_dir_all(&dir);
+        // a mod remade for the new model is left alone
+        let (c, dir) = belle("[TextureOverrideBelleBodyPosition]\nhash = 5838ad30\n");
+        assert!(!c.needs_author && c.needs.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

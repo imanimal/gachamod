@@ -1,5 +1,5 @@
 // Shared state for the GameBanana browser: the filters (one set per game, shared by the Browse page, Home's
-// embedded browser and the character pages, so Expand keeps them), what the library has (installed and
+// embedded browser and the character pages, so Expand keeps them; each visit starts plain), what the library has (installed and
 // archived mods by GameBanana id) and opening a mod's page. Owner: BROWSE area.
 import { useEffect, useSyncExternalStore } from "react";
 import { library, type ArchiveEntry, type GameId, type ModEntry } from "../../lib/api";
@@ -53,37 +53,34 @@ export const KINDS: Array<{ value: GbKind; label: string; title: string }> = [
 ];
 export const kindLabel = (k: GbKind | null) => (k ? KINDS.find((x) => x.value === k)?.label ?? "All types" : "All types");
 
-const DEFAULTS: BrowseFilters = { sort: "popular", kind: null, category: null, character: null, hq: false, hideInstalled: false, followed: false, search: "" };
-const filterKey = (game: GameId) => `gm.browse.filters.${game}`;
+/** What a visit starts with: newest mods first, nothing filtered. */
+export const DEFAULTS: BrowseFilters = { sort: "newest", kind: null, category: null, character: null, hq: false, hideInstalled: false, followed: false, search: "" };
 const filters = new Map<GameId, BrowseFilters>();
 const filterSubs = new Set<() => void>();
 /** The sort from before a search switched to Relevance, put back when the search is cleared. */
 const sortBeforeSearch = new Map<GameId, BrowseSort>();
 const browseSort = (game: GameId, s: BrowseSort) => (s === "relevance" ? sortBeforeSearch.get(game) ?? DEFAULTS.sort : s);
 
+// filters were kept between visits before; a visit now always starts plain (saved filter sets put one back)
+try { for (const k of Object.keys(localStorage)) if (k.startsWith("gm.browse.filters.")) localStorage.removeItem(k); } catch { /* storage off */ }
+
 function readFilters(game: GameId): BrowseFilters {
   const hit = filters.get(game);
   if (hit) return hit;
-  let f: BrowseFilters = { ...DEFAULTS };
-  try {
-    const raw = JSON.parse(localStorage.getItem(filterKey(game)) ?? "null") as Partial<BrowseFilters> | null;
-    if (raw && typeof raw === "object") {
-      f = {
-        ...f,
-        sort: raw.sort !== "relevance" && SORTS.some((s) => s.value === raw.sort) ? raw.sort! : f.sort,
-        kind: KINDS.some((k) => k.value === raw.kind) ? raw.kind! : null,
-        hq: raw.hq === true, hideInstalled: raw.hideInstalled === true, followed: raw.followed === true,
-      };
-    }
-  } catch { /* storage off or bad */ }
+  const f: BrowseFilters = { ...DEFAULTS };
   filters.set(game, f);
   return f;
 }
 
 export function getFilters(game: GameId): BrowseFilters { return readFilters(game); }
 
-/** Change some filters of a game. Sort, type and the switches are remembered; the character, category and search
- *  only last while the browser stays open (a saved filter set keeps them on purpose). */
+/** How many filters are on, besides the sort and the search (the Filters button's count). */
+export function filterCount(f: BrowseFilters, fixedChar = false): number {
+  return [f.kind, f.category && !f.character, !fixedChar && f.character, f.hq, f.followed, f.hideInstalled].filter(Boolean).length;
+}
+
+/** Change some filters of a game. They last while a browser stays open (and across Home's Expand); the next visit
+ *  starts from DEFAULTS. */
 export function setFilters(game: GameId, patch: Partial<BrowseFilters>) {
   const cur = readFilters(game);
   const next = { ...cur, ...patch };
@@ -97,16 +94,11 @@ export function setFilters(game: GameId, patch: Partial<BrowseFilters>) {
   }
   if (Object.keys(next).every((k) => next[k as keyof BrowseFilters] === cur[k as keyof BrowseFilters])) return;
   filters.set(game, next);
-  try {
-    const { search: _s, character: _c, category: _g, ...keep } = next;
-    keep.sort = browseSort(game, keep.sort);
-    localStorage.setItem(filterKey(game), JSON.stringify(keep));
-  } catch { /* storage off */ }
   filterSubs.forEach((f) => f());
 }
 
-// A browser opening fresh drops the last visit's character, category and search, unless something opened it to show
-// them (a category link, See all, Expand). Those mark the game just before they navigate.
+// A browser opening fresh drops the last visit's filters, unless something opened it to show them (a category link,
+// See all, Expand). Those mark the game just before they navigate.
 const carry = new Map<GameId, number>();
 
 /** Set filters for the browser that is about to open (and keep them when it does). */
@@ -119,8 +111,8 @@ export function openWithFilters(game: GameId, patch: Partial<BrowseFilters> = {}
 export function beginVisit(game: GameId) {
   const at = carry.get(game);
   if (at !== undefined && Date.now() - at < 5000) return;
-  const cur = readFilters(game);
-  if (cur.character || cur.category || cur.search) filters.set(game, { ...cur, character: null, category: null, search: "", sort: browseSort(game, cur.sort) });
+  sortBeforeSearch.delete(game);
+  filters.set(game, { ...DEFAULTS });
 }
 
 /** The browser has mounted: a mark left for it is used up. */

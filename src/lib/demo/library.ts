@@ -699,7 +699,7 @@ export function registerLibraryDemo() {
 const archived: ArchiveEntry[] = [];
 let nextArchive = 1;
 function trashDays() {
-  const d = Number(demoDb.settings.get("trash.days") ?? 14);
+  const d = Number(demoDb.settings.get("trash.days") ?? 0);
   return Number.isFinite(d) ? Math.min(Math.max(Math.round(d), 0), 3650) : 14;
 }
 

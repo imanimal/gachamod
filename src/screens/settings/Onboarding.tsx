@@ -11,12 +11,10 @@ import { imm, settings, type GameState, type ImmInfo } from "../../lib/api";
 import { allGames, go, useGames } from "../../lib/store";
 import { canInstallLoader, installLoaders, recheck, useSetup } from "../../lib/setup";
 import { startHints } from "../../shell/hints";
+import { oxford } from "../../lib/notes";
 import "./settings.css";
 
-const listNames = (list: GameState[]) => {
-  const n = list.map((g) => g.name);
-  return n.length <= 1 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
-};
+const listNames = (list: GameState[]) => oxford(list.map((g) => g.name), 12);
 
 /** Called once the games are known at start. With a game ready and no first start yet, says what was found (and the
  *  usage data note) in a toast, offers loaders for other games on this PC, and points at mods IMM keeps. */

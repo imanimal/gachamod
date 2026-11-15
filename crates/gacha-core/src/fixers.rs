@@ -26,6 +26,10 @@ pub struct FixerFile {
     pub at: i64,
     /// The link the fix data gives for the tool, for one that comes from GitHub.
     pub source: String,
+    /// It opens a window of its own and works through the whole Mods folder there, so it runs once for every mod
+    /// that needs it. Worked out when listed, not saved.
+    #[serde(skip_deserializing)]
+    pub window: bool,
 }
 
 /// One file of a GameBanana tool to download.
@@ -63,12 +67,25 @@ fn folder_name(name: &str, fallback: &str) -> String {
 pub fn list(data_dir: &Path, game: &str) -> Result<Vec<FixerFile>> {
     let path = root(data_dir, game)?.join(LIST);
     let all: Vec<FixerFile> = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-    Ok(all.into_iter().filter(|f| Path::new(&f.main).exists()).collect())
+    Ok(all.into_iter().filter(|f| Path::new(&f.main).exists()).map(|mut f| { f.window = is_window_exe(Path::new(&f.main)); f }).collect())
 }
 
+/// The same fixer: the same GameBanana tool, or the same link in the fix data.
+fn same_fixer(a: &FixerFile, b: &FixerFile) -> bool {
+    (a.tool_id != 0 && a.tool_id == b.tool_id) || (!a.source.is_empty() && a.source == b.source)
+}
+
+/// List a downloaded fixer. Older versions of the same fixer are deleted, so there is one copy of each: the newest.
 fn remember(data_dir: &Path, game: &str, entry: &FixerFile) -> Result<()> {
     let mut all = list(data_dir, game)?;
-    all.retain(|f| f.file_id != entry.file_id);
+    let base = root(data_dir, game)?;
+    for old in all.iter().filter(|f| f.file_id != entry.file_id && same_fixer(f, entry) && f.dir != entry.dir) {
+        let dir = PathBuf::from(&old.dir);
+        // only a folder of its own inside the fixers folder
+        if dir.starts_with(&base) && dir != base { let _ = std::fs::remove_dir_all(&dir); }
+        if let Some(up) = dir.parent().filter(|p| *p != base && p.starts_with(&base)) { let _ = std::fs::remove_dir(up); }
+    }
+    all.retain(|f| f.file_id != entry.file_id && !same_fixer(f, entry));
     all.push(entry.clone());
     let path = root(data_dir, game)?.join(LIST);
     std::fs::write(&path, serde_json::to_string_pretty(&all).map_err(|e| Error::Invalid(e.to_string()))?)?;
@@ -125,7 +142,7 @@ pub fn place(data_dir: &Path, game: &str, req: &FixerRequest, downloaded: &Path)
     let entry = FixerFile {
         tool_id: req.tool_id, file_id: req.file_id, tool: req.tool.clone(), file: req.file.clone(),
         dir: dir.to_string_lossy().into_owned(), main: main_of(&dir).to_string_lossy().into_owned(), at: crate::db::now(),
-        source: req.source.clone(),
+        source: req.source.clone(), window: false,
     };
     remember(data_dir, game, &entry)?;
     Ok(entry)
@@ -217,8 +234,14 @@ pub struct FixerRun {
 
 /// A console fixer that's still running after this waits for a key press nobody can give it.
 const CONSOLE_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
-/// A fixer with its own window waits for the player.
-const WINDOW_LIMIT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+/// How long a fixer with its own window is watched for.
+const WINDOW_LIMIT: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+/// A window fixer is done once the Mods folder has stayed the same this long after it changed something.
+const QUIET: std::time::Duration = std::time::Duration::from_secs(6);
+
+static STOP_WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Stop watching a fixer's window now and go by what it has changed so far.
+pub fn stop_waiting() { STOP_WAITING.store(true, std::sync::atomic::Ordering::Relaxed); }
 
 type Snapshot = std::collections::BTreeMap<String, (u64, Option<std::time::SystemTime>)>;
 
@@ -316,44 +339,128 @@ fn launch(main: &Path, cwd: &Path, tool: &str) -> Result<Ran> {
     Ok(Ran { window, stopped, output: tail.trim().to_string() })
 }
 
-/// Run a downloaded fixer (`file_id`) on one mod the way fixers' readmes say: from inside the mod's folder. Every
-/// file is copied first, and the backup keeps the ones that changed (restoring it undoes the run).
-/// A fixer that changes nothing from its own folder gets one more try as a copy placed in the mod's folder.
-pub fn run_on_mod(shared: &crate::db::Shared, data_dir: &Path, game: &str, file_id: u64, mod_id: &str) -> Result<FixerRun> {
-    let lock = || shared.lock().map_err(|_| Error::Db("The local database is stuck. Restart gachamod".into()));
-    let fixer = list(data_dir, game)?.into_iter().find(|f| f.file_id == file_id)
-        .ok_or_else(|| Error::Invalid("That fixer isn't downloaded any more. Try again".into()))?;
-    let m = crate::library::get(&*lock()?, game, mod_id)?;
+fn lock(shared: &crate::db::Shared) -> Result<std::sync::MutexGuard<'_, crate::db::Db>> {
+    shared.lock().map_err(|_| Error::Db("The local database is stuck. Restart gachamod".into()))
+}
+
+fn fixer_of(data_dir: &Path, game: &str, file_id: u64) -> Result<FixerFile> {
+    list(data_dir, game)?.into_iter().find(|f| f.file_id == file_id)
+        .ok_or_else(|| Error::Invalid("That fixer isn't downloaded any more. Try again".into()))
+}
+
+/// A mod with every file copied, ready for a fixer.
+struct Readied { m: crate::model::ModEntry, dir: PathBuf, before: Snapshot, backup: crate::backups::Backup }
+
+fn ready(shared: &crate::db::Shared, game: &str, mod_id: &str, tool: &str) -> Result<Readied> {
+    let m = crate::library::get(&*lock(shared)?, game, mod_id)?;
     let dir = PathBuf::from(&m.path);
     if !dir.is_dir() { return Err(Error::Invalid(format!("{}'s folder isn't there any more", m.name))); }
     let before = snapshot(&dir);
     let files: Vec<String> = before.keys().cloned().collect();
-    let backup = crate::backups::take(&*lock()?, game, mod_id, &dir, &files, &format!("Ran {} on {}", fixer.tool, m.name))?;
+    let db = lock(shared)?;
+    // listing trims a backup that an earlier run of this mod never finished (the app was closed while it ran)
+    let _ = crate::backups::list(&db, Some(game), Some(mod_id));
+    let backup = crate::backups::take_open(&db, game, mod_id, &dir, &files, &format!("Ran {tool} on {}", m.name))?;
+    drop(db);
+    Ok(Readied { m, dir, before, backup })
+}
+
+/// Measure what the fixer did to a mod: the backup keeps only what changed, and the run is remembered.
+fn settle(shared: &crate::db::Shared, game: &str, r: Readied, after: &Snapshot, tool: &str, stopped: bool, output: &str) -> Result<FixerRun> {
+    let (changed, created) = diff(&r.before, after);
+    let n = changed.len() + created.len();
+    let backup = crate::backups::keep_only(&*lock(shared)?, r.backup, &changed, &created)?;
+    if backup.is_some() && r.m.loaded() { crate::devtools::mark_changed(game); }
+    let _ = crate::fixes::note_attempt(&*lock(shared)?, game, &r.m.id, tool, n);
+    crate::logs::info(format!("Ran {tool} on {}: {n} files changed{}", r.m.name, if stopped { ", stopped at the time limit" } else { "" }));
+    Ok(FixerRun { mod_id: r.m.id.clone(), name: r.m.name.clone(), backup, changed: n, stopped, output: output.into() })
+}
+
+/// Open a fixer that has its own window and watch what it does. Nobody has to close it: it is done when it has
+/// changed files under `watch` (the Mods folder) and they have then stayed the same for a few seconds, when its
+/// window is closed, when the player says to stop waiting, or after ten minutes. The window is left open.
+fn launch_window(main: &Path, cwd: &Path, tool: &str, watch: &Path) -> Result<()> {
+    use std::sync::atomic::Ordering;
+    let mut child = std::process::Command::new(main).current_dir(cwd).spawn()
+        .map_err(|e| Error::Invalid(format!("{tool} didn't start: {e}")))?;
+    STOP_WAITING.store(false, Ordering::Relaxed);
+    let start = std::time::Instant::now();
+    let mut last = snapshot(watch);
+    let mut changed_at: Option<std::time::Instant> = None;
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        if child.try_wait().ok().flatten().is_some() || STOP_WAITING.swap(false, Ordering::Relaxed) { break; }
+        let now = snapshot(watch);
+        if now != last { changed_at = Some(std::time::Instant::now()); last = now; }
+        else if changed_at.is_some_and(|t| t.elapsed() >= QUIET) { break; }
+        if start.elapsed() > WINDOW_LIMIT { break; }
+    }
+    Ok(())
+}
+
+/// Run a downloaded fixer (`file_id`) on one mod the way fixers' readmes say: from inside the mod's folder. Every
+/// file is copied first, and the backup keeps the ones that changed (restoring it undoes the run).
+/// A fixer that changes nothing from its own folder gets one more try as a copy placed in the mod's folder.
+pub fn run_on_mod(shared: &crate::db::Shared, data_dir: &Path, game: &str, file_id: u64, mod_id: &str) -> Result<FixerRun> {
+    let fixer = fixer_of(data_dir, game, file_id)?;
+    if fixer.window {
+        let mut runs = run_on_mods(shared, data_dir, game, file_id, &[mod_id.to_string()])?;
+        return runs.pop().ok_or_else(|| Error::Invalid("That mod isn't there any more".into()));
+    }
+    let r = ready(shared, game, mod_id, &fixer.tool)?;
     let main = PathBuf::from(&fixer.main);
-    let first = launch(&main, &dir, &fixer.tool);
-    let mut ran = match first {
-        Ok(r) => r,
-        Err(e) => { let _ = crate::backups::keep_only(&*lock()?, backup, &[], &[]); return Err(e); }
+    let mut ran = match launch(&main, &r.dir, &fixer.tool) {
+        Ok(ran) => ran,
+        Err(e) => { let _ = crate::backups::keep_only(&*lock(shared)?, r.backup, &[], &[]); return Err(e); }
     };
-    let mut after = snapshot(&dir);
+    let mut after = snapshot(&r.dir);
     let alone = walkdir::WalkDir::new(&fixer.dir).into_iter().flatten().filter(|e| e.file_type().is_file()).count() == 1;
-    if after == before && !ran.window && main.is_file() && alone {
+    if after == r.before && !ran.window && main.is_file() && alone {
         if let Some(name) = main.file_name() {
-            let copy = dir.join(name);
+            let copy = r.dir.join(name);
             if !copy.exists() && std::fs::copy(&main, &copy).is_ok() {
-                let again = launch(&copy, &dir, &fixer.tool);
+                let again = launch(&copy, &r.dir, &fixer.tool);
                 let _ = std::fs::remove_file(&copy);
-                if let Ok(r) = again { ran = r; }
-                after = snapshot(&dir);
+                if let Ok(x) = again { ran = x; }
+                after = snapshot(&r.dir);
             }
         }
     }
-    let (changed, created) = diff(&before, &after);
-    let n = changed.len() + created.len();
-    let backup = crate::backups::keep_only(&*lock()?, backup, &changed, &created)?;
-    if backup.is_some() && m.loaded() { crate::devtools::mark_changed(game); }
-    crate::logs::info(format!("Ran {} on {}: {n} files changed{}", fixer.tool, m.name, if ran.stopped { ", stopped at the time limit" } else { "" }));
-    Ok(FixerRun { mod_id: m.id.clone(), name: m.name.clone(), backup, changed: n, stopped: ran.stopped, output: ran.output })
+    settle(shared, game, r, &after, &fixer.tool, ran.stopped, &ran.output)
+}
+
+/// Run a fixer once for several mods. This is for a fixer with a window of its own: it works through the whole Mods
+/// folder there, so opening it again for each mod would only show the same window again. Every mod is copied first,
+/// the fixer opens once, and each mod gets its own result and its own backup of what changed in it. The window
+/// doesn't have to be closed (`launch_window`).
+pub fn run_on_mods(shared: &crate::db::Shared, data_dir: &Path, game: &str, file_id: u64, mod_ids: &[String]) -> Result<Vec<FixerRun>> {
+    let fixer = fixer_of(data_dir, game, file_id)?;
+    let mut readied: Vec<Readied> = Vec::new();
+    for id in mod_ids {
+        // a mod that is gone doesn't stop the others
+        if let Ok(r) = ready(shared, game, id, &fixer.tool) { readied.push(r); }
+    }
+    let Some(first) = readied.first() else { return Err(Error::Invalid("None of those mods are there any more".into())) };
+    let main = PathBuf::from(&fixer.main);
+    let started = if fixer.window {
+        let watch = crate::games::mods_dir(&*lock(shared)?, game).unwrap_or_else(|_| first.dir.clone());
+        launch_window(&main, &first.dir, &fixer.tool, &watch).map(|()| (false, String::new()))
+    } else {
+        launch(&main, &first.dir, &fixer.tool).map(|ran| (ran.stopped, ran.output))
+    };
+    let (stopped, output) = match started {
+        Ok(x) => x,
+        Err(e) => {
+            for r in readied { let _ = crate::backups::keep_only(&*lock(shared)?, r.backup, &[], &[]); }
+            return Err(e);
+        }
+    };
+    let mut out = Vec::new();
+    for r in readied {
+        let after = snapshot(&r.dir);
+        out.push(settle(shared, game, r, &after, &fixer.tool, stopped, &output)?);
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -449,6 +556,22 @@ mod tests {
         // deleted by hand: no longer listed
         std::fs::remove_dir_all(&f.dir).unwrap();
         assert!(list(d.path(), "gi").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_newer_version_replaces_the_old_install() {
+        let d = tempfile::tempdir().unwrap();
+        let dl = d.path().join("fixer-v3.2.exe");
+        std::fs::write(&dl, b"MZ old").unwrap();
+        let old = place(d.path(), "zzz", &req("fixer-v3.2.exe", 1), &dl).unwrap();
+        let dl = d.path().join("fixer-v3.3.exe");
+        std::fs::write(&dl, b"MZ new").unwrap();
+        let new = place(d.path(), "zzz", &req("fixer-v3.3.exe", 2), &dl).unwrap();
+        assert!(!Path::new(&old.dir).exists(), "the old version's folder is deleted");
+        assert!(Path::new(&new.main).is_file());
+        let all = list(d.path(), "zzz").unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].file_id, 2);
     }
 
     #[test]

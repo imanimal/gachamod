@@ -13,6 +13,7 @@ import { profilesChanged } from "../profiles/data";
 import { changeStates, publish, removeMods, toggleMods } from "./data";
 import { previewChanged } from "./Preview";
 import { askOverlap } from "./overlap";
+import { notesText } from "../../lib/notes";
 
 /** "Ellen hoodie" or "3 mods". */
 export const modsName = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : `${list.length} mods`);
@@ -149,7 +150,7 @@ export async function combineMods(game: GameId, list: ModEntry[]) {
   try {
     const c = await library.merge(game, list.map((m) => m.id));
     publish(game, c);
-    toast(c.notes.join(". "), false, c.changed[0] ? { label: "View parts", run: () => openDetails(c.changed[0]!, "parts") } : undefined);
+    toast(notesText(c.notes), false, c.changed[0] ? { label: "View parts", run: () => openDetails(c.changed[0]!, "parts") } : undefined);
   } catch (e) { fail(e); }
 }
 

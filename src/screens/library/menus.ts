@@ -79,7 +79,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
     !many && mod.hasKeys && { label: "Toggles", icon: "key", title: "Its toggles, to change their keys or turn them off", onClick: () => openDetails(mod, "keys") },
     !many && mod.conflicts > 0 && { label: "Conflicts", icon: "warn", title: "Mods that change the same parts as this one, to pick which one wins", onClick: () => openDetails(mod, "conflicts") },
     !many && mod.iniCount > 0 && { label: "View in 3D", icon: "box", title: "Turn the mod's model around, as its toggles are set now", onClick: () => openDetails(mod, "model") },
-    broken.length > 0 && { label: "Fix for the game update", icon: "wand", title: reasons.slice(0, 3).join(". ") || "A game update broke it and a fix is known", onClick: () => void fixForUpdate(game, broken) },
+    broken.length > 0 && { label: "Attempt fix for the game update", icon: "wand", title: reasons.slice(0, 3).join(". ") || "A game update broke it. Swaps its outdated hashes, or runs the fixer it needs", onClick: () => void fixForUpdate(game, broken) },
     onScreen && mod.hasKeys && { label: "Toggles only while on screen", icon: "keyboard", title: "Its toggles only work while its character is on screen, so they stop taking keys meant for other mods", onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
     !many && { label: "Rename", icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
@@ -152,7 +152,7 @@ registerCommands("library.characters", async (query) => {
       keywords: `${one} ${many} character page skins outfits`, hint: n ? `${n} ${n === 1 ? "mod" : "mods"}` : undefined, priority: n ? 4 : 0,
       run: () => go({ view: "characters", character: c.name }) });
     if (n) out.push({ id: `charmods:${g.id}:${c.name}`, title: `${c.name}'s mods`, section: "Mods", img, icon: "mods",
-      keywords: `${one} installed mods skins my`, hint: `${n}`, priority: 5, run: () => go({ view: "library", character: c.name }) });
+      keywords: `${one} installed mods skins my`, hint: `${n}`, where: "Mods", priority: 5, run: () => go({ view: "library", character: c.name }) });
   }
   return out;
 });
@@ -169,6 +169,6 @@ registerCommands("library.mods", async (query) => {
     .map((m) => ({
       id: `mod:${g.id}:${m.id}`, title: m.name, section: "Mods", icon: "mods" as const,
       keywords: `${m.character ?? ""} ${one} installed mod ${m.tags.join(" ")} ${m.source?.submitter ?? ""}`,
-      hint: m.enabled ? "On" : "Off", run: () => go({ view: "library", modId: m.id }),
+      hint: m.enabled ? "On" : "Off", where: `Mods › ${m.character ?? "No character"}`, run: () => go({ view: "library", modId: m.id }),
     }));
 });

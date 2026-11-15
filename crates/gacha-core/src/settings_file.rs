@@ -99,6 +99,9 @@ pub struct ImportSummary {
     pub skipped_paths: Vec<String>,
     /// Mods named in profiles that this PC doesn't have.
     pub missing_mods: u32,
+    /// Their names, each once.
+    #[serde(default)]
+    pub missing_names: Vec<String>,
     /// The window's choices to apply (theme picks, colours, text size).
     pub ui: BTreeMap<String, String>,
     /// The backup taken before applying (empty in a preview).
@@ -325,7 +328,10 @@ fn plan(db: &Db, file: &SettingsFile) -> Result<Plan> {
             match found {
                 Some(id) if !rows.iter().any(|(x, _, _): &(String, bool, Vec<VarValue>)| x == id) => rows.push((id.to_string(), m.enabled, m.vars.clone())),
                 Some(_) => {}
-                None => s.missing_mods += 1,
+                None => {
+                    s.missing_mods += 1;
+                    if !s.missing_names.contains(&m.name) { s.missing_names.push(m.name.clone()); }
+                }
             }
         }
         let existing: Option<i64> = db.conn.query_row("SELECT id FROM profiles WHERE game = ?1 AND lower(name) = lower(?2)", params![def.id, name], |r| r.get(0)).optional()?;

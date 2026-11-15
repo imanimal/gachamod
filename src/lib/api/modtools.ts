@@ -28,7 +28,8 @@ export interface Problem {
 /** "point": in `ini`, the `filename = <from>` lines change to `<to>`, the same file found elsewhere in the mod.
  *  "keep": `ini` stays on and the other `inis` are renamed DISABLED_<name>. Set `ini` to the one to keep. */
 export interface ProblemFix { kind: "point" | "keep" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
-export interface ConflictRef { modId: string; name: string; shared: number }
+/** `parts`: the shared parts by their section names ("ZhuYuan.Body.IB (6619364f)"), at most 40. */
+export interface ConflictRef { modId: string; name: string; shared: number; parts?: string[] }
 export interface ModInspect {
   modId: string; inis: string[]; keys: KeyBinding[]; vars: VarInfo[]; hashCount: number;
   conflicts: ConflictRef[]; problems: Problem[]; readmes: Array<[string, string]>;
@@ -128,7 +129,13 @@ export interface ModHealthRow {
   tool: ToolLink | null;
   /** Hash lines a fix changes. */
   swaps: number;
+  /** The game changed the model itself, so no fixer can repair the mod: it needs an update from its author. */
+  needsAuthor: boolean;
+  /** The last fixer run on it that left it broken. */
+  tried: FixTried | null;
 }
+/** A fixer run that didn't fix a mod. `changed` is how many files it changed (0: it found nothing it knows). */
+export interface FixTried { tool: string; at: number; changed: number }
 export interface FixInfo { game: string; currentVersion: string; pairs: number; sources: FixSource[] }
 export interface FixAll { changed: ModBackup[]; skipped: ModSkip[] }
 
@@ -149,6 +156,9 @@ export interface FixerFile {
   at: number;
   /** The fix data's link, for a fixer from GitHub. */
   source?: string;
+  /** It opens a window of its own and works through the whole Mods folder there, so it runs once for every mod that
+   *  needs it (fixers.runAll). */
+  window?: boolean;
 }
 export interface FixerRequest { toolId: number; fileId: number; tool: string; file: string; url: string; md5?: string | null; source?: string }
 /** What running a fixer on one mod did. Restoring `backup` undoes it; null when it changed nothing. */
@@ -169,6 +179,10 @@ export const fixers = {
   github: (game: GameId, source: string, tool: string) => call<FixerFile>("fixers_github", { game, source, tool }),
   /** Run a downloaded fixer on one mod from inside its folder, with a backup first. */
   run: (game: GameId, fileId: number, modId: string) => call<FixerRun>("fixers_run", { game, fileId, modId }),
+  /** Run a fixer that has its own window once for several mods. Each mod gets its own result and backup. */
+  runAll: (game: GameId, fileId: number, modIds: string[]) => call<FixerRun[]>("fixers_run_all", { game, fileId, modIds }),
+  /** Stop watching a fixer's window: runAll returns with what it changed so far. */
+  stopWaiting: () => call<void>("fixers_stop_waiting"),
 };
 
 // ── keys: rebinding, turning keys off, "only while on screen" and clashes (crates/gacha-core/src/keys.rs) ──

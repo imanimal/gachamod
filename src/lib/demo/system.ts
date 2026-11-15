@@ -224,6 +224,6 @@ function demoImport(backup: string): ImportSummary {
   return {
     appVersion: "0.1.0", exportedAt: Math.floor(Date.now() / 1000) - 86_400, settings: 4, games: ["Zenless Zone Zero"],
     newProfiles: ["Summer (ZZZ)"], replacedProfiles: ["Default (ZZZ)"], skippedPaths: ["Genshin Impact game folder: D:\\Games\\Genshin Impact Game"],
-    missingMods: 2, ui: {}, backup,
+    missingMods: 2, missingNames: ["Ellen Maid", "Neon Burnice"], ui: {}, backup,
   };
 }

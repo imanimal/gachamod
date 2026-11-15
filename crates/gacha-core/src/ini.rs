@@ -100,7 +100,14 @@ pub struct ProblemFix {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConflictRef { pub mod_id: String, pub name: String, pub shared: u32 }
+pub struct ConflictRef {
+    pub mod_id: String,
+    pub name: String,
+    pub shared: u32,
+    /// The shared parts by their section names in the mod's ini ("ZhuYuan.Body.IB"), at most 40.
+    #[serde(default)]
+    pub parts: Vec<String>,
+}
 
 /// Everything the mod detail drawer shows about a mod's insides.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -144,7 +151,13 @@ pub struct HashHit { pub mod_id: String, pub name: String, pub ini: String, pub 
 /// Cheap facts the library scan stores for each mod.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QuickFacts { pub ini_count: u32, pub has_keys: bool, pub hashes: Vec<String> }
+pub struct QuickFacts {
+    pub ini_count: u32,
+    pub has_keys: bool,
+    pub hashes: Vec<String>,
+    /// The hashes of sections that change something (not just `hash` and `match_*` lines). Conflicts count these.
+    pub active: Vec<String>,
+}
 
 // ── reading text ──
 
@@ -222,19 +235,56 @@ fn norm_hash(v: &str) -> Option<String> {
 
 fn is_override(lower: &str) -> bool { lower.starts_with("textureoverride") || lower.starts_with("shaderoverride") }
 
-/// The cheap part of one ini that the scan needs.
+/// The cheap part of one ini that the scan needs. `hashes` is (section, hash, does something).
 #[derive(Debug, Default)]
-struct IniFacts { has_keys: bool, hashes: Vec<(String, String)> }
+struct IniFacts { has_keys: bool, hashes: Vec<(String, String, bool)> }
+
+/// An override that only names a hash (and how it matches) changes nothing in game. Some mods carry a block of them
+/// for other characters, which would otherwise look like conflicts with every mod that has the same block.
+fn does_something(s: &Sec) -> bool {
+    s.lines.iter().any(|l| !(l.lkey == "hash" || l.lkey.starts_with("match_") || l.lkey == "filter_index" || l.lkey == "allow_duplicate_hash"))
+}
 
 fn facts_of(ini: &Ini) -> IniFacts {
     let mut f = IniFacts::default();
     for s in &ini.sections {
         if s.lower.starts_with("key") && s.first("key").is_some_and(|k| !k.is_empty()) { f.has_keys = true; }
         if is_override(&s.lower) {
-            for h in s.get("hash").filter_map(norm_hash) { f.hashes.push((s.name.clone(), h)); }
+            let live = does_something(s);
+            for h in s.get("hash").filter_map(norm_hash) { f.hashes.push((s.name.clone(), h, live)); }
         }
     }
     f
+}
+
+/// The parts of a mod that change each hash: hash -> section names without "TextureOverride" ("ZhuYuan.Body.IB").
+fn parts_by_hash(mod_dir: &Path) -> HashMap<String, Vec<String>> {
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    for (path, _) in mod_inis(mod_dir) {
+        let Some(f) = cached_facts(&path) else { continue };
+        for (sec, h, live) in &f.hashes {
+            if !live { continue; }
+            let lower = sec.to_ascii_lowercase();
+            let name = if lower.starts_with("textureoverride") { &sec["textureoverride".len()..] }
+                else if lower.starts_with("shaderoverride") { &sec["shaderoverride".len()..] } else { sec.as_str() };
+            let list = out.entry(h.clone()).or_default();
+            let name = name.trim().to_string();
+            if !list.contains(&name) { list.push(name); }
+        }
+    }
+    out
+}
+
+/// Readable names for shared hashes: the section names `parts` gives them, the hash itself when it has none.
+fn part_names(parts: &HashMap<String, Vec<String>>, hashes: &[String]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for h in hashes {
+        let n = parts.get(h).and_then(|v| v.first()).map(|n| format!("{n} ({h})")).unwrap_or_else(|| h.clone());
+        if !names.contains(&n) { names.push(n); }
+    }
+    names.sort_by_key(|n| n.to_lowercase());
+    names.truncate(40);
+    names
 }
 
 const QUICK_MAX: u64 = 2 * 1024 * 1024;
@@ -289,14 +339,16 @@ pub(crate) fn mod_inis(dir: &Path) -> Vec<(PathBuf, String)> {
 pub fn quick_facts(mod_dir: &Path) -> QuickFacts {
     let inis = mod_inis(mod_dir);
     let mut hashes = BTreeSet::new();
+    let mut active = BTreeSet::new();
     let mut has_keys = false;
     for (path, _) in &inis {
         if let Some(f) = cached_facts(path) {
             has_keys |= f.has_keys;
-            hashes.extend(f.hashes.iter().map(|(_, h)| h.clone()));
+            hashes.extend(f.hashes.iter().map(|(_, h, _)| h.clone()));
+            active.extend(f.hashes.iter().filter(|(_, _, live)| *live).map(|(_, h, _)| h.clone()));
         }
     }
-    QuickFacts { ini_count: inis.len() as u32, has_keys, hashes: hashes.into_iter().collect() }
+    QuickFacts { ini_count: inis.len() as u32, has_keys, hashes: hashes.into_iter().collect(), active: active.into_iter().collect() }
 }
 
 // ── readable key names ──
@@ -847,15 +899,33 @@ fn overlaps(inis: &[ModIni]) -> Vec<(Vec<usize>, bool)> {
     by_root.into_values().filter(|g| g.len() > 1).map(|g| { let u = g.iter().any(|&i| plain[i]); (g, u) }).collect()
 }
 
-/// "a.ini, b.ini and 2 more".
-fn name_list(names: &[&str]) -> String {
-    match names {
+/// "a.ini, b.ini, and 2 more": names joined with an Oxford comma, the first `max` of them.
+pub(crate) fn oxford<S: AsRef<str>>(names: &[S], max: usize) -> String {
+    let max = max.max(1);
+    let shown: Vec<&str> = names.iter().take(if names.len() > max { max - 1 } else { max }).map(|s| s.as_ref()).collect();
+    let rest = names.len() - shown.len();
+    let mut parts: Vec<String> = shown.iter().map(|s| s.to_string()).collect();
+    if rest > 0 { parts.push(format!("{rest} more")); }
+    match parts.as_slice() {
         [] => String::new(),
-        [a] => a.to_string(),
+        [a] => a.clone(),
         [a, b] => format!("{a} and {b}"),
-        [a, b, c] => format!("{a}, {b} and {c}"),
-        [a, b, rest @ ..] => format!("{a}, {b} and {} more", rest.len()),
+        [init @ .., last] => format!("{}, and {last}", init.join(", ")),
     }
+}
+
+fn name_list(names: &[&str]) -> String { oxford(names, 3) }
+
+/// Missing files of one kind from one ini, as one problem: "x.ini lists 3 files from ./Covered that aren't in the
+/// mod folder: a.dds, b.dds, and c.dds". The folder is said once when they all share it.
+fn missing_group(ini: &str, files: &[String], verb: &str, tail_one: &str, tail_many: &str) -> String {
+    if let [f] = files { return format!("{ini} {verb} {f}, which isn't in the mod folder{tail_one}"); }
+    let dir_of = |f: &str| f.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
+    let first = dir_of(&files[0]);
+    let same_dir = !first.is_empty() && files.iter().all(|f| dir_of(f) == first);
+    let names: Vec<String> = files.iter().map(|f| if same_dir { f.rsplit('/').next().unwrap_or(f).to_string() } else { f.clone() }).collect();
+    let from = if same_dir { format!(" from {first}") } else { String::new() };
+    format!("{ini} {verb} {} files{from} that aren't in the mod folder: {}{tail_many}", files.len(), oxford(&names, 12))
 }
 
 /// Sections the importer defines for every mod (ZZMI's `Core/ZZMI/main.ini` has `[CommandListSkinTexture]`),
@@ -916,6 +986,8 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
         loads = true;
         let base = m.abs.parent().unwrap_or(dir);
         let mut missing: Vec<(String, &str)> = Vec::new();
+        let mut no_key: Vec<String> = Vec::new();
+        let mut no_run: Vec<String> = Vec::new();
         for s in &ini.sections {
             if s.lower.starts_with("resource") {
                 for f in s.get("filename") {
@@ -926,50 +998,76 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
                 }
             }
             if s.lower.starts_with("key") && !s.get("key").any(|k| !k.trim().is_empty()) {
-                out.push(problem("no_key", "info", Some(&m.rel), format!("[{}] in {} has no key line, so it does nothing", s.name, m.rel)));
+                no_key.push(format!("[{}]", s.name));
             }
             for run in s.get("run") {
                 let r = run.trim();
                 let lower = r.to_lowercase();
                 if lower.starts_with("commandlist") && !r.contains('\\') && !all_sections.contains(lower.as_str())
                     && !core.get_or_insert_with(|| importer_sections(dir)).contains(&lower) {
-                    out.push(problem("missing_section", "warn", Some(&m.rel), format!("{} runs [{r}], which isn't in the mod. That step is skipped", m.rel)));
+                    let name = format!("[{r}]");
+                    if !no_run.contains(&name) { no_run.push(name); }
                 }
             }
         }
-        const SHOWN: usize = 8;
-        let mut shown: HashMap<&str, usize> = HashMap::new();
-        let mut extra: HashMap<&str, usize> = HashMap::new();
+        // one problem per kind of missing file, except ones with a fix of their own
+        let mut groups: BTreeMap<u8, Vec<String>> = BTreeMap::new();
         for (f, section) in &missing {
             let shown_f = f.replace('\\', "/");
             let name = Path::new(&shown_f).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            let (severity, detail) = if !used.contains(*section) {
-                ("info", format!("{} lists {shown_f}, which isn't in the mod folder. Nothing uses it, so the game never loads it", m.rel))
-            } else if name.to_lowercase().contains("remap") {
-                ("warn", format!("{} needs {shown_f}, which isn't in the mod folder. Only the remap for another model of the character (a skin, or the Raiden boss) uses it", m.rel))
-            } else {
-                ("bad", format!("{} needs {shown_f}, which isn't in the mod folder", m.rel))
-            };
-            let n = shown.entry(severity).or_default();
-            if *n >= SHOWN { *extra.entry(severity).or_default() += 1; continue; }
-            *n += 1;
-            let mut p = problem("missing_file", severity, Some(&m.rel), detail);
-            if severity != "info" {
+            let kind: u8 = if !used.contains(*section) { 2 } else if name.to_lowercase().contains("remap") { 1 } else { 0 };
+            if kind < 2 {
                 let index = files.get_or_insert_with(|| files_by_name(dir));
                 let found = index.get(&name.to_lowercase()).map(Vec::as_slice).unwrap_or(&[]);
                 if let Some(to) = pick_copy(f, found).and_then(|c| path_from(base, &c, f)) {
+                    let (severity, detail) = if kind == 1 {
+                        ("warn", format!("{} needs {shown_f}, which isn't in the mod folder. Only the remap for another model of the character (a skin, or the Raiden boss) uses it", m.rel))
+                    } else {
+                        ("bad", format!("{} needs {shown_f}, which isn't in the mod folder", m.rel))
+                    };
+                    let mut p = problem("missing_file", severity, Some(&m.rel), detail);
                     p.fix = Some(ProblemFix { kind: "point".into(), ini: Some(m.rel.clone()), from: Some(f.clone()), to: Some(to), inis: vec![] });
+                    out.push(p);
+                    continue;
                 }
             }
-            out.push(p);
+            groups.entry(kind).or_default().push(shown_f);
         }
-        for (severity, n) in extra {
-            out.push(problem("missing_file", severity, Some(&m.rel), format!("{} needs {n} more files like these that aren't there", m.rel)));
+        for (kind, list) in groups {
+            let (severity, detail) = match kind {
+                2 => ("info", missing_group(&m.rel, &list, "lists",
+                    ". Nothing uses it, so the game never loads it", ". Nothing uses them, so the game never loads them")),
+                1 => ("warn", missing_group(&m.rel, &list, "needs",
+                    ". Only the remap for another model of the character (a skin, or the Raiden boss) uses it",
+                    ". Only the remap for another model of the character (a skin, or the Raiden boss) uses them")),
+                _ => ("bad", missing_group(&m.rel, &list, "needs", "", "")),
+            };
+            out.push(problem("missing_file", severity, Some(&m.rel), detail));
+        }
+        if !no_key.is_empty() {
+            out.push(problem("no_key", "info", Some(&m.rel), if no_key.len() == 1 {
+                format!("{} in {} has no key line, so it does nothing", no_key[0], m.rel)
+            } else {
+                format!("{} in {} have no key line, so they do nothing", oxford(&no_key, 10), m.rel)
+            }));
+        }
+        if !no_run.is_empty() {
+            out.push(problem("missing_section", "warn", Some(&m.rel), if no_run.len() == 1 {
+                format!("{} runs {}, which isn't in the mod. That step is skipped", m.rel, no_run[0])
+            } else {
+                format!("{} runs {}, which aren't in the mod. Those steps are skipped", m.rel, oxford(&no_run, 10))
+            }));
         }
     }
-    for e in &empty {
-        let (severity, detail) = if loads { ("info", format!("{e} is empty. The mod's other inis still load")) } else { ("bad", format!("{e} is empty, so the game loads nothing from this mod")) };
-        out.push(problem("bad_ini", severity, Some(e), detail));
+    if !empty.is_empty() {
+        let verb = if empty.len() == 1 { "is" } else { "are" };
+        let list = oxford(&empty, 8);
+        let (severity, detail) = if loads {
+            ("info", format!("{list} {verb} empty. The mod's other inis still load"))
+        } else {
+            ("bad", format!("{list} {verb} empty, so the game loads nothing from this mod"))
+        };
+        out.push(problem("bad_ini", severity, Some(empty[0]), detail));
     }
     for (group, plain) in overlaps(inis) {
         if !plain { continue; }
@@ -1164,7 +1262,7 @@ fn enabled_hashes(mods: &[crate::model::ModEntry]) -> (Vec<usize>, HashMap<Strin
     let mut on = Vec::new();
     for (i, m) in mods.iter().enumerate().filter(|(_, m)| m.enabled) {
         on.push(i);
-        for h in quick_facts(Path::new(&m.path)).hashes { by_hash.entry(h).or_default().push(i); }
+        for h in quick_facts(Path::new(&m.path)).active { by_hash.entry(h).or_default().push(i); }
     }
     (on, by_hash)
 }
@@ -1184,15 +1282,18 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
     out.mod_id = m.id.clone();
     if m.enabled {
         let mods = mods_or_empty(db, game).unwrap_or_default();
-        let mine: HashSet<String> = quick_facts(&dir).hashes.into_iter().collect();
+        let mine: HashSet<String> = quick_facts(&dir).active.into_iter().collect();
         let (_, by_hash) = enabled_hashes(&mods);
-        let mut shared: HashMap<usize, u32> = HashMap::new();
+        let mut shared: HashMap<usize, Vec<String>> = HashMap::new();
         for h in &mine {
             let Some(list) = by_hash.get(h) else { continue };
             if list.len() >= COMMON_HASH { continue; }
-            for &i in list { if mods[i].id != m.id { *shared.entry(i).or_default() += 1; } }
+            for &i in list { if mods[i].id != m.id { shared.entry(i).or_default().push(h.clone()); } }
         }
-        let mut c: Vec<ConflictRef> = shared.into_iter().map(|(i, n)| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n }).collect();
+        let parts = if shared.is_empty() { HashMap::new() } else { parts_by_hash(&dir) };
+        let mut c: Vec<ConflictRef> = shared.into_iter().map(|(i, hs)| ConflictRef {
+            mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: hs.len() as u32, parts: part_names(&parts, &hs),
+        }).collect();
         c.sort_by(|a, b| b.shared.cmp(&a.shared).then_with(|| a.name.cmp(&b.name)));
         out.conflicts = c;
     }
@@ -1236,7 +1337,8 @@ pub fn conflicts(db: &Db, game: &str) -> Result<Vec<ConflictGroup>> {
         let n = hashes.len() as u32;
         let first = mods[idx[0]].character.clone();
         let character = first.filter(|c| idx.iter().all(|&i| mods[i].character.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(c))));
-        ConflictGroup { mods: idx.iter().map(|&i| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n }).collect(), hashes, character }
+        let parts = part_names(&parts_by_hash(Path::new(&mods[idx[0]].path)), &hashes);
+        ConflictGroup { mods: idx.iter().map(|&i| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n, parts: parts.clone() }).collect(), hashes, character }
     }).collect();
     out.sort_by(|a, b| b.hashes.len().cmp(&a.hashes.len()));
     Ok(out)
@@ -1267,7 +1369,7 @@ pub fn hash_lookup(db: &Db, game: &str, hash: &str) -> Result<Vec<HashHit>> {
     for m in &mods {
         for (abs, rel) in mod_inis(Path::new(&m.path)) {
             let Some(f) = cached_facts(&abs) else { continue };
-            for (section, h) in &f.hashes {
+            for (section, h, _) in &f.hashes {
                 if *h == want { out.push(HashHit { mod_id: m.id.clone(), name: m.name.clone(), ini: rel.clone(), section: section.clone(), enabled: m.enabled }); }
             }
         }
@@ -1363,6 +1465,8 @@ mod tests {
         assert_eq!(f.ini_count, 1);
         assert!(f.has_keys);
         assert_eq!(f.hashes, vec!["00001234", "11112222", "abcdef12"]);
+        // [ShaderOverrideX] only names its hash, so it changes nothing and conflicts leave it out
+        assert_eq!(f.active, vec!["11112222", "abcdef12"]);
         // a mod folder that is itself DISABLED still counts its own files
         let off = d.join("DISABLED Coca Cola");
         fs::create_dir_all(&off).unwrap();
@@ -1473,6 +1577,27 @@ mod tests {
     }
 
     #[test]
+    fn missing_files_of_one_kind_are_one_problem() {
+        let d = temp("grouped");
+        let mut ini = String::new();
+        for n in ["Diffuse", "NormalMap", "LightMap", "MaterialMap"] {
+            ini.push_str(&format!("[ResourceHair{n}]\nfilename = ./Covered/Hair{n}.dds\n"));
+        }
+        ini.push_str("[KeyA]\ntype = cycle\n[KeyB]\ntype = cycle\n");
+        fs::write(d.join("mod.ini"), ini).unwrap();
+        let ps = lint_dir(&d);
+        let missing: Vec<&Problem> = ps.iter().filter(|p| p.kind == "missing_file").collect();
+        assert_eq!(missing.len(), 1, "{ps:?}");
+        assert_eq!(missing[0].detail, "mod.ini lists 4 files from ./Covered that aren't in the mod folder: HairDiffuse.dds, \
+            HairNormalMap.dds, HairLightMap.dds, and HairMaterialMap.dds. Nothing uses them, so the game never loads them");
+        let keys: Vec<&Problem> = ps.iter().filter(|p| p.kind == "no_key").collect();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0].detail, "[KeyA] and [KeyB] in mod.ini have no key line, so they do nothing");
+        assert_eq!(oxford(&["a", "b", "c", "d", "e"], 3), "a, b, and 3 more");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
     fn variants_that_draw_over_each_other() {
         let d = temp("overlap");
         let variant = |extra: &str| format!("[TextureOverrideVB]\nhash = 11111111\n{extra}handling = skip\n[TextureOverrideIB]\nhash = 22222222\nmatch_first_index = 0\n{extra}handling = skip\n");
@@ -1485,7 +1610,7 @@ mod tests {
         let o = ps.iter().find(|p| p.kind == "overlap").expect("overlap");
         assert_eq!(o.severity, "bad");
         assert_eq!(o.fix.as_ref().unwrap().inis, vec!["1/a.ini", "2/a.ini", "3/a.ini"]);
-        assert!(o.detail.starts_with("1/a.ini, 2/a.ini and 3/a.ini change"), "{}", o.detail);
+        assert!(o.detail.starts_with("1/a.ini, 2/a.ini, and 3/a.ini change"), "{}", o.detail);
         // match_priority says which wins, and variants that each check a condition take turns
         write(&|n| format!("match_priority = {n}\n"));
         assert!(!lint_dir(&d).iter().any(|p| p.kind == "overlap"));

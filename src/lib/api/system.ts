@@ -121,6 +121,7 @@ export interface ImportSummary {
   skippedPaths: string[];
   /** Mods named in profiles that this PC doesn't have. */
   missingMods: number;
+  missingNames?: string[];
   /** The window's own choices to apply (theme picks, colours, text size). */
   ui: Record<string, string>;
   /** The backup taken before applying (empty in a preview). */

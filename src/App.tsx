@@ -178,7 +178,7 @@ export function App() {
     const play = () => (document.querySelector(".side .play-btn") as HTMLElement | null)?.click();
     const offKeys = installKeys({
       views: KEY_VIEWS, go: (v) => go(v as View), help: toggleHelp, back: () => back(), forward: () => forward(), nextGame, play,
-      palette: () => openPalette(), sidebar: toggleSide, menu: menuForFocus,
+      palette: (t) => openPalette(t), sidebar: toggleSide, menu: menuForFocus,
     });
     const offPad = installGamepad({
       nextView: (d) => { const cur = VIEWS.indexOf(routeRef.current); go(VIEWS[(cur + d + VIEWS.length) % VIEWS.length]!); },

@@ -12,8 +12,17 @@ import { Badge, Button, Confirm, Panel, Skeleton, TextField, plural } from "../.
 import { Icon } from "../../ui/Icon";
 import { KeyChip, keysChanged, onKeysChanged, recordBackups, recordEdit } from "../../ui/KeyEditor";
 import { toast } from "../../ui/toast";
-import { setToolsCount, turnOff } from "./toolsBadge";
+import { notesText, oxford } from "../../lib/notes";
+import { conflictKey, setToolsCount, turnOff } from "./toolsBadge";
+import { SharedParts } from "./ModInsides";
 import "./modtools.css";
+
+/** Skipped mods grouped by why, so one reason is said once. */
+function byReason(list: ModSkip[]): Array<[string, string[]]> {
+  const m = new Map<string, string[]>();
+  for (const s of list) m.set(s.reason, [...(m.get(s.reason) ?? []), s.name]);
+  return [...m];
+}
 
 function useMounted() {
   const live = useRef(true);
@@ -52,7 +61,7 @@ export function ConflictsPanel() {
   const { game, list, reload } = useGameList<ConflictGroup>(modtools.conflicts);
   const [busy, setBusy] = useState<string | null>(null);
   const live = useMounted();
-  useEffect(() => { if (game && list) setToolsCount(game, "conflicts", list.length); }, [game, list]);
+  useEffect(() => { if (game && list) setToolsCount(game, "conflicts", list.map(conflictKey)); }, [game, list]);
 
   const keep = (g: ConflictGroup, keepId: string) => {
     if (!game) return;
@@ -76,7 +85,7 @@ export function ConflictsPanel() {
             <li key={g.mods.map((m) => m.modId).join(",")} className="tp-conflict">
               <div className="tp-conflict-h">
                 {g.character && <span className="tp-conflict-char">{g.character}</span>}
-                <span className="hint" title={g.hashes.join(", ")}>{plural(g.hashes.length, "shared part")}</span>
+                <SharedParts n={g.hashes.length} parts={g.mods[0]?.parts ?? g.hashes} />
               </div>
               <ul className="tp-conflict-mods">
                 {g.mods.map((m) => (
@@ -214,8 +223,12 @@ export function KeyClashesPanel() {
       )}
       {skipped.length > 0 && (
         <div className="kc-skip">
-          <p className="hint">{plural(skipped.length, "mod")} stayed as {skipped.length === 1 ? "it was" : "they were"}: {skipped[0]!.reason.charAt(0).toLowerCase() + skipped[0]!.reason.slice(1)}.</p>
-          <ul className="kc-skipped hint">{skipped.slice(0, 6).map((s) => <li key={s.modId}>{s.name}</li>)}{skipped.length > 6 && <li>and {skipped.length - 6} more</li>}</ul>
+          <p className="hint">{plural(skipped.length, "mod")} stayed as {skipped.length === 1 ? "it was" : "they were"}:</p>
+          <ul className="kc-skipped hint">
+            {byReason(skipped).map(([reason, names]) => (
+              <li key={reason}>{oxford(names, 12)}: {reason.charAt(0).toLowerCase() + reason.slice(1)}</li>
+            ))}
+          </ul>
           {aiShown("useful") && game && (
             <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of these mods draws the character, then apply its answer"
               onClick={() => askAi({ kind: "keys-offscreen", game, modIds: skipped.slice(0, 8).map((s) => s.modId) })}>Ask the AI helper</Button>
@@ -339,8 +352,10 @@ export function ImmPanel() {
   const move = async (game: string) => {
     try {
       const r = await imm.takeover(game);
-      toast(r.notes[0] ?? `Moved the mods from Integrated Mod Manager`);
-      if (r.notes.length > 1) toast(r.notes.slice(1).join(" "), true);
+      const bad = r.notes.filter((n) => n.startsWith("Couldn't") || n.includes("couldn't"));
+      const good = r.notes.filter((n) => !bad.includes(n));
+      toast(good.length ? notesText(good) : "Moved the mods from Integrated Mod Manager");
+      if (bad.length) toast(notesText(bad), true);
       emitApp({ type: "library-refresh", game });
       if (live.current) setTick((n) => n + 1);
     } catch (e) { toast(errorText(e), true); }

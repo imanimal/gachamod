@@ -156,6 +156,21 @@ function Problems({ mod, problems, onFixed }: { mod: ModEntry; problems: Problem
   );
 }
 
+/** "14 shared parts", which opens to the list of them by the names the mod gives them. A few names usually say it
+ *  all: "ZhuYuan.Body.IB" on an Anby mod means both mods also change Zhu Yuan. */
+export function SharedParts({ n, parts }: { n: number; parts?: string[] }) {
+  if (!parts?.length) return <span className="mi-conf-n hint">{plural(n, "shared part")}</span>;
+  return (
+    <details className="mi-parts">
+      <summary className="hint" title="Show which parts both mods change">{plural(n, "shared part")}</summary>
+      <ul className="mi-parts-l mono">
+        {parts.map((p) => <li key={p}>{p}</li>)}
+        {n > parts.length && <li className="muted">and {n - parts.length} more</li>}
+      </ul>
+    </details>
+  );
+}
+
 function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onDone: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const live = useRef(true);
@@ -176,9 +191,11 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
       <ul className="mi-conf-list">
         {data.conflicts.map((c) => (
           <li key={c.modId} className="mi-conf">
-            <span className="mi-conf-name">{c.name}</span>
-            <span className="mi-conf-n hint">{plural(c.shared, "shared part")}</span>
-            <IconButton icon="power" size="sm" label={`Turn off ${c.name}`} disabled={!!busy} onClick={() => off([c.modId], [c.name], c.modId)} />
+            <div className="mi-conf-row">
+              <span className="mi-conf-name">{c.name}</span>
+              <IconButton icon="power" size="sm" label={`Turn off ${c.name}`} disabled={!!busy} onClick={() => off([c.modId], [c.name], c.modId)} />
+            </div>
+            <SharedParts n={c.shared} parts={c.parts} />
           </li>
         ))}
       </ul>

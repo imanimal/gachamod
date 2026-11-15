@@ -9,6 +9,7 @@ import { useModHealth } from "../../lib/fixes";
 import { usePortraitBatch, portraitNow, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { consumeRoute, go, patchRoute, setBadge, useGame, useRoute } from "../../lib/store";
+import { openPalette } from "../../shell/state";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
 import { toast } from "../../ui/toast";
@@ -178,12 +179,12 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
 
   return (
     <>
-      <PageHeader title="Mods" icon="mods"
+      <PageHeader title="My Mods" icon="mods"
         sub={loaded ? `${mods.length === 1 ? "1 mod" : `${mods.length} mods`}, ${counts.on} on, ${formatBytes(size)}` : "Reading the Mods folder"}
         actions={<>
           <LibTabs tab="installed" />
           <SearchField value={search} onChange={setSearch} placeholder="Search name, character, tag, creator" className="library-search" />
-          <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Read the Mods folder again (it also happens on its own when you open this screen)">Rescan</Button>
+          <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Reads the Mods folder again for changes made outside gachamod, then checks every mod for updates on GameBanana. Opening this screen only reads the folder">Rescan</Button>
           <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
             onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
           <Segmented size="sm" label="Layout" value={prefs.view} onChange={(v) => setPrefs({ view: v })}
@@ -220,15 +221,19 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           <Empty icon="mods" title="No mods yet"
             actions={<>
               <Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse GameBanana</Button>
-              <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Read the Mods folder again, for changes made outside gachamod">Rescan</Button>
+              <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Reads the Mods folder again, for mods put there outside gachamod">Rescan</Button>
             </>}>
             Get mods from Browse, or drop a .zip, .7z or .rar anywhere on this window. If {gameName}'s Mods folder
             already has mods, Rescan picks them up.
           </Empty>
         ) : (
           <Empty icon="search" title="Nothing matches"
-            actions={filtersOn ? <Button onClick={() => { setSearch(""); setPrefs({ filter: "all" }); setCharacter(null); }}>Clear filters</Button> : undefined}>
-            {nsfw === "hide" && mods.some((m) => m.nsfw) ? "Mods for adults are hidden (Settings, Mods)." : "Try another search or filter."}
+            actions={<>
+              {filtersOn && <Button onClick={() => { setSearch(""); setPrefs({ filter: "all" }); setCharacter(null); }}>Clear filters</Button>}
+              {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title="Settings, Mods">Mods for adults</Button>}
+              {search.trim() && <Button variant="ghost" icon="search" onClick={() => openPalette(search.trim())} title="Search pages, settings, GameBanana and the rest (Ctrl+K)">Search everywhere</Button>}
+            </>}>
+            {nsfw === "hide" && mods.some((m) => m.nsfw) ? "Mods for adults are hidden." : "Try another search or filter."}
           </Empty>
         )} />
     </>

@@ -13,7 +13,7 @@
 // tools 0.5). With an empty library it comes down to quality. Mods you have, removed before, hid, or by blocked
 // creators never show, and each further pick for the same character or creator counts 18% less so one favourite
 // doesn't fill the list.
-import { library, type GameId, type ModEntry } from "./api";
+import { errorText, library, type GameId, type ModEntry } from "./api";
 import { hideFromAi, type AiTask } from "./ai";
 import { characterList, hqBar, hqScore, isAbort, listByCreators, listMods, type GbCard, type GbKind } from "./gamebanana";
 import { creatorsPref, hiddenModsPref, nsfwPref } from "./prefs";
@@ -125,7 +125,10 @@ export async function surpriseMe(game?: GameId | null): Promise<GbCard | null> {
   const g = game ?? currentGame()?.id;
   if (!g) return null;
   let recs: GbCard[];
-  try { recs = await recommend(g, { limit: 40 }); } catch { toast("Couldn't reach GameBanana. Try again in a moment", true); return null; }
+  try { recs = await recommend(g, { limit: 40 }); } catch (e) {
+    toast(`Couldn't reach GameBanana: ${errorText(e)}`, true, { label: "Try again", run: () => void surpriseMe(g) });
+    return null;
+  }
   let pool = recs.filter((c) => !surprised.includes(c.id)).slice(0, 25);
   if (!pool.length && recs.length) { surprised.length = 0; pool = recs.slice(0, 25); }
   if (!pool.length) { toast("Nothing new to suggest right now"); return null; }

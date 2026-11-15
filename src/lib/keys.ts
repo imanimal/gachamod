@@ -2,7 +2,7 @@
 // field is never interrupted (only Escape and Ctrl combinations work there). Ctrl+Z/Y (lib/history.ts) and
 // Ctrl+= - 0 (lib/zoom.ts) live with what they change. Owner: SHELL area.
 export const SHORTCUTS: Array<[string, string]> = [
-  ["Ctrl+K", "Search everything: pages, mods, characters, settings, actions"],
+  ["Ctrl+K, or start typing", "Search everything: pages, mods, characters, settings, actions"],
   ["/", "Find: the search field of the screen or the open window"],
   ["Ctrl+F", "Find, too"],
   ["Ctrl+1 … Ctrl+8", "Home, Browse, Mods, Characters, Downloads, Profiles, Tools, Settings"],
@@ -59,7 +59,8 @@ export interface KeyActions {
   forward: () => void;
   nextGame: (d: number) => void;
   play: () => void;
-  palette: () => void;
+  /** Open the search, with text already typed when given. */
+  palette: (text?: string) => void;
   sidebar: () => void;
   menu: () => void;
 }
@@ -87,7 +88,13 @@ export function installKeys(opts: KeyActions): () => void {
     if (e.key === "BrowserForward") { e.preventDefault(); opts.forward(); return; }
     if (inField || ctrl || e.altKey) return;
     if (e.key === "/") { if (focusSearch()) e.preventDefault(); return; }
-    if (e.key === "?") { e.preventDefault(); opts.help(); }
+    if (e.key === "?") { e.preventDefault(); opts.help(); return; }
+    // type to search: a letter or digit with nothing to type into opens the search with it. Screens with their own
+    // letter keys (I on a card, O on a character page) handle them first, and anything open on top keeps them
+    if (e.key.length === 1 && /[\p{L}\p{N}]/u.test(e.key) && !document.querySelector(".overlay, .ctx, .popover, .lightbox")) {
+      const key = e.key;
+      window.setTimeout(() => { if (!e.defaultPrevented) opts.palette(key); }, 0);
+    }
   };
   window.addEventListener("keydown", h);
   return () => window.removeEventListener("keydown", h);

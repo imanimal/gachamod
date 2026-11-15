@@ -885,18 +885,20 @@ fn import_one(ctx: &Ctx, z: &mut zip::ZipArchive<File>, names: &[(usize, String)
     // 1. extract to staging
     let stage = ctx.staging.join(n.to_string());
     fs::create_dir_all(&stage)?;
-    let mut refused = 0;
+    let mut refused: Vec<String> = Vec::new();
     for (i, name) in names.iter().filter(|(_, nm)| nm.starts_with(&prefix)) {
         let rest = &name[prefix.len()..];
-        let Some(rel) = crate::archive::safe_relative(rest) else { refused += 1; continue };
-        if crate::archive::safe_relative(name).is_none() { refused += 1; continue; }
+        let Some(rel) = crate::archive::safe_relative(rest) else { refused.push(rest.to_string()); continue };
+        if crate::archive::safe_relative(name).is_none() { refused.push(rest.to_string()); continue; }
         let target = stage.join(&rel);
         if let Some(p) = target.parent() { fs::create_dir_all(p)?; }
         let mut f = z.by_index(*i).map_err(|_| Error::Archive("the pack is damaged. Ask for it again".into()))?;
         let mut out = File::create(&target)?;
         copy_with(&mut f, &mut out, t).map_err(|e| if matches!(e.kind(), io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof) { Error::Archive("the pack is damaged. Ask for it again".into()) } else { e.into() })?;
     }
-    if refused > 0 { notes.push(format!("Left out {refused} files from {display} that pointed outside its folder")); }
+    if !refused.is_empty() {
+        notes.push(format!("Left out {} from {display}, which pointed outside its folder", crate::ini::oxford(&refused, 8)));
+    }
 
     // 2. its sidecar
     let mut sidecar = pm.sidecar.clone();

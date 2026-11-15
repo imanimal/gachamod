@@ -153,7 +153,7 @@ pub fn merge(db: &Db, game: &str, ids: &[String]) -> Result<ModChange> {
         } else {
             let key = part_key(&mods[0].id, display_folder(&folder));
             if !own.is_empty() { let _ = keep_vars(db, game, &key, &own, true); }
-            parts_off.push(folder.clone());
+            parts_off.push(display_folder(&folder).to_string());
         }
         // the lead's own picture moves up so the whole shows it
         if m.id == mods[0].id {
@@ -178,7 +178,8 @@ pub fn merge(db: &Db, game: &str, ids: &[String]) -> Result<ModChange> {
     let mut change = ModChange { changed: vec![entry], removed: mods[1..].iter().map(|m| m.id.clone()).collect(), notes: Vec::new() };
     change.notes.push(format!("Combined {} mods into {base}", mods.len()));
     if !parts_off.is_empty() {
-        change.notes.push(format!("{} of its parts draw the same things as another part, so they're off", parts_off.len()));
+        let (verb, pron) = if parts_off.len() == 1 { ("draws", "it's") } else { ("draw", "they're") };
+        change.notes.push(format!("{} {verb} the same things as another part, so {pron} off", crate::ini::oxford(&parts_off, 8)));
     }
     finish(db, game, &change);
     Ok(change)

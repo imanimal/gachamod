@@ -9,6 +9,7 @@ import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
 import { appUpdateCheckPref, autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
+import { fixWarningsPref } from "../../lib/fixes";
 import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "../library/shuffle";
 
 /** "Keys only while the character is on screen" for new installs (the install flow reads it). Same key as
@@ -136,6 +137,10 @@ export function AutomaticSection() {
           hint="For mods a game update broke">
           <Switch p={fixesAutoUpdatePref} on="Looking for new mod fixers" off="Stopped looking for new mod fixers" />
         </SetRow>
+        <SetRow id="set-fix-warn" label="Warn about mods a game update broke" hint="On mod cards, in a mod's details and in Tools > Fixes"
+          tip="Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods">
+          <Switch p={fixWarningsPref} on="Showing the broken mod warnings" off="Muted the broken mod warnings" />
+        </SetRow>
         <SetRow id="set-onscreen" label="Toggles only while on screen, for new mods"
           tip="A mod's toggles stop working when its character isn't on screen, so two mods can share a key">
           <Switch p={onScreenOnInstallPref} on="New mods get toggles only while on screen" off="New mods keep their toggles as they are" />
@@ -147,15 +152,15 @@ export function AutomaticSection() {
 
 // ── storage ──
 
-const DAY_OPTIONS = [0, 1, 3, 7, 14, 30, 90, 365];
+const DAY_OPTIONS = [1, 3, 7, 14, 30, 90, 365];
 
 export function StorageSection() {
   const days = useTrashDays();
   const [ask, setAsk] = useState<{ days: number; count: number } | null>(null);
-  const opts = (DAY_OPTIONS.includes(days) ? DAY_OPTIONS : [...DAY_OPTIONS, days].sort((a, b) => a - b))
-    .map((d) => ({ value: String(d), label: d === 0 ? "Delete them right away" : d === 1 ? "1 day" : `${d} days` }));
+  const opts = (DAY_OPTIONS.includes(days) || days === 0 ? DAY_OPTIONS : [...DAY_OPTIONS, days].sort((a, b) => a - b))
+    .map((d) => ({ value: String(d), label: d === 1 ? "1 day" : `${d} days` }));
 
-  const save = (d: number) => void trashDaysPref.set(d, d ? `Removed mods keep their files ${d === 1 ? "1 day" : `${d} days`}` : "Removed mods' files go right away");
+  const save = (d: number) => void trashDaysPref.set(d, d ? `Removed mods keep their files ${d === 1 ? "1 day" : `${d} days`}` : "Removed mods' files are deleted right away");
   const choose = async (d: number) => {
     if (d >= days) { save(d); return; }
     // fewer days deletes files that are past the new limit, which can't be undone: say how many first
@@ -170,13 +175,18 @@ export function StorageSection() {
     <Panel title="Storage" icon="archive" id="storage">
       <div className="set-rows">
         <SetRow id="set-trash-days" label="Keep removed mods' files"
-          hint="After that the files are deleted from your PC. A short record (name, settings, GameBanana link) stays in Mods, Trash so you can download the mod again">
-          <Select value={String(days)} onChange={(v) => void choose(Number(v))} options={opts} />
+          hint={days
+            ? "Removed mods stay on your PC for a while so Put back works without downloading. Mods, Trash keeps their GameBanana link either way"
+            : "Off: removing a mod deletes its files. Mods, Trash keeps its GameBanana link and settings so you can download it again"}>
+          <span className="set-inline">
+            {days > 0 && <Select value={String(days)} onChange={(v) => void choose(Number(v))} options={opts} />}
+            <Toggle checked={days > 0} onChange={(v) => void choose(v ? 14 : 0)} />
+          </span>
         </SetRow>
       </div>
       {ask && (
         <Confirm title="Delete files now?" yes="Delete files" danger onClose={() => setAsk(null)} onYes={() => save(ask.days)}>
-          {plural(ask.count, "removed mod")} {ask.count === 1 ? "is" : "are"} older than that, so {ask.count === 1 ? "its files go" : "their files go"} now and can't come back. A short record of each stays in Mods, Trash.
+          {plural(ask.count, "removed mod")} {ask.count === 1 ? "is" : "are"} older than that, so {ask.count === 1 ? "its files go" : "their files go"} now. Each one's GameBanana link stays in Mods, Trash.
         </Confirm>
       )}
     </Panel>

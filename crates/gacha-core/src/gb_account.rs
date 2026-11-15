@@ -87,18 +87,36 @@ fn user_from(id: u64, page: &Value) -> GbUser {
     GbUser { id, name: s("_sName").unwrap_or_else(|| format!("Member {id}")), avatar: s("_sHdAvatarUrl").or_else(|| s("_sAvatarUrl")) }
 }
 
-/// Who the cookie signs in as, or None when it doesn't.
+/// Who the cookie signs in as, or None when it doesn't. GameBanana's own pages read the member from
+/// `apiv13/Member/UiConfig` (`_bIsLoggedIn`, `_idMemberRow`, `_sAvatarUrl`); `apiv11/Member/Session` only says
+/// whether someone is signed in, so it is the fallback.
 pub async fn whoami(http: &reqwest::Client, cookie: &str) -> Result<Option<GbUser>> {
-    let s = match send(http, cookie, reqwest::Method::GET, &format!("{API11}/Member/Session")).await {
-        Ok(s) => s,
+    let ui = match send(http, cookie, reqwest::Method::GET, &format!("{API13}/Member/UiConfig")).await {
+        Ok(v) => v,
         Err(e) if is_signed_out(&e) => return Ok(None),
-        Err(e) => return Err(e),
+        Err(_) => send(http, cookie, reqwest::Method::GET, &format!("{API11}/Member/Session")).await.unwrap_or(Value::Null),
     };
-    if s.get("_bIsLoggedIn").and_then(Value::as_bool) != Some(true) { return Ok(None); }
-    let Some(id) = s.get("_idMemberRow").and_then(Value::as_u64) else { return Ok(None) };
+    if ui.get("_bIsLoggedIn").and_then(Value::as_bool) == Some(false) { return Ok(None); }
+    let id = ["_idMemberRow", "_idRow"].iter().find_map(|k| ui.get(*k).and_then(id_of))
+        .or_else(|| ui.get("_aMember").and_then(|m| m.get("_idRow")).and_then(id_of));
+    let Some(id) = id else {
+        // signed in, but the answer doesn't say who: ask the session the other way before giving up
+        let s = send(http, cookie, reqwest::Method::GET, &format!("{API11}/Member/Session")).await.unwrap_or(Value::Null);
+        let Some(id) = s.get("_idMemberRow").and_then(id_of) else { return Ok(None) };
+        let page = send(http, cookie, reqwest::Method::GET, &format!("{API11}/Member/{id}/ProfilePage")).await.unwrap_or(Value::Null);
+        return Ok(Some(user_from(id, &page)));
+    };
     let page = send(http, cookie, reqwest::Method::GET, &format!("{API11}/Member/{id}/ProfilePage")).await.unwrap_or(Value::Null);
-    Ok(Some(user_from(id, &page)))
+    let mut user = user_from(id, &page);
+    if user.avatar.is_none() { user.avatar = ui.get("_sAvatarUrl").and_then(Value::as_str).filter(|v| !v.is_empty()).map(String::from); }
+    if user.name.starts_with("Member ") {
+        if let Some(n) = ["_sName", "_sUsername"].iter().find_map(|k| ui.get(*k).and_then(Value::as_str).filter(|v| !v.is_empty())) { user.name = n.to_string(); }
+    }
+    Ok(Some(user))
 }
+
+/// A member id as GameBanana writes it: a number, or a number in a string.
+fn id_of(v: &Value) -> Option<u64> { v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).filter(|&n| n > 0) }
 
 /// Follow (subscribe to) a creator, or stop.
 pub async fn follow(http: &reqwest::Client, cookie: &str, member: u64, on: bool) -> Result<()> {

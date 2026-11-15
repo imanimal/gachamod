@@ -27,12 +27,12 @@ export const enableNewPref = flag("mods.enableNew", true);
 /** Look on GameBanana for new fixer tools (Tools > Fixes lists them; nothing is downloaded). */
 export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 
-/** Days removed mods keep their files in the app's trash (backend setting "trash.days", 0 to 3650, default 14).
- *  0 deletes the files right away; a short record always stays in Mods, Trash. */
-export const trashDaysPref = pref<number>("trash.days", 14,
+/** Days removed mods keep their files in the app's trash (backend setting "trash.days", 0 to 3650, default 0).
+ *  0 deletes the files right away; a short record with the GameBanana link always stays in Mods, Trash. */
+export const trashDaysPref = pref<number>("trash.days", 0,
   (r) => { const n = Number.parseInt(r, 10); return Number.isFinite(n) ? Math.max(0, Math.min(3650, n)) : undefined; }, (v) => String(v));
 export const useTrashDays = () => trashDaysPref.use();
-/** How removed files are kept, to finish a sentence that starts "The files ": "stay on your PC for 14 days" or
+/** How removed files are kept, to finish a sentence that starts "The files ": "stay on your PC for 7 days" or
  *  "are deleted right away". */
 export function trashPhrase(days = trashDaysPref.get()): string {
   return days > 0 ? `stay on your PC for ${days === 1 ? "1 day" : `${days} days`}` : "are deleted right away";

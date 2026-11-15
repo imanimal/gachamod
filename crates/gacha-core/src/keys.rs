@@ -1222,7 +1222,7 @@ pub fn on_screen_mods(db: &Db, game: &str) -> Result<Vec<OnScreenMod>> {
 pub fn after_install(shared: &crate::db::Shared, game: &str, installed: &[ModEntry], notes: &mut Vec<String>) {
     let Ok(d) = shared.lock() else { return };
     if d.setting("keys.onScreenOnInstall").ok().flatten().as_deref() != Some("1") { return; }
-    let mut done = 0;
+    let mut done: Vec<String> = Vec::new();
     for m in installed {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
@@ -1230,10 +1230,13 @@ pub fn after_install(shared: &crate::db::Shared, game: &str, installed: &[ModEnt
         let a = analyse(&docs);
         if a.keys.is_empty() || a.own || a.ungated.is_empty() { continue; }
         on_screen_docs(&mut docs, None);
-        if let Ok(Some(_)) = commit(&d, game, m, &docs, &format!("Toggles of {} work only while on screen", m.name)) { done += 1; }
+        if let Ok(Some(_)) = commit(&d, game, m, &docs, &format!("Toggles of {} work only while on screen", m.name)) { done.push(m.name.clone()); }
     }
-    if done > 0 {
-        notes.push(if done == 1 { "Its toggles work only while its character is on screen".into() } else { format!("Toggles of {done} new mods work only while their character is on screen") });
+    match done.as_slice() {
+        [] => {}
+        [_] if installed.len() == 1 => notes.push("Its toggles work only while its character is on screen".into()),
+        [one] => notes.push(format!("Toggles of {one} work only while its character is on screen")),
+        _ => notes.push(format!("Toggles of {} work only while their characters are on screen", crate::ini::oxford(&done, 8))),
     }
 }
 

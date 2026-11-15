@@ -217,7 +217,7 @@ function PreviewView({ p }: { p: Preview }) {
       {p.noApply && <p className="hint">{p.noApply}</p>}
       {p.skipped.length > 0 && (
         <details className="ai-skipped">
-          <summary><Badge tone="warn">{p.skipped.length} left out</Badge> parts of the answer that don't fit</summary>
+          <summary><Badge tone="warn">{p.skipped.length} skipped</Badge> {p.skipped.length === 1 ? "A part of the answer that doesn't match your mods" : "Parts of the answer that don't match your mods"}. Click to see them</summary>
           <ul>{p.skipped.map((s, i) => <li key={i}>{s}</li>)}</ul>
         </details>
       )}

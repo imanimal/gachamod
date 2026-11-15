@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { errorText, type GameState } from "../../lib/api";
 import { isAbort, listMods, memberProfile, type GbCard, type GbMember } from "../../lib/gamebanana";
 import { setCreatorFlag, useCreators, useNsfw, useHiddenMods } from "../../lib/prefs";
-import { useGames } from "../../lib/store";
+import { go, useGames } from "../../lib/store";
 import { Avatar, Badge, Button, Empty, Skeleton, formatCount, plural } from "../../ui/kit";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { openExternal } from "./actions";
@@ -131,7 +131,7 @@ function CreatorMods({ id, game, name }: { id: number; game: GameState; name: st
       <section className="gb-creator-sec">
         <h2 className="sub-h">{name}'s mods for {game.name}</h2>
         {error && !here ? <Empty icon="warn" title="Couldn't load their mods">{error}</Empty>
-          : here && !mine.length ? <p className="muted">{hiddenHere ? `${plural(hiddenHere, "mod")} for adults ${hiddenHere === 1 ? "is" : "are"} hidden.` : `No mods for ${game.short} yet.`}</p>
+          : here && !mine.length ? <p className="muted">{hiddenHere ? <>{plural(hiddenHere, "mod")} for adults {hiddenHere === 1 ? "is" : "are"} hidden. <Button size="sm" variant="ghost" icon="eye" title="Settings, Mods" onClick={() => go({ view: "settings", section: "set-nsfw" })}>Mods for adults</Button></> : `No mods for ${game.short} yet.`}</p>
           : (
             <div className="cards gb-grid">
               {here ? mine.map((m) => <ModCard key={m.id} game={game.id} mod={m} lib={lib} nsfw={nsfw} />)

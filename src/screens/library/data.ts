@@ -4,11 +4,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText, library, type GameId, type ModChange, type ModEntry } from "../../lib/api";
 import { held } from "../../lib/tauri";
-import { onApp } from "../../lib/store";
+import { checkUpdates, queueLatest } from "../../lib/gamebanana";
+import { go, onApp, setBadge } from "../../lib/store";
 import { record, undo } from "../../lib/history";
 import { toast } from "../../ui/toast";
+import { plural } from "../../ui/kit";
+import { notesText } from "../../lib/notes";
 import { autoRescanPref } from "../settings/automatic";
 import { sayF10 } from "../../lib/elevation";
+
+const count = (n: number) => (n === 1 ? "1 mod" : `${n} mods`);
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -50,7 +55,19 @@ export function useMods(game: GameId) {
       const l = await library.scan(game);
       lastScan.set(game, Date.now());
       if (alive.current) { setMods(l); setLoaded(true); }
-      if (!quiet) toast(`Found ${l.length === 1 ? "1 mod" : `${l.length} mods`}`);
+      if (quiet) return;
+      // asked for by hand: also look for updates now, whatever the automatic check is set to
+      const linked = l.filter((m) => m.source);
+      if (!linked.length) { toast(`Found ${count(l.length)}`); return; }
+      toast(`Found ${count(l.length)}. Checking ${linked.length === l.length ? "them" : count(linked.length)} for updates on GameBanana`);
+      try {
+        const ids = await checkUpdates(l);
+        await library.markUpdates(game, ids);
+        const want = new Set(ids);
+        if (alive.current) setMods((now) => now.map((m) => (m.updateAvailable === want.has(m.id) ? m : { ...m, updateAvailable: want.has(m.id) })));
+        setBadge("library", ids.length ? { count: ids.length, tone: "accent" } : null);
+        toast(ids.length ? `${ids.length === 1 ? "1 mod has" : `${ids.length} mods have`} an update` : "Every mod is up to date");
+      } catch (e) { toast(`Couldn't check for updates: ${errorText(e)}`, true); }
     } catch (e) {
       if (alive.current) setLoaded(true);
       toast(errorText(e), true);
@@ -110,13 +127,13 @@ export async function toggleMods(game: GameId, ids: string[], on: boolean, prior
   const changedIds = change.changed.map((m) => m.id);
   if (!changedIds.length) {
     const rest = sayF10(change.notes);
-    if (rest.length) toast(rest.join(". "));
+    if (rest.length) toast(notesText(rest));
     return change;
   }
   const mine = change.changed.filter((m) => ids.includes(m.id));
   const main = mine.length ? `Turned ${on ? "on" : "off"} ${nameOf(mine, "mods")}` : summarize(change);
   record({
-    label: [main, ...sayF10(change.notes)].join(". "),
+    label: notesText([main, ...sayF10(change.notes)]),
     undo: () => restoreStates(game, before, changedIds),
     redo: async () => { publish(game, await library.setEnabled(game, ids, on, turnOffOthers)); },
   });
@@ -137,11 +154,11 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
   const changedIds = merged.changed.map((m) => m.id);
   if (!changedIds.length) {
     const rest = sayF10(merged.notes);
-    if (rest.length || !merged.notes.length) toast(rest.length ? rest.join(". ") : "Nothing to change");
+    if (rest.length || !merged.notes.length) toast(rest.length ? notesText(rest) : "Nothing to change");
     return merged;
   }
   record({
-    label: [label, ...sayF10(merged.notes)].join(". "),
+    label: notesText([label, ...sayF10(merged.notes)]),
     undo: () => restoreStates(game, before, changedIds),
     redo: async () => {
       if (offs.length) publish(game, await library.setEnabled(game, offs, false));
@@ -156,7 +173,7 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
   const ids = list.map((m) => m.id);
   const change = await library.remove(game, ids);
   publish(game, change);
-  if (change.notes.length) toast(change.notes.join(". "), true);
+  if (change.notes.length) toast(notesText(change.notes), true);
   if (!change.removed.length) return change;
   const removedNames = list.filter((m) => change.removed.includes(m.id));
   let gone = change.removed;
@@ -166,13 +183,21 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
     undo: async () => {
       const trash = await library.trash(game);
       const back: string[] = [];
+      const fetch: number[] = [];
       for (const id of gone) {
         const t = trash.find((x) => x.modId === id);
-        if (!t) continue;
-        const ch = await library.trashRestore(t.id);
-        publish(game, ch);
-        back.push(...ch.changed.map((m) => m.id));
+        if (t) {
+          const ch = await library.trashRestore(t.id);
+          publish(game, ch);
+          back.push(...ch.changed.map((m) => m.id));
+          continue;
+        }
+        // its files were deleted (Keep removed mods' files is off): download it again, its settings come back
+        const src = list.find((m) => m.id === id)?.source;
+        if (src) fetch.push(src.modId);
       }
+      for (const gb of fetch) await queueLatest(game, gb);
+      if (fetch.length) toast(`Downloading ${plural(fetch.length, "mod")} again. Settings come back when they install`, false, { label: "Downloads", run: () => go("downloads") });
       gone = back;
     },
     redo: async () => {

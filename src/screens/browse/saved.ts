@@ -1,10 +1,10 @@
 // Saved filter sets for Browse, per game: one click puts a whole set back (sort, type, category or character, search,
 // High quality ...). Named after what they hold ("Ellen Joe, Outfits, High quality") and renamable. Kept in the
-// window's storage like the filters themselves. Owner: BROWSE area.
+// window's storage; the filters themselves reset each visit. Owner: BROWSE area.
 import { useSyncExternalStore } from "react";
 import type { GameId } from "../../lib/api";
 import { record } from "../../lib/history";
-import { getFilters, kindLabel, setFilters, sortLabel, type BrowseFilters } from "./state";
+import { DEFAULTS, getFilters, kindLabel, setFilters, sortLabel, type BrowseFilters } from "./state";
 
 export interface SavedFilter { id: string; name: string; f: BrowseFilters }
 
@@ -40,7 +40,7 @@ export function describe(f: BrowseFilters): string {
     f.hq && "High quality",
     f.followed && "Following",
     f.hideInstalled && "Not installed",
-    f.sort !== "popular" && f.sort !== "relevance" && sortLabel(f.sort),
+    f.sort !== DEFAULTS.sort && f.sort !== "relevance" && sortLabel(f.sort),
   ].filter(Boolean) as string[];
   return parts.join(", ") || sortLabel(f.sort);
 }
@@ -54,7 +54,7 @@ export const matching = (list: SavedFilter[], f: BrowseFilters) => list.find((s)
 
 /** Nothing to save: the plain default view. */
 export const isPlain = (f: BrowseFilters) =>
-  f.sort === "popular" && !f.kind && !f.category && !f.character && !f.hq && !f.hideInstalled && !f.followed && !f.search.trim();
+  f.sort === DEFAULTS.sort && !f.kind && !f.category && !f.character && !f.hq && !f.hideInstalled && !f.followed && !f.search.trim();
 
 /** Save the game's filters now, with Undo. Returns the saved set (the existing one when they match one already). */
 export function saveFilters(game: GameId): SavedFilter {

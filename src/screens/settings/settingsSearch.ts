@@ -78,6 +78,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-archives", "automatic", "Delete downloaded archives", "zip 7z rar archive keep downloads cleanup disk space", "trash"],
   ["set-other-servers", "automatic", "Move slow downloads to another server", "slow download speed mirror server filecache gamebanana faster", "downloads"],
   ["set-fix-updates", "automatic", "Look for new mod fixers", "fixer fixes hash broken game update patch auto", "wand"],
+  ["set-fix-warn", "automatic", "Warn about mods a game update broke", "mute fixes broken outdated hash warning badge hide", "bell"],
   ["set-onscreen", "automatic", "Toggles only while on screen", "toggles hotkeys keybinds key conflict off screen character visible active", "key"],
   ["set-ext-sources", "extensions", "Extension lists", "repo repository index source marketplace url add another list", "puzzle"],
   ["set-ext-make", "extensions", "Make an extension", "develop create build plugin addon package link folder share submit upload", "code"],
@@ -104,23 +105,35 @@ export const sectionOf = (id: string): string | undefined => {
   return SECTIONS.find((s) => s.id === section)?.page;
 };
 
+/** "Settings › Mods › Storage" for a panel or a setting in it (the panel is left out when it is the whole page). */
+export function settingsWhere(panel: string): string {
+  const sec = SECTIONS.find((s) => s.id === panel);
+  const page = PAGES.find((p) => p.id === sec?.page);
+  if (!sec || !page) return "Settings";
+  return sec.label === page.label ? `Settings › ${page.label}` : `Settings › ${page.label} › ${sec.label}`;
+}
+
 registerCommands("settings", () => {
-  const list: Command[] = SECTIONS.map((s) => ({
-    id: `settings:${s.id}`, title: s.label, section: "Settings", icon: s.icon, keywords: `settings ${s.keywords}`, hint: "In Settings",
-    run: () => go({ view: "settings", section: s.id }),
-  }));
-  for (const [section, , title, keywords, icon] of SETTINGS) {
+  const list: Command[] = SECTIONS.map((s) => {
+    const page = PAGES.find((p) => p.id === s.page);
+    return {
+      id: `settings:${s.id}`, title: s.label, section: "Settings", icon: s.icon, keywords: `settings ${s.keywords}`,
+      where: page && page.label !== s.label ? `Settings › ${page.label}` : "Settings",
+      run: () => go({ view: "settings", section: s.id }),
+    };
+  });
+  for (const [section, panel, title, keywords, icon] of SETTINGS) {
     if (section.startsWith("set-ai-chatbot") && !aiShown("useful")) continue;
-    list.push({ id: `settings:${section}:${title}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, hint: "In Settings",
+    list.push({ id: `settings:${section}:${title}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
       run: () => go({ view: "settings", section }) });
   }
   list.push(
     { id: "page:extensions", title: "Extensions", section: "Pages", icon: "puzzle", keywords: "extensions plugins addons add-ons themes get more download marketplace store",
       run: () => go({ view: "extensions" }) },
-    { id: "page:themes-online", title: "Get more themes", section: "Actions", icon: "palette", keywords: "themes download community share look skins",
+    { id: "page:themes-online", title: "Get more themes", section: "Actions", icon: "palette", keywords: "themes download community share look skins", where: "Extensions › Themes",
       run: () => go({ view: "extensions", section: "themes" }) },
   );
-  list.push({ id: "act:feedback", title: "Send feedback", section: "Actions", icon: "help", keywords: "feedback bug report problem suggestion idea contact developer", run: () => openFeedback() });
+  list.push({ id: "act:feedback", title: "Send feedback", section: "Actions", icon: "help", where: "Settings › Feedback and data", keywords: "feedback bug report problem suggestion idea contact developer", run: () => openFeedback() });
   list.push({ id: "act:gamecheck", title: "Check this game", section: "Actions", icon: "check", keywords: "test testing tester check game report switching skins menu", run: openGameCheck });
   list.push({ id: "act:xxmi", title: "Open XXMI Launcher", section: "Actions", icon: "external", keywords: "xxmi launcher open start run", run: openXxmi });
 

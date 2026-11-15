@@ -5,6 +5,7 @@
 use crate::state::{blocking, AppState};
 use gacha_core::model::events;
 use gacha_core::{devtools, gamecheck, launch, live, Result};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
@@ -17,14 +18,19 @@ const OPENED: &str = "overlay-open";
 #[derive(Default)]
 pub struct Showing(Mutex<Option<String>>);
 
+/// A pick is being sent to the game. The game comes to the front for it, which must not close the menu.
+static PICKING: AtomicBool = AtomicBool::new(false);
+
 fn window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
     if let Some(w) = app.get_webview_window(LABEL) { return Some(w); }
     let w = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into()))
-        .title("gachamod skins").inner_size(460.0, 640.0).decorations(false).resizable(false).always_on_top(true)
+        .title("gachamod menu").inner_size(960.0, 640.0).decorations(false).resizable(false).always_on_top(true)
         .skip_taskbar(true).visible(false).focused(false).build().ok()?;
-    // clicking back into the game (or a pick, which brings the game forward) closes the menu
+    // clicking back into the game closes the menu. A pick also brings the game forward, and the menu stays for that
     let handle = app.clone();
-    w.on_window_event(move |e| { if let WindowEvent::Focused(false) = e { hide(&handle); } });
+    w.on_window_event(move |e| {
+        if let WindowEvent::Focused(false) = e { if !PICKING.load(Ordering::Relaxed) { hide(&handle); } }
+    });
     Some(w)
 }
 
@@ -41,14 +47,25 @@ pub fn hide<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window(LABEL) { let _ = w.hide(); }
 }
 
-/// Down the left side of the game's window, as tall as fits.
+/// Down the left side of the game's window: wide enough for the characters and a grid of skins, as tall as fits,
+/// and never wider or taller than the game.
 fn place<R: Runtime>(w: &WebviewWindow<R>, game: &str) {
-    let Some((x, y, _, gh)) = devtools::game_rect(game) else { let _ = w.center(); return };
+    let Some((x, y, gw, gh)) = devtools::game_rect(game) else { let _ = w.center(); return };
     let scale = w.scale_factor().unwrap_or(1.0);
     let px = |v: f64| (v * scale).round() as i32;
-    let height = ((gh as f64 * 0.72) as i32).clamp(px(360.0), px(780.0)).min(gh.max(px(240.0)));
-    let _ = w.set_size(PhysicalSize::new(px(460.0) as u32, height as u32));
-    let _ = w.set_position(PhysicalPosition::new(x + px(40.0), y + (gh - height) / 2));
+    let margin = px(40.0);
+    let height = ((gh as f64 * 0.78) as i32).clamp(px(420.0), px(860.0)).min(gh.max(px(240.0)));
+    let width = ((gw as f64 * 0.58) as i32).clamp(px(640.0), px(1040.0)).min((gw - margin).max(px(360.0)));
+    let _ = w.set_size(PhysicalSize::new(width as u32, height as u32));
+    let _ = w.set_position(PhysicalPosition::new(x + margin.min((gw - width).max(0)), y + (gh - height) / 2));
+}
+
+/// Put the menu back in front with the keyboard, if it is open.
+fn refocus<R: Runtime>(app: &AppHandle<R>) {
+    let Some(w) = app.get_webview_window(LABEL).filter(|w| w.is_visible().unwrap_or(false)) else { return };
+    let _ = w.set_focus();
+    #[cfg(windows)]
+    if let Ok(h) = w.hwnd() { devtools::raise(h.0 as isize); }
 }
 
 /// The menu key or the controller shortcut was pressed while `game` runs.
@@ -128,6 +145,8 @@ pub async fn overlay_hide(app: AppHandle, game: Option<String>) -> Result<()> {
 pub async fn overlay_pick(app: AppHandle, st: tauri::State<'_, AppState>, game: String, group: u32, slot: u32) -> Result<live::Picked> {
     let db = st.db.clone();
     let g = game.clone();
+    // the keys go to the game, so the game comes forward while they are sent: the menu stays up through that
+    PICKING.store(true, Ordering::Relaxed);
     let picked = blocking(move || {
         let mut picked = {
             let d = db.lock().map_err(|_| gacha_core::Error::Db("The local database is stuck after an earlier error. Restart gachamod".into()))?;
@@ -135,7 +154,18 @@ pub async fn overlay_pick(app: AppHandle, st: tauri::State<'_, AppState>, game: 
         };
         picked.note = live::flush_sends(&db).into_iter().next();
         Ok(picked)
-    }).await?;
+    }).await;
+    // and takes the keyboard back. The focus change arrives a moment later: only after it does losing focus close
+    // the menu again
+    refocus(&app);
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        refocus(&handle);
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        PICKING.store(false, Ordering::Relaxed);
+    });
+    let picked = picked?;
     let _ = app.emit(events::LIBRARY_CHANGED, serde_json::json!({ "game": game }));
     Ok(picked)
 }

@@ -5,7 +5,7 @@
 import { Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { dialogs, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
-import { useFixerBusy, useModHealth } from "../../lib/fixes";
+import { fixLabel, stopWaiting, triedNote, useFixerBusy, useModHealth } from "../../lib/fixes";
 import { gbToolId } from "../../lib/gamebanana";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { trashPhrase } from "../settings/automatic";
@@ -195,16 +195,33 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="note t-warn mod-drawer-health" role="status">
           <Icon name="warn" />
           <div className="mod-drawer-health-t">
-            <strong>{health.status === "broken" || health.tool ? "A game update broke this mod" : "A game update broke this mod, and gachamod can't fix it by itself"}</strong>
-            {health.reasons.length > 0 && <span>{health.reasons.slice(0, 4).join(". ")}</span>}
+            <strong>{health.needsAuthor ? "A game update broke this mod, and a fixer can't repair it"
+              : health.tried ? "A game update broke this mod, and the fixer didn't repair it"
+              : health.status === "broken" || health.tool ? "A game update broke this mod" : "A game update broke this mod, and gachamod can't fix it by itself"}</strong>
+            {health.reasons.length > 0 && <span>{health.reasons.join(". ")}</span>}
+            {triedNote(health) && <span>{triedNote(health)}.</span>}
             <span className="mod-drawer-health-a">
               {health.status === "broken" && (
                 <Button size="sm" variant="primary" icon="wand" onClick={() => void fixForUpdate(game, [mod])}
-                  title="Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back">Fix</Button>
+                  title="Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back">{fixLabel(health)}</Button>
               )}
               {health.status === "unfixable" && health.tool && (
-                <Button size="sm" variant="primary" icon="wand" busy={fixerBusy.has(`mod:${mod.id}`)} onClick={() => void fixForUpdate(game, [mod])}
-                  title={`Gets ${health.tool.name} from ${gbToolId(health.tool.url) !== null ? "GameBanana" : "GitHub"} and runs it on this mod. A backup is kept and Undo puts it back`}>Fix</Button>
+                <Button size="sm" variant={health.tried || health.needsAuthor ? undefined : "primary"} icon="wand" busy={fixerBusy.has(`mod:${mod.id}`)} onClick={() => void fixForUpdate(game, [mod])}
+                  title={`Gets ${health.tool.name} from ${gbToolId(health.tool.url) !== null ? "GameBanana" : "GitHub"} and runs it on this mod. ${health.tried ? "It gets the fixer's newest version first. " : ""}${health.needsAuthor ? "It may not help: the game changed the model, which a fixer can't redo. " : ""}A backup is kept and Undo puts it back`}>{fixLabel(health)}</Button>
+              )}
+              {fixerBusy.has("waiting") && fixerBusy.has(`mod:${mod.id}`) && (
+                <Button size="sm" variant="ghost" onClick={stopWaiting}
+                  title="The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far">Stop waiting</Button>
+              )}
+              {(health.tried || health.needsAuthor) && mod.source && (<>
+                <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
+                  title="Looks on GameBanana for a newer file of this mod and downloads it">Check for an update</Button>
+                <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
+                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Mod page</Button>
+              </>)}
+              {(health.tried || health.needsAuthor) && !mod.source && (
+                <Button size="sm" icon="search" onClick={() => go({ view: "browse", search: mod.name })}
+                  title="Search GameBanana for a newer version of this mod">Search GameBanana</Button>
               )}
               {health.status === "unfixable" && aiShown("useful", aiShow) && (
                 <Button size="sm" icon="ai" onClick={() => askAi({ kind: "fix-mod", game, modIds: [mod.id], detail: health.reasons.join("\n") })}

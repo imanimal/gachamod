@@ -288,6 +288,8 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .toast.gone { animation: toastOut 200ms ease-in forwards; }
 /* never a wall of text: past three lines the rest is in the hover tip */
 .toast .tt { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+/* a long message shows whole while pointed at or focused (the toast waits meanwhile) */
+.toast:hover .tt, .toast:focus-within .tt { -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
 .toast > .i { color: var(--ok); }
 .toast.bad > .i { color: var(--bad); }
 .toast-act { flex: none; font-weight: 750; color: var(--accent-ink); padding: .3rem .6rem; border-radius: 7px; }

@@ -5,10 +5,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { errorText, type GameId, type GameState } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import { cardHasWords, categories, filterHq, isAbort, kindCategory, listByCreators, listMods, modsByNamedCreator, useCharacterList, type GbCard, type GbCategoryRef, type GbKind } from "../../lib/gamebanana";
+import { oxford } from "../../lib/notes";
 import { ideasTask, recommend, surpriseMe } from "../../lib/recommend";
 import { setNsfw, useCreators, useHiddenMods, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
-import { Button, Chip, Empty, IconButton, Menu, SearchField, Segmented, plural } from "../../ui/kit";
+import { Button, Chip, Empty, IconButton, Menu, SearchField, Segmented, Toggle, plural } from "../../ui/kit";
 import { openMenu } from "../../ui/ContextMenu";
 import { Icon } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
@@ -17,6 +18,7 @@ import { CharRow, charsOpenAtStart } from "./CharRow";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { applySaved, describe, isPlain, matching, removeSaved, renameSaved, saveFilters, useSavedFilters } from "./saved";
 import { KINDS, SORTS, beginVisit, endCarry, kindLabel, openWithFilters, setFilters, sortLabel, useFilters, useLibIndex, type BrowseFilters, type BrowseSort } from "./state";
+import type { GbCategoryRef as Cat } from "../../lib/gamebanana";
 import "./browse.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { useHint } from "../../shell/hints";
@@ -175,7 +177,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   const [cats, setCats] = useState<GbCategoryRef[] | null>(null);
   const aiShow = useAiShow();
   const [text, setText] = useState(f.search);
-  const [menu, setMenu] = useState<{ el: HTMLElement; kind: "sort" | "cat" | "type" | "saved" } | null>(null);
+  const [menu, setMenu] = useState<{ el: HTMLElement; kind: "sort" | "filters" } | null>(null);
   const savedSets = useSavedFilters(game);
   const savedNow = matching(savedSets, f);
   const [charsOpen, setCharsOpen] = useState(charsOpenAtStart);
@@ -218,14 +220,16 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   const [limit, setLimit] = useState(step);
   useEffect(() => { setLimit(step); }, [query, step]);
 
-  const shown = useCallback((c: GbCard) => {
-    if (c.submitter && creators[String(c.submitter.id)]?.blocked) return false;
-    if (hidden.includes(c.id)) return false;
-    if (nsfw === "hide" && c.nsfw) return false;
-    if (f.hideInstalled && lib.byMod.has(c.id)) return false;
-    if (f.kind && (c.kind ?? "outfit") !== f.kind) return false;
-    return true;
+  /** Why a card is left out, or null when it shows. */
+  const leftOut = useCallback((c: GbCard): string | null => {
+    if (c.submitter && creators[String(c.submitter.id)]?.blocked) return "from creators you blocked";
+    if (hidden.includes(c.id)) return "you hid";
+    if (nsfw === "hide" && c.nsfw) return "for adults";
+    if (f.hideInstalled && lib.byMod.has(c.id)) return "you have";
+    if (f.kind && (c.kind ?? "outfit") !== f.kind) return "of other types";
+    return null;
   }, [creators, hidden, nsfw, f.hideInstalled, f.kind, lib]);
+  const shown = useCallback((c: GbCard) => leftOut(c) === null, [leftOut]);
 
   const pages = usePages(query, shown, limit + step);
   const pinned = pages.pinned.filter(shown);
@@ -269,13 +273,13 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
 
   // active filters as removable chips
   const chips: Array<{ key: string; label: string; icon?: Parameters<typeof Chip>[0]["icon"]; img?: string | null; clear: () => void }> = [];
-  if (f.search) chips.push({ key: "q", label: `"${f.search}"`, icon: "search", clear: () => { setText(""); set({ search: "" }); } });
   if (!fixedChar && f.character) chips.push({ key: "c", label: f.character, img: charRef?.icon, icon: "characters", clear: () => set({ character: null }) });
   if (f.category && !f.character) chips.push({ key: "k", label: f.category.name, icon: "filter", clear: () => set({ category: null }) });
   if (f.kind) chips.push({ key: "t", label: kindLabel(f.kind), icon: "shirt", clear: () => set({ kind: null }) });
-  if (f.hq) chips.push({ key: "hq", label: "High quality", icon: "quality", clear: () => set({ hq: false }) });
   if (f.followed) chips.push({ key: "f", label: "Creators you follow", icon: "feed", clear: () => set({ followed: false }) });
   if (f.hideInstalled) chips.push({ key: "i", label: "Not installed", icon: "check", clear: () => set({ hideInstalled: false }) });
+  // filters inside the Filters button (High quality and the search show in the bar)
+  const hidden_n = [f.kind, f.category && !f.character, f.followed, f.hideInstalled].filter(Boolean).length;
   const clearAll = () => { setText(""); set({ search: "", character: fixedChar ? f.character : null, category: null, kind: null, hq: false, followed: false, hideInstalled: false }); };
 
   const hqTip = f.kind && f.kind !== "outfit"
@@ -290,8 +294,20 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
       aiShown("extra", aiShow) && { label: "Ask your chatbot for ideas", icon: "ai", onClick: () => { void ideasTask(game).then(askAi); } },
     ]);
   };
+  /** "8 you have, 3 for adults, and 1 from creators you blocked" */
+  const outWhy = () => {
+    const n = new Map<string, number>();
+    const seen = new Set<number>();
+    for (const c of [...pages.pinned, ...pages.items]) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      const w = leftOut(c);
+      if (w) n.set(w, (n.get(w) ?? 0) + 1);
+    }
+    return oxford([...n].map(([w, k]) => `${k} ${w}`));
+  };
   const emptyText = f.followed && !subIds.length ? "Right-click a creator's name and pick Follow, and their mods show here."
-    : filteredOut > 0 ? `${plural(filteredOut, "mod")} ${filteredOut === 1 ? "is" : "are"} left out by your filters or blocked creators.`
+    : filteredOut > 0 ? `${plural(filteredOut, "mod")} ${filteredOut === 1 ? "is" : "are"} hidden: ${outWhy()}.`
     : f.hq && pages.dropped > 0 ? `${plural(pages.dropped, "mod")} ${pages.dropped === 1 ? "was" : "were"} left out by High quality.`
     : f.sort === "foryou" && !lib.byMod.size ? "Install a few mods and this fills with ones that suit them."
     : search ? "Try fewer or different words." : "Try another category or sort.";
@@ -300,24 +316,15 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
     <div className={`gbb${embedded ? " is-embedded" : ""}`}>
       <div className="gbb-bar">
         <SearchField className="gbb-search" value={text} onChange={setText} placeholder={`Search ${gs.short} mods or creators`} onEnter={() => set({ search: text.trim() })} />
-        <Button className="gbb-sort" variant="secondary" icon="sort" iconRight="down" title="Sort" onClick={(e) => setMenu(menu ? null : { el: e.currentTarget, kind: "sort" })}>{sortLabel(f.sort)}</Button>
-        {!embedded && !!cats?.length && !fixedChar && (
-          <Button className="gbb-cat" variant="secondary" icon="filter" iconRight="down" title="Show one category"
-            onClick={(e) => setMenu(menu ? null : { el: e.currentTarget, kind: "cat" })}>{f.category?.name ?? "All categories"}</Button>
-        )}
-        <Button className="gbb-kind" variant="secondary" icon="shirt" iconRight="down" title="Show one type of mod: outfits, recolors, tools, UI ..."
-          onClick={(e) => setMenu(menu ? null : { el: e.currentTarget, kind: "type" })}>{kindLabel(f.kind)}</Button>
+        <Button className="gbb-sort" variant="secondary" icon="sort" iconRight="down" title="Sort" onClick={(e) => setMenu(menu?.kind === "sort" ? null : { el: e.currentTarget, kind: "sort" })}>{sortLabel(f.sort)}</Button>
         <Chip on={f.hq} icon="quality" onClick={() => set({ hq: !f.hq })} title={hqTip}>High quality</Chip>
-        {!embedded && <Chip on={f.followed} icon="feed" onClick={toggleFollowed} title="Only mods by creators you follow">Following</Chip>}
-        {!embedded && <Chip on={f.hideInstalled} icon="check" onClick={() => set({ hideInstalled: !f.hideInstalled })} title="Leave out mods you already have">Not installed</Chip>}
-        {!embedded && <AdultSwitch value={nsfw} />}
+        <Button className={`gbb-filters${hidden_n ? " is-on" : ""}`} variant="secondary" icon="filter" iconRight="down"
+          title="Type, category, creators you follow, mods you have, mods for adults and saved filters"
+          onClick={(e) => setMenu(menu?.kind === "filters" ? null : { el: e.currentTarget, kind: "filters" })}>
+          {savedNow ? savedNow.name : "Filters"}{hidden_n > 0 && !savedNow && <span className="chip-n">{hidden_n}</span>}
+        </Button>
         <IconButton className="gbb-surprise" icon="dice" label="Surprise me: open a mod you don't have that suits your library (right-click for more)"
           onClick={surprise} onContextMenu={surpriseMenu} />
-        {!embedded && (
-          <Button className="gbb-saved-btn" variant="secondary" icon="pin" iconRight="down"
-            title="Saved filters: put a whole set back in one click, or save the ones on now"
-            onClick={(e) => setMenu(menu ? null : { el: e.currentTarget, kind: "saved" })}>{savedNow ? savedNow.name : "Saved"}</Button>
-        )}
         {embedded && <IconButton className="gbb-expand" icon="expand" label="Open the full browser (keeps these filters)" onClick={expand} />}
       </div>
 
@@ -347,7 +354,10 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
           <Empty icon="warn" title="Couldn't load GameBanana" actions={<Button icon="refresh" onClick={pages.retry}>Try again</Button>}>{pages.error}</Empty>
         ) : !loading && pages.complete && !items.length && !pinned.length ? (
           <Empty icon="browse" title={f.followed && !subIds.length ? "You don't follow anyone yet" : search ? `Nothing found for "${search}"` : "No mods here"}
-            actions={chips.length ? <Button icon="x" onClick={clearAll}>Clear filters</Button> : undefined}>{emptyText}</Empty>
+            actions={chips.length || (nsfw === "hide" && filteredOut > 0) ? <>
+              {chips.length > 0 && <Button icon="x" onClick={clearAll}>Clear filters</Button>}
+              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title="Settings, Mods" onClick={() => go({ view: "settings", section: "set-nsfw" })}>Mods for adults</Button>}
+            </> : undefined}>{emptyText}</Empty>
         ) : (
           <div className="cards gb-grid" aria-busy={waiting}>
             {pinned.map((m) => <ModCard key={`p${m.id}`} game={game} mod={m} lib={lib} nsfw={nsfw} prio />)}
@@ -367,9 +377,10 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
         )}
       </div>
 
-      {menu?.kind === "saved" && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Saved filters" width="19em">
-          <SavedPanel game={game} f={f} onPick={() => setMenu(null)} />
+      {menu?.kind === "filters" && (
+        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Filters" width="24em">
+          <FiltersPanel game={game} f={f} set={set} cats={fixedChar ? [] : cats ?? []} nsfw={nsfw} following={subIds.length > 0}
+            onFollowed={toggleFollowed} onClear={hidden_n || chips.length ? () => { clearAll(); } : null} onPick={() => setMenu(null)} />
         </Popover>
       )}
       {menu?.kind === "sort" && (
@@ -378,24 +389,6 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
             label: s.label, hint: s.value === "foryou" && f.search ? "Only the mods picked for you that match the search" : s.title,
             icon: s.value === f.sort ? "check" : undefined, onClick: () => { set({ sort: s.value }); setMenu(null); },
           }))} />
-        </Popover>
-      )}
-      {menu?.kind === "type" && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Type" width="16em">
-          <Menu items={[
-            { label: "All types", icon: !f.kind ? "check" : undefined, onClick: () => { set({ kind: null }); setMenu(null); } },
-            "-",
-            ...KINDS.map((k) => ({ label: k.label, hint: k.title, icon: f.kind === k.value ? "check" as const : undefined, onClick: () => { set({ kind: k.value }); setMenu(null); } })),
-          ]} />
-        </Popover>
-      )}
-      {menu?.kind === "cat" && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Categories" width="16em">
-          <Menu items={[
-            { label: "All categories", icon: !f.category ? "check" : "grid", onClick: () => { set({ category: null }); setMenu(null); } },
-            "-",
-            ...(cats ?? []).map((c) => ({ label: c.name, icon: f.category?.id === c.id ? "check" as const : undefined, onClick: () => { set({ category: c, character: null }); setMenu(null); } })),
-          ]} />
         </Popover>
       )}
     </div>
@@ -422,6 +415,48 @@ export function AdultSwitch({ value, size = "sm" }: { value: NsfwMode; size?: "s
 }
 
 
+/** Everything past sort and High quality, in one popover: type, category, two switches, mods for adults and saved
+ *  sets. Each pick applies at once and leaves it open, so several can be set in a row. */
+function FiltersPanel({ game, f, set, cats, nsfw, following, onFollowed, onClear, onPick }: {
+  game: GameId; f: BrowseFilters; set: (p: Partial<BrowseFilters>) => void; cats: Cat[]; nsfw: NsfwMode; following: boolean;
+  onFollowed: () => void; onClear: (() => void) | null; onPick: () => void;
+}) {
+  return (
+    <div className="gbb-fp">
+      <div className="gbb-fp-s" role="group" aria-label="Type">
+        <span className="gbb-fp-h">Type</span>
+        <div className="gbb-fp-o">
+          <Chip on={!f.kind} onClick={() => set({ kind: null })} title="Every type of mod">All</Chip>
+          {KINDS.map((k) => <Chip key={k.value} on={f.kind === k.value} onClick={() => set({ kind: f.kind === k.value ? null : k.value })} title={k.title}>{k.label}</Chip>)}
+        </div>
+      </div>
+      {cats.length > 0 && (
+        <div className="gbb-fp-s" role="group" aria-label="Category">
+          <span className="gbb-fp-h">Category</span>
+          <div className="gbb-fp-o">
+            <Chip on={!f.category} onClick={() => set({ category: null })} title="Every category">All</Chip>
+            {cats.map((c) => <Chip key={c.id} on={f.category?.id === c.id} onClick={() => set(f.category?.id === c.id ? { category: null } : { category: c, character: null })}>{c.name}</Chip>)}
+          </div>
+        </div>
+      )}
+      <div className="gbb-fp-s gbb-fp-t">
+        <Toggle size="sm" checked={f.followed} onChange={onFollowed} label="Only creators you follow"
+          hint={following ? undefined : "Right-click a creator's name and pick Follow"} />
+        <Toggle size="sm" checked={f.hideInstalled} onChange={(v) => set({ hideInstalled: v })} label="Hide mods you have" />
+      </div>
+      <div className="gbb-fp-s gbb-fp-row">
+        <span className="gbb-fp-h">Mods for adults</span>
+        <AdultSwitch value={nsfw} />
+      </div>
+      <div className="gbb-fp-s">
+        <span className="gbb-fp-h">Saved filters</span>
+        <SavedPanel game={game} f={f} onPick={onPick} />
+      </div>
+      {onClear && <Button size="sm" variant="ghost" icon="x" className="gbb-fp-clear" onClick={onClear}>Clear filters</Button>}
+    </div>
+  );
+}
+
 /** The Saved popover: save the filters on now, put a saved set back, rename or remove one (with Undo). */
 function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPick: () => void }) {
   const list = useSavedFilters(game);
@@ -432,7 +467,7 @@ function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPic
   return (
     <div className="gbb-saved">
       <Button size="sm" variant="secondary" icon="plus" disabled={isPlain(f) || !!cur} onClick={() => saveFilters(game)}
-        title={cur ? `These are saved as "${cur.name}"` : isPlain(f) ? "Pick some filters first" : `Save as "${describe(f)}"`}>Save the filters on now</Button>
+        title={cur ? `These are saved as "${cur.name}"` : isPlain(f) ? "Pick some filters first" : `Save as "${describe(f)}"`}>Save these filters</Button>
       {list.length === 0
         ? <p className="hint">Saved sets show here. Picking one puts back its sort, type, character, search and the rest.</p>
         : (

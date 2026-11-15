@@ -26,7 +26,7 @@ const EXTRA_LABELS: Record<string, ExtraInfo> = {
   force_max_lod_bias: { label: "LOD bias on Ultra High", hint: "Mod textures are made for this setting" },
   mesh_lod_distance_lod_base_fov: { label: "Mesh LOD base FOV", hint: "Higher keeps the full character model, the one mods replace, at farther camera distances. 165 by default" },
   resource_tier: { label: "Client resource quality", hint: "Pick a tier you have installed. A missing one crashes the game while loading" },
-  unlock_fps: { label: "Unlock FPS", hint: "Sets the game's frame rate limit to the value below before each start" },
+  unlock_fps: { label: "Raise FPS limit", hint: "Sets the game's frame rate limit to the value below before each start" },
   unlock_fps_value: { label: "FPS limit", hint: "120, 180 or 240 cause the fewest glitches" },
   enable_hdr: { label: "HDR", hint: "Needs an HDR display with HDR on in Windows" },
 };
@@ -34,7 +34,7 @@ const EXTRA_LABELS: Record<string, ExtraInfo> = {
 const GAME_LABELS: Record<string, Record<string, ExtraInfo>> = {
   gi: {
     configure_game: { label: "Turn off dynamic character resolution", hint: "XXMI turns it off before each start. Mods break with it on" },
-    unlock_fps: { label: "Unlock FPS", hint: "Starts the game through an FPS unlocker that stays open in the background" },
+    unlock_fps: { label: "Raise FPS limit", hint: "Starts the game through an FPS unlocker that stays open in the background" },
   },
   ww: {
     configure_game: { label: "Set in-game graphics for mods", hint: "Before each start, sets graphics quality to Quality and turns off ray tracing. The options below need this on" },
@@ -63,18 +63,18 @@ registerCommands("tools", () => {
   const g = currentGame();
   if (!g) return [];
   return [
-    { id: "tools:fixes", title: "Fix mods after a game update", section: "Pages", icon: "wand", hint: "In Tools", keywords: "fixer fixes broken mods hash game update patch repair",
+    { id: "tools:fixes", title: "Fix mods after a game update", section: "Pages", icon: "wand", where: "Tools › Problems and fixes", keywords: "fixer fixes broken mods hash game update patch repair",
       run: () => go({ view: "tools", section: "fixes" }) },
-    { id: "tools:ingame", title: "In-game menu", section: "Pages", icon: "gamepad", hint: "In Tools", keywords: "in game overlay switch mods without reload f10 toggle menu",
+    { id: "tools:ingame", title: "In-game menu", section: "Pages", icon: "gamepad", where: "Tools › Switch skins in game", keywords: "in game overlay switch mods without reload f10 toggle menu",
       run: () => go({ view: "tools", section: "ingame" }) },
-    { id: "tools:migoto", title: "Mod maker switches", section: "Pages", icon: "code", hint: "In Tools", keywords: "hunting mode dump shaders log 3dmigoto debug warnings",
+    { id: "tools:migoto", title: "Mod maker switches", section: "Pages", icon: "code", where: "Tools › Mod makers", keywords: "hunting mode dump shaders log 3dmigoto debug warnings",
       run: () => go({ view: "tools", section: "migoto" }) },
-    { id: "tools:dev", title: "Shader cache and logs", section: "Pages", icon: "bug", hint: "In Tools", keywords: "shader cache clear frame dumps log d3dx ini d3dx_user wipe reload",
+    { id: "tools:dev", title: "Shader cache and logs", section: "Pages", icon: "bug", where: "Tools › Mod makers", keywords: "shader cache clear frame dumps log d3dx ini d3dx_user wipe reload",
       run: () => go({ view: "tools", section: "dev" }) },
-    ...(g.modCount > 0 ? [{ id: "tools:share", title: `Share ${g.short} library`, section: "Actions", icon: "share" as const, hint: ".gachamod",
+    ...(g.modCount > 0 ? [{ id: "tools:share", title: `Share ${g.short} library`, section: "Actions", icon: "share" as const, hint: ".gachamod", where: "Tools › Share and move",
       keywords: "export share send friend backup gachamod pack links library mods profiles", run: () => emitApp({ type: "export-pack", game: g.id, scope: "game" }) }] : []),
     ...(allGames().filter((x) => x.modsDir && x.modCount > 0).length > 1 ? [{ id: "tools:share-all", title: "Share every game", section: "Actions", icon: "share" as const,
-      hint: ".gachamod", keywords: "export share send friend backup gachamod pack links all games library", run: () => emitApp({ type: "export-pack", game: g.id, scope: "all" }) }] : []),
+      hint: ".gachamod", where: "Tools › Share and move", keywords: "export share send friend backup gachamod pack links all games library", run: () => emitApp({ type: "export-pack", game: g.id, scope: "all" }) }] : []),
   ];
 });
 
@@ -364,7 +364,7 @@ function DevSection({ game }: { game: GameState }) {
   return (
     <Panel title="Files and logs" icon="bug" id="dev">
       {noImporter
-        ? <p className="hint">Set {game.name}'s mod loader folder in Settings first.</p>
+        ? <p className="hint">Set {game.name}'s mod loader folder first. <Button size="sm" variant="ghost" icon="folder" onClick={() => go({ view: "settings", section: "games" })}>Game folders</Button></p>
         : <>
           <div className="toolbar tools-open">
             <Button icon="folder" onClick={() => open(game.importerDir)} disabled={!game.importerDir} title="Open the folder with d3dx.ini and Mods">Loader folder</Button>
