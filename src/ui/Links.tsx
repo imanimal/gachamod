@@ -8,6 +8,7 @@ import { openWithFilters } from "../screens/browse/state";
 import { go } from "../lib/store";
 import { menuFor, menuHandler } from "./ContextMenu";
 import { Portrait } from "./Portrait";
+import { LazyImg } from "./LazyImg";
 
 const stop = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); };
 
@@ -37,7 +38,7 @@ export function CreatorLink({ id, name, avatar, modId, children, className }:
       onClick={(e) => { stop(e); e.preventDefault(); open(); }}
       onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); open(); } }}
       onMouseDown={stop} onContextMenu={menuHandler(() => menuFor("creator", { id, name, avatar, modId }))}>
-      {avatar && <img className="qlink-img" src={avatar} alt="" loading="lazy" />}
+      {avatar && <LazyImg className="qlink-img" src={avatar} alt="" />}
       {children ?? name}
     </span>
   );

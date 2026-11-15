@@ -105,4 +105,7 @@
   .profile-card-desc { padding: .4rem .5rem 0; color: var(--text-2); font-weight: 600; }
   .profile-card-a { padding: .5rem .4rem .3rem; }
   .profile-card.is-active { box-shadow: 0 0 0 3px var(--acc), 0 3px 0 3px rgb(0 0 0 / .75); }
+
+  /* ── Settings and Tools pages: their panels have no fill, so the lettering behind them is blurred ── */
+  .pg-page > .pg-body > .panel { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 }

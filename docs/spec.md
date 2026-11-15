@@ -81,7 +81,7 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
   problems the user ignored don't count.
 - Current game: `useGame()`; switching games re-mounts the view (App keys `main.view` by game and view).
 - Settings: small strings via `settings.get/set` (UI) or `Db::setting` (Rust). Key names are dotted and per game when
-  per game: `"<game>.oneSkin"`, `"ui.nsfw"`, `"player"` (JSON), `"xxmi.root"`, `"<game>.launch"` (JSON).
+  per game: `"<game>.oneSkin"`, `"ui.nsfw"`, `"player"` (JSON, from older versions; only extensions read it now), `"xxmi.root"`, `"<game>.launch"` (JSON).
 
 ## Mods on disk
 
@@ -484,6 +484,10 @@ game merges mods an older version installed one per folder from the same archive
 `library-changed {game}` after installs and a `toast` event ("Installed Coca Cola for Ellen Joe") with `open: {game,
 modId}`, which gives the toast an Open button for the mod's details. Downloads go to
 `<data>/downloads/<game>/`; keep the archive (setting "downloads.keep" default "0": delete after install).
+A GameBanana download under 1 MB/s for 8 seconds, with 8 MB or more to go, carries on (a Range request from the
+.part) on another `filecache<N>` server picked at random, at most 3 moves per download (`download::GAMEBANANA`).
+Another server that fails, can't resume or gives another size sends it back to the `/dl/` link. Setting
+"downloads.otherServers" "0" turns this off. Each move is logged.
 `install_local`: archives (zip/7z/rar) and folders; for a folder, copy it (don't move the user's folder).
 gachamod:// links (deep-link event -> app event open-gb-link): `gachamod:https://gamebanana.com/mmdl/<fileId>,Mod,
 <modId>` queues that file at once; `gachamod://mod/<modId>` opens it in Browse.
@@ -635,20 +639,38 @@ UI:
 - `screens/home/PlayButton.tsx`: the Play button in the sidebar and on Home (game running: "Running" with the time,
   disabled; Starting until the game runs; Set up when no folder is set). The three-line button next to it ("More ways
   to start") has Play without mods, Open XXMI Launcher and Launch options. Ctrl+Enter presses Play.
-- `screens/home/PlayerCard.tsx`: the player card: avatar (pick a character portrait from any game's characterList,
-  or an image file or URL), display name, a title line ("Proxy", "Trailblazer" ... free text), a banner strip, a
-  "UID" style tag (free text), all from setting "player" (JSON). Click opens an edit dialog. Compact but pretty.
+- `shell/AccountCard.tsx`: the GameBanana account at the top of the sidebar, in place of the old player card (its
+  classes stay so themes still dress it). Signed out it reads "Sign in" and one click opens GameBanana's sign-in
+  window (`lib/account.ts`); signed in it shows the GameBanana name and picture, and a click opens: your GameBanana
+  page (in Browse), follow who you follow there, sign out. Extensions asking for "player" get the GameBanana name.
 - `screens/tools/Tools.tsx` and `screens/settings/*`: owned by SETTINGS/AI now, see "Settings, Tools and the AI
   helper" below.
-- `screens/settings/Onboarding.tsx`: first start window: runs games.detect, xxmi.status and imm.detect, each listed
-  with its own state (running with a timer, done, or failed with the reason), and past 10 seconds what could be
-  holding it. "Skip the search" appears after 5 seconds; results that arrive later still fill in. Then it shows found games
-  as cards (game badge, folders, mod count) with toggles to show them, offers XXMI download link if not found
-  (https://github.com/SpectrumQT/XXMI-Launcher/releases), offers "Move mods from IMM" when imm.detect finds it
-  (MODTOOLS' ImmPanel logic: emit nothing, just go to Tools section "imm" after), then "Start". Sets setting
-  "onboarded" = "1"; App only shows it when no game has a Mods folder, so also show it when that setting is missing.
-  Shown games appear in the sidebar's game switcher (there is no rail any more).
-  After "Start" a toast offers the tour once ("gm.tour"); it's always in the title bar's Help menu.
+- First start (`screens/settings/Onboarding.tsx`, `lib/setup.ts`), no window and no questions:
+  - When XXMI Launcher already has a game with a Mods folder, the app opens on it. One toast says what was found and
+    that usage counts and crash reports are sent ("Turn those off"); others offer loaders for other games on this PC
+    and moving mods Integrated Mod Manager keeps.
+  - When no game has a Mods folder, the main view is the setup page: the games found and one button, "Install mod
+    loaders", which downloads XXMI Launcher and each game's loader from GitHub and sets them up
+    (`xxmi_install`, gacha-core `xxmi_setup.rs`; progress on "xxmi-setup"). No game found: "Look again". The page
+    looks again every 10 seconds and on focus, and `watchSetup` keeps looking (focus, every 30 s) while a shown game
+    has no Mods folder. Settings and Extensions stay reachable.
+  - Everywhere a Mods folder is missing (Settings, Games, the Play button's Set up, a failed download and its toast),
+    the first button installs the loader or looks again (`getReady`), and picking a folder by hand comes second
+    (`pickModsFolder`).
+  - Uninstalling (`xxmi_uninstall`, `xxmi_setup::uninstall`): Settings, Games has "Uninstall mod loader" per XXMI game
+    and "Uninstall XXMI Launcher" (asks first). Files go to the Recycle Bin (`recycle.rs`); each Mods folder and
+    d3dx_user.ini stay. One loader also comes out of XXMI's config (enabled importers, deployed version) so XXMI
+    sees it as gone; all of them also takes the shortcuts that point into the XXMI folder. It refuses while XXMI
+    Launcher or that game runs. The games forget the loader (`games::forget_loader`) and are looked for again. The
+    toast has "Install again".
+  - Sets "onboarded" = "1". A first setup turns on the first-start hints for that session (`shell/hints.ts`): Browse
+    looks faintly selected until opened, the first Browse card's Install button and the drawer's Install button get
+    a faint outline until the first install, and Downloads looks faintly selected while a download runs until
+    opened. Settings, Appearance, First-start hints turns them off ("hints.on"). There is no tour.
+- New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
+  runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
+  rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
+  more skins and isn't switched in game yet, the toast offers "Switch in game" (live switching).
 - One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
@@ -666,7 +688,8 @@ UI:
   data, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
   what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
   the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
-- `npm run installer` builds the installer with build-machine folders written as `~` (scripts/build-installer.mjs).
+- `npm run installer` builds the installer and gachamod setup with build-machine folders written as `~`
+  (scripts/build-installer.mjs).
 - gachamod's own updates (`src-tauri/src/commands/app.rs`, Tauri's updater plugin; `app_update.rs` keeps version
   numbers). The feed is `releases/latest/download/latest.json` on imanimal/gachamod, and the updater only installs an
   installer signed with the key in `%USERPROFILE%\.tauri\gachamod.key` (its public half is in tauri.conf.json, plugins
@@ -677,9 +700,37 @@ UI:
 - `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
   builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
   (scripts/release.mjs). Without --notes the notes are the commit subjects since the last release.
-- Uninstalling (Windows' Installed apps) removes the program, its RUNASADMIN flag, and the `gachamod:` link and
-  `.gachamod` file keys when they still open that copy (`hooks.nsh`). Mods stay where they are. "Delete the application
-  data" also removes the data folder (settings, profiles, trash) and HKCU\Software\gachamod.
+- Uninstalling removes the program, its RUNASADMIN flag, and the `gachamod:` link and `.gachamod` file keys when they
+  still open that copy (`hooks.nsh`). Mods stay where they are. NSIS's own "Delete the application data" also removes
+  the data folder (settings, profiles, trash) and HKCU\Software\gachamod.
+- gachamod setup (`src-setup`, page in `src/setup`, `setup.html`): the window people download, install, repair and
+  uninstall with. `gachamod-setup.exe` is the setup program with the NSIS installer appended (`payload.rs`;
+  `scripts/build-installer.mjs` makes it and copies named for each game). It runs that installer quietly (`/S /D=`), so
+  updates, the uninstall entry and `hooks.nsh` work as before, and any NSIS switch (`/S`, `/P`, `/D=`) passes straight
+  to it. Its look (`look.rs`): `--theme <id>`, else a game named in its own file name (`gachamod-setup-zzz.exe`), the
+  page that linked the download or the download's address (Windows' Zone.Identifier, `?theme=` or `?game=` too), else
+  the look gachamod last showed, else Default. The app writes that look to `look.json` in its data folder when the
+  theme changes (`save_look`, from `lib/theme.ts`), so repair and uninstall wear the game in use.
+  - Install: one button, with Options for the folder, desktop shortcut, starting as administrator, opening when done
+    and setup's own look. The choices go to HKCU\Software\gachamod (`adminAsked`, `admin`, `desktopShortcut`), which
+    `hooks.nsh` reads instead of asking. An older install shows Update; the same or newer shows Open, Repair and
+    Uninstall.
+  - The installer puts `setup.exe` next to gachamod and points the uninstall entry at it (`UninstallString`
+    `setup.exe --uninstall`, `ModifyPath` for Repair or Uninstall, `QuietUninstallString` stays NSIS's). Settings,
+    About has Open setup when it's there. Run from the install folder it copies itself to `%TEMP%` first so the folder
+    can go.
+  - Repair runs the installer inside setup when it's at least the installed version, else downloads the newest
+    `latest.json` installer and checks its signature with the updater key. Uninstall runs `uninstall.exe /S _?=<dir>`,
+    then removes setup.exe and the empty folder; "Also delete gachamod's data" moves the data folders to the Recycle
+    Bin and clears HKCU\Software\gachamod.
+  - Without WebView2 it falls back to the plain NSIS installer or uninstaller.
+  - It's built with `--profile setup` (Cargo.toml: size over speed), about 6 MB instead of 13. `npm run setup` runs it
+    from source against `npm run dev`; the page alone is http://localhost:1420/setup.html, with `?mode=`, `?theme=`,
+    `?installed=<version>`, `?running=1` and `?fail=1` for the demo.
+  - Checked on one PC: install, repair over the same version, uninstall from the window and with `/S`, closing a
+    running gachamod, the desktop shortcut choice, temp cleanup, and the theme from the file name and from look.json.
+    Not checked yet: a PC without WebView2, an update from 0.1.0 through the app's updater, repair when the download
+    is older than the installed copy (the GitHub download), and a theme from the page that linked the download.
 - Demo handlers for every SYSTEM command.
 
 ## Settings, Tools and the AI helper (SETTINGS/AI)
@@ -689,11 +740,32 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 ### Settings
 
-- `Settings.tsx` (view "settings"): a list of sections on the left (sticky; the one in view is marked), the sections
-  on the right. Every section and every single setting is a route: `go({ view: "settings", section })` with a section
-  id (games, xxmi, integrations, appearance, themes, mods, automatic, storage, creators, hotkeys, account, ai,
-  transfer, about) or a row id (`set-trash-days`, `set-onscreen` ...), which scrolls to the row and flashes it.
-  A section that renders nothing (a part still being built) is left out of the list.
+- `Settings.tsx` (view "settings"): pages listed on the left in groups (`Paged.tsx`, shared with Tools). A page
+  holds the panels that belong together, so the list stays short: Games and mods has "games" (games, xxmi), "mods"
+  (mods, mod-folders, automatic, storage), "creators" and "hotkeys"; Look has "appearance" (appearance, themes) and "fun"; App
+  has "account" (listed as Connections: account, integrations, ai), "extensions", "feedback" and "about" (about,
+  transfer). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`. A panel on a page has no fill
+  or theme frame, only a thin outline in the theme's line colour, so a short page isn't a card floating over an
+  empty screen. New Eridu blurs its background lettering behind these panels (`themes/zzz-screens.css`).
+  Scrolling past the end of a page slides the next one up into view like one long scroll
+  (scrolling up past the top brings back the one before, at its end). Spinning down a long page stops at its end;
+  a new scroll there turns the page, and so does scrolling on once the page has sat at its end for 350 ms, unless
+  the scroll is only winding down (touchpad glide, a free-spinning wheel). Page Down and Page Up do the same at
+  the edges, Ctrl+Page Down and Ctrl+Page Up turn straight away, arrow keys move through the list, and a
+  controller's triggers and right stick turn pages at the edges too (`padscroll` from lib/gamepad.ts).
+  Each screen remembers its page for the session. Every page, panel and single setting is a route:
+  `go({ view: "settings", section })` with a page id, a panel id (`storage`, `themes`) or a row id
+  (`set-trash-days`, `set-onscreen` ...), which opens its page, scrolls to the panel or row and flashes it. A page
+  that renders nothing is left out of the list.
+- A setting sits where people look for it, and some show twice. Mods folders (`mod-folders`, on the Mods page)
+  lists each game's Mods folder with Detect again, Change and Install mod loader or Find it; the same folders are
+  under Games. Run as administrator is under Games and In-game hotkeys (one shared state in `Feedback.tsx`).
+  Automatic updates has its switch in About next to Check now as well as under Automatic. Games has a Launch
+  options row that opens Tools, Launch.
+- `lib/places.ts` gives a message that names a setting or a place a button that opens it. Toasts without a button
+  of their own get it by their words, backend messages included ("has no Mods folder yet" gets "Mods folders",
+  "IMM manages this mod" gets "Move from IMM"). `placeFor(text)` gives the same button to a note drawn in a page
+  (Tools uses it for a launch config that couldn't load or save).
 - `settingsSearch.ts` registers every section and setting in the global search with the words people use
   ("recycle bin" finds Keep removed mods' files), plus "Open XXMI Launcher" and the AI jobs (only while AI shows).
 - Games: XXMI games, then community games (no XXMI support) with one plain line on what differs: they need their own
@@ -706,6 +778,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - Automatic: one switch each, all prefs in `automatic.ts` that other areas read: `appUpdateCheckPref`
   ("app.updateCheck", shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
+  `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
 - Storage: `trashDaysPref` ("trash.days", 0 to 3650, default 14; 0 deletes files at once, the record stays in
   Mods, Trash). Lowering it asks first when files would go now (that can't be undone). `trashPhrase()` finishes a
@@ -713,6 +786,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - Creators: followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the
   creator's page, an x to remove (setCreatorFlag, with Undo).
 - AI helper: off / most useful (default) / everything, the chatbot, and the jobs as buttons.
+- About has "Reset gachamod" (asks first). `app_reset` leaves a note in the data folder, the window clears its own
+  storage and `app_relaunch` restarts. At the next start, before the database opens, `reset::finish` deletes what
+  can be fetched again (downloads, staging, caches, fixers, the GameBanana sign-in), keeps logs and backups, and
+  moves everything else (the database, trash, extensions) to `backups/before-reset-<time>/`. Mods folders, games
+  and XXMI Launcher are outside the data folder.
 - Mods also has "Shuffle outfits" (`screens/library/shuffle.ts`, pref "mods.shuffle": off, each Play, once a day at
   the first Play): every character with two or more mods gets one of them on at random and the others off, as one
   change with Undo. Mods hidden as for adults stay out. Also a dice button on Mods and "Shuffle outfits" in search.
@@ -732,10 +810,13 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 ### Tools
 
-`Tools.tsx` (view "tools"): "fixes" (FixesPanel, FIXES), "launch", "ingame" (InGamePanel, INGAME), "migoto", "dev",
-then MODTOOLS' panels. Wrappers hide when a panel renders nothing. Any setting XXMI Launcher owns (the backend's lock
-message says "in XXMI Launcher" or "Only XXMI Launcher") shows an "Open XXMI Launcher" button next to it. "Start with"
-is hidden for community games.
+`Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
+(Problems and fixes: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "launch", "ingame" from
+INGAME, "packs" (Share and move: packs, "imm") and "migoto" (Mod makers: migoto, "dev", "hash"). The panel ids
+still work as routes. Launch and Mod maker switches are two panels over one launch config (`useLaunch`), saved
+together. A panel that renders nothing (IMM when it isn't installed) is left out. Any
+setting XXMI Launcher owns (the backend's lock message says "in XXMI Launcher" or "Only XXMI Launcher") shows an
+"Open XXMI Launcher" button next to it. "Start with" is hidden for community games.
 
 The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
 (docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
@@ -764,7 +845,7 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
 - Visibility (`aiShowPref`, "ai.show"): "off" hides every AI element (buttons, menu items, search entries, the
   first-run card, the helper itself); "useful" (default) shows entry points that save real work; "all" adds
   extras. Every entry point checks `aiShown("useful" | "extra")`.
-- First-run card: once, a little after start when setup is done ("onboarded"), a small card (not a modal) bottom
+- First-run card: once, 10 seconds into the first start after setup ("onboarded" already set), a small card (not a modal) bottom
   right with four things the helper does, chatbots to pick (apps found on this PC first, from
   `ai_chatbots_installed`, which only checks known folders under %LOCALAPPDATA%), "No thanks" (hides it for good,
   "ai.intro") and "Turn AI off". It never mentions subscriptions.
@@ -816,7 +897,7 @@ so push that copy to the public repo when the docs change.
 
 - Title bar (`shell/Titlebar.tsx`): Back and Forward, the breadcrumb, then "Search anything" in the middle of the
   window (opens the palette, Ctrl+K), then what's running, Undo, Redo, Help and the window keys. Both sides stay
-  empty enough to drag the window. The search box grows in from a key when the app opens, after the first setup and after the tour; on a
+  empty enough to drag the window. The search box grows in from a key when the app opens and after the first setup; on a
   narrow window it narrows before the breadcrumb does.
 - What's running (`shell/Activity.tsx`, `lib/activity.ts`): every backend call and GameBanana request is noted
   with what it does and what can hold it up (`describeCall`, `HOLD`). Anything over 1.2 seconds shows in the title
@@ -825,10 +906,12 @@ so push that copy to the public repo when the docs change.
   kit's `Waiting` (a line saying what it's for, a counter after 3 seconds, and past 10 seconds what could be holding
   it), never a bare spinner. Network requests time out (30 seconds without an answer) so a dead connection becomes
   an error instead of a wait.
-- Help menu: Take the tour, Keyboard and controller shortcuts (?), Search anything, Report a problem (GitHub issues).
-- Tour (`shell/Tour.tsx`): six short steps, each lighting one part of the window (search, the game, pages,
-  profiles, Play, Help) with a card beside it. Arrows or Enter move on, Escape or B closes. Steps whose part isn't
-  on screen are skipped.
+- Help menu: Keyboard and controller shortcuts (?), Search anything, Report a problem (GitHub issues).
+- Sidebar views, Ctrl+1 to Ctrl+8 (`KEY_VIEWS` in `shell/names.ts`): Home, Browse, Mods, Characters, Downloads,
+  Profiles, Tools, Settings. Profiles has no view button: its list sits under the views, with "Manage profiles"
+  (Ctrl+6) in its header and "New profile" at the end. Views are off until a game has a Mods folder.
+- Pictures in lists load only once on screen (`ui/LazyImg.tsx`, 48 px early), not the browser's lazy loading, which
+  starts more than a screen ahead.
 - Game switcher in the sidebar: the shown games' icons on one row; when they don't fit, the last slot is "+N",
   which opens the switch menu.
 - Wheel scrolling (`lib/smoothScroll.ts`): each notch of a mouse wheel glides over about 250 ms instead of jumping.

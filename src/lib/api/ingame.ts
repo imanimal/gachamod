@@ -30,8 +30,9 @@ export const live = {
   setMenu: (game: GameId, menu: MenuSettings) => call<MenuSettings>("live_menu_set", { game, menu }),
   /** Make every mod that has a character switch in game, now and as new ones arrive. Off only stops new ones. */
   setAll: (game: GameId, on: boolean) => call<LiveChange>("live_set_all", { game, on }),
-  /** Start gachamod again as administrator (Windows asks first), so its keys reach a game that runs as one. */
-  restartAsAdmin: () => call<void>("app_restart_admin"),
+  /** Start gachamod again as administrator (Windows asks first), so its keys reach a game that runs as one. False
+   *  when the player said no there. */
+  restartAsAdmin: () => call<boolean>("app_restart_admin"),
 };
 
 /** The skin menu's own window over the game (src-tauri overlay.rs). */

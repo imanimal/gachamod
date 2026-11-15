@@ -18,6 +18,7 @@ import { useQueue } from "./useQueue";
 import { withCreator, openCreator } from "./actions";
 import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 registerBrowseMenus();
 
@@ -209,7 +210,7 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
           return (
             <div key={c.key} className={`card gb-variant${on ? " sel" : ""}`}>
               <span className="gb-variant-img">
-                {img ? <img src={img} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <Icon name="image" />}
+                {img ? <LazyImg src={img} alt="" decoding="async" onError={(e) => { e.currentTarget.style.display = "none"; }} /> : <Icon name="image" />}
               </span>
               <Checkbox checked={on} onChange={(v) => toggle(c.key, v)} label={<span className="gb-variant-t">{c.label}</span>} />
               <span className="gb-variant-meta hint">

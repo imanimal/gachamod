@@ -10,6 +10,7 @@ import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
 import { makeLive, pickLive, setAll, setMenu, stopLive, useLive } from "./data";
 import "./ingame.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 export function InGamePanel({ game }: { game: GameId }) {
   const info = useLive(game);
@@ -78,7 +79,11 @@ const MENU_HINT: Record<MenuSettings["style"], (key: string) => string> = {
 /** The game runs as administrator and gachamod doesn't: what that costs, and the one click that fixes it. */
 function Blocked({ menu }: { menu: MenuSettings }) {
   const [busy, setBusy] = useState(false);
-  const restart = () => { setBusy(true); live.restartAsAdmin().catch((e) => { toast(errorText(e), true); setBusy(false); }); };
+  const restart = () => {
+    setBusy(true);
+    // true: gachamod is closing for the new copy, so the button stays busy until then
+    live.restartAsAdmin().then((ok) => { if (!ok) setBusy(false); }).catch((e) => { toast(errorText(e), true); setBusy(false); });
+  };
   return (
     <div className="live-blocked" role="status">
       <Icon name="warn" />
@@ -144,7 +149,7 @@ function Chip({ m, on, busy, onPick }: { m: LiveMod; on: boolean; busy: boolean;
   return (
     <button type="button" role="radio" aria-checked={on} className={`live-chip${on ? " on" : ""}${m.enabled ? "" : " is-off"}`} disabled={busy} onClick={onPick}
       title={on ? `${m.name} is showing` : m.enabled ? `Show ${m.name}` : `${m.name} is off. Picking it turns it on, and it shows after the game reloads`}>
-      <span className="live-thumb">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <Icon name="mods" />}</span>
+      <span className="live-thumb">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
       <span className="live-chip-t">{m.name}</span>
       {on && <Icon name="check" className="live-chip-on" />}
     </button>

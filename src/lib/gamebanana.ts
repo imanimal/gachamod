@@ -9,6 +9,7 @@ import { currentGame } from "./store";
 import { toast } from "../ui/toast";
 import { pityReset } from "./fun";
 import { HOLD, track } from "./activity";
+import { doneHint } from "../shell/hints";
 
 export const GB = "https://gamebanana.com/apiv11";
 
@@ -1220,6 +1221,7 @@ export function buildRequest(game: GameId, mod: GbMod, file: GbFile, replaces?: 
 /** Queue one file of a mod for download and install. `replaces`: library id of the mod it updates. */
 export async function queueModFile(game: GameId, mod: GbMod, file: GbFile, replaces?: string): Promise<QueueItem | null> {
   const snap = await queue.add(buildRequest(game, mod, file, replaces));
+  doneHint("install");
   pityReset();
   const waiting = snap.items.filter((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled").length;
   if (waiting === 25) toast("25 mods queued. Your drive has been notified");

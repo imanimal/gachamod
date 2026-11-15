@@ -5,6 +5,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { dialogs, errorText, extensions as api, settings, shell, type ExtInstallResult, type ExtRepo, type IndexEntry, type InstalledExt, type Packed } from "./api";
 import { DEFAULT_EXT_SOURCE } from "./api/extensions";
 import { record } from "./history";
+import { accountState } from "./account";
 import { applyCustomTheme, customThemesPref, validateCustomTheme, type CustomTheme } from "./theme";
 import { toast } from "../ui/toast";
 
@@ -240,14 +241,15 @@ export async function sharePackage(repos: ExtRepo[] | null) {
   try { shared(await api.packFolder(folder, out), repos); } catch (e) { toast(errorText(e), true); }
 }
 
-/** Package one custom theme for the repo and open the page to send it in. The author is the player card's name. */
+/** Package one custom theme for the repo and open the page to send it in. The author is the GameBanana name when
+ *  signed in (or the name an older version kept for its player card). */
 export async function shareTheme(t: CustomTheme) {
   const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "theme";
   const id = slug.length < 2 ? `${slug}-theme` : slug;
   const out = await dialogs.saveFile({ title: "Save the theme package", defaultPath: `${id}.zip`, extensions: ["zip"] });
   if (!out) { if (!("__TAURI_INTERNALS__" in window)) toast("Saving a package works in the app", true); return; }
   const player = await settings.getJson<{ name?: string }>("player", {});
-  const author = player.name?.trim() || "Anonymous";
+  const author = accountState().user?.name || player.name?.trim() || "Anonymous";
   const theme = { name: t.name, base: t.base, scheme: t.scheme, tokens: t.tokens, layout: t.layout, ...(t.css ? { css: t.css } : {}) };
   try { shared(await api.packTheme(theme, { id, name: t.name, author, description: `A ${t.scheme === "light" ? "light" : "dark"} theme on top of ${t.base === "default" ? "Default" : t.base}.` }, out), repoStore.get().repos); }
   catch (e) { toast(errorText(e), true); }

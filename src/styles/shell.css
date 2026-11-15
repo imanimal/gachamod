@@ -67,8 +67,8 @@
 /* on a narrow window the breadcrumb gets the space the themes' decorations would take */
 @container app (max-width: 64rem) { :root .tb-l .sp { padding: 0; min-width: .5rem; } .tb-l .sp .glyphs { display: none; } }
 
-/* the search box (a button that opens the palette). It narrows before the breadcrumb does. It grows in from a key when the app opens, after the first
-   setup and after the tour, so it's noticed. */
+/* the search box (a button that opens the palette). It narrows before the breadcrumb does. It grows in from a key when the app opens and after the first
+   setup, so it's noticed. */
 .tb-search { display: flex; align-items: center; gap: .5rem; width: clamp(9rem, 100cqi - 56rem, 22rem); height: 1.95rem; padding: 0 .35rem 0 .65rem; overflow: hidden;
   border-radius: var(--radius-sm); background: var(--surface); color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line); font-size: .88em; text-align: left;
   transition: box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
@@ -108,13 +108,12 @@
 .side > * { flex: none; }
 .side-h { font-size: .82em; font-weight: 650; color: var(--text-3); }
 
-/* the player card, compact (screens/home/PlayerCard.tsx draws it; this sizes it for the sidebar) */
+/* the account card, compact (shell/AccountCard.tsx draws it with the player card classes; this sizes it) */
 .side-top { position: relative; display: flex; align-items: stretch; gap: .3rem; }
 .side-top .player-card { flex: 1; min-width: 0; padding: .35rem .45rem; column-gap: .55rem; border-radius: var(--radius); }
 .side-top .player-card .player-banner { height: 100%; opacity: .32; }
 .side-top .player-card .player-av { width: 2.1rem !important; height: 2.1rem !important; outline-width: 2px; }
 .side-top .player-text { padding-top: 0; }
-.side-top .player-uid { display: none; }
 /* square, so a theme's round hover is a circle and not an oval */
 .side-fold { flex: none; width: 1.75rem; height: 1.75rem; align-self: center; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-3);
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
@@ -382,20 +381,14 @@
 /* decoration (ui/Deco.tsx): off unless a theme turns it on */
 .backdrop, .side-deco, .glyphs { display: none; }
 
-/* ── the tour (shell/Tour.tsx): the window dims except one part, with a card beside it ── */
+/* ── step hints (shell/hints.ts): a quiet ring on the next thing to press, in place of a tour ── */
 
-.tour { position: fixed; inset: 0; z-index: 110; }
-.tour-block { position: absolute; inset: 0; }
-.tour-spot { position: fixed; border-radius: var(--radius); box-shadow: 0 0 0 200vmax var(--scrim), 0 0 0 2px var(--accent); pointer-events: none;
-  transition: left var(--dur) var(--ease), top var(--dur) var(--ease), width var(--dur) var(--ease), height var(--dur) var(--ease); }
-:root .popover.tour-card { position: fixed; width: min(20rem, calc(100vw - 24px)); padding: .85rem .95rem .8rem; overflow: visible;
-  transition: left var(--dur) var(--ease), top var(--dur) var(--ease); }
-.tour-h { display: flex; align-items: center; gap: .5rem; }
-.tour-h b { font-size: 1.02em; }
-.tour-n { margin-left: auto; color: var(--text-3); font-size: .82em; font-variant-numeric: tabular-nums; }
-.tour-x { margin: -.3rem -.4rem -.3rem 0; }
-.tour-card p { margin: .4rem 0 .75rem; color: var(--text-2); line-height: 1.45; }
-.tour-f { display: flex; justify-content: flex-end; gap: .4rem; }
+/* first-start hints (shell/hints.ts): a view looks faintly selected (the selected view's colour, which Sidebar.tsx
+   reads into --nv-on-bg, at 40%), a button gets a faint outline. No motion */
+:root:root .app .side .nv.is-hint:not(.on, :hover) { background: color-mix(in srgb, var(--nv-on-bg, var(--accent-soft)) 40%, transparent); }
+:root:root .app .side .nv.is-hint:not(.on, :hover) .i { color: color-mix(in srgb, var(--accent-ink) 60%, var(--text-3)); }
+:root:root[data-nav="grid"] .app .side .nv.is-hint:not(.on, :hover) { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 25%, transparent); }
+.hint-ring { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); outline-offset: 2px; }
 
 /* what gachamod is waiting on (shell/Activity.tsx) */
 .tb-act { display: inline-flex; align-items: center; gap: .45rem; height: 2rem; max-width: 18rem; padding: 0 .6rem; margin-right: .35rem; flex: none;

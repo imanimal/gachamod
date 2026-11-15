@@ -50,7 +50,7 @@ pub fn game_for_code(code: &str) -> Option<&'static str> {
     crate::games::GAMES.iter().find(|g| g.xxmi && g.importer.eq_ignore_ascii_case(code)).map(|g| g.id)
 }
 
-fn default_root() -> Option<PathBuf> { std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("XXMI Launcher")) }
+pub fn default_root() -> Option<PathBuf> { std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("XXMI Launcher")) }
 
 /// XXMI's folder: a folder the user set (setting "xxmi.root") when it holds XXMI, else %APPDATA%\XXMI Launcher when
 /// its config is there.
@@ -189,6 +189,30 @@ pub fn set_importer_config(custom_root: Option<&str>, code: &str, patch: &Value)
 pub fn write_patch(path: &Path, code: &str, patch: &Value) -> Result<()> {
     let text = std::fs::read_to_string(path)?;
     let out = patch_text(&text, code, patch)?;
+    if out == text { return Ok(()); }
+    backup_once(path)?;
+    write_atomic(path, out.as_bytes())?;
+    if let Ok(mut c) = CACHE.lock() { *c = None; }
+    Ok(())
+}
+
+/// Set values anywhere in the config (each a key path and a value), keeping everything else as XXMI wrote it.
+pub fn set_paths_text(text: &str, sets: &[(Vec<&str>, Value)]) -> Result<String> {
+    let bom = text.starts_with('\u{feff}');
+    let body = text.trim_start_matches('\u{feff}');
+    let mut doc = ojson::parse(body).map_err(|e| Error::Invalid(format!("XXMI Launcher's settings file couldn't be read ({e})")))?;
+    let style = ojson::Style::detect(body);
+    for (path, v) in sets { doc.set(path, v, style.ascii); }
+    let mut out = String::with_capacity(text.len() + 64);
+    if bom { out.push('\u{feff}'); }
+    out.push_str(&doc.write(&style));
+    Ok(out)
+}
+
+/// `set_paths_text` on the file at `path`: backed up once per session, written atomically.
+pub fn write_paths(path: &Path, sets: &[(Vec<&str>, Value)]) -> Result<()> {
+    let text = std::fs::read_to_string(path)?;
+    let out = set_paths_text(&text, sets)?;
     if out == text { return Ok(()); }
     backup_once(path)?;
     write_atomic(path, out.as_bytes())?;

@@ -22,6 +22,9 @@ export const VIEW_INFO: Record<View, { label: string; icon: IconName }> = {
   extensions: { label: "Extensions", icon: "puzzle" },
 };
 
+/** Ctrl+1 … Ctrl+8, in this order. The sidebar lists the same views but Profiles, which has its own list there. */
+export const KEY_VIEWS: View[] = ["home", "browse", "library", "characters", "downloads", "profiles", "tools", "settings"];
+
 /** A view's label in a game ("Agents" for Characters in Zenless Zone Zero). */
 export function viewLabel(view: View, game?: GameId | null): string {
   return view === "characters" ? charNoun(game) : VIEW_INFO[view].label;

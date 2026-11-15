@@ -4,6 +4,7 @@ import { errorText, hotkeys, settings, type HotkeyTaken } from "../../lib/api";
 import { Panel, Toggle } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { HotkeyField } from "../profiles/HotkeyField";
+import { AdminRow } from "./Feedback";
 
 const KEYS = { on: "hotkeys.enabled", next: "hotkeys.next", prev: "hotkeys.prev" } as const;
 
@@ -46,6 +47,7 @@ export function HotkeysSection() {
           <HotkeyField label="Previous profile" value={vals.prev} onChange={(v) => void set("prev", v)} taken={takenFor(vals.prev)} hint="Off until you set a key, like Ctrl+Alt+Left" />
         </div>
       )}
+      {on && <AdminRow />}
     </Panel>
   );
 }

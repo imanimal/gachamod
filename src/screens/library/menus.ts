@@ -16,7 +16,6 @@ import {
   openFolder, openOnGb, previewFromGb, resetPreview, setFavourite, setInProfile, setOn, setParent, trashMods, warmProfiles,
 } from "./actions";
 import { askLib } from "./LibDialogs";
-import { fixerInApp, openFixer } from "../browse/state";
 
 // what the mod screens saw last, so menus opened anywhere know a mod's health and a character's mods
 const lastHealth = new Map<GameId, Map<string, ModHealth>>();
@@ -27,7 +26,8 @@ export function noteLibrary(game: GameId, mods: ModEntry[] | null, health?: Map<
 }
 export const healthOf = (game: GameId, id: string) => lastHealth.get(game)?.get(id);
 
-const isBroken = (h: ModHealth | undefined) => h?.status === "broken";
+/** A hash swap fixes it, or a fixer gachamod gets and runs. */
+const isBroken = (h: ModHealth | undefined) => h?.status === "broken" || (h?.status === "unfixable" && !!h.tool);
 
 /** "Make sub-mod of" with the mods it could go with (the same character's first), or "Unlink" for a sub-mod. */
 function subModItem(game: GameId, mod: ModEntry): MenuEntry {
@@ -80,7 +80,6 @@ registerMenu("mod", ({ game, mod, selection }) => {
     !many && mod.conflicts > 0 && { label: "Conflicts", icon: "warn", title: "Mods that change the same parts as this one, to pick which one wins", onClick: () => openDetails(mod, "conflicts") },
     !many && mod.iniCount > 0 && { label: "View in 3D", icon: "box", title: "Turn the mod's model around, as its toggles are set now", onClick: () => openDetails(mod, "model") },
     broken.length > 0 && { label: "Fix for the game update", icon: "wand", title: reasons.slice(0, 3).join(". ") || "A game update broke it and a fix is known", onClick: () => void fixForUpdate(game, broken) },
-    !many && healthOf(game, mod.id)?.tool && { label: `Get ${healthOf(game, mod.id)!.tool!.name}`, icon: fixerInApp(healthOf(game, mod.id)!.tool!) ? "downloads" : "external", title: `${healthOf(game, mod.id)!.reasons[0] ?? "A game update broke it"}. Opens the fixer's page`, onClick: () => openFixer(healthOf(game, mod.id)!.tool!) },
     onScreen && mod.hasKeys && { label: "Toggles only while on screen", icon: "keyboard", title: "Its toggles only work while its character is on screen, so they stop taking keys meant for other mods", onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
     !many && { label: "Rename", icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },

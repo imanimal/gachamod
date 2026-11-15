@@ -1,19 +1,21 @@
-// Tools: mod fixes, launch options, the in-game menu, 3DMigoto switches for mod makers, dev helpers, then MODTOOLS'
-// panels. Owner: SETTINGS/AI area.
-// Fields save on change (400 ms after the last one) with a small "Saved". Sections have ids for go({ section }).
+// Tools, one page at a time like Settings (settings/Paged.tsx): problems and fixes after a game update, conflicts and
+// key clashes, launch options, switching skins in game, sharing or moving mods, and the mod maker tools (3DMigoto
+// switches, files and logs, finding a hash). Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels.
+// Launch fields save on change (400 ms after the last one) with a small "Saved". Every page and panel is a route:
+// go({ view: "tools", section: "launch" }) or section: "fixes".
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge, Button, Confirm, PageHeader, Panel, Segmented, Select, TextField, Toggle, formatBytes, plural, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
+import { placeFor } from "../../lib/places";
 import { saved } from "../../ui/motion";
-import { dev, errorKind, errorText, launchConfig, shell, type DevStatus, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
-import { allGames, consumeRoute, currentGame, emitApp, go, useGame, useRoute } from "../../lib/store";
+import { dev, errorKind, errorText, launchConfig, shell, type DevStatus, type GameId, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
+import { allGames, currentGame, emitApp, go, useGame } from "../../lib/store";
 import { registerCommands } from "../../lib/search";
-import { scrollToElement } from "../../lib/smoothScroll";
 import { FixesPanel } from "./FixesPanel";
 import { InGamePanel } from "../ingame/InGamePanel";
 import { openXxmi } from "../settings/parts";
-import { ConflictsPanel, HashLookupPanel, ImmPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
-import { useProblemsFirst } from "../modtools/problems";
+import { Paged, type PageInfo } from "../settings/Paged";
+import { ConflictsPanel, HashLookupPanel, ImmPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
 import "./tools.css";
 
 type ExtraInfo = { label: string; hint?: string };
@@ -83,87 +85,83 @@ function lockNote(msg: string | undefined): ReactNode | undefined {
   return <span className="tools-lock">{msg}. <button type="button" className="tools-xxmi" onClick={openXxmi} title="Open XXMI Launcher to change it there">Open XXMI Launcher</button></span>;
 }
 
+/** Tools' pages in order. A page holds the panels that belong together. */
+const PAGES: PageInfo[] = [
+  { id: "problems", label: "Problems and fixes", icon: "warn", tip: "What stops a mod from showing right in game, and the fixers for mods a game update broke" },
+  { id: "conflicts", label: "Conflicts", icon: "layers", tip: "Mods that are on and change the same parts of a model, or use the same keys" },
+  { id: "launch", label: "Launch", icon: "play", tip: "How the game starts: arguments, window, commands before and after" },
+  { id: "ingame", label: "Switch skins in game", icon: "swap" },
+  { id: "packs", label: "Share and move", icon: "package", tip: "Share mods and profiles as a .gachamod file, or move mods out of Integrated Mod Manager" },
+  { id: "migoto", label: "Mod makers", icon: "code", tip: "3DMigoto's hunting mode and logging, the shader cache and logs, and looking up a hash" },
+];
+/** The page each of the other panels is on, for a route to one that isn't shown. */
+const PANEL_PAGE: Record<string, string> = { fixes: "problems", "key-clashes": "conflicts", imm: "packs", dev: "migoto", hash: "migoto" };
+const pageOf = (id: string): string | undefined => PANEL_PAGE[id];
+
 export function Tools() {
   const game = useGame();
-  const route = useRoute();
-  // Problems comes first while one of them has a one-click fix
-  const problemsFirst = useProblemsFirst(game?.id ?? null);
-
-  // scroll to a deep-linked section. Some only show once their config loads (Mod maker switches), so it waits up to a
-  // second for the section to appear.
-  useEffect(() => {
-    const id = route.section;
-    if (!id) return;
-    const t0 = performance.now();
-    let raf = 0;
-    const find = () => {
-      const el = document.getElementById(id);
-      if (!el && performance.now() - t0 < 1000) { raf = requestAnimationFrame(find); return; }
-      const view = el?.closest<HTMLElement>(".view");
-      if (el && view) scrollToElement(view, el, "start");
-      consumeRoute(["section"]);
-    };
-    raf = requestAnimationFrame(find);
-    return () => cancelAnimationFrame(raf);
-  }, [route.section]);
-
   if (!game) return null;
+  return <ToolsPages game={game} />;
+}
+
+function ToolsPages({ game }: { game: GameState }) {
+  const launch = useLaunch(game.id);
   return (
-    <div className="page tools">
+    <div className="page tools pg-screen">
       <PageHeader title="Tools" icon="tools" sub={`Mod fixes, launch options and mod maker tools for ${game.name}`} />
-      {problemsFirst && <div className="tools-ext"><ProblemsPanel /></div>}
-      <div className="tools-ext" id="fixes"><FixesPanel game={game.id} /></div>
-      <LaunchSections game={game} />
-      <div className="tools-ext" id="ingame"><InGamePanel game={game.id} /></div>
-      <DevSection game={game} />
-      <div className="tools-ext"><ConflictsPanel /></div>
-      {!problemsFirst && <div className="tools-ext"><ProblemsPanel /></div>}
-      <div className="tools-ext"><HashLookupPanel /></div>
-      <div className="tools-ext"><PacksPanel /></div>
-      <div className="tools-ext"><ImmPanel /></div>
+      <Paged name="tools" label="Tools pages" pages={PAGES} fallback={pageOf}>
+        {{
+          problems: <><ProblemsPanel /><FixesPanel game={game.id} /></>,
+          conflicts: <><ConflictsPanel /><KeyClashesPanel /></>,
+          launch: <LaunchPanel game={game} l={launch} />,
+          ingame: <InGamePanel game={game.id} />,
+          packs: <><PacksPanel /><ImmPanel /></>,
+          migoto: <><MigotoPanel l={launch} /><DevSection game={game} /><HashLookupPanel /></>,
+        }}
+      </Paged>
     </div>
   );
 }
 
-// ── launch and migoto: one config, saved together ──
+// ── launch and migoto: one config, saved together, shown on two pages (Launch, Mod makers) ──
 
-function LaunchSections({ game }: { game: GameState }) {
+type Launch = ReturnType<typeof useLaunch>;
+
+function useLaunch(game: GameId) {
   const [cfg, setCfg] = useState<LaunchConfig | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState(0);
   const timer = useRef(0);
   const edits = useRef(0);
   const latest = useRef<LaunchConfig | null>(null);
-  const ack = useRef<HTMLSpanElement>(null);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; window.clearTimeout(timer.current); }; }, []);
 
   useEffect(() => {
     let on = true;
-    launchConfig.get(game.id).then((c) => { if (on) { setCfg(c); latest.current = c; } }).catch((e) => { if (on) setLoadError(errorText(e)); });
+    launchConfig.get(game).then((c) => { if (on) { setCfg(c); latest.current = c; } }).catch((e) => { if (on) setLoadError(errorText(e)); });
     return () => { on = false; };
-  }, [game.id]);
+  }, [game]);
 
   const save = useCallback(async () => {
     const c = latest.current;
     if (!c) return;
     const at = edits.current;
     try {
-      const back = await launchConfig.set(game.id, c);
+      const back = await launchConfig.set(game, c);
       if (!live.current) return;
       setBlocked(null);
       // a newer edit is on its way; don't overwrite it with this answer
       if (at === edits.current) { setCfg(back); latest.current = back; }
-      saved(ack.current);
-      ack.current?.classList.add("show");
-      window.setTimeout(() => ack.current?.classList.remove("show"), 1600);
+      setSavedAt(Date.now());
     } catch (e) {
       if (!live.current) return;
       if (errorKind(e) === "conflict") setBlocked(errorText(e)); else toast(errorText(e), true);
     }
-  }, [game.id]);
+  }, [game]);
 
-  const update = (patch: Partial<LaunchConfig>) => {
+  const update = useCallback((patch: Partial<LaunchConfig>) => {
     setCfg((c) => {
       if (!c) return c;
       const n = { ...c, ...patch };
@@ -173,92 +171,136 @@ function LaunchSections({ game }: { game: GameState }) {
     edits.current++;
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void save(), 400);
-  };
+  }, [save]);
 
-  if (loadError) return <Panel title="Launch" icon="play" id="launch"><p className="hint">{loadError}</p></Panel>;
+  return { cfg, blocked, loadError, savedAt, save, update };
+}
+
+/** A small "Saved" that shows for a moment after each save. */
+function SavedTag({ at }: { at: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!at || !el) return;
+    saved(el);
+    el.classList.add("show");
+    const t = window.setTimeout(() => el.classList.remove("show"), 1600);
+    return () => window.clearTimeout(t);
+  }, [at]);
+  return <span ref={ref} className="tools-saved" aria-live="polite">Saved</span>;
+}
+
+/** The backend refused a save because something else holds the file: say so, with a way to try again. */
+function Blocked({ l }: { l: Launch }) {
+  if (!l.blocked) return null;
+  const place = placeFor(l.blocked);
+  return (
+    <div className="tools-blocked" role="alert">
+      <span>{l.blocked}</span>
+      {place && <Button size="sm" variant="ghost" onClick={() => void place.run()}>{place.label}</Button>}
+      <Button size="sm" onClick={() => void l.save()}>Try again</Button>
+    </div>
+  );
+}
+
+/** Why a panel couldn't load, with a button to the setting it names. */
+function LoadError({ text }: { text: string }) {
+  const place = placeFor(text);
+  return (
+    <p className="hint row">
+      <span>{text}</span>
+      {place && <Button size="sm" onClick={() => void place.run()}>{place.label}</Button>}
+    </p>
+  );
+}
+
+function LaunchPanel({ game, l }: { game: GameState; l: Launch }) {
+  const { cfg, update } = l;
+  if (l.loadError) return <Panel title="Launch" icon="play" id="launch"><LoadError text={l.loadError} /></Panel>;
   if (!cfg) return <Panel title="Launch" icon="play" id="launch"><Waiting what="Reading launch options" /></Panel>;
 
   const lock = (k: string) => lockNote(cfg.locked[k]);
-  const setMig = (patch: Partial<MigotoConfig>) => update({ migoto: { ...cfg.migoto, ...patch } });
   const known = Object.keys(EXTRA_LABELS).filter((k) => k in cfg.extras).map((k) => [k, cfg.extras[k]] as const);
   const other = Object.entries(cfg.extras).filter(([k]) => !EXTRA_LABELS[k]);
   const configureOff = cfg.extras.configure_game === false;
   const extraLock = (k: string) => configureOff && NEEDS_CONFIGURE.has(k) ? `Turn on "${extraInfo(game.id, "configure_game").label}" first` : undefined;
-  const migLock = (k: string) => lock("migoto") ?? lock(`migoto.${k}`);
   const viaXxmi = cfg.via === "xxmi";
 
-  const notice = blocked && (
-    <div className="tools-blocked" role="alert">
-      <span>{blocked}</span>
-      <Button size="sm" onClick={() => void save()}>Try again</Button>
-    </div>
+  return (
+    <Panel title="Launch" icon="play" id="launch" actions={<SavedTag at={l.savedAt} />}>
+      <Blocked l={l} />
+      <div className="tools-grid">
+        {game.xxmi && <Field label="Start with" hint={lock("via") ?? (viaXxmi ? "XXMI Launcher loads the mods and applies these settings" : "gachamod starts the game's exe. Mods need another loader")}>
+          <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label="Start with"
+            options={[{ value: "xxmi", label: "XXMI" }, { value: "direct", label: "Game exe" }]} />
+        </Field>}
+        <TextField label="Arguments" mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
+          hint="Added to the game's command line" />
+        {cfg.via === "direct" && (
+          <TextField label="Different exe" mono value={cfg.customExe ?? ""} placeholder="Leave empty for the game's own exe"
+            onChange={(v) => update({ customExe: v || null })} disabled={!!lock("customExe")} hint={lock("customExe")} />
+        )}
+        <Select label="Priority" value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })}
+          options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] ?? p }))} hint={lock("processPriority") ?? "Which programs Windows runs first when the CPU is busy. It doesn't raise FPS. Normal is best: High and Realtime can make sound, input and other apps stutter"} />
+        <Select label="Window" value={cfg.windowMode || "BORDERLESS"} onChange={(v) => update({ windowMode: v })}
+          options={WINDOW_MODES} hint={lock("windowMode")} />
+      </div>
+      <div className="tools-hooks">
+        <HookField title="Before the game starts" hook={cfg.preLaunch} locked={lock("preLaunch")} onChange={(h) => update({ preLaunch: h })} />
+        <HookField title="After mods load" hook={cfg.postLoad} locked={lock("postLoad")} onChange={(h) => update({ postLoad: h })} />
+      </div>
+      {known.length > 0 && (
+        <div className="tools-extras">
+          <h3 className="sub-h">{game.short} options</h3>
+          {known.map(([k, v]) => <Extra key={k} k={k} v={v} info={extraInfo(game.id, k)} locked={extraLock(k)} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
+        </div>
+      )}
+      {other.length > 0 && (
+        <details className="tools-other">
+          <summary>Other</summary>
+          {other.map(([k, v]) => <Extra key={k} k={k} v={v} info={{ label: k }} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
+        </details>
+      )}
+      <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label="Close gachamod when the game starts"
+        hint="Automatic reloads stop while gachamod is closed" />
+    </Panel>
   );
-  const savedTag = <span ref={ack} className="tools-saved" aria-live="polite">Saved</span>;
+}
+
+function MigotoPanel({ l }: { l: Launch }) {
+  const { cfg, update } = l;
+  if (l.loadError) return <Panel title="Mod maker switches" icon="code" id="migoto"><LoadError text={l.loadError} /></Panel>;
+  if (!cfg) return <Panel title="Mod maker switches" icon="code" id="migoto"><Waiting what="Reading 3DMigoto's settings" /></Panel>;
+
+  const lock = (k: string) => lockNote(cfg.locked[k]);
+  const setMig = (patch: Partial<MigotoConfig>) => update({ migoto: { ...cfg.migoto, ...patch } });
+  const migLock = (k: string) => lock("migoto") ?? lock(`migoto.${k}`);
 
   return (
-    <>
-      <Panel title="Launch" icon="play" id="launch" actions={savedTag}>
-        {notice}
-        <div className="tools-grid">
-          {game.xxmi && <Field label="Start with" hint={lock("via") ?? (viaXxmi ? "XXMI Launcher loads the mods and applies these settings" : "gachamod starts the game's exe. Mods need another loader")}>
-            <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label="Start with"
-              options={[{ value: "xxmi", label: "XXMI" }, { value: "direct", label: "Game exe" }]} />
-          </Field>}
-          <TextField label="Arguments" mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
-            hint="Added to the game's command line" />
-          {cfg.via === "direct" && (
-            <TextField label="Different exe" mono value={cfg.customExe ?? ""} placeholder="Leave empty for the game's own exe"
-              onChange={(v) => update({ customExe: v || null })} disabled={!!lock("customExe")} hint={lock("customExe")} />
-          )}
-          <Select label="Priority" value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })}
-            options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] ?? p }))} hint={lock("processPriority") ?? "Which programs Windows runs first when the CPU is busy. It doesn't raise FPS. Normal is best: High and Realtime can make sound, input and other apps stutter"} />
-          <Select label="Window" value={cfg.windowMode || "BORDERLESS"} onChange={(v) => update({ windowMode: v })}
-            options={WINDOW_MODES} hint={lock("windowMode")} />
+    <Panel title="Mod maker switches" icon="code" id="migoto" actions={<SavedTag at={l.savedAt} />}>
+      <Blocked l={l} />
+      {lock("migoto") && <p className="hint">{lock("migoto")}</p>}
+      <div className="tools-switches">
+        <Toggle checked={cfg.migoto.hunting} disabled={!!migLock("hunting")} onChange={(v) => setMig({ hunting: v })} label="Hunting mode"
+          hint={migLock("hunting") ?? "Numpad 0 turns it on in game, then numpad keys step through shaders and buffers to find hashes"} />
+        <Toggle checked={cfg.migoto.dumpShaders} disabled={!!migLock("dumpShaders")} onChange={(v) => setMig({ dumpShaders: v })} label="Dump shaders"
+          hint={migLock("dumpShaders") ?? "Marking a shader in hunting mode also saves its code to ShaderFixes"} />
+        <Toggle checked={cfg.migoto.muteWarnings} disabled={!!migLock("muteWarnings")} onChange={(v) => setMig({ muteWarnings: v })} label="Hide warnings"
+          hint={migLock("muteWarnings") ?? "No mod error text or beeps in game"} />
+        {cfg.xxmiAvailable && <Toggle checked={cfg.migoto.enforceRendering} disabled={!!migLock("enforceRendering")} onChange={(v) => setMig({ enforceRendering: v })} label="Enforce rendering"
+          hint={migLock("enforceRendering") ?? "Writes the [Rendering] values mods need into d3dx.ini before each start. Turn off to edit them by hand"} />}
+        <Toggle checked={cfg.migoto.callsLogging} disabled={!!migLock("callsLogging")} onChange={(v) => setMig({ callsLogging: v })} label="Log calls"
+          hint={migLock("callsLogging") ?? "Writes every DirectX call to d3d11_log.txt. Slow, for debugging"} />
+        <Toggle checked={cfg.migoto.debugLogging} disabled={!!migLock("debugLogging")} onChange={(v) => setMig({ debugLogging: v })} label="Debug logging"
+          hint={migLock("debugLogging") ?? "More detail in d3d11_log.txt"} />
+      </div>
+      {!migLock("logLevel") && (
+        <div className="tools-loglevel">
+          <Select label="Log" value={cfg.migoto.logLevel || "DISABLED"} onChange={(v) => setMig({ logLevel: v })}
+            options={LOG_LEVELS.map((lv) => ({ value: lv, label: LOG_LABEL[lv] ?? lv }))} hint="What goes in d3d11_log.txt. Warnings logs mod errors, Info adds DirectX calls, Debug adds much more" />
         </div>
-        <div className="tools-hooks">
-          <HookField title="Before the game starts" hook={cfg.preLaunch} locked={lock("preLaunch")} onChange={(h) => update({ preLaunch: h })} />
-          <HookField title="After mods load" hook={cfg.postLoad} locked={lock("postLoad")} onChange={(h) => update({ postLoad: h })} />
-        </div>
-        {known.length > 0 && (
-          <div className="tools-extras">
-            <h3 className="sub-h">{game.short} options</h3>
-            {known.map(([k, v]) => <Extra key={k} k={k} v={v} info={extraInfo(game.id, k)} locked={extraLock(k)} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
-          </div>
-        )}
-        {other.length > 0 && (
-          <details className="tools-other">
-            <summary>Other</summary>
-            {other.map(([k, v]) => <Extra key={k} k={k} v={v} info={{ label: k }} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
-          </details>
-        )}
-        <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label="Close gachamod when the game starts"
-          hint="Automatic reloads stop while gachamod is closed" />
-      </Panel>
-
-      <Panel title="Mod maker switches" icon="code" id="migoto">
-        {lock("migoto") && <p className="hint">{lock("migoto")}</p>}
-        <div className="tools-switches">
-          <Toggle checked={cfg.migoto.hunting} disabled={!!migLock("hunting")} onChange={(v) => setMig({ hunting: v })} label="Hunting mode"
-            hint={migLock("hunting") ?? "Numpad 0 turns it on in game, then numpad keys step through shaders and buffers to find hashes"} />
-          <Toggle checked={cfg.migoto.dumpShaders} disabled={!!migLock("dumpShaders")} onChange={(v) => setMig({ dumpShaders: v })} label="Dump shaders"
-            hint={migLock("dumpShaders") ?? "Marking a shader in hunting mode also saves its code to ShaderFixes"} />
-          <Toggle checked={cfg.migoto.muteWarnings} disabled={!!migLock("muteWarnings")} onChange={(v) => setMig({ muteWarnings: v })} label="Hide warnings"
-            hint={migLock("muteWarnings") ?? "No mod error text or beeps in game"} />
-          {cfg.xxmiAvailable && <Toggle checked={cfg.migoto.enforceRendering} disabled={!!migLock("enforceRendering")} onChange={(v) => setMig({ enforceRendering: v })} label="Enforce rendering"
-            hint={migLock("enforceRendering") ?? "Writes the [Rendering] values mods need into d3dx.ini before each start. Turn off to edit them by hand"} />}
-          <Toggle checked={cfg.migoto.callsLogging} disabled={!!migLock("callsLogging")} onChange={(v) => setMig({ callsLogging: v })} label="Log calls"
-            hint={migLock("callsLogging") ?? "Writes every DirectX call to d3d11_log.txt. Slow, for debugging"} />
-          <Toggle checked={cfg.migoto.debugLogging} disabled={!!migLock("debugLogging")} onChange={(v) => setMig({ debugLogging: v })} label="Debug logging"
-            hint={migLock("debugLogging") ?? "More detail in d3d11_log.txt"} />
-        </div>
-        {!migLock("logLevel") && (
-          <div className="tools-loglevel">
-            <Select label="Log" value={cfg.migoto.logLevel || "DISABLED"} onChange={(v) => setMig({ logLevel: v })}
-              options={LOG_LEVELS.map((l) => ({ value: l, label: LOG_LABEL[l] ?? l }))} hint="What goes in d3d11_log.txt. Warnings logs mod errors, Info adds DirectX calls, Debug adds much more" />
-          </div>
-        )}
-      </Panel>
-    </>
+      )}
+    </Panel>
   );
 }
 
@@ -320,7 +362,7 @@ function DevSection({ game }: { game: GameState }) {
   const noImporter = !game.importerDir && !game.modsDir;
 
   return (
-    <Panel title="For mod makers" icon="bug" id="dev">
+    <Panel title="Files and logs" icon="bug" id="dev">
       {noImporter
         ? <p className="hint">Set {game.name}'s mod loader folder in Settings first.</p>
         : <>
@@ -357,7 +399,7 @@ function DevSection({ game }: { game: GameState }) {
               <Button size="sm" variant="ghost" icon="refresh" onClick={loadLog} title="Read the log again">Refresh</Button>
               <Button size="sm" variant="ghost" icon="external" disabled={!st?.log.bytes} onClick={() => open(st?.log.path)} title="Open the log file">Open</Button>
             </div>
-            <pre className="tools-log-text selectable">{log === null ? "…" : log || "No log yet. Turn on a log level above, then start the game."}</pre>
+            <pre className="tools-log-text selectable">{log === null ? "…" : log || "No log yet. Turn on a log level in Mod maker switches, then start the game."}</pre>
           </div>
         </>}
       {wipe && (

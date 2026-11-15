@@ -5,7 +5,7 @@
 // Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { errorText, type GameState, type ModEntry, type QueueItem, type QueueSnapshot } from "../../lib/api";
-import { downloadFixer, showFixer, useFixerBusy, useFixerFiles } from "../../lib/fixes";
+import { downloadFixer, useFixerBusy, useFixerFiles } from "../../lib/fixes";
 import { gbLinkTarget, imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, toolPage, type GbFile, type GbImage, type GbMod, type GbUpdate } from "../../lib/gamebanana";
 import { detectKeybinds } from "../../lib/keybinds";
 import { likeMod, useAccount, useLiked } from "../../lib/account";
@@ -26,6 +26,8 @@ import { openGbMod, openGbTool, useLibIndex } from "./state";
 import { useQueue } from "./useQueue";
 import { setOn } from "../library/actions";
 import { pityOpened } from "../../lib/fun";
+import { LazyImg } from "../../ui/LazyImg";
+import { hintClass, useHint } from "../../shell/hints";
 
 const activeStates = new Set(["waiting", "downloading", "installing", "needsChoice"]);
 
@@ -185,7 +187,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             {installed.length > 0 && (target?.id === here.id
               ? <>
                 <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
-                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "New mods come in off. Turn it on here or in Mods"}>
+                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "Turn it on. Settings, Mods decides whether new mods start on"}>
                   <Toggle size="sm" checked={installed[0]!.enabled} onChange={(v) => void setOn(here.id, [installed[0]!], v)} label={installed[0]!.enabled ? "On" : "Off"} />
                 </span>
               </>
@@ -258,7 +260,7 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
       <button type="button" className="gb-gallery-main" title={blurred ? "Show the pictures" : "Open full size"} onClick={() => (blurred ? onReveal() : onOpen(shown))}>
         {broken.has(shown)
           ? <span className="gb-img-broken"><Icon name="image" /></span>
-          : <img src={imageAt(img, 800)} alt={img.caption ?? mod.name} loading="lazy" decoding="async"
+          : <LazyImg src={imageAt(img, 800)} alt={img.caption ?? mod.name} decoding="async"
               onError={() => setBroken((b) => new Set(b).add(shown))} />}
         {blurred && <span className="gb-nsfw-cover"><span className="gb-nsfw-badge is-inline">18+</span><span className="gb-nsfw-show on-img">Show pictures</span></span>}
       </button>
@@ -267,7 +269,7 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
           {mod.images.map((m, i) => (
             <button key={`${m.full}-${i}`} type="button" role="option" aria-selected={i === shown} className={`gb-thumb${i === shown ? " on" : ""}`}
               title={m.caption ?? `Picture ${i + 1}`} onClick={() => setShown(i)}>
-              <img src={imageAt(m, 100)} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+              <LazyImg src={imageAt(m, 100)} alt="" decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
             </button>
           ))}
         </div>
@@ -283,6 +285,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
   actionFor?: (f: GbFile, newest: boolean) => ReactNode;
 }) {
   const newest = newestFile(mod);
+  const installHint = useHint("install");
   const current = mod.files.filter((f) => !f.archived);
   const old = mod.files.filter((f) => f.archived);
   if (!mod.files.length) return <p className="muted">This {mod.tool ? "fixer" : "mod"} has no files to download.</p>;
@@ -319,7 +322,8 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
       action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" title="Download it again. Your settings, tags and profile places for it come back"
         onClick={() => onInstall(f)}>Reinstall</Button>;
     } else {
-      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)} title="Download this file and add it to Mods">Install</Button>;
+      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)} title="Download this file and add it to Mods"
+        className={hintClass(installHint && f === newest).trim() || undefined}>Install</Button>;
     }
     const scan = f.analysis === "clean" ? null : f.analysis;
     return (
@@ -356,7 +360,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
 
 const NO_QUEUE: QueueSnapshot = { items: [] } as unknown as QueueSnapshot;
 
-/** A tool's files with Download: saved in gachamod's fixers folder and shown in File Explorer, never run. */
+/** A tool's files with Download, saved in gachamod's fixers folder. Fix on a broken mod runs the one it needs. */
 function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameState; older: boolean; setOlder: (v: boolean) => void }) {
   const have = useFixerFiles(game.id);
   const busy = useFixerBusy();
@@ -366,19 +370,19 @@ function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameSta
     if (got) {
       return (
         <div className="row">
-          <Button icon="folder" title={`Show ${got.file} in File Explorer`} onClick={() => showFixer(got)}>Show file</Button>
+          <span className="hint">Downloaded</span>
           <IconButton icon="refresh" label="Download it again" onClick={() => void downloadFixer(game.id, tool, f)} />
         </div>
       );
     }
     return (
-      <Button variant={newest ? "primary" : "secondary"} icon="downloads" title="Save it in gachamod's fixers folder. gachamod doesn't run it"
+      <Button variant={newest ? "primary" : "secondary"} icon="downloads" title="Save it in gachamod's fixers folder"
         onClick={() => void downloadFixer(game.id, tool, f)}>Download</Button>
     );
   };
   return (
     <>
-      <p className="hint">Saved in gachamod's fixers folder. Run it the way the description says.</p>
+      <p className="hint">You don't need to download it yourself. Fix on a broken mod gets the fixer it needs and runs it on that mod.</p>
       <FileList mod={tool} game={game} installed={[]} archived={false} snap={NO_QUEUE} older={older} setOlder={setOlder}
         onInstall={() => {}} onMenu={() => {}} actionFor={action} />
     </>

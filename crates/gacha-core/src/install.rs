@@ -602,8 +602,8 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         let target = match (target, setup) {
             (Some(t), _) => t,
             (None, Some(s)) => shared_target(&mods_dir, &group, &name, s),
-            // a new mod comes in off: the user turns it on from its details, where gachamod asks about the
-            // character's other skins
+            // a new mod comes in off. With "Turn on new mods" (the default) the UI turns it on right after, with the
+            // one-skin rule and an Undo (src/screens/library/afterInstall.ts)
             (None, None) => unique_child(&mods_dir.join(&group), &format!("{DISABLED_PREFIX}{}", sanitize_name(&name))),
         };
 

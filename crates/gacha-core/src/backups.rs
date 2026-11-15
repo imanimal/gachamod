@@ -107,6 +107,23 @@ fn restore_in(root: &Path, id: &str, current_dir: Option<PathBuf>) -> Result<Bac
     Ok(before)
 }
 
+/// Trim a backup taken before a change whose files weren't known in advance: keep the copies of `changed`, note
+/// `created` (removed on restore) and drop the rest. None, with the backup gone, when nothing changed.
+pub fn keep_only(db: &Db, mut b: Backup, changed: &[String], created: &[String]) -> Result<Option<Backup>> {
+    let dir = root(db).join(&b.id);
+    for rel in b.files.iter().filter(|r| !changed.contains(r)) {
+        let _ = std::fs::remove_file(inside(&dir, rel)?);
+    }
+    b.files.retain(|r| changed.contains(r));
+    for c in created { if !b.created.contains(c) { b.created.push(c.clone()); } }
+    if b.files.is_empty() && b.created.is_empty() {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Ok(None);
+    }
+    std::fs::write(dir.join("manifest.json"), serde_json::to_vec_pretty(&b)?)?;
+    Ok(Some(b))
+}
+
 /// Backups, newest first, optionally for one game or one mod.
 pub fn list(db: &Db, game: Option<&str>, mod_id: Option<&str>) -> Result<Vec<Backup>> {
     let root = root(db);

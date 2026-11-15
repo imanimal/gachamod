@@ -25,6 +25,7 @@ import { byUid, dismissForeign, forgetUnrecognised, importForeign, importOwned, 
 import { rosterOrder, rosterViewPref, useRoster, type RosterChar, type RosterSort } from "./roster";
 import "../library/library.css";
 import "./characters.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 export function Characters() {
   const game = useGame()!;
@@ -155,10 +156,10 @@ function Tile({ game, c }: { game: GameId; c: RosterChar }) {
       title={`${c.name}: ${mods}${c.owned ? ", owned" : ""}. Press O to mark as ${c.owned ? "not owned" : "owned"}`}
       onClick={() => go({ view: "characters", character: c.name })} onKeyDown={onKey}
       onContextMenu={menuHandler(() => menuFor("character", { game, name: c.name }))}>
-      {wearing && <span className="portrait-bg"><img src={fileUrl(wearing.preview)} alt="" loading="lazy" decoding="async" /></span>}
+      {wearing && <span className="portrait-bg"><LazyImg src={fileUrl(wearing.preview)} alt="" decoding="async" /></span>}
       <span className={`portrait-img${p.sharp ? "" : " is-soft"}`}>
         {p.src && !broken
-          ? <img src={p.src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} style={p.crop ? { objectPosition: "50% 8%" } : undefined} />
+          ? <LazyImg src={p.src} alt="" decoding="async" draggable={false} onError={() => setBroken(true)} style={p.crop ? { objectPosition: "50% 8%" } : undefined} />
           : <span className="roster-tile-initials">{initials}</span>}
       </span>
       {c.owned && <span className="roster-owned" aria-label="Owned"><Icon name="check" /></span>}

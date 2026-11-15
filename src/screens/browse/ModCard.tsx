@@ -10,11 +10,15 @@ import { Icon } from "../../ui/Icon";
 import { CategoryLink, CharLink, CreatorLink } from "../../ui/Links";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { go } from "../../lib/store";
+import { hintClass } from "../../shell/hints";
 import { installLatest } from "./actions";
 import { openGbMod, type LibIndex } from "./state";
+import { LazyImg } from "../../ui/LazyImg";
 
-export function ModCard({ game, mod, lib, nsfw, prio, noInstall, className }: {
+export function ModCard({ game, mod, lib, nsfw, prio, noInstall, hint, className }: {
   game: GameId; mod: GbCard; lib: LibIndex; nsfw: NsfwMode; prio?: boolean;
+  /** Show the install button with the first-start outline (shell/hints.ts). */
+  hint?: boolean;
   /** A mod for a game that isn't set up here: no install button. */
   noInstall?: boolean; className?: string;
 }) {
@@ -49,7 +53,7 @@ export function ModCard({ game, mod, lib, nsfw, prio, noInstall, className }: {
       onClick={open} onKeyDown={onKey} onContextMenu={menuHandler(() => menuFor("gbmod", { game, card: mod }))}>
       <span className="gb-card-img">
         {src && !broken
-          ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} />
+          ? <LazyImg src={src} alt="" decoding="async" draggable={false} onError={() => setBroken(true)} />
           : <span className="gb-img-broken"><Icon name="image" /></span>}
         {mod.nsfw && nsfw === "blur" && <span className="gb-nsfw-badge" title="Marked for adults on GameBanana">18+</span>}
         {mod.nsfw && nsfw === "show" && <span className="gb-nsfw-mark" title="Marked for adults on GameBanana">18+</span>}
@@ -64,7 +68,7 @@ export function ModCard({ game, mod, lib, nsfw, prio, noInstall, className }: {
             : null}
         </span>
         {quick && (
-          <IconButton className="gb-card-quick" variant="primary" size="sm" icon={busy ? "clock" : quick.icon} label={quick.label}
+          <IconButton className={`gb-card-quick${hintClass(!!hint && !busy)}`} variant="primary" size="sm" icon={busy ? "clock" : quick.icon} label={quick.label}
             data-pad-x-target disabled={busy} tabIndex={-1}
             onClick={(e: MouseEvent) => { e.stopPropagation(); void runQuick(); }} />
         )}

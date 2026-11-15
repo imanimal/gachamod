@@ -142,7 +142,16 @@ GameBanana API, per game id (gi 8552, hsr 18366, zzz 19567, ww 20357, hi3 10349,
 
 `https://gamebanana.com/apiv11/Tool/Index?_nPage=1&_nPerpage=50&_aFilters[Generic_Game]=<id>&_sSort=Generic_Newest`
 
-Keep the highest `_tsDateAdded` seen. A tool is a fixer candidate when its name matches `fix|hash|remap|repair|update|convert` (case insensitive). Show it once as "new fixer" with the link. `Tool/<id>/ProfilePage` gives `_aFiles[]` with names and dates, which is how to notice a new version of a known fixer (for example `gifixversion72.exe`, `hsr_fix33d`). Do not download the archives automatically: most are CC BY-NC-ND and many exes are unsigned.
+Keep the highest `_tsDateAdded` seen. A tool is a fixer candidate when its name matches `fix|hash|remap|repair|update|convert` (case insensitive). Show it once as "new fixer" in Tools > Fixes. `Tool/<id>/ProfilePage` gives `_aFiles[]` with names and dates, which is how to notice a new version of a known fixer (for example `gifixversion72.exe`, `hsr_fix33d`). Most are CC BY-NC-ND, so gachamod never copies their code or data: it downloads the author's own file when someone presses Fix and runs it as it is.
+
+## Running a fixer on a mod
+
+A mod that needs more than a hash swap (status "unfixable" with a `tool`) gets a Fix button like any other broken mod: the drawer, the card's menu, Tools > Fixes and its "Fix N mods". Nothing opens a browser or a GameBanana page. `lib/fixes.ts` `fixMods` sends hash swaps to `fixes_apply` and the rest to `runFixers`:
+
+1. Get the fixer: a GameBanana tool's newest file (`fixers_download`, only when GameBanana's virus check says clean; pending waits), or a GitHub link's newest Windows release asset or the raw file (`fixers_github`). A copy already in `<data>/fixers/<game>/` is reused.
+2. `fixers_run` (gacha-core `fixers::run_on_mod`): copy every file of the mod into a backup, then run the fixer with the mod folder as its working folder. A console program runs hidden, gets the mod folder's path and 30 blank lines on stdin (for "press Enter" and path prompts), and is stopped after 2 minutes. A window program (PE subsystem 2) runs visibly for up to 30 minutes. `.bat` and `.cmd` go through `cmd /C`, `.py` through the py launcher or a python.exe outside WindowsApps.
+3. If nothing changed and the fixer is a single file, a copy of it runs inside the mod folder once more (several fixers only look at the folder they sit in).
+4. Compare the mod before and after, trim the backup to what changed (`backups::keep_only`) and record one Undo per mod. Health is read again, and a toast says when the mod still looks broken or when nothing changed.
 
 ## Detecting broken installed mods
 
@@ -164,14 +173,14 @@ WW and GI have one source each, so no cross-source conflicts. Inside one source,
 
 ## Gaps
 
-- GI 5.5 to 7.2 hash data and HSR 3.2/3.3 data exist only in ND licensed tools. They stay as links to the upstream tools,
-  and their data isn't copied into gachamod.
+- GI 5.5 to 7.2 hash data and HSR 3.2/3.3 data exist only in ND licensed tools. gachamod downloads and runs those
+  tools on the mod (see Running a fixer on a mod), and their data isn't copied into gachamod.
 - EF has no extracted data.
 - ZZZ 3.3 has 7 pairs (the hefeng log). 120 of the 585 end-of-chain ZZZ hashes are not in the 3.3 table (86 of them textures, which the table covers only in part). They are unverified, not known wrong. `current: true` marks the others.
 - Jane Doe needs hand work beyond the buffer remap. Mesh changes that cannot be fixed are listed in a ZZZ rule.
 - WW shape key, hair and MaterialMap fixes are described, not specified. Use the upstream config and tool.
-- No fixer was run and nothing was checked against a live game.
-- GameBanana archives were not downloaded. The GI, HSR 3.3 and EFMI 1.1 sources are small zips (24 KB to 141 KB). Fetching them needs the project owner's approval, and the licence (ND) does not allow copying their data into the app.
+- The run conventions above are generic. Each real fixer still needs a run on a broken mod (docs/testing.md).
+- The licence (ND) does not allow copying the fixers' data into the app, so it stays in their own files.
 
 ## Credits
 

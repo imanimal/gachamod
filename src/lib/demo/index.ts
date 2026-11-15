@@ -2,6 +2,7 @@
 // with believable data from demo/db.ts. Each area keeps its handlers in its own file and registers them here.
 // GameBanana calls are real even in the demo (the API allows CORS). Owner: skeleton.
 import { inTauri, registerDemo } from "../tauri";
+import { registerAccountDemo } from "./account";
 import { registerAiDemo } from "./ai";
 import { registerExtensionsDemo } from "./extensions";
 import { registerIngameDemo } from "./ingame";
@@ -33,4 +34,5 @@ export function installDemo() {
   registerIngameDemo();
   registerExtensionsDemo();
   registerReportDemo();
+  registerAccountDemo();
 }

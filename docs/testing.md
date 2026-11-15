@@ -77,3 +77,30 @@ Something to post on the GameBanana pages, the README or a Discord:
 
 Move what was learned into docs/ingame.md (the game's loader, whether it runs as administrator, anything that needed a
 fix) and take it off the list there.
+
+### Still to check: fixers, uninstalling and reset
+
+These have only run against the demo and unit tests (a stand-in .bat fixer).
+
+- Fix on a mod that needs a fixer, for each game with one (GI Fix All Character Mods, HSR 3.3 fix, ZZZ fixers, EFMI
+  1.1 fix): the fixer downloads, runs without a window it waits on, changes the mod, and the mod stops showing as
+  broken. Note any fixer that wants arguments, a different working folder, or keys pressed, and teach `launch` that.
+- Undo after a fixer run puts every changed file back, and files the fixer created are removed.
+- Settings, Games, Uninstall mod loader for one game, then Install again: the Mods folder and d3dx_user.ini are where
+  they were and XXMI Launcher shows the loader as not installed in between.
+- Uninstall XXMI Launcher: the launcher, loaders and shortcuts are in the Recycle Bin, the Mods folders are still in
+  the XXMI folder, and the setup page offers to install again.
+- Reset gachamod: the app restarts on the first-start page, the old database is in `backups/before-reset-<time>/`,
+  and logs and older backups are still there.
+
+### Still to check: installing XXMI from the app
+
+The setup page's "Install mod loaders" (gacha-core `xxmi_setup.rs`) has only run against the demo and unit tests. On a
+PC without XXMI, check:
+
+- A full run for each game on the PC: XXMI Launcher opens afterwards, shows the importers as installed, and starts
+  the game with mods.
+- XXMI Launcher asks for administrator rights when it starts. Whether that prompt shows when gachamod starts it.
+- Whether the loaders need the Visual C++ runtime on a fresh Windows, and what the game does without it.
+- GitHub's limit for downloads without an account (60 API calls an hour per address) and the message it gives.
+- Antivirus holding or removing `d3d11.dll` or `3dmloader.dll` right after the copy.

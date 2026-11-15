@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { leave } from "./motion";
 import { STUCK_MS, seconds, useActivity, useElapsed } from "../lib/activity";
+import { LazyImg } from "./LazyImg";
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
@@ -75,7 +76,7 @@ export function Chip({ on, onClick, icon, img, count, children, title, className
   { on?: boolean; onClick?: () => void; icon?: IconName; img?: string | null; count?: number; children: ReactNode; title?: string; className?: string }) {
   return (
     <button type="button" className={cx("chip", on && "on", className)} onClick={onClick} title={title} aria-pressed={on}>
-      {img ? <img className="chip-img" src={img} alt="" loading="lazy" /> : icon && <Icon name={icon} />}
+      {img ? <LazyImg className="chip-img" src={img} alt="" /> : icon && <Icon name={icon} />}
       <span className="chip-t">{children}</span>
       {count !== undefined && <span className="chip-n">{count}</span>}
     </button>
@@ -281,7 +282,7 @@ export function Avatar({ src, name, size = 40, ring, square, className }: { src?
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
   return (
     <span className={cx("avatar", ring && "ring", square && "square", className)} style={{ width: size, height: size, fontSize: size * 0.38 }} title={name}>
-      {src && !broken ? <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} /> : <span className="avatar-t">{initials}</span>}
+      {src && !broken ? <LazyImg src={src} alt="" onError={() => setBroken(true)} /> : <span className="avatar-t">{initials}</span>}
     </span>
   );
 }

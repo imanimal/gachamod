@@ -1,141 +1,139 @@
-// First start: look for games and XXMI, show what was found, offer XXMI or moving mods from IMM. Sets "onboarded".
-// Owner: SETTINGS/AI area.
-import { useEffect, useRef, useState } from "react";
-import { Button, Card, Dialog, Progress, Spinner, Toggle, plural } from "../../ui/kit";
-import { Icon } from "../../ui/Icon";
-import { HOLD, STUCK_MS, seconds, useElapsed } from "../../lib/activity";
+// The first start, without a welcome window. When XXMI Launcher already has a game ready, the app opens straight to
+// it and one toast says what was found. When no game is ready, the main view is this page: the games found on this
+// PC and one button that installs XXMI Launcher and their mod loaders (lib/setup.ts). It keeps looking for games while
+// it's open, so a game installed meanwhile shows up by itself. Sets "onboarded". Owner: SETTINGS/AI area.
+import { useEffect, useState } from "react";
+import { Button, Progress, Waiting, formatBytes, plural } from "../../ui/kit";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { errorText, games, imm, settings, shell, xxmi, type GameState, type ImmInfo, type XxmiStatus } from "../../lib/api";
-import { go, setGames, useGames } from "../../lib/store";
-import { XXMI_RELEASES } from "./Settings";
+import { HOLD } from "../../lib/activity";
+import { imm, settings, type GameState, type ImmInfo } from "../../lib/api";
+import { allGames, go, useGames } from "../../lib/store";
+import { canInstallLoader, installLoaders, recheck, useSetup } from "../../lib/setup";
+import { startHints } from "../../shell/hints";
 import "./settings.css";
 
-export function Onboarding({ onDone }: { onDone: () => void }) {
-  const all = useGames();
-  const [scanning, setScanning] = useState(true);
-  const [steps, setSteps] = useState<Record<StepKey, StepState>>({ games: { at: "run" }, xxmi: { at: "run" }, imm: { at: "run" } });
-  const [x, setX] = useState<XxmiStatus | null>(null);
-  const [immInfo, setImm] = useState<ImmInfo | null>(null);
-  const [since] = useState(Date.now);
-  const live = useRef(true);
-  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+const listNames = (list: GameState[]) => {
+  const n = list.map((g) => g.name);
+  return n.length <= 1 ? n.join("") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+};
 
-  // three real searches, each shown with its own state; results that arrive after "Skip" still fill in
+/** Called once the games are known at start. With a game ready and no first start yet, says what was found (and the
+ *  usage data note) in a toast, offers loaders for other games on this PC, and points at mods IMM keeps. */
+export async function welcome(list: GameState[] = allGames()) {
+  if ((await settings.get("onboarded").catch(() => null)) === "1") return;
+  void settings.set("onboarded", "1").catch(() => {});
+  startHints();
+  const ready = list.filter((g) => g.modsDir && g.shown);
+  if (ready.length) {
+    toast(`Found ${listNames(ready)}. gachamod sends its developer anonymous usage counts and crash reports`, false,
+      { label: "Turn those off", run: () => go({ view: "settings", section: "feedback" }) });
+  }
+  const more = list.filter(canInstallLoader);
+  if (more.length) {
+    toast(`${listNames(more)} ${more.length === 1 ? "is" : "are"} on this PC too, without a mod loader`, false,
+      { label: "Install mod loaders", run: () => void installLoaders(more.map((g) => g.id)) });
+  }
+  imm.detect().then((info) => {
+    const n = immMods(info);
+    if (n) toast(`Integrated Mod Manager keeps ${plural(n, "mod")} in its own folders`, false, { label: "Move them", run: () => go({ view: "tools", section: "imm" }) });
+  }).catch(() => {});
+}
+
+/** The setup was done from the page: no welcome toast, the page said it all. A first setup gets the hints. */
+export async function setupDone() {
+  if ((await settings.get("onboarded").catch(() => null)) === "1") return;
+  void settings.set("onboarded", "1").catch(() => {});
+  startHints();
+}
+
+const immMods = (i: ImmInfo | null) => (i?.found ? i.games.reduce((n, g) => n + g.mods, 0) : 0);
+
+/** The main view while no game has a Mods folder. `looking`: the first search hasn't finished yet. */
+export function SetupPage({ looking }: { looking: boolean }) {
+  const all = useGames();
+  const setup = useSetup();
+  const [immInfo, setImm] = useState<ImmInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { imm.detect().then(setImm).catch(() => {}); }, []);
+
+  // keep looking while this page is open: every 10 seconds and when the window comes back to the front
   useEffect(() => {
-    const step = <T,>(key: StepKey, p: Promise<T>, use: (v: T) => void) => p.then((v) => {
-      if (!live.current) return;
-      use(v);
-      setSteps((s) => ({ ...s, [key]: { at: "done" } }));
-    }, (e) => { if (live.current) setSteps((s) => ({ ...s, [key]: { at: "fail", error: errorText(e) } })); });
-    Promise.all([
-      step("games", games.detect(), setGames),
-      step("xxmi", xxmi.status(), setX),
-      step("imm", imm.detect(), setImm),
-      new Promise((r) => setTimeout(r, 600)),
-    ]).finally(() => { if (live.current) setScanning(false); });
+    const look = () => { if (document.visibilityState === "visible") void recheck(true); };
+    const t = window.setInterval(look, 10_000);
+    window.addEventListener("focus", look);
+    return () => { window.clearInterval(t); window.removeEventListener("focus", look); };
   }, []);
 
-  const finish = (then?: () => void) => {
-    settings.set("onboarded", "1").catch(() => {});
-    onDone();
-    then?.();
-  };
-  const show = async (g: GameState, v: boolean) => {
-    try { setGames(await games.setShown(g.id, v)); } catch (e) { toast(errorText(e), true); }
-  };
+  if (looking) return <Waiting className="setup-page setup-wait" what="Looking for your games and XXMI Launcher" hold={HOLD.detect} />;
 
-  const found = all.filter((g) => g.modsDir || g.installed);
-  const immMods = immInfo?.found ? immInfo.games.reduce((n, g) => n + g.mods, 0) : 0;
+  const can = all.filter(canInstallLoader);
+  const lookAgain = async () => {
+    setBusy(true);
+    const list = await recheck(true);
+    setBusy(false);
+    if (list && !list.some((g) => g.modsDir || canInstallLoader(g))) toast("Still no games. gachamod keeps looking while this page is open");
+  };
+  const n = immMods(immInfo);
 
   return (
-    <Dialog title="Welcome to gachamod" icon="sparkle" size="lg" className="onboard" onClose={() => finish()} locked={scanning ? "Looking for games. Skip it to close" : undefined}
-      footer={scanning ? <SkipButton since={since} onSkip={() => setScanning(false)} /> : <>
-        <Button variant="ghost" onClick={() => finish(() => go({ view: "settings", section: "games" }))} title="Pick each game's folders yourself in Settings">Set folders by hand</Button>
-        <Button variant="primary" autoFocus onClick={() => finish()}>Start</Button>
-      </>}>
-      {scanning ? (
-        <div className="onboard-scan">
-          <Progress value={Object.values(steps).filter((t) => t.at !== "run").length / 3} label="Looking for games" />
-          <ul className="onboard-steps">
-            {STEPS.map(([key, what, hold]) => <Step key={key} what={what} hold={hold} state={steps[key]} since={since} />)}
-          </ul>
-        </div>
-      ) : (
+    <div className="page setup-page">
+      {can.length > 0 ? (
         <>
-          {Object.values(steps).some((t) => t.at !== "done") && (
-            <ul className="onboard-steps">
-              {STEPS.filter(([key]) => steps[key].at !== "done").map(([key, what, hold]) => <Step key={key} what={what} hold={hold} state={steps[key]} since={since} />)}
-            </ul>
-          )}
-          <p>{found.length ? `Found ${plural(found.length, "game")}. Turn on the ones you play: they show in the sidebar, where you switch games. You can change this in Settings.`
-            : "No games found yet. Install XXMI Launcher below, or pick a game's folders in Settings."}</p>
-          {found.length > 0 && (
-            <div className="onboard-games">
-              {found.map((g) => (
-                <Card key={g.id} className="onboard-game" selected={g.shown}>
-                  <GameBadge game={g} size={40} />
-                  <span className="onboard-game-t">
-                    <b>{g.name}</b>
-                    <span className="hint" title={g.modsDir ?? g.gameDir ?? ""}>
-                      {g.modsDir ? `${plural(g.modCount, "mod")}${g.viaXxmi ? ` · ${g.importer} via XXMI` : ""}` : "Game found, no mod loader yet"}
-                    </span>
-                  </span>
-                  <Toggle checked={g.shown} onChange={(v) => void show(g, v)} />
-                </Card>
-              ))}
+          <h1>Get your games ready for mods</h1>
+          <div className="setup-games">
+            {can.map((g) => (
+              <span key={g.id} className="setup-game" title={g.gameDir ?? undefined}><GameBadge game={g} size={48} /><b>{g.name}</b></span>
+            ))}
+          </div>
+          <p>One click installs XXMI Launcher and the mod loader for {listNames(can)}. It downloads about 65 MB from GitHub and takes a minute or two.</p>
+          {setup.running ? <Installing /> : (
+            <div className="row setup-go">
+              <Button variant="primary" size="lg" icon="install" autoFocus onClick={() => void installLoaders(can.map((g) => g.id))}
+                title="Downloads XXMI Launcher and each game's mod loader from their GitHub pages and sets them up in %APPDATA%\XXMI Launcher">
+                Install mod loaders
+              </Button>
             </div>
           )}
-          {x && !x.found && (
-            <Card className="onboard-card">
-              <b>Get XXMI Launcher</b>
-              <span className="hint">It loads mods into Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves, Honkai Impact 3rd and Endfield. Install it, open it once, then press Detect again in Settings.</span>
-              <div className="row"><Button icon="external" onClick={() => shell.openUrl(XXMI_RELEASES).catch((e) => toast(errorText(e), true))} title="XXMI Launcher's releases on GitHub">Open the download page</Button></div>
-            </Card>
-          )}
-          {immInfo?.found && immMods > 0 && (
-            <Card className="onboard-card">
-              <b>Integrated Mod Manager keeps {plural(immMods, "mod")} in its own folders</b>
-              <span className="hint">gachamod can move them back into the normal Mods folders, keeping their options and GameBanana links, so both apps aren't fighting over them.</span>
-              <div className="row"><Button icon="swap" onClick={() => finish(() => go({ view: "tools", section: "imm" }))} title="Opens Tools, where you pick which games to move">Move mods from IMM</Button></div>
-            </Card>
-          )}
-          <p className="hint onboard-data">gachamod sends its developer anonymous counts of which screens and buttons get used, and crash reports.
-            {" "}<button type="button" className="qlink" onClick={() => finish(() => go({ view: "settings", section: "feedback" }))}
-              title="Opens Settings, Feedback and data">Turn them off</button> any time in Settings.</p>
+        </>
+      ) : (
+        <>
+          <h1>No games found yet</h1>
+          <p>gachamod looks in HoYoPlay, the Wuthering Waves launcher, GRYPHLINK, Steam and XXMI Launcher, and keeps looking while this page is open. Install a game and it shows up here.</p>
+          <div className="row setup-go">
+            <Button variant="primary" size="lg" icon="search" busy={busy} autoFocus onClick={() => void lookAgain()} title="Look for games and XXMI Launcher again">Look again</Button>
+          </div>
         </>
       )}
-    </Dialog>
+
+      {n > 0 && (
+        <div className="setup-note">
+          <span>Integrated Mod Manager keeps {plural(n, "mod")} in its own folders. gachamod can move them into the normal Mods folders, keeping their options.</span>
+          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "imm" })} title="Opens Tools, where you pick which games to move">Move them</Button>
+        </div>
+      )}
+
+      <p className="hint setup-more">
+        Mods already in a folder XXMI doesn't know, or a game XXMI doesn't support, like Punishing: Gray Raven?{" "}
+        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title="Settings, Games: every game with its folders">Settings, Games</button> has those.
+      </p>
+      <p className="hint setup-more">
+        gachamod sends its developer anonymous usage counts and crash reports.{" "}
+        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "feedback" })} title="Opens Settings, Feedback and data">Turn them off</button> any time.
+      </p>
+    </div>
   );
 }
 
-type StepKey = "games" | "xxmi" | "imm";
-type StepState = { at: "run" | "done" } | { at: "fail"; error: string };
-const STEPS: Array<[StepKey, string, string]> = [
-  ["games", "Looking for games in XXMI Launcher, game launchers and Steam libraries", HOLD.detect],
-  ["xxmi", "Reading XXMI Launcher's settings", HOLD.xxmi],
-  ["imm", "Looking for Integrated Mod Manager", HOLD.disk],
-];
-
-/** One search: what it does, how long it's taken, and once it runs long, what could be holding it. */
-function Step({ what, hold, state, since }: { what: string; hold: string; state: StepState; since: number }) {
-  const s = useElapsed(since, state.at === "run");
-  const long = state.at === "run" && s * 1000 >= STUCK_MS;
+/** The install as it runs: the step, its download and a timer. */
+export function Installing({ compact }: { compact?: boolean }) {
+  const { step } = useSetup();
+  const frac = step?.total ? step.done / step.total : null;
+  const what = step ? `${step.step}${step.total ? ` (${formatBytes(step.done)} of ${formatBytes(step.total)})` : ""}` : "Starting the install";
   return (
-    <li className={`onboard-step is-${state.at}`}>
-      {state.at === "run" ? <Spinner /> : <Icon name={state.at === "done" ? "check" : "warn"} />}
-      <span className="onboard-step-t">
-        <span>{what}{state.at === "run" && s >= 3 ? ` (${seconds(s)})` : ""}</span>
-        {state.at === "fail" && <span className="hint">{state.error}</span>}
-        {long && <span className="hint">Still going. {hold}</span>}
-      </span>
-    </li>
+    <div className={`setup-run${compact ? " is-compact" : ""}`}>
+      <Progress value={frac} label={what} />
+      <Waiting what={what} />
+    </div>
   );
-}
-
-/** After a few seconds, a way past a search that's hanging. What it finds later still shows. */
-function SkipButton({ since, onSkip }: { since: number; onSkip: () => void }) {
-  const s = useElapsed(since);
-  if (s < 5) return null;
-  return <Button variant="ghost" onClick={onSkip} title="Show what was found so far. Anything found later still shows up">Skip the search</Button>;
 }

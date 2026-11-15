@@ -12,12 +12,12 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 const LABEL: &str = "gb-login";
 const USER_KEY: &str = "account.gbUser";
-/// Sign-in starts off (Settings > Account turns it on).
+/// Sign-in is on unless Settings, GameBanana account turned it off ("0"). Clicking Sign in turns it back on.
 const ON_KEY: &str = "account.gbSignIn";
 
 fn state_of(st: &AppState) -> AccountState {
     let db = st.db.lock().ok();
-    let available = db.as_ref().and_then(|d| d.setting(ON_KEY).ok().flatten()).as_deref() == Some("1");
+    let available = db.as_ref().and_then(|d| d.setting(ON_KEY).ok().flatten()).as_deref() != Some("0");
     let has_cookie = st.data_dir.join("gb-session.bin").is_file();
     let user = if has_cookie { db.as_ref().and_then(|d| d.setting_json::<GbUser>(USER_KEY).ok().flatten()) } else { None };
     AccountState { available, user }
@@ -56,10 +56,24 @@ pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
     let http = st.http.clone();
     let done = Arc::new(AtomicBool::new(false));
     let handle = app.clone();
-    WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(url))
+    let mut builder = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(url))
         .title("Sign in to GameBanana")
         .inner_size(520.0, 760.0)
-        .data_directory(acc::login_data_dir(&data_dir))
+        .data_directory(acc::login_data_dir(&data_dir));
+    // a small window that belongs to gachamod's: it stays in front of it and over its middle
+    if let Some(main) = app.get_webview_window("main") {
+        builder = builder.parent(&main).map_err(|e| Error::Invalid(format!("Couldn't open the sign-in window: {e}")))?;
+        if let (Ok(pos), Ok(size), Ok(scale)) = (main.outer_position(), main.outer_size(), main.scale_factor()) {
+            let (w, h) = (520.0 * scale, 760.0 * scale);
+            let x = pos.x as f64 + (size.width as f64 - w) / 2.0;
+            let y = pos.y as f64 + ((size.height as f64 - h) / 2.0).max(0.0);
+            builder = builder.position(x / scale, y / scale);
+        }
+    } else {
+        builder = builder.center();
+    }
+    let closed = done.clone();
+    let window = builder
         .on_page_load(move |w, p| {
             if p.event() != PageLoadEvent::Finished || p.url().host_str() != Some("gamebanana.com") { return; }
             // still on the login or code pages: nothing to read yet
@@ -76,7 +90,7 @@ pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
                 if acc::save_cookie(&data_dir, &header).is_err() { done.store(false, Ordering::SeqCst); return; }
                 let available = if let Ok(d) = db.lock() {
                     let _ = d.set_setting_json(USER_KEY, &user);
-                    d.setting(ON_KEY).ok().flatten().as_deref() == Some("1")
+                    d.setting(ON_KEY).ok().flatten().as_deref() != Some("0")
                 } else { true };
                 let _ = app.emit("gb-account", AccountState { available, user: Some(user) });
                 let _ = w.close();
@@ -84,6 +98,11 @@ pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
         })
         .build()
         .map_err(|e| Error::Invalid(format!("Couldn't open the sign-in window: {e}")))?;
+    // closed by hand before signing in: the account card stops waiting
+    let app2 = app.clone();
+    window.on_window_event(move |e| {
+        if matches!(e, tauri::WindowEvent::Destroyed) && !closed.load(Ordering::SeqCst) { let _ = app2.emit("gb-login-closed", ()); }
+    });
     Ok(())
 }
 

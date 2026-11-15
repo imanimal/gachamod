@@ -1,30 +1,9 @@
 /* Settings and onboarding layout. Colours are theme tokens only. Owner: SETTINGS/AI area. */
-.settings .panel, .settings [id^="set-"] { scroll-margin-top: 1rem; }
-.set-layout { display: grid; grid-template-columns: 12.5rem minmax(0, 1fr); gap: 1.2rem; align-items: start; }
-.set-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; padding-top: .2rem; overflow: hidden auto; scrollbar-width: thin; }
-.set-nav-i { display: flex; align-items: center; gap: .6rem; padding: .42rem .7rem; border-radius: var(--radius-sm); color: var(--text-2);
-  text-align: left; font-size: .93em; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
-.set-nav-i .i { width: 1.05rem; height: 1.05rem; flex: none; opacity: .8; }
-.set-nav-i:hover { background: var(--hover); color: var(--text); }
-.set-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
-.set-main { min-width: 0; display: flex; flex-direction: column; gap: var(--stack-gap); }
-.set-ext { display: flex; flex-direction: column; gap: var(--stack-gap); }
-.set-ext:empty { display: none; }
-@container view (max-width: 46rem) {
-  .set-layout { grid-template-columns: minmax(0, 1fr); }
-  .set-nav { position: static; flex-direction: row; flex-wrap: wrap; max-height: none !important; overflow: visible; }
-}
 .set-tip { text-decoration: underline dotted var(--text-3); text-underline-offset: 3px; cursor: help; }
 .set-row.set-row-col { flex-direction: column; align-items: stretch; gap: .6rem; }
 .set-ai-bots, .set-ai-jobs { display: flex; flex-wrap: wrap; gap: .4rem; }
 .set-game-note { margin-top: .2rem; }
-.set-flash { animation: setFlash 1.6s var(--ease-out); border-radius: var(--radius-sm); }
-@keyframes setFlash { 0%, 30% { background: var(--accent-soft); } 100% { background: transparent; } }
-/* a section picked in the list: an accent ring around it that fades (outline, so no theme's panel look changes) */
-.set-ring { outline: 2px solid transparent; outline-offset: 3px; animation: setRing 1.8s var(--ease-out); }
-@keyframes setRing { 0%, 35% { outline-color: var(--accent-ink); } 100% { outline-color: transparent; } }
-/* reduced motion: the highlight still shows, it just goes away without fading */
-[data-motion="reduced"] :is(.set-flash, .set-ring) { animation-timing-function: steps(1, end); }
+.set-game-fix { align-items: center; gap: .6rem; margin-top: .35rem; }
 .set-creators .sub-h { margin-top: .6rem; }
 .set-creator-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .3rem .8rem; }
 .set-creator { display: flex; align-items: center; gap: .55rem; padding: .25rem 0; min-width: 0; }
@@ -34,7 +13,9 @@
 .set-games { display: flex; flex-direction: column; }
 .set-game { display: flex; align-items: flex-start; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .set-game:last-child { border-bottom: 0; }
-.set-game:not(.shown) .gbadge { opacity: .6; }
+.set-game:not(.shown):not(.set-modfolder) .gbadge { opacity: .6; }
+.set-modfolder { align-items: center; padding: .55rem 0; }
+.set-modfolder .set-folder-p { align-self: flex-start; max-width: 100%; }
 .set-game-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
 .set-game-h { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .2rem; }
 .set-folder { display: grid; grid-template-columns: 6.5rem 1fr auto; align-items: center; gap: .6rem; }
@@ -65,18 +46,21 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-pergame-h span[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .set-pergame-r { padding: .3rem 0; }
 
-/* onboarding */
-.onboard .dialog-b { display: flex; flex-direction: column; gap: 1rem; }
+/* the setup page (Onboarding.tsx): the main view while no game is ready */
+.setup-page { display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; max-width: 44rem; padding: 3rem 2.5rem; }
+.setup-page h1 { margin: 0; font-size: 1.7rem; }
+.setup-page > p { margin: 0; color: var(--text-2); line-height: 1.5; }
+.setup-wait { align-items: center; justify-content: center; max-width: none; min-height: 60%; }
+.setup-games { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; }
+.setup-game { display: inline-flex; align-items: center; gap: .6rem; }
+.setup-go { margin-top: .4rem; }
+.setup-run { display: flex; flex-direction: column; gap: .6rem; width: min(100%, 30rem); }
+.setup-run .waiting { align-items: flex-start; padding: 0; }
+.setup-run.is-compact { width: 100%; }
+.setup-note { display: flex; align-items: center; gap: .8rem; padding: .8rem 1rem; border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.setup-note > span { flex: 1; color: var(--text-2); }
+.setup-more { margin: 0; }
 /* a short window scrolls the body; its cards never squash and cut off their buttons */
-.onboard .dialog-b > * { flex-shrink: 0; }
-.onboard-scan { display: flex; flex-direction: column; align-items: center; gap: .8rem; padding: 2.5rem 1rem; text-align: center; }
-.onboard-scan .progress { width: 60%; }
-.onboard-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .8rem; }
-.onboard-game { flex-direction: row; align-items: center; gap: .8rem; padding: .8rem; }
-.onboard-game-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.onboard-game-t .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.onboard-card { padding: 1rem; gap: .6rem; }
-.onboard-card .row { flex-wrap: wrap; }
 
 .set-accents { display: flex; gap: .55rem; align-items: center; }
 .set-import ul { margin: .4rem 0 .6rem; padding-left: 1.2rem; display: grid; gap: .2rem; }
@@ -115,11 +99,6 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .ctheme-ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 .ctheme-ed-foot .hint { margin-right: auto; }
 
-/* The Default theme's page header scrolls away, which left a header-sized gap above the section list (it sticks where
-   it starts so it never moves). On Settings the header stays, like in the game themes. */
-[data-theme="default"] .settings > .page-h { position: sticky; top: 0; z-index: 6; margin: -1rem -1.2rem 0; padding: 1rem 1.2rem .7rem; background: var(--bg);
-  box-shadow: 0 1px 0 var(--line); }
-
 /* Settings > GameBanana account */
 .acct-user { gap: .6rem; }
 .acct-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
@@ -131,13 +110,6 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .year-stat b { font-family: var(--font-display); font-size: 1.6rem; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
 .year-stat span { color: var(--text-2); }
 .set-shuffle { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
-.onboard-steps { display: flex; flex-direction: column; gap: .55rem; width: min(100%, 34rem); margin: 0 auto .6rem; text-align: left; }
-.onboard-step { display: flex; align-items: flex-start; gap: .6rem; color: var(--text-2); }
-.onboard-step > .spin, .onboard-step > .i { margin-top: .2em; width: 1rem; height: 1rem; flex: none; }
-.onboard-step.is-done { color: var(--text-3); }
-.onboard-step.is-fail > .i { color: var(--warn); }
-.onboard-step-t { display: flex; flex-direction: column; gap: .2rem; }
-.onboard-step-t .hint { font-size: .84rem; line-height: 1.4; }
 
 /* feedback form and the administrator row (Feedback.tsx) */
 .feedback { display: flex; flex-direction: column; gap: .9rem; }

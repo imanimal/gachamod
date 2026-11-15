@@ -67,6 +67,6 @@ export const admin = {
   state: () => call<AdminState>("admin_state"),
   /** Start as administrator every time, from the next start. */
   setAlways: (on: boolean) => call<AdminState>("admin_set_always", { on }),
-  /** Close and open again as administrator. Windows asks first. */
-  restart: () => call<void>("app_restart_admin"),
+  /** Close and open again as administrator. Windows asks first; false when the player said no there. */
+  restart: () => call<boolean>("app_restart_admin"),
 };

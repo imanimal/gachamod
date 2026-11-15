@@ -2,16 +2,15 @@
 // menu, the command palette, the AI helper, drop zone, toasts, shortcuts). Owner: SHELL area. Areas own the
 // components it imports from screens/* (docs/spec.md, "Areas").
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Icon } from "./ui/Icon";
 import { Dialog, Waiting } from "./ui/kit";
 import { Toasts, toast } from "./ui/toast";
 import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop } from "./ui/Deco";
 import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
-import { app as appApi, appUpdate, errorText, games as gamesApi, settings as settingsApi } from "./lib/api";
+import { app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi } from "./lib/api";
 import { held } from "./lib/tauri";
-import { back, currentGame, emitApp, forward, go, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
+import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
 import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
 import { chillPref, HIDDEN_THEME, onKonami, watchKonamiKeys } from "./lib/fun";
 import { Seasonal } from "./ui/Seasonal";
@@ -25,9 +24,9 @@ import { Titlebar } from "./shell/Titlebar";
 import { Sidebar } from "./shell/Sidebar";
 import { CommandPalette } from "./shell/CommandPalette";
 import { installGlobalInput } from "./shell/globalInput";
-import { offerTour, openPalette, setHelpOpen, toggleHelp, toggleSide, useHelpOpen, useSideCollapsed } from "./shell/state";
-import { Tour } from "./shell/Tour";
-import { viewLabel } from "./shell/names";
+import { introSearch, openPalette, setHelpOpen, toggleHelp, toggleSide, useHelpOpen, useSideCollapsed } from "./shell/state";
+import { doneHint } from "./shell/hints";
+import { KEY_VIEWS, viewLabel } from "./shell/names";
 import "./shell/commands";
 import { AiHost } from "./screens/ai/AiHost";
 import { Home } from "./screens/home/Home";
@@ -41,15 +40,16 @@ import { NewProfileHost } from "./screens/profiles/ProfileEditor";
 import { Tools } from "./screens/tools/Tools";
 import { Settings } from "./screens/settings/Settings";
 import { Extensions } from "./screens/extensions/Extensions";
-import { Onboarding } from "./screens/settings/Onboarding";
+import { SetupPage, setupDone, welcome } from "./screens/settings/Onboarding";
+import { canInstallLoader, getReady, recheck, watchSetup } from "./lib/setup";
 import { FeedbackHost } from "./screens/settings/Feedback";
 import { GameCheckHost } from "./screens/settings/GameCheck";
 import "./lib/elevation";
+import "./lib/places";
 import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
+import { afterInstall } from "./screens/library/afterInstall";
 import { installSmoothScroll } from "./lib/smoothScroll";
 
-/** Ctrl+1 … Ctrl+8, in the sidebar's order. */
-const KEY_VIEWS: View[] = ["home", "library", "characters", "browse", "downloads", "profiles", "tools", "settings"];
 
 export function App() {
   const games = useGames();
@@ -60,17 +60,38 @@ export function App() {
   const help = useHelpOpen();
   const collapsed = useSideCollapsed();
   const [loaded, setLoaded] = useState(false);
-  const [onboard, setOnboard] = useState(false);
+  // the first look for games is done (on a first start, or while no game is ready)
+  const [looked, setLooked] = useState(false);
+  const ready = games.some((g) => g.modsDir);
+  const sawSetup = useRef(false);
   const viewRef = useRef<HTMLElement>(null);
 
-  // games: the saved list at once, then a detection pass on first start (and whenever nothing is set up)
+  // games: the saved list at once, then a detection pass on first start and whenever nothing is ready. No window:
+  // a game that's ready opens straight away (welcome() says what was found), otherwise the setup page shows
   useEffect(() => {
-    refreshGames().then((list) => {
+    refreshGames().then(async (list) => {
       setLoaded(true);
-      if (!list.some((g) => g.modsDir)) setOnboard(true);
-      else settingsApi.get("onboarded").then((v) => { if (v !== "1") setOnboard(true); }).catch(() => {});
-    }).catch((e) => { setLoaded(true); toast(String((e as { message?: string }).message ?? e), true); });
+      const first = (await settingsApi.get("onboarded").catch(() => null)) !== "1";
+      if (!first && list.some((g) => g.modsDir)) { setLooked(true); return; }
+      const after = (await recheck(true)) ?? list;
+      setLooked(true);
+      if (after.some((g) => g.modsDir)) void welcome(after);
+      introSearch();
+    }).catch((e) => { setLoaded(true); setLooked(true); toast(String((e as { message?: string }).message ?? e), true); });
   }, []);
+  // the setup page made a game ready: that was the first start
+  useEffect(() => {
+    if (!ready && looked) sawSetup.current = true;
+    if (ready && sawSetup.current) { sawSetup.current = false; setupDone(); }
+  }, [ready, looked]);
+  // a game in the sidebar without its Mods folder (or none ready): look again now and then (lib/setup.ts)
+  useEffect(() => watchSetup(), []);
+  // the first visit to Browse and Downloads ends their hints (shell/hints.ts)
+  useEffect(() => onRoute(() => {
+    const v = currentRoute().view;
+    if (v === "browse") doneHint("browse");
+    if (v === "downloads") doneHint("downloads");
+  }), []);
 
   // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
   useEffect(() => installSmoothScroll(), []);
@@ -109,6 +130,14 @@ export function App() {
       held(appApi.onOpenFile((p) => open({ kind: "file", path: p.path }))),
       held(appApi.onToast((p) => {
         const o = p.open;
+        if (o && p.installed?.length) { void afterInstall(p.text, o.game, p.installed); return; }
+        // nowhere to install: offer the loader (or a fresh look) and retry, not a dead end
+        const f = p.failed, fg = f && allGames().find((g) => g.id === f.game);
+        if (f && fg && !fg.modsDir) {
+          toast(p.text, true, { label: canInstallLoader(fg) ? "Install mod loader" : "Find Mods folder",
+            run: () => void getReady(f.game).then((ok) => { if (ok) queueApi.retry(f.item).catch((e) => toast(errorText(e), true)); }) });
+          return;
+        }
         toast(p.text, !!p.bad, o ? { label: "Open", run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
       })),
       // a newer gachamod downloaded in the background (commands/app.rs)
@@ -178,7 +207,8 @@ export function App() {
   }, [nav.n]);
 
   const view = route.view;
-  const screen = !game && view !== "settings" ? <NoGame loaded={loaded} />
+  const screen = !loaded ? <Waiting className="nogame" what="Reading your games" />
+    : !ready && view !== "settings" && view !== "extensions" ? <SetupPage looking={!looked} />
     : view === "home" ? <Home />
     : view === "library" ? <Library />
     : view === "characters" ? <Characters />
@@ -204,7 +234,6 @@ export function App() {
       {games.length > 0 && <ErrorBoundary where="Profiles" quiet><NewProfileHost /></ErrorBoundary>}
       <ErrorBoundary where="Feedback" quiet><FeedbackHost /></ErrorBoundary>
       <ErrorBoundary where="Check this game" quiet><GameCheckHost /></ErrorBoundary>
-      {onboard && <Onboarding onDone={() => { setOnboard(false); offerTour((text, action) => toast(text, false, action)); }} />}
       <DropZone />
       <ErrorBoundary where="AI helper" quiet><AiHost /></ErrorBoundary>
       <CommandPalette />
@@ -217,19 +246,7 @@ export function App() {
       )}
       <Seasonal />
       <ContextMenuHost />
-      <Tour />
       <Toasts />
-    </div>
-  );
-}
-
-function NoGame({ loaded }: { loaded: boolean }) {
-  if (!loaded) return <Waiting className="nogame" what="Reading your games" />;
-  return (
-    <div className="nogame">
-      <h1>No game set up yet</h1>
-      <p>gachamod looks for XXMI Launcher and your games on its own. If it found nothing, pick a game's Mods folder in Settings.</p>
-      <button type="button" className="btn btn-primary btn-lg" onClick={() => go({ view: "settings", section: "games" })}><Icon name="settings" /><span className="btn-t">Set up a game</span></button>
     </div>
   );
 }

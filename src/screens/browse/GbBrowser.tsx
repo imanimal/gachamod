@@ -18,6 +18,8 @@ import { CardSkeleton, ModCard } from "./ModCard";
 import { applySaved, describe, isPlain, matching, removeSaved, renameSaved, saveFilters, useSavedFilters } from "./saved";
 import { KINDS, SORTS, beginVisit, endCarry, kindLabel, openWithFilters, setFilters, sortLabel, useFilters, useLibIndex, type BrowseFilters, type BrowseSort } from "./state";
 import "./browse.css";
+import { LazyImg } from "../../ui/LazyImg";
+import { useHint } from "../../shell/hints";
 
 export interface GbBrowserProps {
   game: GameId;
@@ -166,6 +168,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   const f = useFilters(game);
   const nsfw = useNsfw();
   const creators = useCreators();
+  const installHint = useHint("install");
   const hidden = useHiddenMods();
   const lib = useLibIndex(game);
   const chars = useCharacterList(game);
@@ -326,7 +329,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
         <div className="gbb-chips" aria-label="Active filters">
           {chips.map((c) => (
             <span key={c.key} className="chip on gbb-fchip">
-              {c.img ? <img className="chip-img" src={c.img} alt="" /> : c.icon && <Icon name={c.icon} />}
+              {c.img ? <LazyImg className="chip-img" src={c.img} alt="" /> : c.icon && <Icon name={c.icon} />}
               <span className="chip-t">{c.label}</span>
               <button type="button" className="gbb-fchip-x" aria-label={`Remove ${c.label}`} title="Remove this filter" onClick={c.clear}><Icon name="x" /></button>
             </span>
@@ -348,7 +351,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
         ) : (
           <div className="cards gb-grid" aria-busy={waiting}>
             {pinned.map((m) => <ModCard key={`p${m.id}`} game={game} mod={m} lib={lib} nsfw={nsfw} prio />)}
-            {items.map((m) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && creators[String(m.submitter.id)]?.prio)} />)}
+            {items.map((m, i) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && creators[String(m.submitter.id)]?.prio)} hint={installHint && i === 0 && !pinned.length} />)}
             {waiting && Array.from({ length: items.length ? 6 : embedded ? 8 : 12 }, (_, i) => <CardSkeleton key={`s${i}`} />)}
           </div>
         )}

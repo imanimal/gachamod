@@ -2,9 +2,8 @@
 // embedded browser and the character pages, so Expand keeps them), what the library has (installed and
 // archived mods by GameBanana id) and opening a mod's page. Owner: BROWSE area.
 import { useEffect, useSyncExternalStore } from "react";
-import { errorText, library, shell, type ArchiveEntry, type GameId, type ModEntry, type ToolLink } from "../../lib/api";
-import { gbToolId, type GbCategoryRef, type GbKind, type GbSort } from "../../lib/gamebanana";
-import { toast } from "../../ui/toast";
+import { library, type ArchiveEntry, type GameId, type ModEntry } from "../../lib/api";
+import { type GbCategoryRef, type GbKind, type GbSort } from "../../lib/gamebanana";
 import { closeRoute, currentRoute, go, onApp } from "../../lib/store";
 import { onPublish } from "../library/data";
 
@@ -206,16 +205,6 @@ export function openGbTool(id: number) {
   go({ ...r, toolId: id });
 }
 export function closeGbTool() { closeRoute(["toolId"]); }
-
-/** Open a fixer: a GameBanana tool's page in the app (with Download), anything else (GitHub) in the browser. */
-export function openFixer(link: ToolLink) {
-  const id = gbToolId(link.url);
-  if (id) openGbTool(id);
-  else void shell.openUrl(link.url).catch((e) => toast(errorText(e), true));
-}
-
-/** Whether openFixer stays in the app. */
-export const fixerInApp = (link: ToolLink) => gbToolId(link.url) !== null;
 
 /** The GameBanana mod id the route opens, if any: a number anywhere, a numeric text in Browse. */
 export function gbModOfRoute(r: { view: string; modId?: string | number }): number | null {

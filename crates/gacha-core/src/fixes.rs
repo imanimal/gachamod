@@ -201,7 +201,7 @@ impl Index {
             return ToolLink { name: s.name.clone(), url: url.into() };
         }
         let last = url.trim_end_matches('/').rsplit('/').next().unwrap_or_default();
-        let name = if url.contains("github.com/") && !last.is_empty() { last.replace(['-', '_'], " ") } else { "the fixer on GameBanana".into() };
+        let name = if url.contains("github.com/") && !last.is_empty() { last.replace(['-', '_'], " ") } else { "the fixer".into() };
         ToolLink { name, url: url.into() }
     }
 }

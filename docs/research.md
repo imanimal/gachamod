@@ -184,6 +184,13 @@ Archive contents without downloading: `GET https://gamebanana.com/apiv13/File/18
 ```
 `/dl/<fileId>` 302-redirects to `https://files.gamebanana.com/mods/<filename>`.
 
+That redirects again to `https://filecache<N>.gamebanana.com/mods/<filename>` (nginx, `accept-ranges: bytes`). Each
+file always goes to the same N (checked 2026-11-15: 46 for one file, 41 or 20 or 52 for others). Hosts that serve
+`/mods/` for any file: 20, 31, 35 to 47, 52, 53, 54 (1 to 80 checked; the rest answer 404 or not at all). The same
+file came from filecache46 at 0.25 to 0.7 MB/s and from 20, 40 and 45 at 12 to 18 MB/s in the same minute; a few
+minutes later 46 was fast and 35 and 42 were slow. So the slow one changes over time, and any other host has the
+file. The host list is not documented anywhere and can change.
+
 Single-property fetch: `GET /apiv11/Mod/434773?_csvProperties=_sName,_tsDateUpdated,_tsDateModified` returns just those keys.
 
 ### 2.5 Update checks and bulk endpoint

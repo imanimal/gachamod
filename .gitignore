@@ -1,6 +1,7 @@
 # Node / front end
 node_modules/
 dist/
+dist-setup/
 .vite/
 *.tsbuildinfo
 
@@ -8,6 +9,7 @@ dist/
 target/
 src-tauri/target/
 src-tauri/gen/schemas/
+src-setup/gen/
 
 # Local data and secrets
 .env

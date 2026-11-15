@@ -12,7 +12,9 @@
     "app": "tauri dev",
     "app:attach": "tauri dev --config src-tauri/tauri.attach.conf.json",
     "installer": "node scripts/build-installer.mjs",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "build:setup": "vite build --config vite.setup.config.ts",
+    "setup": "cargo run -p gachamod-setup --"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",

@@ -93,7 +93,7 @@ export function summarize(change: ModChange): string {
 }
 
 /** Put mods back to earlier on/off states (undo). Offs first so the one-skin rule never undoes the ons. */
-async function restoreStates(game: GameId, prior: Map<string, boolean>, ids: string[]) {
+export async function restoreStates(game: GameId, prior: Map<string, boolean>, ids: string[]) {
   const offs = ids.filter((id) => prior.get(id) === false);
   const ons = ids.filter((id) => prior.get(id) === true);
   if (offs.length) publish(game, await library.setEnabled(game, offs, false));

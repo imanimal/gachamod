@@ -68,7 +68,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
       <span className="mod-card-badges">
         {broken && (
           <button type="button" className={`mod-card-health${health.status === "unfixable" ? " is-bad" : ""}`} aria-label="Broken by a game update"
-            title={`${health.status === "broken" ? "Broken by a game update. Click to see the fix" : "Broken by a game update, and gachamod can't fix it by itself. Click for details"}${health.reasons.length ? `: ${health.reasons.slice(0, 3).join(". ")}` : ""}`}
+            title={`${health.status === "broken" || health.tool ? "Broken by a game update. Click to see the fix" : "Broken by a game update, and gachamod can't fix it by itself. Click for details"}${health.reasons.length ? `: ${health.reasons.slice(0, 3).join(". ")}` : ""}`}
             onClick={() => openDetails(mod)}>
             <Icon name="warn" />
           </button>

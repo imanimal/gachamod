@@ -18,6 +18,12 @@ export const keepArchivesPref = flag("downloads.keep", false);
 /** An archive that holds several mods installs all of them as one mod without asking (the downloader reads
  *  "downloads.allParts"). Off shows the picker. */
 export const installAllPartsPref = flag("downloads.allParts", false);
+/** A GameBanana download under 1 MB/s for 8 seconds carries on from another of GameBanana's file servers (the
+ *  downloader reads "downloads.otherServers"). Off, it stays on the server GameBanana picked. */
+export const otherServersPref = flag("downloads.otherServers", true);
+/** A mod turns on as soon as it installs (screens/library/afterInstall.ts). Its character's other skin goes off, by
+ *  the "<game>.oneSkin" rule. Off, new mods wait in Mods, turned off. */
+export const enableNewPref = flag("mods.enableNew", true);
 /** Look on GameBanana for new fixer tools (Tools > Fixes lists them; nothing is downloaded). */
 export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 

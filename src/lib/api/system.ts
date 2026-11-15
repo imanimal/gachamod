@@ -55,9 +55,19 @@ export const games = {
   onState: (cb: (p: { game: GameId; running: boolean }) => void) => listen<{ game: GameId; running: boolean }>(EVENTS.gameState, cb),
 };
 
+/** One step of installing XXMI and the mod loaders; `total` is the download's size when known. */
+export interface SetupProgress { step: string; done: number; total: number | null }
+
 export const xxmi = {
   status: () => call<XxmiStatus>("xxmi_status"),
   open: () => call<void>("xxmi_open"),
+  /** Install XXMI Launcher and the mod loader of each game (every XXMI game found on this PC when none are given),
+   *  then look for games again. Steps arrive through `onSetup`. */
+  install: (games?: GameId[]) => call<GameState[]>("xxmi_install", { games: games ?? null }),
+  /** Uninstall the mod loaders of `games`, or XXMI Launcher and every loader when none are given. Files go to the
+   *  Recycle Bin; each Mods folder stays (`kept`). */
+  uninstall: (games?: GameId[]) => call<{ games: GameState[]; kept: string[] }>("xxmi_uninstall", { games: games ?? null }),
+  onSetup: (cb: (p: SetupProgress) => void) => listen<SetupProgress>("xxmi-setup", cb),
 };
 
 export const launchConfig = {
@@ -83,6 +93,16 @@ export const integrations = {
 export const about = {
   /** The app's data folder (database, trash, downloads). */
   dataDir: () => call<string>("app_data_dir"),
+  /** Keep the look on screen for gachamod setup, which wears it for repair and uninstall (lib/theme.ts sends it). */
+  saveLook: (look: Record<string, unknown>) => call<void>("save_look", { look }),
+  /** True when gachamod setup sits next to the app (installed copies). */
+  setupAvailable: () => call<boolean>("setup_available"),
+  /** Open gachamod setup for repair or uninstall. */
+  openSetup: () => call<void>("setup_open"),
+  /** Start over at the next start: the old data moves to a backup (gacha-core reset.rs). Then call relaunch. */
+  reset: () => call<void>("app_reset"),
+  /** Close gachamod and open it again. */
+  relaunch: () => call<void>("app_relaunch"),
 };
 
 // ── settings file (commands/app.rs) ──

@@ -63,13 +63,25 @@ pub async fn live_menu_set(app: tauri::AppHandle, st: State<'_, AppState>, game:
     }).await
 }
 
-/// Start gachamod again as administrator, so its keys reach a game that runs as one. Windows asks first.
+/// Start gachamod again as administrator, so its keys reach a game that runs as one. Windows asks first, in front of
+/// the window that asked. False: the player said no, and gachamod carries on as it was.
 #[tauri::command]
-pub async fn app_restart_admin(app: tauri::AppHandle) -> Result<()> {
-    blocking(gacha_core::devtools::restart_elevated).await?;
+pub async fn app_restart_admin(app: tauri::AppHandle, window: tauri::WebviewWindow) -> Result<bool> {
+    let owner = window.hwnd().map_or(0, |h| h.0 as isize);
+    let r = blocking(move || gacha_core::devtools::restart_elevated(owner)).await;
+    if !matches!(r, Ok(true)) {
+        // Windows' prompt took the keyboard and owned the window for a while: make sure the window takes clicks and
+        // keys again
+        if window.is_enabled().is_ok_and(|on| !on) {
+            gacha_core::logs::warn("the window was left disabled after the administrator prompt");
+            let _ = window.set_enabled(true);
+        }
+        let _ = window.set_focus();
+        return r;
+    }
     crate::commands::app::skip_update_on_quit(&app);
     app.exit(0);
-    Ok(())
+    Ok(true)
 }
 
 /// Pick what a character shows. While the game runs the pick is sent to it (the database isn't held meanwhile).

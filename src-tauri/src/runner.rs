@@ -42,6 +42,11 @@ pub fn install_all_parts(db: &Shared) -> bool {
     lk(db).setting("downloads.allParts").ok().flatten().is_some_and(|v| v == "1")
 }
 
+/// "downloads.otherServers" is not "0": a slow GameBanana download carries on from another of its file servers.
+pub fn other_servers(db: &Shared) -> bool {
+    lk(db).setting("downloads.otherServers").ok().flatten().as_deref() != Some("0")
+}
+
 /// Where an item's download goes: `<data>/downloads/<game>/` and `<fileId>-<name>`.
 pub fn download_target(data_dir: &Path, item: &QueueItem) -> (PathBuf, String) {
     let game = download::safe_file_name(&item.req.game);
@@ -125,10 +130,6 @@ impl Runner {
             if last.elapsed() >= EMIT_EVERY { *last = Instant::now(); true } else { false }
         };
         if due { emit_snapshot(&self.app); }
-    }
-
-    fn toast(&self, text: String, bad: bool) {
-        let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": bad }));
     }
 
     /// Change an item and save it. None when it is gone.
@@ -224,7 +225,8 @@ impl Runner {
             Some(d) => Ok(d),
             None if url.starts_with("https://") || url.starts_with("http://") => {
                 let r = self.clone();
-                download::download(&self.http, &url, &dir, &name, move |rec, total| r.on_progress(id, rec, total)).await
+                let switch = other_servers(&self.db).then_some(&download::GAMEBANANA);
+                download::download(&self.http, &url, &dir, &name, switch, move |rec, total| r.on_progress(id, rec, total)).await
             }
             None => Err(Error::Invalid("This item has no download link. Remove it and queue the file again".into())),
         };
@@ -255,7 +257,9 @@ impl Runner {
     fn fail(&self, id: u64, message: String, item: &QueueItem) {
         self.update(id, |i| { i.staging = None; i.choose.clear(); i.state = ItemState::Failed { message: message.clone() }; });
         self.emit();
-        self.toast(format!("Couldn't install {}: {message}", item.name()), true);
+        // the UI adds a way to fix it when the game has no Mods folder yet (App.tsx)
+        let text = format!("Couldn't install {}: {message}", item.name());
+        let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": true, "failed": { "game": item.req.game, "item": id } }));
     }
 
     async fn fetch_preview(&self, url: &str, staging: &Path) {
@@ -303,9 +307,10 @@ impl Runner {
                 let what = if o.installed.len() > 1 { format!("{} variants of {name}", o.installed.len()) } else { name };
                 let mut text = match character { Some(c) => format!("{verb} {what} for {c}"), None => format!("{verb} {what}") };
                 if !o.notes.is_empty() { text = format!("{text}. {}", o.notes.join(". ")); }
-                // the toast opens the mod, where it can be turned on
+                // the toast opens the mod; a new one (not an update) is turned on by the UI first (library/afterInstall.ts)
                 let open = o.installed.first().map(|m| serde_json::json!({ "game": item.req.game, "modId": m.id }));
-                let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false, "open": open }));
+                let fresh: Vec<&String> = if item.req.meta.replaces.is_none() { ids.iter().collect() } else { Vec::new() };
+                let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false, "open": open, "installed": fresh }));
             }
             Err(e) => {
                 // a broken archive is fetched again on Retry

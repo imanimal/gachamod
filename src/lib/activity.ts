@@ -94,6 +94,7 @@ const EXACT: Record<string, Desc> = {
   game_set_paths: ["Saving the game's folders", HOLD.disk],
   xxmi_status: ["Reading XXMI Launcher's settings", HOLD.xxmi],
   xxmi_open: ["Opening XXMI Launcher", HOLD.xxmi],
+  xxmi_install: ["Installing XXMI Launcher and the mod loaders", "This downloads about 65 MB from GitHub and unpacks it into XXMI Launcher's folder. A slow connection, a VPN or an antivirus scanning the new files can hold it."],
   imm_detect: ["Looking for Integrated Mod Manager", HOLD.disk],
   imm_takeover: ["Moving mods out of Integrated Mod Manager", HOLD.disk],
   library_scan: ["Reading the Mods folder", HOLD.disk],
@@ -119,6 +120,11 @@ const EXACT: Record<string, Desc> = {
   extensions_fetch: ["Reading an extension list", HOLD.github],
   extensions_install: ["Installing an extension", HOLD.github],
   fixers_download: ["Downloading a fix tool", HOLD.github],
+  fixers_github: ["Downloading a fix tool from GitHub", HOLD.github],
+  fixers_run: ["Running the fixer on the mod", "A fixer with its own window waits until you close it. One that waits for a key press is stopped after 2 minutes."],
+  xxmi_uninstall: ["Uninstalling the mod loaders", "This moves files to the Recycle Bin. A game or XXMI Launcher that has the files open can hold it."],
+  app_reset: ["Getting ready to start over", HOLD.disk],
+  app_relaunch: ["Restarting gachamod", HOLD.disk],
   fixes_apply: ["Updating mods for the new game version", HOLD.disk],
   settings_import: ["Bringing in settings", HOLD.disk],
   settings_export: ["Saving your settings to a file", HOLD.disk],
@@ -129,6 +135,8 @@ const EXACT: Record<string, Desc> = {
   admin_set_always: ["Changing how gachamod starts", HOLD.disk],
   app_restart_admin: ["Waiting for Windows to allow administrator", HOLD.dialog],
   game_check_send: ["Sending the check's results", HOLD.web],
+  setup_available: ["Looking for gachamod setup", HOLD.disk],
+  setup_open: ["Opening gachamod setup", HOLD.disk],
 };
 /** By prefix, for everything not named above. */
 const PREFIX: Array<[string, Desc]> = [
@@ -162,7 +170,7 @@ const PREFIX: Array<[string, Desc]> = [
 
 /** Commands that wait on the person (a file dialog, a sign-in window), or run in the background where nobody waits on
  *  them (usage counts, log lines), and so never count as slow. */
-const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "game_check_saved", "game_check_menu"]);
+const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "game_check_saved", "game_check_menu", "save_look"]);
 
 /** What a backend command does and what can hold it. */
 export function describeCall(cmd: string): Desc | null {

@@ -86,6 +86,19 @@ pub async fn fixers_download(st: State<'_, AppState>, game: String, req: FixerRe
     fixers::fetch(&st.http, &st.data_dir, &game, req).await
 }
 
+/// Download a fixer that lives on GitHub (`source` is the link the fix data gives), or use the copy already here.
+#[tauri::command]
+pub async fn fixers_github(st: State<'_, AppState>, game: String, source: String, tool: String) -> Result<FixerFile> {
+    fixers::fetch_github(&st.http, &st.data_dir, &game, &source, &tool).await
+}
+
+/// Run a downloaded fixer on one mod, with a backup that undoes it.
+#[tauri::command]
+pub async fn fixers_run(st: State<'_, AppState>, game: String, file_id: u64, mod_id: String) -> Result<fixers::FixerRun> {
+    let (db, data) = (st.db.clone(), st.data_dir.clone());
+    blocking(move || fixers::run_on_mod(&db, &data, &game, file_id, &mod_id)).await
+}
+
 #[tauri::command]
 pub async fn hash_lookup(st: State<'_, AppState>, game: String, hash: String) -> Result<Vec<HashHit>> {
     let db = st.db.clone();

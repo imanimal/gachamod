@@ -12,6 +12,7 @@ import { IconButton, SearchField, Skeleton } from "../../ui/kit";
 import { Portrait } from "../../ui/Portrait";
 import { reloadLive, useLive } from "./data";
 import "./overlay.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 const recentKey = (game: GameId) => `overlay.recent.${game}`;
 function recent(game: GameId): number[] {
@@ -130,7 +131,7 @@ function Tile({ m, on, busy, name, title, onPick }: { m?: LiveMod; on: boolean; 
   return (
     <button type="button" role="radio" aria-checked={on} className={`ov-tile${on ? " on" : ""}${busy ? " busy" : ""}`} onClick={onPick}
       title={title ?? (on ? `${name} is showing` : m && !m.enabled ? `${name} is off. Picking it turns it on, and it shows after the game reloads` : `Show ${name}`)}>
-      <span className="ov-pic">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <Icon name={m ? "mods" : "block"} />}</span>
+      <span className="ov-pic">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name={m ? "mods" : "block"} />}</span>
       <span className="ov-label"><span className="ov-t">{name}</span>{on && <Icon name="check" />}</span>
     </button>
   );

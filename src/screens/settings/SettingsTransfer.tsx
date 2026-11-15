@@ -1,7 +1,7 @@
 // Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own updates for the
 // About section. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
 import { useEffect, useState } from "react";
-import { Button, Checkbox, Confirm, Panel, Progress, formatBytes, plural } from "../../ui/kit";
+import { Button, Checkbox, Confirm, Panel, Progress, Toggle, formatBytes, plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
 import { record, undo } from "../../lib/history";
@@ -172,8 +172,13 @@ export function UpdateRow() {
   return (
     <div className="set-rows set-update">
       <div className="set-row">
-        <span><b>Updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "Automatic updates are off (Settings, Automatic)"}</span></span>
-        <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
+        <span><b>Updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "gachamod doesn't look for new versions by itself"}</span></span>
+        <span className="set-admin">
+          <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
+          <span title="gachamod looks for a new version at start and every 6 hours. The same switch is under Mods, Automatic">
+            <Toggle checked={auto} label="Automatic" onChange={(v) => void appUpdateCheckPref.set(v, v ? "Updating gachamod automatically" : "Stopped updating gachamod automatically")} />
+          </span>
+        </span>
       </div>
       {r && (
         <div className="set-row">

@@ -34,9 +34,12 @@ pub mod platform;
 pub mod previews;
 pub mod profiles;
 pub mod queue;
+pub mod recycle;
+pub mod reset;
 pub mod settings_file;
 pub mod telemetry;
 pub mod xxmi;
+pub mod xxmi_setup;
 
 pub use error::{Error, Result};
 

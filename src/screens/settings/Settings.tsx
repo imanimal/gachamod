@@ -1,18 +1,17 @@
-// Settings (global), for changing one thing fast: a list of sections on the left, every setting in the global search
-// (settingsSearch.ts), every change saved at once. A section or a single setting is a route:
-// go({ view: "settings", section: "storage" }) or section: "set-trash-days". Owner: SETTINGS/AI area.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Badge, Button, PageHeader, Panel, Select, Toggle } from "../../ui/kit";
+// Settings (global), for changing one thing fast: one page at a time, picked from a list in groups on the left
+// (Paged.tsx), every setting in the global search (settingsSearch.ts), every change saved at once. A page, a panel on
+// one or a single setting is a route: go({ view: "settings", section: "mods" }), "storage" or "set-trash-days".
+// Owner: SETTINGS/AI area.
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { Badge, Button, Confirm, PageHeader, Panel, Select, Toggle } from "../../ui/kit";
 import { GameBadge } from "../../ui/GameBadge";
-import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { about, app, dialogs, errorText, games, integrations, settings, shell, xxmi, type GameId, type GameState, type Integration, type XxmiStatus } from "../../lib/api";
 import { gameMeta } from "../../lib/games";
-import { consumeRoute, refreshGames, setGames, useGames, useOnlyGame, useRoute } from "../../lib/store";
+import { go, refreshGames, setGames, useGame, useGames, useOnlyGame } from "../../lib/store";
 import { focusGame } from "../../shell/commands";
-import { useAiShow } from "../../lib/ai";
 import { openKofi } from "../../lib/support";
-import { scrollToElement } from "../../lib/smoothScroll";
+import { Paged } from "./Paged";
 import "./settings.css";
 import { AccountSection } from "./AccountSection";
 import { HotkeysSection } from "./HotkeysSection";
@@ -21,10 +20,12 @@ import { AppearanceSection, CustomThemesSection } from "./Appearance";
 import { AutomaticSection, CreatorsSection, ModsSection, StorageSection } from "./Sections";
 import { AiSection } from "./AiSection";
 import { ExtensionsSection } from "../extensions/ExtensionsSection";
-import { SECTIONS, sectionOf } from "./settingsSearch";
+import { PAGES, sectionOf } from "./settingsSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
 import { AdminRow, FeedbackSection } from "./Feedback";
+import { Installing } from "./Onboarding";
+import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
 export { SetRow, openXxmi, useSetting };
 
@@ -32,149 +33,72 @@ export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releas
 
 
 export function Settings() {
-  const route = useRoute();
-  const aiShow = useAiShow();
-  const [active, setActive] = useState(SECTIONS[0]!.id);
-  const [present, setPresent] = useState<string[]>(SECTIONS.map((s) => s.id));
-  const main = useRef<HTMLDivElement>(null);
-  const nav = useRef<HTMLElement>(null);
-
-  // the section list sticks just under the page header (its height differs per theme) and only scrolls when the
-  // window is too short to show all of it
-  useLayoutEffect(() => {
-    const el = nav.current;
-    const view = el?.closest(".view") as HTMLElement | null;
-    const head = view?.querySelector(".page-h") as HTMLElement | null;
-    if (!el || !view) return;
-    const fit = () => {
-      if (getComputedStyle(el).position !== "sticky") return;
-      // stick where it starts (below the header), so scrolling the page never moves it at all
-      const h = head && getComputedStyle(head).position === "sticky" ? head.offsetHeight : 0;
-      const start = el.parentElement!.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
-      const top = Math.max(h + 8, Math.round(start));
-      el.style.top = `${top}px`;
-      el.style.maxHeight = `${view.clientHeight - top - 8}px`;
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(view);
-    if (head) ro.observe(head);
-    return () => ro.disconnect();
-  }, []);
-
-  // scroll to a section or a single setting, mark its section in the list and light it up once it gets there.
-  // Sections near the end can't reach the top of the page, so without the highlight it isn't clear which one it was.
-  const pinned = useRef(false);
-  const reveals = useRef(0);
-  const reveal = useCallback((id: string) => {
-    const el = document.getElementById(id) ?? document.getElementById(sectionOf(id) ?? "");
-    const view = el?.closest<HTMLElement>(".view");
-    if (!el || !view) return;
-    const row = el.id.startsWith("set-");
-    const section = row ? sectionOf(el.id) : el.id;
-    if (section) setActive(section);
-    pinned.current = true;
-    const n = ++reveals.current;
-    scrollToElement(view, el, row ? "center" : "start", () => {
-      if (reveals.current !== n) return;
-      pinned.current = false;
-      const cls = row ? "set-flash" : "set-ring";
-      el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
-    });
-  }, []);
-
-  // a section or a single setting from the route. A row whose data is still loading may not be there on the first
-  // frame, so it waits a moment for it before settling for its section.
-  useEffect(() => {
-    const id = route.section;
-    if (!id) return;
-    const t0 = performance.now();
-    let raf = 0;
-    const go = () => {
-      if (!document.getElementById(id) && performance.now() - t0 < 400) { raf = requestAnimationFrame(go); return; }
-      reveal(id);
-      consumeRoute(["section"]);
-    };
-    raf = requestAnimationFrame(go);
-    return () => cancelAnimationFrame(raf);
-  }, [route.section, reveal]);
-
-  // sections that render nothing (a part still being built) stay out of the list
-  useEffect(() => {
-    const check = () => setPresent(SECTIONS.map((s) => s.id).filter((id) => { const el = document.getElementById(id); return !!el && el.childElementCount > 0; }));
-    check();
-    const t = window.setTimeout(check, 800);
-    return () => window.clearTimeout(t);
-  }, [aiShow]);
-
-  // the section in view is the one marked in the list (except while scrolling to one that was picked)
-  useEffect(() => {
-    const root = main.current?.closest(".view") ?? null;
-    const seen = new Map<string, boolean>();
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) seen.set(e.target.id, e.isIntersecting);
-      const first = SECTIONS.find((s) => seen.get(s.id));
-      if (first && !pinned.current) setActive(first.id);
-    }, { root, rootMargin: "0px 0px -65% 0px" });
-    for (const s of SECTIONS) { const el = document.getElementById(s.id); if (el) io.observe(el); }
-    return () => io.disconnect();
-  }, [present]);
-
   return (
-    <div className="page settings">
+    <div className="page settings pg-screen">
       <PageHeader title="Settings" icon="settings" />
-      <div className="set-layout">
-        <nav ref={nav} className="set-nav" aria-label="Settings sections">
-          {SECTIONS.filter((s) => present.includes(s.id)).map((s) => (
-            <button key={s.id} type="button" className={`set-nav-i${active === s.id ? " on" : ""}`} onClick={() => reveal(s.id)} aria-current={active === s.id ? "true" : undefined}>
-              <Icon name={s.icon} /><span>{s.label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="set-main" ref={main}>
-          <GamesSection />
-          <XxmiSection />
-          <IntegrationsSection />
-          <AppearanceSection />
-          <CustomThemesSection />
-          <ExtensionsSection />
-          <ModsSection />
-          <AutomaticSection />
-          <StorageSection />
-          <CreatorsSection />
-          <HotkeysSection />
-          <div className="set-ext" id="account"><AccountSection /></div>
-          <AiSection />
-          <TransferSection />
-          <FunSection />
-          <FeedbackSection />
-          <AboutSection />
-        </div>
-      </div>
+      <Paged name="settings" label="Settings pages" pages={PAGES} fallback={sectionOf}>
+        {{
+          games: <><GamesSection /><XxmiSection /></>,
+          mods: <><ModsSection /><ModFoldersSection /><AutomaticSection /><StorageSection /></>,
+          creators: <CreatorsSection />,
+          hotkeys: <HotkeysSection />,
+          appearance: <><AppearanceSection /><CustomThemesSection /></>,
+          fun: <FunSection />,
+          account: <><AccountSection /><IntegrationsSection /><AiSection /></>,
+          extensions: <ExtensionsSection />,
+          feedback: <FeedbackSection />,
+          about: <><AboutSection /><TransferSection /></>,
+        }}
+      </Paged>
     </div>
   );
 }
 
 // ── games ──
 
-function GamesSection() {
-  const list = useGames();
+/** "Detect again": look for XXMI Launcher and the games' folders, and say what turned up. */
+function useDetect(list: GameState[]): [boolean, () => Promise<void>] {
   const [busy, setBusy] = useState(false);
   const detect = async () => {
     setBusy(true);
     try {
       const before = list.filter((g) => g.modsDir).length;
-      const after = (await refreshGames(true)).filter((g) => g.modsDir).length;
+      const after = ((await recheck(true)) ?? list).filter((g) => g.modsDir).length;
       toast(after > before ? `Found ${after - before} more` : "Nothing new found");
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };
+  return [busy, detect];
+}
+
+function GamesSection() {
+  const list = useGames();
+  const [busy, detect] = useDetect(list);
+  const setup = useSetup();
+  const current = useGame();
+  // a quiet look when the page opens, so a game installed since shows up without pressing anything
+  useEffect(() => { void recheck(); }, []);
+  const can = list.filter(canInstallLoader);
   const xxmiGames = list.filter((g) => g.xxmi);
   const community = list.filter((g) => !g.xxmi);
   return (
     <Panel title="Games" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
+      {setup.running ? <Installing compact /> : can.length > 1 && (
+        <div className="set-note row">
+          <span>{can.map((g) => g.short).join(", ")} have no mod loader yet.</span>
+          <Button size="sm" variant="primary" icon="install" onClick={() => void installLoaders(can.map((g) => g.id))}
+            title="Installs XXMI Launcher and each game's mod loader from their GitHub pages">Install all</Button>
+        </div>
+      )}
       <OnlyGameRow list={list} />
-      <AdminRow />
+      <AdminRow id="set-admin" />
+      {current && (
+        <div className="set-rows">
+          <SetRow id="set-launch" label="Launch options" hint={`Arguments, window mode and commands for ${current.name}, the game picked in the sidebar. They are in Tools`}>
+            <Button size="sm" icon="sliders" onClick={() => go({ view: "tools", section: "launch" })} title="Opens Tools, Launch">Launch options</Button>
+          </SetRow>
+        </div>
+      )}
       <div className="set-games">{xxmiGames.map((g) => <GameRow key={g.id} game={g} />)}</div>
       {community.length > 0 && <>
         <h3 className="sub-h" id="set-community">Community games</h3>
@@ -201,8 +125,24 @@ function OnlyGameRow({ list }: { list: GameState[] }) {
   );
 }
 
+/** Uninstall mod loaders (none given: XXMI Launcher and all of them). Files go to the Recycle Bin and Mods folders
+ *  stay, so Install again picks them up. */
+async function uninstallLoaders(ids?: GameId[]): Promise<boolean> {
+  try {
+    const r = await xxmi.uninstall(ids);
+    setGames(r.games);
+    const one = ids?.length === 1 ? r.games.find((g) => g.id === ids[0]) : undefined;
+    const what = one ? `${one.short}'s mod loader` : "XXMI Launcher";
+    const kept = r.kept.length ? ` Your mods stay in ${r.kept.length === 1 ? r.kept[0] : `${r.kept.length} Mods folders`}` : "";
+    toast(`Moved ${what} to the Recycle Bin.${kept}`, false, { label: "Install again", run: () => void installLoaders(ids) });
+    return true;
+  } catch (e) { toast(errorText(e), true); return false; }
+}
+
 function GameRow({ game }: { game: GameState }) {
   const meta = gameMeta(game.id);
+  const setup = useSetup();
+  const [removing, setRemoving] = useState(false);
   const change = async (field: "gameDir" | "importerDir" | "modsDir") => {
     try {
       const picked = await dialogs.pickFolder(field === "gameDir" ? `${game.name}'s game folder` : field === "importerDir" ? `${game.name}'s mod loader folder (holds d3dx.ini)` : `${game.name}'s Mods folder`);
@@ -246,6 +186,23 @@ function GameRow({ game }: { game: GameState }) {
         {folder("Mod loader", game.importerDir, "importerDir", "The folder with d3dx.ini and Mods")}
         {game.modsDir && game.importerDir && game.modsDir.toLowerCase() !== `${game.importerDir}\\Mods`.toLowerCase() && folder("Mods", game.modsDir, "modsDir", "Where mods live")}
         {notes.map((n) => <span key={n} className="hint set-game-note">{n}</span>)}
+        {!game.modsDir && game.xxmi && (
+          <span className="row set-game-fix">
+            {canInstallLoader(game)
+              ? <Button size="sm" variant="primary" icon="install" busy={setup.running} onClick={() => void installLoaders([game.id])}
+                  title={`Installs XXMI Launcher and ${game.short}'s mod loader from their GitHub pages, then finds its Mods folder`}>Install mod loader</Button>
+              : <Button size="sm" variant="primary" icon="search" busy={setup.running} onClick={() => void getReady(game.id)}
+                  title={`Looks for ${game.short} and its mod loader again`}>Find it</Button>}
+            <span className="hint">{canInstallLoader(game) ? "No mod loader yet" : `${game.short} wasn't found on this PC. Install it, or set the folders below`}</span>
+          </span>
+        )}
+        {game.viaXxmi && game.importerDir && (
+          <span className="row">
+            <Button size="sm" variant="ghost" icon="trash" busy={removing} disabled={setup.running}
+              onClick={() => { setRemoving(true); void uninstallLoaders([game.id]).finally(() => setRemoving(false)); }}
+              title={`Moves ${game.short}'s mod loader to the Recycle Bin. Its Mods folder and saved mod settings stay, and Install again brings it back`}>Uninstall mod loader</Button>
+          </span>
+        )}
         {!game.xxmi && !game.importerDir && meta.loader && (
           <span className="row"><Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(meta.loader!.url).catch((e) => toast(errorText(e), true))}>{meta.loader.label}</Button></span>
         )}
@@ -255,9 +212,47 @@ function GameRow({ game }: { game: GameState }) {
   );
 }
 
+// ── Mods folders (on the Mods page; the same folders are under Games) ──
+
+/** Where each game's mods live: found by itself, or picked by hand. */
+function ModFoldersSection() {
+  const list = useGames().filter((g) => g.shown || g.modsDir);
+  const [busy, detect] = useDetect(list);
+  const setup = useSetup();
+  if (!list.length) return null;
+  const pick = async (g: GameState) => { if (await pickModsFolder(g.id)) toast(`Saved ${g.short}'s Mods folder`); };
+  return (
+    <Panel title="Mods folders" icon="folder" id="mod-folders" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and each game's Mods folder again">Detect again</Button>}>
+      <p className="hint set-note">gachamod finds each game's Mods folder from its mod loader. Pick another one here when your mods live somewhere else.</p>
+      <div className="set-games">
+        {list.map((g) => {
+          const dir = g.modsDir;
+          return (
+            <div key={g.id} className="set-game set-modfolder">
+              <GameBadge game={g} size={28} />
+              <div className="set-game-main">
+                <b>{g.name}</b>
+                {dir
+                  ? <button type="button" className="set-folder-p mono" title={`Open ${dir}`} onClick={() => shell.openPath(dir).catch((e) => toast(errorText(e), true))}>{dir}</button>
+                  : <span className="hint">{canInstallLoader(g) ? "No mod loader yet, so no Mods folder" : "Not found yet"}</span>}
+              </div>
+              {!dir && (canInstallLoader(g)
+                ? <Button size="sm" variant="primary" icon="install" busy={setup.running} onClick={() => void installLoaders([g.id])}
+                    title={`Installs XXMI Launcher and ${g.short}'s mod loader from their GitHub pages, then finds its Mods folder`}>Install mod loader</Button>
+                : <Button size="sm" variant="primary" icon="search" busy={setup.running} onClick={() => void getReady(g.id)} title={`Looks for ${g.short} and its mod loader again`}>Find it</Button>)}
+              <Button size="sm" variant="ghost" onClick={() => void pick(g)} title={`Pick ${g.short}'s Mods folder yourself`}>{dir ? "Change" : "Pick folder"}</Button>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
 // ── XXMI ──
 
 function XxmiSection() {
+  const setup = useSetup();
   const [st, setSt] = useState<XxmiStatus | null>(null);
   const [root, setRoot] = useState("");
   const load = useCallback(() => {
@@ -279,6 +274,7 @@ function XxmiSection() {
     try { await settings.set("xxmi.root", ""); load(); await refreshGames(true); } catch (e) { toast(errorText(e), true); }
   };
   const update = st?.version && st.latest && st.version !== st.latest;
+  const [asking, setAsking] = useState(false);
 
   return (
     <Panel title="XXMI Launcher" icon="package" id="xxmi">
@@ -286,7 +282,8 @@ function XxmiSection() {
         <div className="set-xxmi-missing">
           <p>XXMI Launcher loads mods into Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves, Honkai Impact 3rd and Endfield. gachamod starts games through it.</p>
           <div className="row">
-            <Button variant="primary" icon="external" onClick={() => shell.openUrl(XXMI_RELEASES).catch((e) => toast(errorText(e), true))}>Get XXMI Launcher</Button>
+            <Button variant="primary" icon="install" busy={setup.running} onClick={() => void installLoaders().then(load)}
+              title="Downloads XXMI Launcher and the mod loaders of the games on this PC from their GitHub pages (about 65 MB)">Install XXMI Launcher</Button>
             <Button onClick={() => void pick()} title="Pick the folder XXMI Launcher is in">It's in another folder</Button>
           </div>
         </div>
@@ -310,8 +307,17 @@ function XxmiSection() {
             <Button icon="external" onClick={openXxmi}>Open XXMI Launcher</Button>
             <Button variant="ghost" onClick={() => void pick()} title="For a portable copy of XXMI Launcher">Use another folder</Button>
             {root && <Button variant="ghost" onClick={() => void reset()} title="Look for XXMI Launcher where its installer puts it">Use the usual folder</Button>}
+            <Button id="set-xxmi-uninstall" variant="ghost" icon="trash" disabled={setup.running} onClick={() => setAsking(true)}
+              title="Moves XXMI Launcher and every game's mod loader to the Recycle Bin. Mods folders stay">Uninstall XXMI Launcher</Button>
           </div>
         </>
+      )}
+      {asking && st && (
+        <Confirm title="Uninstall XXMI Launcher?" yes="Uninstall" danger onClose={() => setAsking(false)}
+          onYes={async () => { if (await uninstallLoaders()) load(); }}>
+          <p>XXMI Launcher, every game's mod loader and their shortcuts go to the Recycle Bin.</p>
+          <p className="hint">Your Mods folders and saved mod settings stay in {st.root}. Installing again picks them up.</p>
+        </Confirm>
       )}
     </Panel>
   );
@@ -353,12 +359,24 @@ function IntegrationsSection() {
 
 // ── about ──
 
+/** Start over: the old data moves to a backup at the next start, then gachamod opens fresh. */
+async function resetApp() {
+  try {
+    await about.reset();
+    try { localStorage.clear(); sessionStorage.clear(); } catch { /* storage may be off */ }
+    await about.relaunch();
+  } catch (e) { toast(errorText(e), true); }
+}
+
 function AboutSection() {
   const [version, setVersion] = useState("");
+  const [asking, setAsking] = useState(false);
   const [dir, setDir] = useState<string | null>(null);
+  const [setup, setSetup] = useState(false);
   useEffect(() => {
     app.info().then((i) => setVersion(i.version)).catch(() => {});
     about.dataDir().then(setDir).catch(() => {});
+    about.setupAvailable().then(setSetup).catch(() => {});
   }, []);
   return (
     <Panel title="About" icon="info" id="about">
@@ -369,6 +387,16 @@ function AboutSection() {
       </div>
       <UpdateRow />
       <div className="set-rows set-update">
+        {setup && (
+          <div className="set-row">
+            <span><b>Repair or uninstall</b><span className="hint">Opens gachamod setup in this theme. Repair puts gachamod's files and shortcuts back and keeps your mods and settings</span></span>
+            <Button size="sm" icon="tool" onClick={() => about.openSetup().catch((e) => toast(errorText(e), true))} title="Opens gachamod setup. A repair closes gachamod while it works">Open setup</Button>
+          </div>
+        )}
+        <div className="set-row" id="set-reset">
+          <span><b>Reset gachamod</b><span className="hint">Starts over as if just installed. Your mods stay in their Mods folders, and the old settings, profiles and library go to a backup in the data folder</span></span>
+          <Button size="sm" variant="ghost" icon="undo" onClick={() => setAsking(true)} title="Asks first, then restarts gachamod">Reset</Button>
+        </div>
         <div className="set-row">
           <span><b>Tip jar</b><span className="hint">gachamod is free and has no ads. If it saves you some time, a tip on Ko-fi helps keep it going</span></span>
           <Button size="sm" icon="coffee" onClick={openKofi} title="Opens ko-fi.com/aanimal in your browser">Tip on Ko-fi</Button>
@@ -376,6 +404,12 @@ function AboutSection() {
       </div>
       <p className="hint set-note">Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.
         Fonts: Manrope, Rubik, Anton and JetBrains Mono, under the SIL Open Font License.</p>
+      {asking && (
+        <Confirm title="Reset gachamod?" yes="Reset and restart" danger onClose={() => setAsking(false)} onYes={resetApp}>
+          <p>gachamod restarts with nothing set up: no settings, profiles, tags, favourites or GameBanana sign-in.</p>
+          <p className="hint">Your mods, games and XXMI Launcher aren't touched. The old data moves to a backup folder{dir ? ` in ${dir}` : ""}, and downloads and caches are deleted.</p>
+        </Confirm>
+      )}
     </Panel>
   );
 }

@@ -1,6 +1,6 @@
 // Problems in mods (modtools.lint): one result per game that the Tools panel, the Tools page order and the nav badge
 // all read, the problems the user chose to ignore, and the one-click fixes. Owner: MODTOOLS area.
-import { useRef, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { errorKind, errorText, modtools, type Backup, type GameId, type ModProblems, type Problem, type ProblemFix } from "../../lib/api";
 import { modPage, newestFile, queueModFile } from "../../lib/gamebanana";
 import { jsonPref } from "../../lib/prefs";
@@ -33,22 +33,6 @@ export const badgeCount = (list: ModProblems[], ign: Ignored, game: GameId) =>
 
 /** A broken part with no fix in the mod's files: downloading the mod again may bring the file back. */
 export const needsDownload = (shown: Problem[]) => shown.some((p) => p.severity === "bad" && !p.fix);
-
-/** Some listed problem has a one-click fix: a change in the mod's files, or downloading it again from GameBanana. */
-export const anyFixable = (list: ModProblems[], ign: Ignored, game: GameId) => list.some((m) => {
-  const shown = shownProblems(ign, game, m);
-  return shown.some((p) => p.fix) || (!!m.source && needsDownload(shown));
-});
-
-/** Tools shows Problems first while a listed problem has a one-click fix. Decided from the first result of each visit,
- *  so the panel doesn't jump back down while you fix things. */
-export function useProblemsFirst(game: GameId | null): boolean {
-  const list = useLint(game);
-  const ign = useIgnored();
-  const decided = useRef<{ game: GameId; first: boolean } | null>(null);
-  if (game && list && decided.current?.game !== game) decided.current = { game, first: anyFixable(list, ign, game) };
-  return !!game && decided.current?.game === game && decided.current.first;
-}
 
 export function ignore(game: GameId, m: ModProblems, problems: Problem[]) {
   if (!problems.length) return;

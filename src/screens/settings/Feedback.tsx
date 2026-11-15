@@ -1,7 +1,7 @@
 // Feedback to the developer, the usage counts and crash reports switches, the log folder, and starting as
 // administrator. The form opens from Settings, the search ("Send feedback") and a screen that hit an error.
 // Owner: SETTINGS/AI area.
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { Button, Checkbox, Dialog, Panel, Segmented, TextField, Toggle } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { admin, errorText, report, shell, type AdminState, type FeedbackKind, type ReportState } from "../../lib/api";
@@ -101,20 +101,30 @@ const ADMIN_TIP = "Zenless Zone Zero and some other games run as administrator, 
   + "As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. "
   + "Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way";
 
-/** Settings, under Games: start as administrator every time, or once now. */
-export function AdminRow() {
-  const [st, setSt] = useState<AdminState | null>(null);
-  useEffect(() => { admin.state().then(setSt).catch(() => {}); }, []);
+// the row shows on two pages (Games, In-game hotkeys), so its state is shared and both copies agree
+let adminNow: AdminState | null = null;
+let adminAsked = false;
+const adminSubs = new Set<() => void>();
+const setAdmin = (s: AdminState) => { adminNow = s; adminSubs.forEach((f) => f()); };
+function useAdmin(): AdminState | null {
+  useEffect(() => { if (!adminAsked) { adminAsked = true; admin.state().then(setAdmin).catch(() => { adminAsked = false; }); } }, []);
+  return useSyncExternalStore((f) => { adminSubs.add(f); return () => { adminSubs.delete(f); }; }, () => adminNow);
+}
+
+/** Settings, under Games and In-game hotkeys: start as administrator every time, or once now. `id` goes on one copy,
+ *  the one a route scrolls to. */
+export function AdminRow({ id }: { id?: string }) {
+  const st = useAdmin();
   const always = (on: boolean) => {
     admin.setAlways(on).then((s) => {
-      setSt(s);
+      setAdmin(s);
       if (on && !s.elevated) toast("gachamod starts as administrator from now on", false, { label: "Restart now", run: restartAsAdmin });
     }).catch((e) => toast(errorText(e), true));
   };
   if (!st) return null;
   return (
     <div className="set-rows">
-      <SetRow id="set-admin" label="Run as administrator" tip={ADMIN_TIP}
+      <SetRow id={id} label="Run as administrator" tip={ADMIN_TIP}
         hint={st.elevated ? "gachamod runs as administrator now, so it can send keys to games that do too" : "Lets gachamod send keys to games that run as administrator, like Zenless Zone Zero"}>
         <span className="set-admin">
           {!st.elevated && <Button size="sm" onClick={restartAsAdmin} data-t="admin-restart" title="Closes gachamod and opens it again as administrator. Windows asks you first">Restart as administrator</Button>}

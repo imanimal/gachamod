@@ -1,14 +1,14 @@
-// The sidebar: a compact player card, the current game (with a row of the other games when two or more are shown), big
-// view buttons, the game's profiles one click away, and Play at the bottom. Folds to an icon rail with Ctrl+B or its
+// The sidebar: the GameBanana account, the current game (with a row of the other games when two or more are shown), big
+// view buttons, the game's profiles one click away, and Play at the bottom. Browse and Downloads carry the soft
+// first-time rings (hints.ts). Folds to an icon rail with Ctrl+B or its
 // button (remembered). When the window is short the profile list scrolls and the rest stays.
 // Layout attributes on <html> (set by lib/theme.ts): data-density, data-sidebar, data-nav, data-corners.
 // Owner: SHELL area.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import { errorText, profiles, type GameState, type Profile } from "../lib/api";
-import { record } from "../lib/history";
+import { errorText, type GameState, type Profile } from "../lib/api";
 import { charNoun } from "../lib/games";
 import { extensionPages, useExtensions } from "../lib/extensions";
-import { go, setGame, useBadges, useDailyGames, useGame, useRoute, useShownGames, type View } from "../lib/store";
+import { go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { GameBadge, gameIconNow } from "../ui/GameBadge";
 import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
@@ -16,49 +16,39 @@ import { SideDeco } from "../ui/Deco";
 import { toast } from "../ui/toast";
 import { PlayButton } from "../screens/home/PlayButton";
 import { extIcon } from "../screens/extensions/Extensions";
-import { PlayerCard, usePlayer, useAvatar } from "../screens/home/PlayerCard";
 import { startNewProfile } from "../screens/profiles/actions";
-import { profilesChanged, switchProfile, useProfiles } from "../screens/profiles/data";
+import { switchProfile, useProfiles } from "../screens/profiles/data";
 import { ProfileThumb } from "../screens/profiles/ProfileThumb";
-import { VIEW_INFO } from "./names";
+import { AccountCard, MiniAccount } from "./AccountCard";
+import { useHint } from "./hints";
+import { KEY_VIEWS, VIEW_INFO } from "./names";
 import { toggleSide, useSideCollapsed } from "./state";
 
-const NAV: View[] = ["home", "library", "characters", "browse", "downloads", "profiles", "tools", "settings"];
+// Profiles has its own list under the views
+const NAV: View[] = KEY_VIEWS.filter((v) => v !== "profiles");
 
 const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
 const beside = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.right + 6, y: r.top }; };
 
 export function Sidebar() {
   const game = useGame();
+  const ready = useGames().some((g) => g.modsDir);
   const collapsed = useSideCollapsed();
   return (
     <aside className="side" aria-label="Sidebar" data-collapsed={collapsed ? "" : undefined}>
       <div className="side-top">
-        {collapsed ? <MiniPlayer /> : <PlayerCard />}
+        {collapsed ? <MiniAccount /> : <AccountCard />}
         <button type="button" className="side-fold" onClick={toggleSide} aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
           title={collapsed ? "Expand the sidebar (Ctrl+B)" : "Collapse the sidebar (Ctrl+B)"}>
           <Icon name={collapsed ? "expand" : "collapse"} />
         </button>
       </div>
       <GameHeader />
-      <Nav disabled={!game} />
-      {game && <ProfileList game={game} />}
+      <Nav disabled={!game || !ready} />
+      {game?.modsDir && <ProfileList game={game} />}
       <SideDeco game={game} />
-      <div className="side-foot">{game && <PlayButton />}</div>
+      <div className="side-foot">{game?.modsDir && <PlayButton />}</div>
     </aside>
-  );
-}
-
-// ── the player, folded: just the picture ──
-
-function MiniPlayer() {
-  const p = usePlayer();
-  const av = useAvatar(p.avatar);
-  const name = p.name.trim() || "Proxy";
-  return (
-    <button type="button" className="side-me" title={`${name}. Expand the sidebar to edit your card`} onClick={toggleSide}>
-      {av.src ? <img src={av.src} alt="" draggable={false} style={av.crop ? { objectPosition: "50% 8%" } : undefined} /> : <Icon name="user" />}
-    </button>
   );
 }
 
@@ -159,18 +149,31 @@ function Nav({ disabled }: { disabled: boolean }) {
   const badges = useBadges();
   const game = useGame();
   const pages = extensionPages(useExtensions(), game?.id);
+  const ringBrowse = useHint("browse") && !disabled && route.view !== "browse";
+  const ringDownloads = useHint("downloads") && !!badges.downloads?.count && route.view !== "downloads";
+  // a hinted view looks like the selected one, faded: take the theme's own selection colour from the selected button
+  const navRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const on = nav?.querySelector<HTMLElement>(".nv.on");
+    if (!nav || !on || !(ringBrowse || ringDownloads)) return;
+    const bg = getComputedStyle(on).backgroundColor;
+    if (bg && bg !== "transparent" && !/,\s*0\)$/.test(bg)) nav.style.setProperty("--nv-on-bg", bg);
+  });
   return (
-    <nav className="side-nav" aria-label="Views">
+    <nav className="side-nav" aria-label="Views" ref={navRef}>
       {NAV.map((v) => {
         const b = badges[v];
         const label = v === "characters" ? charNoun(game?.id) : VIEW_INFO[v].label;
-        const key = NAV.indexOf(v) + 1;
+        const key = KEY_VIEWS.indexOf(v) + 1;
+        const ring = (v === "browse" && ringBrowse) || (v === "downloads" && ringDownloads);
         const off = disabled && v !== "settings";
-        const tip = `${label} (Ctrl+${key})${b?.count ? `. ${b.count} ${v === "library" ? "with updates" : v === "downloads" ? "downloading" : "to look at"}` : ""}`;
+        const tip = `${label} (Ctrl+${key})${b?.count ? `. ${b.count} ${v === "library" ? "with updates" : v === "downloads" ? "downloading" : "to look at"}` : ""}`
+          + (ring ? (v === "browse" ? ". Find mods on GameBanana and install them in one click" : ". See how your downloads are going") : "");
         // Extensions opens from Settings, so Settings stays marked there
         const on = route.view === v || (v === "settings" && route.view === "extensions" && !route.ext);
         return (
-          <button key={v} type="button" className={`nv${on ? " on" : ""}`} aria-current={on ? "page" : undefined}
+          <button key={v} type="button" className={`nv${on ? " on" : ""}${ring ? " is-hint" : ""}`} aria-current={on ? "page" : undefined}
             onClick={() => go(v)} title={tip} disabled={off} data-view={v}>
             <Icon name={VIEW_INFO[v].icon} /><span className="nv-t">{label}</span>
             {b && <span className={`nv-b t-${b.tone ?? "accent"}`}>{b.count ? b.count : ""}</span>}
@@ -208,30 +211,6 @@ function ProfileList({ game }: { game: GameState }) {
 
   const create = () => startNewProfile(game.id);
 
-  const saveInto = async (p: Profile) => {
-    try {
-      let id = p.id;
-      let before = await profiles.snapshot(id);
-      await profiles.capture(id);
-      profilesChanged(game.id);
-      record({
-        label: `Saved the mods on now into ${p.name}`,
-        undo: async () => { const after = await profiles.snapshot(id); await profiles.remove(id); id = (await profiles.restore(before)).id; before = after; profilesChanged(game.id); },
-        redo: async () => { const prior = await profiles.snapshot(id); await profiles.remove(id); id = (await profiles.restore(before)).id; before = prior; profilesChanged(game.id); },
-      });
-    } catch (e) { toast(errorText(e), true); }
-  };
-
-  const saveMenu = (): MenuEntry[] => {
-    const others = (list ?? []).filter((p) => !p.active);
-    return [
-      { header: "Save the mods on now" },
-      { label: "As a new profile", icon: "plus", onClick: create },
-      others.length > 0 && "-",
-      ...others.map((p) => ({ label: `Into ${p.name}`, icon: "pin" as const, title: `Replaces ${p.name}'s mods with the ones on now`, onClick: () => void saveInto(p) })),
-      active && { label: `${active.name} follows your changes already`, icon: "check" as const, disabled: true },
-    ];
-  };
   const ctx = (p: Profile) => (e: ReactMouseEvent) => {
     const items = menuFor("profile", { game: game.id, id: p.id });
     const fallback: MenuEntry[] = [
@@ -246,9 +225,6 @@ function ProfileList({ game }: { game: GameState }) {
     <section className="side-prof" aria-label="Profiles">
       <div className="side-prof-h">
         <span className="side-h">Profiles</span>
-        <button type="button" className="side-hk" onClick={create} aria-label="New profile" title="New profile from the mods on now"><Icon name="plus" /></button>
-        <button type="button" className="side-hk" onClick={(e) => openMenu(collapsed ? beside(e.currentTarget) : below(e.currentTarget), saveMenu())}
-          aria-label="Save current mods" title="Save the mods on now as a profile, or into one"><Icon name="pin" /></button>
         <button type="button" className="side-hk" onClick={() => go("profiles")} aria-label="Manage profiles" title="Manage profiles (Ctrl+6)"><Icon name="sliders" /></button>
       </div>
       <div className="side-prof-list" role="list">

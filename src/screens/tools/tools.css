@@ -1,7 +1,4 @@
 /* Tools screen layout. Colours are theme tokens only. Owner: SETTINGS/AI area. */
-.tools .panel { scroll-margin-top: 1rem; }
-.tools-ext { display: flex; flex-direction: column; gap: var(--stack-gap); scroll-margin-top: 1rem; }
-.tools-ext:empty { display: none; }
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem 1.2rem; }
 .tools-hooks { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem 1.2rem; margin: 1.2rem 0; }
 .tools-hook { display: flex; flex-direction: column; gap: .5rem; }

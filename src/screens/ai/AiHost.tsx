@@ -225,7 +225,7 @@ function PreviewView({ p }: { p: Preview }) {
   );
 }
 
-// ── the one-time suggestion after setup ──
+// ── the one-time suggestion, from the start after setup ──
 
 function AiIntro() {
   const intro = aiIntroPref.use();
@@ -233,14 +233,13 @@ function AiIntro() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let live = true;
-    // a little after start, and only once setup is finished (never on top of the first-start window): checks every
-    // 10 seconds until the first-start window is done
-    const t = window.setInterval(() => {
-      void Promise.all([aiIntroPref.ready, chatbotPref.ready, settings.get("onboarded").catch(() => null)]).then(([, , ob]) => {
-        if (live && ob === "1") { setReady(true); window.clearInterval(t); }
-      });
-    }, 10000);
-    return () => { live = false; window.clearInterval(t); };
+    let t = 0;
+    // 10 seconds after start, and not in the session that did the first setup (that one has Browse to find): setup
+    // was already done when this start began
+    void Promise.all([aiIntroPref.ready, chatbotPref.ready, settings.get("onboarded").catch(() => null)]).then(([, , ob]) => {
+      if (live && ob === "1") t = window.setTimeout(() => { if (live) setReady(true); }, 10000);
+    });
+    return () => { live = false; window.clearTimeout(t); };
   }, []);
   if (!ready || intro === "done" || bot) return null;
 

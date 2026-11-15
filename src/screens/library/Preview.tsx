@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fileUrl } from "../../lib/api";
 import { useNsfw } from "../../lib/prefs";
 import { Icon, type IconName } from "../../ui/Icon";
+import { LazyImg } from "../../ui/LazyImg";
 
 export type NsfwMode = "hide" | "blur" | "show";
 
@@ -26,11 +27,11 @@ export function Preview({ src, className, blur, icon = "image", alt = "", portra
   return (
     <span className={`mod-img${blur ? " is-blurred" : ""}${className ? ` ${className}` : ""}`}>
       {url && !broken
-        ? <img src={url} alt={alt} loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} />
+        ? <LazyImg src={url} alt={alt} decoding="async" draggable={false} onError={() => setBroken(true)} />
         : portrait || label
           ? <span className="mod-img-none mod-img-stand" aria-hidden="true">
               {label && <span className="mod-img-ghost">{label}</span>}
-              {portrait ? <img className="mod-img-portrait" src={portrait} alt="" loading="lazy" decoding="async" draggable={false} /> : <Icon name={icon} />}
+              {portrait ? <LazyImg className="mod-img-portrait" src={portrait} alt="" decoding="async" draggable={false} /> : <Icon name={icon} />}
             </span>
           : <span className="mod-img-none" aria-hidden="true"><Icon name={icon} /></span>}
     </span>

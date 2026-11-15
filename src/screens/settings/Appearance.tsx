@@ -16,6 +16,7 @@ import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
 import { hiddenThemePref } from "../../lib/fun";
 import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
+import { hintsOnPref } from "../../shell/hints";
 
 const SCHEME_OPTIONS: Array<{ value: SchemeChoice; label: string; icon?: "moon" | "sun" }> = [
   { value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" }, { value: "system", label: "System" },
@@ -92,9 +93,17 @@ export function AppearanceSection() {
         <SetRow id="set-motion" label="Animations" hint="Off keeps every change instant">
           <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
         </SetRow>
+        <SetRow id="set-hints" label="First-start hints" hint="Right after setup, Browse, Install and Downloads look faintly selected until you've used them once">
+          <HintsSwitch />
+        </SetRow>
       </div>
     </Panel>
   );
+}
+
+function HintsSwitch() {
+  const on = hintsOnPref.use();
+  return <Toggle checked={on} label="First-start hints" onChange={(v) => void hintsOnPref.set(v, v ? "Turned first-start hints on" : "Turned first-start hints off")} />;
 }
 
 // ── layout ──
@@ -200,7 +209,7 @@ export function CustomThemesSection() {
           ))}
         </div>
       )}
-      {!list.length && !edit && <p className="hint ctheme-intro">Your own colours, corners and spacing on top of any theme above. Themes other people share can be imported here.</p>}
+      {!list.length && !edit && <p className="hint ctheme-intro">Your own colours, corners and spacing on top of any theme in Appearance. Themes other people share can be imported here.</p>}
       {edit
         ? <ThemeEditor key={`${edit.theme.id}:${edit.isNew}`} start={edit.theme} isNew={edit.isNew} note={edit.note} onClose={() => setEdit(null)} />
         : (

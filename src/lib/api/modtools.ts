@@ -121,7 +121,7 @@ export interface ToolLink { name: string; url: string }
 /** What a game update did to one installed mod. */
 export interface ModHealthRow {
   modId: string; name: string; enabled: boolean;
-  /** "broken": hashes gachamod can swap; "unfixable": needs a fixer gachamod can't run (tool); "fixed": gachamod swapped them. */
+  /** "broken": hashes gachamod can swap; "unfixable": needs more than a swap (`tool` is the fixer gachamod runs, if one is known); "fixed": gachamod fixed it. */
   status: "broken" | "unfixable" | "fixed";
   reasons: string[];
   since: string | null;
@@ -139,7 +139,7 @@ export const fixes = {
   apply: (game: GameId, ids: string[]) => call<FixAll>("fixes_apply", { game, ids }),
 };
 
-/** A fixer file downloaded from GameBanana into the app's fixers folder (crates/gacha-core/src/fixers.rs). */
+/** A fixer file downloaded from GameBanana or GitHub into the app's fixers folder (crates/gacha-core/src/fixers.rs). */
 export interface FixerFile {
   toolId: number; fileId: number; tool: string; file: string;
   /** The folder it is in. */
@@ -147,13 +147,28 @@ export interface FixerFile {
   /** The one program in it (an .exe, else a .bat or .py), or the folder. */
   main: string;
   at: number;
+  /** The fix data's link, for a fixer from GitHub. */
+  source?: string;
 }
-export interface FixerRequest { toolId: number; fileId: number; tool: string; file: string; url: string; md5?: string | null }
+export interface FixerRequest { toolId: number; fileId: number; tool: string; file: string; url: string; md5?: string | null; source?: string }
+/** What running a fixer on one mod did. Restoring `backup` undoes it; null when it changed nothing. */
+export interface FixerRun {
+  modId: string; name: string; backup: Backup | null;
+  /** Files changed, added or removed. */
+  changed: number;
+  /** Still running at the time limit, so it was stopped. */
+  stopped: boolean;
+  output: string;
+}
 
 export const fixers = {
   list: (game: GameId) => call<FixerFile[]>("fixers_list", { game }),
-  /** Only GameBanana links. Nothing in the file is run. */
+  /** Only GameBanana links. */
   download: (game: GameId, req: FixerRequest) => call<FixerFile>("fixers_download", { game, req }),
+  /** A fixer from GitHub: the newest release's Windows program, or one script file. */
+  github: (game: GameId, source: string, tool: string) => call<FixerFile>("fixers_github", { game, source, tool }),
+  /** Run a downloaded fixer on one mod from inside its folder, with a backup first. */
+  run: (game: GameId, fileId: number, modId: string) => call<FixerRun>("fixers_run", { game, fileId, modId }),
 };
 
 // ── keys: rebinding, turning keys off, "only while on screen" and clashes (crates/gacha-core/src/keys.rs) ──

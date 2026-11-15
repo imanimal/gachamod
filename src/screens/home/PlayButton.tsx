@@ -1,9 +1,10 @@
 // The big Play button at the bottom of the sidebar (and on Home). Owner: HOME/PROFILES area.
 // States: Play, Starting (until the game-state event says it runs, or 60 s), Running (disabled, shows the time),
-// and Set up (no folder yet: goes to Settings). Ctrl+Enter and the controller's Menu button click `.side .play-btn`.
+// and Set up (no folder yet: installs the mod loader when XXMI can, else goes to Settings). Ctrl+Enter and the controller's Menu button click `.side .play-btn`.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button, IconButton, Menu } from "../../ui/kit";
 import { Popover } from "../../ui/Popover";
+import { canInstallLoader, installLoaders, useSetup } from "../../lib/setup";
 import { toast } from "../../ui/toast";
 import { errorText, games, settings, xxmi, type GameState } from "../../lib/api";
 import { windowAction } from "../../lib/tauri";
@@ -88,14 +89,18 @@ export function PlayButton({ big = false }: { big?: boolean }) {
     return () => window.clearInterval(t);
   }, [id, isRunning, startTime]);
 
+  const setup = useSetup();
   if (!game) return null;
   const cls = `play${big ? " play-big" : ""}`;
 
   if (!canPlay(game)) {
     return (
       <div className={cls}>
-        <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={`Pick ${game.name}'s folders first`}
-          onClick={() => go({ view: "settings", section: "games" })}>Set up</Button>
+        {canInstallLoader(game)
+          ? <Button className="play-btn play-setup" variant="primary" size="lg" icon="install" busy={setup.running}
+              title={`Installs XXMI Launcher and ${game.short}'s mod loader`} onClick={() => void installLoaders([game.id])}>Set up</Button>
+          : <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={`Find or pick ${game.name}'s folders in Settings, Games`}
+              onClick={() => go({ view: "settings", section: "games" })}>Set up</Button>}
       </div>
     );
   }

@@ -1,5 +1,10 @@
 ; gachamod's additions to the installer (tauri.conf.json: bundle > windows > nsis > installerHooks).
 
+; gachamod setup (src-setup) does repair and uninstall in the app's theme. scripts/build-installer.mjs puts it here
+; while the installer builds; a plain `tauri build` leaves it out and keeps NSIS's own uninstall entry. Defined at the
+; top: inside a macro, __FILEDIR__ is the folder of the generated installer.nsi.
+!define GACHAMOD_SETUP_EXE "${__FILEDIR__}\..\..\target\gachamod-setup\setup.exe"
+
 ; Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from a program that doesn't
 ; away from them. The player chooses whether gachamod starts as administrator: asked once, on a fresh install with the
 ; full installer, No by default. HKCU\Software\gachamod keeps the answer (`admin`, which Settings also writes), so an
@@ -23,6 +28,33 @@
     ReadRegStr $R0 HKCU "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" "$INSTDIR\${MAINBINARYNAME}.exe"
     ${If} $R0 == ""
       WriteRegStr HKCU "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" "$INSTDIR\${MAINBINARYNAME}.exe" "~ RUNASADMIN"
+    ${EndIf}
+  ${EndIf}
+
+  ; gachamod setup next to gachamod, and Windows' uninstall entry pointed at it
+  !if /FileExists "${GACHAMOD_SETUP_EXE}"
+    SetOverwrite try
+    File "/oname=setup.exe" "${GACHAMOD_SETUP_EXE}"
+    SetOverwrite on
+  !endif
+  ${If} ${FileExists} "$INSTDIR\setup.exe"
+    WriteRegStr SHCTX "${UNINSTKEY}" "UninstallString" '"$INSTDIR\setup.exe" --uninstall'
+    WriteRegStr SHCTX "${UNINSTKEY}" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
+    WriteRegStr SHCTX "${UNINSTKEY}" "ModifyPath" '"$INSTDIR\setup.exe"'
+    WriteRegDWORD SHCTX "${UNINSTKEY}" "NoModify" 0
+  ${EndIf}
+
+  ; A quiet install makes a desktop shortcut. gachamod setup has a box for it and keeps the answer in
+  ; `desktopShortcut`, so a repair leaves the desktop as the player set it.
+  ${If} ${Silent}
+  ${AndIf} $UpdateMode <> 1
+    ReadRegStr $R0 HKCU "Software\gachamod" "desktopShortcut"
+    ${If} $R0 == "0"
+      !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
+      Pop $R0
+      ${If} $R0 = 1
+        Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+      ${EndIf}
     ${EndIf}
   ${EndIf}
   Pop $R0
@@ -54,6 +86,9 @@
     ${EndIf}
     ; SHCNE_ASSOCCHANGED: Explorer drops the old file icon
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+    ; gachamod setup, when this uninstaller ran on its own (setup runs from a copy in %TEMP%)
+    Delete "$INSTDIR\setup.exe"
+    RMDir "$INSTDIR"
   ${EndIf}
   Pop $R0
 !macroend

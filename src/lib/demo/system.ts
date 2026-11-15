@@ -16,7 +16,40 @@ function gamesNow(): GameState[] {
 
 const running = new Set<string>();
 
+/** `?fresh` in the address: a PC with games but no XXMI Launcher or mod loader yet, to try the first start and the
+ *  one-click setup. The loaders' folders come back when "Install mod loaders" runs. */
+const fresh = typeof location !== "undefined" && new URLSearchParams(location.search).has("fresh");
+let xxmiFound = !fresh;
+const loaders = new Map<string, Pick<GameState, "importerDir" | "modsDir" | "viaXxmi" | "importerVersion" | "importerLatest">>();
+if (fresh) {
+  for (const g of demoDb.games) {
+    if (!g.modsDir) continue;
+    loaders.set(g.id, { importerDir: g.importerDir, modsDir: g.modsDir, viaXxmi: g.viaXxmi, importerVersion: g.importerVersion, importerLatest: g.importerLatest });
+    Object.assign(g, { importerDir: null, modsDir: null, viaXxmi: false, importerVersion: null, importerLatest: null, shown: false });
+  }
+}
+
+/** The demo's one-click setup: a few steps with a download, then each game's loader folders. */
+async function demoInstall(games: string[] | null): Promise<GameState[]> {
+  const steps: Array<[string, number]> = [["Asking GitHub for XXMI Launcher", 0], ["Downloading XXMI Launcher", 61_000_000], ["Unpacking XXMI Launcher", 0], ["Downloading the 3DMigoto libraries", 3_500_000]];
+  const want = demoDb.games.filter((g) => g.xxmi && (games?.length ? games.includes(g.id) : g.installed) && !g.modsDir);
+  for (const g of want) steps.push([`Downloading ${g.importer} for ${g.name}`, 900_000]);
+  steps.push(["Writing XXMI Launcher's settings", 0]);
+  for (const [step, total] of steps) {
+    if (!total) { demoEmit("xxmi-setup", { step, done: 0, total: null }); await demoWait(500); continue; }
+    for (let i = 0; i <= 10; i++) { demoEmit("xxmi-setup", { step, done: Math.round((total * i) / 10), total }); await demoWait(120); }
+  }
+  xxmiFound = true;
+  for (const g of want) {
+    const code = g.importer;
+    Object.assign(g, loaders.get(g.id) ?? { importerDir: `${ROOT}\\${code}`, modsDir: `${ROOT}\\${code}\\Mods`, viaXxmi: true, importerVersion: "1.0.0", importerLatest: "1.0.0" });
+    loaders.delete(g.id);
+  }
+  return gamesNow();
+}
+
 function xxmiStatus(): XxmiStatus {
+  if (!xxmiFound) return { found: false, root: null, exe: null, config: null, version: null, latest: null, running: false, importers: [] };
   return {
     found: true, root: ROOT, exe: `${ROOT}\\Resources\\Bin\\XXMI Launcher.exe`, config: `${ROOT}\\XXMI Launcher Config.json`,
     version: "2.4.1", latest: "2.5.0", running: false,
@@ -112,6 +145,19 @@ export function registerSystemDemo() {
       setTimeout(() => { running.delete(id); demoEmit("game-state", { game: id, running: false }); }, 95_000);
     },
     xxmi_status: () => xxmiStatus(),
+    xxmi_install: ({ games }) => demoInstall((games as string[] | null) ?? null),
+    xxmi_uninstall: async ({ games }) => {
+      await demoWait(700);
+      const ids = (games as string[] | null) ?? [];
+      const kept: string[] = [];
+      for (const g of demoDb.games.filter((x) => x.xxmi && x.viaXxmi && (!ids.length || ids.includes(x.id)))) {
+        loaders.set(g.id, { importerDir: g.importerDir, modsDir: g.modsDir, viaXxmi: g.viaXxmi, importerVersion: g.importerVersion, importerLatest: g.importerLatest });
+        if (g.modsDir) kept.push(g.modsDir);
+        Object.assign(g, { importerDir: null, modsDir: null, viaXxmi: false, importerVersion: null, importerLatest: null });
+      }
+      if (!ids.length) xxmiFound = false;
+      return { games: gamesNow(), kept };
+    },
     xxmi_open: () => undefined,
     launch_config_get: ({ game }) => launchConfig(String(game)),
     launch_config_set: async ({ game, config }) => {
@@ -139,6 +185,11 @@ export function registerSystemDemo() {
     },
     dev_wipe_user_config: () => undefined,
     app_data_dir: () => ROOT.replace("XXMI Launcher", "gachamod"),
+    save_look: () => undefined,
+    setup_available: () => true,
+    setup_open: () => undefined,
+    app_reset: () => undefined,
+    app_relaunch: () => { location.reload(); },
     integrations_get: () => integrationsState.map((i) => ({ ...i })),
     integration_set: ({ id, on }) => {
       const i = integrationsState.find((x) => x.id === id);

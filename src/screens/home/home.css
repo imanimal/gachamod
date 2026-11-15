@@ -1,4 +1,4 @@
-/* Home, the Play button and the player card. Layout only; colours are theme tokens. Owner: HOME/PROFILES area. */
+/* Home, the Play button and the account card. Layout only; colours are theme tokens. Owner: HOME/PROFILES area. */
 
 /* play button */
 .play { display: flex; gap: .25rem; align-items: stretch; }
@@ -11,49 +11,28 @@
 .play-big { min-width: 15rem; }
 .play-big .play-btn { min-width: 11rem; }
 
-/* player card: each part is its own button (PlayerCard.tsx). .player-bg covers the whole card under the rest, so a
-   click anywhere but the picture, name or title opens the banner, colour and UID. */
+/* the GameBanana account card at the top of the sidebar (shell/AccountCard.tsx). It keeps the old player card's classes
+   so the game themes still dress it. */
 .player-card { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: .65rem; align-items: center;
   width: 100%; padding: 1.4rem .6rem .6rem; border-radius: var(--radius); overflow: hidden; text-align: left;
   background: var(--surface); border: 1px solid var(--line); }
 .player-card:hover { background: var(--surface-2); }
 .player-banner { position: absolute; inset: 0 0 auto 0; height: 2.6rem; background: color-mix(in srgb, var(--g-accent) 55%, var(--surface)); overflow: hidden; pointer-events: none; }
 .player-banner img { width: 100%; height: 100%; object-fit: cover; }
-.player-bg { position: absolute; inset: 0; border-radius: inherit; }
-.player-bg:focus-visible, html.kbd .player-bg:focus { outline-offset: -2px; }
-.player-av-btn { grid-row: 1 / span 2; position: relative; z-index: 1; display: block; border-radius: 50%; }
 .player-card .player-av { position: relative; outline: 3px solid var(--surface); transition: outline-color var(--dur-fast) var(--ease); }
-.player-av-btn:is(:hover, .on) .player-av { outline-color: var(--accent); }
 .player-text { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding-top: 1.1rem; pointer-events: none; }
 .player-text > * { pointer-events: auto; max-width: 100%; }
 .player-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .player-title { font-size: .82em; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-button:is(.player-name, .player-title) { margin: 0 -.25rem; padding: 0 .25rem; border-radius: var(--radius-xs, 4px); text-align: left; }
-button:is(.player-name, .player-title):hover { background: var(--hover); }
-.player-text .player-in { width: calc(100% + .5rem); max-width: none; margin: 0 -.25rem; padding: 0 .25rem; border: 0; border-radius: var(--radius-xs, 4px);
-  background: var(--bg-2); box-shadow: inset 0 0 0 1.5px var(--accent); line-height: inherit; }
-.player-text input.player-title { color: var(--text-2); }
-.player-uid { position: relative; z-index: 1; pointer-events: none; grid-column: 1 / -1; justify-self: start; margin-top: .45rem; padding: .05rem .45rem; border-radius: 99px; font-family: var(--font-mono);
-  font-size: .72em; color: var(--text-2); background: var(--bg-2); border: 1px solid var(--line); }
 .player-av { display: grid; place-items: center; border-radius: 50%; overflow: hidden; flex: none;
   background: color-mix(in srgb, var(--g-accent) 35%, var(--surface-2)); color: var(--text); }
 .player-av img { width: 100%; height: 100%; object-fit: cover; }
 .player-av-ph { width: 55%; height: 55%; }
+.player-card:hover .player-av { outline-color: var(--accent); }
+.acct-card .player-title { display: flex; align-items: center; gap: .35rem; }
+.acct-card .player-title .spin { width: .8em; height: .8em; border-width: 1.5px; }
+.side-me .player-av-ph { width: 55%; height: 55%; }
 
-/* the pickers that open from the card */
-.player-pop { display: flex; flex-direction: column; gap: .6rem; padding: .45rem; }
-.player-pop .tab { padding: .5rem .65rem; }
-.player-pop-file { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
-.player-pop-foot { display: flex; justify-content: flex-end; }
-.portrait-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr)); gap: .5rem; max-height: 15rem; overflow: auto; padding: .2rem; }
-.portrait { aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); }
-.portrait img { width: 100%; height: 100%; object-fit: cover; }
-.portrait.on { outline: 2px solid var(--accent); outline-offset: 1px; }
-.portrait-skel { width: 100%; aspect-ratio: 1; height: auto; }
-.player-swatches { display: flex; flex-wrap: wrap; gap: .4rem; }
-.player-swatch { width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--g-accent); border: 1px solid var(--line-2); display: grid; place-items: center; }
-.player-swatch.auto { background: var(--surface-2); color: var(--text-3); }
-.player-swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* home: a stack of full-width widgets (Home.tsx). The quick bar is the game's banner with Play, the profiles and the
    quick actions; the rest are sideways rows that scroll. */
 .home { display: flex; flex-direction: column; gap: 1.1rem; }

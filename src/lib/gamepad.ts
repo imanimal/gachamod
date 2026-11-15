@@ -74,7 +74,12 @@ export function installGamepad(opts: {
     if (next === undefined) { held.set(name, now + (repeat ? 380 : Infinity)); fn(); konamiPress(name); }
     else if (repeat && now >= next) { held.set(name, now + 110); fn(); }
   };
-  const scroll = (amount: number) => (document.querySelector(".lightbox, .drawer-b, .dialog-b, .app .view") as HTMLElement | null)?.scrollBy({ top: amount });
+  const scroll = (amount: number) => {
+    let el = document.querySelector<HTMLElement>(".lightbox, .drawer-b, .dialog-b, .app .view");
+    // a screen of pages (Settings, Tools) scrolls the page showing, and turns to the next one at its end
+    if (el?.matches(".app .view")) el = el.querySelector<HTMLElement>("[data-scroller]") ?? el;
+    if (el?.dispatchEvent(new CustomEvent("padscroll", { detail: amount, bubbles: true, cancelable: true }))) el.scrollBy({ top: amount });
+  };
   const tick = (now: number) => {
     raf = requestAnimationFrame(tick);
     if (!document.hasFocus() || document.visibilityState !== "visible") return;

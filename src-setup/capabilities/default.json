@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "The setup window: its own title bar keys, dragging, and picking an install folder.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-start-dragging",
+    "dialog:allow-open"
+  ]
+}

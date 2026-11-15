@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import type { GameId, ModEntry } from "../lib/api";
 import type { GbCard } from "../lib/gamebanana";
 import { Icon, type IconName } from "./Icon";
+import { LazyImg } from "./LazyImg";
 
 export interface MenuItem {
   label: string;
@@ -201,7 +202,7 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
                 it.onClick?.();
               }}>
               {it.checked !== undefined ? <span className="menu-c" aria-hidden="true">{it.checked && <Icon name="check" />}</span> : null}
-              {it.img ? <img className="menu-img" src={it.img} alt="" loading="lazy" /> : it.icon ? <Icon name={it.icon} /> : it.checked === undefined ? <span className="menu-ni" aria-hidden="true" /> : null}
+              {it.img ? <LazyImg className="menu-img" src={it.img} alt="" /> : it.icon ? <Icon name={it.icon} /> : it.checked === undefined ? <span className="menu-ni" aria-hidden="true" /> : null}
               <span className="menu-t">{it.label}</span>
               {it.keys && <kbd className="menu-k">{it.keys}</kbd>}
               {hasSub && <Icon name="chevron" className="menu-sub" />}

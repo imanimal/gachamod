@@ -1,7 +1,7 @@
 // The title bar: Back and Forward (right-click lists recent pages), a breadcrumb you can click (game, view, then the
 // open character, mod, creator or section; the chevrons between them open a menu), the search box in the middle
 // (it opens the palette, and grows in when the app opens to show it's there), Undo and Redo (right-click lists the
-// history), what gachamod is waiting on (shell/Activity.tsx), Help (the tour, shortcuts) and the window keys. The empty parts drag the window. Owner: SHELL area.
+// history), what gachamod is waiting on (shell/Activity.tsx), Help (shortcuts, feedback) and the window keys. The empty parts drag the window. Owner: SHELL area.
 import { useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { Icon } from "../ui/Icon";
 import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
@@ -11,7 +11,7 @@ import { redo, undo, useHistory } from "../lib/history";
 import { allGames, back, forward, go, goIndex, recentPages, useDailyGames, useGame, useNav, useRoute, useShownGames, VIEWS, type Route } from "../lib/store";
 import { pageName, subCrumbs, useNamesVersion, VIEW_INFO, viewLabel } from "./names";
 import { switchEntries } from "./Sidebar";
-import { openPalette, startTour, toggleHelp, useSearchIntro } from "./state";
+import { openPalette, toggleHelp, useSearchIntro } from "./state";
 import { openKofi } from "../lib/support";
 import { openFeedback, openGameCheck } from "../lib/feedback";
 import { Activity } from "./Activity";
@@ -67,7 +67,6 @@ export function Titlebar() {
   ];
 
   const helpMenu = (): MenuEntry[] => [
-    { label: "Take the tour", icon: "sparkle", title: "Six short steps through the window", onClick: startTour },
     { label: "Keyboard and controller shortcuts", icon: "keyboard", keys: "?", onClick: toggleHelp },
     { label: "Search anything", icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
     "-",
@@ -133,7 +132,7 @@ export function Titlebar() {
             title={nextRedo ? `Redo: ${nextRedo.label} (Ctrl+Y). Right-click for more` : "Nothing to redo (Ctrl+Y)"}
             onClick={() => void redo()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), redoMenu()); }}><Icon name="redo" /></button>
         </span>
-        <button type="button" className="tb-k tb-help" aria-label="Help" title="Help: the tour and every shortcut (? for shortcuts)"
+        <button type="button" className="tb-k tb-help" aria-label="Help" title="Help: shortcuts and feedback (? for shortcuts)"
           onClick={(e) => openMenu(below(e.currentTarget), helpMenu())}><Icon name="help" /></button>
 
         <span className="winkeys">

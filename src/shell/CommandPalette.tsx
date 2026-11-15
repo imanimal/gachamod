@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import { commandSources, noteRecent, recentIds, scoreCommand, type Command } from "../lib/search";
 import { onApp } from "../lib/store";
 import { Icon } from "../ui/Icon";
+import { LazyImg } from "../ui/LazyImg";
 
 const ORDER = ["Recent", "Pages", "Actions", "Characters", "Mods", "Profiles", "Settings", "Creators", "Games"];
 const PER_SECTION = 6;
@@ -132,7 +133,7 @@ export function CommandPalette() {
                   <button key={c.id} id={`pc-${n}`} type="button" role="option" aria-selected={n === sel} data-i={n} tabIndex={-1}
                     className={`palette-i${n === sel ? " on" : ""}`}
                     onMouseMove={() => { if (sel !== n) setSel(n); }} onFocus={() => setSel(n)} onClick={() => run(c)}>
-                    {c.img ? <img className="palette-img" src={c.img} alt="" loading="lazy" /> : <Icon name={c.icon ?? "chevron"} />}
+                    {c.img ? <LazyImg className="palette-img" src={c.img} alt="" /> : <Icon name={c.icon ?? "chevron"} />}
                     <span className="palette-t">{c.title}</span>
                     {c.hint && <span className="palette-hint">{c.hint}</span>}
                   </button>

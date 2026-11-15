@@ -13,6 +13,7 @@ import { emitApp, useGame } from "../../lib/store";
 import { reloadLive, setAll, useLive } from "../ingame/data";
 import { play } from "../home/PlayButton";
 import "../ingame/ingame.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 /** Where the check shows (once, in App). It checks the game picked in the sidebar when it opened. */
 export function GameCheckHost() {
@@ -249,7 +250,7 @@ function PickStep({ game, setup, group, groups, onGroup, note, answer }:
         return (
           <button key={m.modId} type="button" role="radio" aria-checked={on} className={`live-chip${on ? " on" : ""}`} disabled={busy || on} onClick={() => void pick(m.slot)}
             title={on ? `${m.name} is showing` : `Show ${m.name}`}>
-            <span className="live-thumb">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <Icon name="mods" />}</span>
+            <span className="live-thumb">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
             <span className="live-chip-t">{m.name}</span>
             {on && <Icon name="check" className="live-chip-on" />}
           </button>

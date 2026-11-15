@@ -2,9 +2,9 @@
 // from, and new fixers posted on GameBanana. Owner: FIXES area.
 import { useEffect, useRef, useState } from "react";
 import { fixes, type FixInfo, type GameId, type ModHealthRow } from "../../lib/api";
-import { downloadNewestFixer, fixMods, reloadHealth, showFixer, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
+import { downloadNewestFixer, fixMods, reloadHealth, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
 import { gameTools, gbToolId, type GbTool } from "../../lib/gamebanana";
-import { fixerInApp, openFixer, openGbTool } from "../browse/state";
+import { openGbTool } from "../browse/state";
 import { jsonPref } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
 import { Badge, Button, Panel, Skeleton, plural, timeAgo } from "../../ui/kit";
@@ -31,16 +31,18 @@ export function FixesPanel({ game }: { game: GameId }) {
   const broken = (rows ?? []).filter((r) => r.status === "broken");
   const stuck = (rows ?? []).filter((r) => r.status === "unfixable");
   const fixed = (rows ?? []).filter((r) => r.status === "fixed");
+  // everything gachamod can fix: hash swaps here, and mods whose fixer it can get and run
+  const fixable = [...broken, ...stuck.filter((r) => r.tool)];
   const listed = [...broken, ...stuck].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
   const noData = info && !info.pairs && !info.sources.length;
 
   return (
-    <Panel title="Fixes" icon="wand" className="tp tp-fixes" count={rows ? listed.length : undefined}
+    <Panel id="fixes" title="Fixes" icon="wand" className="tp tp-fixes" count={rows ? listed.length : undefined}
       actions={<>
-        {broken.length > 0 && (
+        {fixable.length > 0 && (
           <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}
-            title={`Swap the outdated hashes in ${plural(broken.length, "mod")}. Each gets a backup, and one Undo puts them all back`}
-            onClick={() => void run("all", () => fixMods(game, broken.map((r) => r.modId)))}>{broken.length === 1 ? "Fix 1 mod" : `Fix ${broken.length} mods`}</Button>
+            title={`Fix ${plural(fixable.length, "mod")}: outdated hashes are swapped, and a mod that needs more gets its fixer run on it. Each gets a backup, and Undo puts it back`}
+            onClick={() => void run("all", () => fixMods(game, fixable.map((r) => r.modId)))}>{fixable.length === 1 ? "Fix 1 mod" : `Fix ${fixable.length} mods`}</Button>
         )}
         <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title="Check every mod again"
           onClick={() => void run("check", () => reloadHealth(game))}>Check again</Button>
@@ -48,7 +50,7 @@ export function FixesPanel({ game }: { game: GameId }) {
       <p className="hint tp-intro">
         {noData
           ? "gachamod has no fix data for this game yet. The fixers below may still help."
-          : `A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A backup is kept, and Undo puts the files back.`}
+          : `A game update changes the hashes mods use, and mods that still use the old ones stop showing. gachamod knows the hash changes up to ${info?.currentVersion.split(" ")[0] || "the latest version"} and swaps them in the mod's .ini. A mod that needs more gets its fixer downloaded and run on it. A backup is kept, and Undo puts the files back.`}
       </p>
       {!rows ? (
         <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>
@@ -79,7 +81,7 @@ export function FixesPanel({ game }: { game: GameId }) {
             {info.sources.map((s) => (
               <li key={s.id} className="fx-source">
                 <div className="row">
-                  <button type="button" className="tp-link grow" title={gbToolId(s.url) ? "Open its page" : `Open ${s.url}`} onClick={() => openFixer({ name: s.name, url: s.url })}>{s.name}</button>
+                  <span className="grow">{s.name}</span>
                   {s.checked && <span className="hint">Checked {s.checked}</span>}
                 </div>
                 <span className="hint">{[s.author, s.license && `Licence: ${s.license}`, s.used && `gachamod uses: ${s.used}`].filter(Boolean).join(". ")}</span>
@@ -93,26 +95,30 @@ export function FixesPanel({ game }: { game: GameId }) {
 }
 
 function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy: string | null; run: (key: string, job: () => Promise<unknown>) => Promise<void> }) {
+  const fixerBusy = useFixerBusy();
+  const can = r.status === "broken" || !!r.tool;
+  const fix = () => void run(r.modId, () => fixMods(game, [r.modId]));
+  const from = r.tool && (gbToolId(r.tool.url) !== null ? "GameBanana" : "GitHub");
   return (
     <li className="tp-problem">
       <div className="tp-problem-h row">
         <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: r.modId })}>{r.name}</button>
         {!r.enabled && <Badge tone="muted" title="This mod is off">Off</Badge>}
-        {r.status === "broken" ? (
-          <Button size="sm" icon="wand" busy={busy === r.modId} disabled={!!busy}
-            title={`Swap ${plural(r.swaps, "outdated hash", "outdated hashes")}. A backup is kept and Undo puts it back`}
-            onClick={() => void run(r.modId, () => fixMods(game, [r.modId]))}>Fix</Button>
-        ) : r.tool && (
-          <Button size="sm" icon={fixerInApp(r.tool) ? "downloads" : "external"} title={`It needs more than a hash swap. ${r.tool.name} does the rest. ${fixerInApp(r.tool) ? "Opens its page here, where you can download it" : "Opens its page in your browser"}`}
-            onClick={() => openFixer(r.tool!)}>Get {r.tool.name}</Button>
+        {can && (
+          <Button size="sm" icon="wand" busy={busy === r.modId || fixerBusy.has(`mod:${r.modId}`)} disabled={!!busy}
+            title={r.status === "broken"
+              ? `Swap ${plural(r.swaps, "outdated hash", "outdated hashes")}. A backup is kept and Undo puts it back`
+              : `It needs more than a hash swap. Gets ${r.tool!.name} from ${from} and runs it on this mod. A backup is kept and Undo puts it back`}
+            onClick={fix}>Fix</Button>
         )}
       </div>
       <ul className="tp-problem-items">
         {r.reasons.slice(0, 4).map((t) => (
           <li key={t} className="tp-problem-item row">
-            <Badge tone={r.status === "broken" ? "warn" : "bad"} title={r.status === "broken" ? "gachamod can fix this. Click to fix it" : "gachamod can't fix this by itself. Click to open the fixer's page"}
-              onClick={busy ? undefined : () => { if (r.status === "broken") void run(r.modId, () => fixMods(game, [r.modId])); else if (r.tool) openFixer(r.tool); }}>
-              {r.status === "broken" ? "Fixable" : "Needs a fixer"}
+            <Badge tone={r.status === "broken" ? "warn" : "bad"}
+              title={r.status === "broken" ? "gachamod can fix this. Click to fix it" : r.tool ? `${r.tool.name} fixes this. Click to get it and run it on this mod` : "No fixer handles this yet. The mod needs an update from its author"}
+              onClick={busy || !can ? undefined : fix}>
+              {r.status === "broken" ? "Fixable" : r.tool ? `Needs ${r.tool.name}` : "Needs its author"}
             </Badge>
             <span className="grow tp-problem-t">{t}</span>
           </li>
@@ -160,14 +166,13 @@ function NewFixers({ game }: { game: GameId }) {
   );
 }
 
-/** Download a fixer's newest file in one click, then Show file. gachamod never runs it. */
+/** Download a fixer's newest file in one click. */
 function GetFixer({ game, toolId }: { game: GameId; toolId: number }) {
   const have = useFixerFiles(game).filter((f) => f.toolId === toolId);
   const busy = useFixerBusy();
-  const got = have[have.length - 1];
-  if (got) return <Button size="sm" variant="ghost" icon="folder" title={`Show ${got.file} in File Explorer`} onClick={() => showFixer(got)}>Show file</Button>;
+  if (have.length) return <span className="hint">Downloaded</span>;
   return (
-    <Button size="sm" icon="downloads" busy={busy.has(`tool:${toolId}`)} title="Download its newest file into gachamod's fixers folder. gachamod doesn't run it"
+    <Button size="sm" icon="downloads" busy={busy.has(`tool:${toolId}`)} title="Download its newest file into gachamod's fixers folder"
       onClick={() => void downloadNewestFixer(game, toolId)}>Download</Button>
   );
 }

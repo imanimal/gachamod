@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gacha-core", "src-tauri"]
+members = ["crates/gacha-core", "src-tauri", "src-setup"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +12,13 @@ rust-version = "1.80"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# gachamod setup is a download, so it is built for size (scripts/build-installer.mjs: --profile setup).
+[profile.setup]
+inherits = "release"
+opt-level = "s"
+lto = true
+panic = "abort"
 
 # The 3D preview decodes textures in dev builds too: unoptimised, a 4K DDS takes seconds.
 [profile.dev.package.image]

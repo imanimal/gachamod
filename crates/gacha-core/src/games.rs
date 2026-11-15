@@ -143,6 +143,12 @@ fn user_set(db: &Db, id: &str) -> Result<bool> {
 /// Detection never overwrites these while they exist.
 pub fn save_paths(db: &Db, id: &str, p: &GamePaths) -> Result<()> { write_paths(db, id, p, true) }
 
+/// Forget a game's mod loader after it was uninstalled (its game folder stays), so detection can find a new one.
+pub fn forget_loader(db: &Db, id: &str) -> Result<()> {
+    let p = paths(db, id)?;
+    write_paths(db, id, &GamePaths { game_dir: p.game_dir, importer_dir: None, mods_dir: None, via_xxmi: false }, false)
+}
+
 fn write_paths(db: &Db, id: &str, p: &GamePaths, by_user: bool) -> Result<()> {
     require_def(id)?;
     let clean = |s: &Option<String>| s.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
@@ -158,7 +164,7 @@ fn write_paths(db: &Db, id: &str, p: &GamePaths, by_user: bool) -> Result<()> {
 
 fn not_set_up(id: &str, what: &str) -> Error {
     let name = def(id).map(|g| g.name).unwrap_or(id);
-    Error::NotSetUp(format!("{name}'s {what} isn't set. Pick it in Settings, or install XXMI Launcher and press Detect"))
+    Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games installs its mod loader or finds the folder"))
 }
 
 /// The game's Mods folder (created if its importer folder exists). Every area uses this.
@@ -243,7 +249,8 @@ pub fn discover(xxmi_root: Option<&str>) -> Vec<Found> {
     if let Ok(st) = crate::xxmi::status(xxmi_root) {
         for imp in &st.importers {
             let Some(game) = imp.game.as_deref().and_then(def) else { continue };
-            let dir = imp.importer_dir.as_ref().map(PathBuf::from).filter(|d| d.is_dir());
+            // a loader folder has its d3dx.ini: one left with only Mods in it was uninstalled
+            let dir = imp.importer_dir.as_ref().map(PathBuf::from).filter(|d| d.join("d3dx.ini").is_file());
             let gdir = imp.game_folder.as_ref().map(PathBuf::from).filter(|d| d.is_dir());
             if dir.is_none() && gdir.is_none() { continue; }
             out.push(Found { game: game.id, game_dir: gdir, importer_dir: dir, via_xxmi: true });

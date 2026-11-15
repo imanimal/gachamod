@@ -9,15 +9,22 @@ It's early and Windows only.
 
 ## Install
 
-Download `gachamod_<version>_x64-setup.exe` from the [latest release](https://github.com/imanimal/gachamod/releases/latest)
-and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run
-anyway. It installs for your Windows account and doesn't need administrator rights.
+Download `gachamod-setup.exe` from the [latest release](https://github.com/imanimal/gachamod/releases/latest) and run
+it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway.
+It installs for your Windows account and doesn't need administrator rights. Options has the folder, the desktop
+shortcut and whether gachamod starts as administrator.
+
+Setup takes a game's look when its file name names the game. `gachamod-setup-zzz.exe` opens in the Zenless Zone Zero
+theme, and the release has one for Genshin, Star Rail, Wuthering Waves and Endfield too, so a link like
+`https://github.com/imanimal/gachamod/releases/latest/download/gachamod-setup-genshin.exe` gets Genshin's.
 
 gachamod updates itself. A new version downloads in the background and installs when you close the app, or right
 away if you click Restart in the toast. Settings, Automatic can turn that off.
 
-To uninstall, open Windows Settings, Apps, Installed apps, and pick gachamod. Your mods stay in their folders. Tick
-"Delete the application data" to also remove gachamod's settings, profiles and trash.
+To repair or uninstall, use Open setup in Settings, About, or pick gachamod in Windows Settings, Apps, Installed apps.
+Setup opens in the theme gachamod last showed. Repair puts the program, its shortcuts and its Windows entries back.
+Uninstall leaves your mods in their folders; tick "Also delete gachamod's data" to move its settings, profiles and
+trash to the Recycle Bin too.
 
 Play Genshin, Star Rail, Wuthering Waves or Endfield? Switching skins while you play has only been checked in Zenless
 Zone Zero so far. Start your game, open Help, Check this game, and go through the steps. It takes about ten minutes
@@ -67,8 +74,9 @@ picks up changes on its own:
 
 `npm run app:attach` does the same but uses a dev server that is already running on port 1420. `npm run dev` runs
 the interface alone in a browser at http://localhost:1420 with made-up local data and the real GameBanana.
-`npm run installer` makes a release build and an installer in `target/release/bundle/nsis`; that one is slow and only
-needed to hand the app to someone else.
+`npm run installer` makes a release build, the NSIS installer in `target/release/bundle/nsis` and `gachamod-setup.exe`
+in `target/release/bundle/setup`. It's slow and only needed to hand the app to someone else. `npm run setup` opens
+the setup window from source while `npm run dev` runs.
 
 `npm run release -- 0.1.1` publishes version 0.1.1: it sets the version, builds the installer, signs the update with
 `%USERPROFILE%\.tauri\gachamod.key`, pushes and makes the GitHub release that installed copies update from. Keep a

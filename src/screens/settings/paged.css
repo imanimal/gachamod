@@ -1,0 +1,56 @@
+/* Paged screens (Paged.tsx): Settings and Tools. The pages listed on the left in groups, one page on the right that
+   slides like a scroll when it changes. Colours are theme tokens only. Owner: SETTINGS/AI area. */
+.view > .page.pg-screen { height: 100%; min-height: 0; padding-bottom: 0; }
+.pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 14rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 1.2rem; }
+
+.pg-nav { min-height: 0; display: flex; flex-direction: column; gap: .9rem; padding: .2rem 0 1.4rem; overflow: hidden auto; scrollbar-width: thin; }
+.pg-g { display: flex; flex-direction: column; gap: 2px; }
+.pg-group { padding: 0 .7rem .2rem; color: var(--text-3); font-size: .82em; font-weight: 650; }
+.pg-nav-i { display: flex; align-items: center; gap: .6rem; padding: .42rem .7rem; border-radius: var(--radius-sm); color: var(--text-2);
+  text-align: left; font-size: .93em; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.pg-nav-i .i { width: 1.05rem; height: 1.05rem; flex: none; opacity: .8; }
+.pg-nav-i > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-nav-i:hover { background: var(--hover); color: var(--text); }
+.pg-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* The pages sit on top of each other. The stage reaches a little past the content on each side, so focus rings and
+   theme frames near the edge aren't cut off. */
+.pg-stage { --pg-t: 460ms; --pg-ease: cubic-bezier(.3, .75, .2, 1);
+  position: relative; min-height: 0; overflow: clip; margin: -.5rem -.6rem 0; }
+.pg-page { position: absolute; inset: 0; display: flex; flex-direction: column; padding: .5rem .6rem 1.5rem; overflow: hidden auto;
+  scrollbar-gutter: stable; scroll-behavior: smooth; visibility: hidden; }
+.pg-page.on, .pg-page.out { visibility: visible; }
+.pg-page.out { pointer-events: none; }
+.pg-body { display: flex; flex-direction: column; gap: var(--stack-gap, .9rem); }
+
+/* A page's panel has no fill or frame of its own, in any theme: the page sits on the window's background inside a
+   thin outline, so a short page doesn't look like a small card floating over an empty screen. Themes keep their
+   title style. A theme whose background art is too busy to read over blurs it behind the panel (zzz-screens.css). */
+.pg .pg-page > .pg-body > .panel { padding: 0; border: 0; border-radius: var(--radius); background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.pg .pg-page > .pg-body > .panel::before { display: none; }
+.pg .pg-page > .pg-body > .panel > .panel-h { padding: .6rem 1.1rem; background: none; color: inherit; --text: inherit; --text-2: inherit; --text-3: inherit; --hover: inherit; --line: inherit; }
+.pg .pg-page > .pg-body > .panel > .panel-b { margin: 0; border-radius: 0; background: none; box-shadow: none; }
+.pg .pg-page > .pg-body > .panel:not(.flush) > .panel-b { padding-inline: 1.1rem; }
+
+/* turning a page: the old one moves out the top and the next comes up from below, in one motion like a scroll */
+.pg-page.on.fwd { animation: pgInFwd var(--pg-t) var(--pg-ease) both; }
+.pg-page.out.fwd { animation: pgOutFwd var(--pg-t) var(--pg-ease) both; }
+.pg-page.on.back { animation: pgInBack var(--pg-t) var(--pg-ease) both; }
+.pg-page.out.back { animation: pgOutBack var(--pg-t) var(--pg-ease) both; }
+@keyframes pgInFwd { from { transform: translateY(100%); } }
+@keyframes pgOutFwd { to { transform: translateY(-100%); } }
+@keyframes pgInBack { from { transform: translateY(-100%); } }
+@keyframes pgOutBack { to { transform: translateY(100%); } }
+
+/* a row picked from search: it lights up once it's in view */
+.pg-flash { animation: pgFlash 1.6s var(--ease-out); border-radius: var(--radius-sm); }
+@keyframes pgFlash { 0%, 30% { background: var(--accent-soft); } 100% { background: transparent; } }
+
+/* a narrow window: the list runs across the top */
+@container view (max-width: 46rem) {
+  .pg { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: .5rem; }
+  .pg-nav { flex-direction: row; gap: 2px; padding: 0 0 .3rem; overflow: auto hidden; }
+  .pg-g { display: contents; }
+  .pg-group { display: none; }
+  .pg-nav-i { flex: none; }
+}

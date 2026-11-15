@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { characters as charsApi, errorText, extensions as api, library, owned as ownedApi, settings, shell, type AppStatus, type GameId, type GameState, type InstalledExt } from "../../lib/api";
 import { usePageReloads } from "../../lib/extensions";
+import { accountState } from "../../lib/account";
 import { moveFocusFrom, setFrameNav } from "../../lib/gamepad";
 import { go, VIEWS, type Route, type View } from "../../lib/store";
 import { subscribeTheme, THEME_TOKENS } from "../../lib/theme";
@@ -116,9 +117,10 @@ async function handle(ext: InstalledExt, game: GameId, method: string, params: u
       }));
     }
     case "player": {
-      need(m.permissions.player, "read your player card");
+      need(m.permissions.player, "read your GameBanana name");
+      // the GameBanana name now that the player card is gone; older versions kept a name, title and UID
       const pl = await settings.getJson<{ name?: string; title?: string; uid?: string }>("player", {});
-      return { name: pl.name ?? "", title: pl.title ?? "", uid: pl.uid ?? "" };
+      return { name: accountState().user?.name ?? pl.name ?? "", title: pl.title ?? "", uid: pl.uid ?? "" };
     }
     case "fetch": return api.fetch(ext.id, { url: String(p.url ?? ""), method: typeof p.method === "string" ? p.method : undefined, headers: (p.headers ?? {}) as Record<string, string>, body: typeof p.body === "string" ? p.body : undefined });
     case "readFile": return api.readFile(ext.id, String(p.path ?? ""));

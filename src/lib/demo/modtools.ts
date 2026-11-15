@@ -3,7 +3,7 @@
 import { demoEmit, registerDemo } from "../tauri";
 import { demoDb, demoId, demoNow, demoWait } from "./db";
 import type {
-  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, FixerFile, FixerRequest, ModHealthRow, ExportRequest, HashHit, ImmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
+  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, FixerFile, FixerRequest, FixerRun, ModHealthRow, ExportRequest, HashHit, ImmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
   KeyClash, KeyEdit, KeyEntry, KeyLine, KeyTarget, ModEntry, ModInspect, ModKeys, ModProblems, OnScreenAll, OnScreenMod, PackFiles, PackPreview, PackPreviewMod, PreviewGame, PreviewProfile, ProblemFix,
   ModMesh, VarInfo, VarValue,
 } from "../api";
@@ -99,7 +99,7 @@ const FIXERS: Record<string, { version: string; tool: { name: string; url: strin
   zzz: { version: "2.5", tool: { name: "ZZZ Mod Fixer", url: "https://github.com/Vonksdesu/ZZZ-Mod-Fixer" } },
   ww: { version: "3.5", tool: { name: "Wuwa Mod Fixer", url: "https://github.com/Moonholder/Wuwa_Mod_Fixer" } },
   hsr: { version: "2.3", tool: { name: "HSR Fix", url: "https://github.com/petrascyll/hsr-scripts" } },
-  gi: { version: "4.3", tool: { name: "the fixer on GameBanana", url: "https://gamebanana.com/tools/16433" } },
+  gi: { version: "4.3", tool: { name: "Fix All Character Mods", url: "https://gamebanana.com/tools/16433" } },
 };
 
 function demoHealth(game: string): ModHealthRow[] {
@@ -114,7 +114,11 @@ function demoHealth(game: string): ModHealthRow[] {
       ? { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "fixed", reasons: ["gachamod swapped its outdated hashes"], since: null, tool: null, swaps: 0 }
       : { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "broken", reasons: [`Uses ${who(broken)}'s Body hash from before ${f.version}`, `Uses ${who(broken)}'s Hair hash from before ${f.version}`], since: f.version, tool: null, swaps: 3 });
   }
-  if (stuck) out.push({ modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(stuck)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0 });
+  if (stuck) {
+    out.push(fixDone.has(`${game}|${stuck.id}`)
+      ? { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "fixed", reasons: [`${f.tool.name} fixed it`], since: null, tool: null, swaps: 0 }
+      : { modId: stuck.id, name: stuck.name, enabled: stuck.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(stuck)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0 });
+  }
   return out;
 }
 
@@ -537,6 +541,26 @@ export function registerModtoolsDemo() {
       return out;
     },
     fixers_list: async ({ game }) => { await demoWait(60); return fixerFiles.get(String(game)) ?? []; },
+    fixers_github: async ({ game, source, tool }) => {
+      await demoWait(1200);
+      const name = String(tool).replace(/\s+/g, "_");
+      const dir = ["%APPDATA%", "gachamod", "fixers", String(game), String(tool), name].join("\\");
+      const f: FixerFile = { toolId: 0, fileId: 1000 + String(source).length, tool: String(tool), file: `${name}.exe`, dir, main: `${dir}\\${name}.exe`, at: demoNow(), source: String(source) };
+      fixerFiles.set(String(game), [...(fixerFiles.get(String(game)) ?? []).filter((x) => x.fileId !== f.fileId), f]);
+      return f;
+    },
+    fixers_run: async ({ game, fileId, modId }): Promise<FixerRun> => {
+      await demoWait(1600);
+      const g = String(game);
+      const m = findMod(g, String(modId));
+      const tool = (fixerFiles.get(g) ?? []).find((x) => x.fileId === fileId)?.tool ?? "The fixer";
+      const key = `${g}|${m.id}`;
+      fixDone.add(key);
+      const bid = `fix-${demoId()}`;
+      fixBackups.set(bid, key);
+      return { modId: m.id, name: m.name, changed: 2, stopped: false, output: "Done",
+        backup: { id: bid, game: g, modId: m.id, modDir: m.path, files: [iniOf(m)], created: [], label: `Ran ${tool} on ${m.name}`, at: demoNow() } };
+    },
     fixers_download: async ({ game, req }) => {
       const r = req as FixerRequest;
       if (!/^https:\/\/([a-z0-9-]+\.)?gamebanana\.com\//i.test(r.url)) throw new Error("Fixers are only downloaded from GameBanana");

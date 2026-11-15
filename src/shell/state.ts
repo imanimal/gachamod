@@ -71,26 +71,6 @@ export const toggleHelp = () => help.set(!help.get());
 /** Open the command palette, optionally with text typed in it. */
 export const openPalette = (text?: string) => emitApp({ type: "palette", text });
 
-// ── the tour ──
-
-const TOUR_KEY = "gm.tour";
-const tour = store(false);
-export const useTourOpen = () => useSyncExternalStore(tour.sub, tour.get);
-export const startTour = () => tour.set(true);
-export function endTour() {
-  tour.set(false);
-  try { localStorage.setItem(TOUR_KEY, "done"); } catch { /* storage unavailable */ }
-  introSearch();
-}
-/** Offer the tour once, after the first setup: a toast with a button, so it never gets in the way. */
-export function offerTour(say: (text: string, action: { label: string; run: () => void }) => void) {
-  let seen: string | null = null;
-  try { seen = localStorage.getItem(TOUR_KEY); localStorage.setItem(TOUR_KEY, seen ?? "offered"); } catch { /* storage unavailable */ }
-  if (seen) { introSearch(); return; }
-  say("New here? A short tour shows where things are", { label: "Take the tour", run: startTour });
-  introSearch();
-}
-
 // ── drawing a little attention to the search box ──
 
 const intro = store(0);

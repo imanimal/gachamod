@@ -89,6 +89,12 @@ pub fn run() {
             gacha_core::logs::init(&data_dir);
             gacha_core::logs::catch_panics(env!("CARGO_PKG_VERSION"));
             gacha_core::logs::started(env!("CARGO_PKG_VERSION"));
+            // SYSTEM: Reset gachamod left a note: start over before anything opens the database
+            match gacha_core::reset::finish(&data_dir) {
+                Ok(Some(old)) => gacha_core::logs::info(format!("Started over. The old data is in {}", old.display())),
+                Ok(None) => {}
+                Err(e) => gacha_core::logs::error(format!("Couldn't start over: {e}")),
+            }
             gacha_core::devtools::accept_hand_offs(&app.config().identifier);
             let state = state::AppState::new(data_dir)?;
             app.manage(state);
@@ -198,6 +204,8 @@ pub fn run() {
             commands::modtools::fixes_apply,
             commands::modtools::fixers_list,
             commands::modtools::fixers_download,
+            commands::modtools::fixers_github,
+            commands::modtools::fixers_run,
             commands::modtools::mod_mesh,
             commands::ingame::live_info,
             commands::ingame::live_add,
@@ -254,6 +262,10 @@ pub fn run() {
             commands::system::game_set_shown,
             commands::system::xxmi_status,
             commands::system::xxmi_open,
+            commands::system::xxmi_install,
+            commands::system::xxmi_uninstall,
+            commands::system::app_reset,
+            commands::system::app_relaunch,
             commands::system::launch_config_get,
             commands::system::launch_config_set,
             commands::system::game_launch,
@@ -267,6 +279,9 @@ pub fn run() {
             commands::system::integrations_get,
             commands::system::integration_set,
             commands::system::app_data_dir,
+            commands::system::save_look,
+            commands::system::setup_available,
+            commands::system::setup_open,
             // ── BACKEND ──
             commands::library::mod_fetch_preview,
             commands::library::archive_list,

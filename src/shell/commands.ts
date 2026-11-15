@@ -13,7 +13,7 @@ import { registerMenu, type MenuEntry } from "../ui/ContextMenu";
 import { toast } from "../ui/toast";
 import { play } from "../screens/home/PlayButton";
 import { refreshGameIcon } from "../ui/GameBadge";
-import { sideCollapsed, startTour, toggleHelp, toggleSide } from "./state";
+import { sideCollapsed, toggleHelp, toggleSide } from "./state";
 import { openActivity } from "./Activity";
 import { shuffleOutfits } from "../screens/library/shuffle";
 
@@ -49,7 +49,7 @@ async function checkAppUpdate() {
 }
 
 export function openModsFolder(game: GameState) {
-  if (!game.modsDir) { toast(`${game.name} has no Mods folder yet. Pick one in Settings`); return; }
+  if (!game.modsDir) { toast(`${game.name} has no Mods folder yet`); return; }
   shell.openPath(game.modsDir).catch((e) => toast(errorText(e), true));
 }
 
@@ -106,9 +106,9 @@ registerMenu("game", ({ id }) => {
 
 const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords: string; icon: Command["icon"]; hint?: string }> = [
   { route: { view: "home" }, title: () => "Home", keywords: "start main dashboard overview front", icon: "home", hint: "Ctrl+1" },
-  { route: { view: "library" }, title: () => "Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+2" },
-  { route: { view: "characters" }, title: (g) => charNoun(g), keywords: "characters agents resonators roster heroes cast skins", icon: "characters", hint: "Ctrl+3" },
-  { route: { view: "browse" }, title: () => "Browse GameBanana", keywords: "browse gamebanana online find new mods download discover store shop", icon: "browse", hint: "Ctrl+4" },
+  { route: { view: "library" }, title: () => "Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+3" },
+  { route: { view: "characters" }, title: (g) => charNoun(g), keywords: "characters agents resonators roster heroes cast skins", icon: "characters", hint: "Ctrl+4" },
+  { route: { view: "browse" }, title: () => "Browse GameBanana", keywords: "browse gamebanana online find new mods download discover store shop", icon: "browse", hint: "Ctrl+2" },
   { route: { view: "downloads" }, title: () => "Downloads", keywords: "queue downloading progress installs transfers", icon: "downloads", hint: "Ctrl+5" },
   { route: { view: "profiles" }, title: () => "Profiles", keywords: "presets loadouts sets outfits teams switch save", icon: "profiles", hint: "Ctrl+6" },
   { route: { view: "tools" }, title: () => "Tools", keywords: "utilities fixes launch options shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
@@ -144,7 +144,6 @@ registerCommands("shell.actions", () => {
     { id: "act:sidebar", title: sideCollapsed() ? "Expand the sidebar" : "Collapse the sidebar", section: "Actions", icon: "sidebar", keywords: "sidebar minimise minimize collapse expand hide menu rail compact", hint: "Ctrl+B", run: toggleSide },
     { id: "act:shortcuts", title: "Keyboard shortcuts", section: "Actions", icon: "keyboard", keywords: "keys hotkeys help controller gamepad bindings", hint: "?", run: toggleHelp },
     { id: "act:activity", title: "Show what's running", section: "Actions", icon: "clock", keywords: "loading waiting stuck hung frozen slow busy spinner progress background tasks", run: openActivity },
-    { id: "act:tour", title: "Take the tour", section: "Actions", icon: "sparkle", keywords: "help tutorial guide intro how start new", run: startTour },
     { id: "act:appupdate", title: "Check for gachamod updates", section: "Actions", icon: "update", keywords: "app update new version upgrade", run: () => void checkAppUpdate() },
     { id: "act:kofi", title: "Tip on Ko-fi", section: "Actions", icon: "coffee", keywords: "kofi ko-fi tip donate support coffee money thanks developer", run: openKofi },
     ...NSFW.map(([v, title, keywords]) => ({ id: `act:nsfw:${v}`, title, section: "Actions", icon: (v === "show" ? "eye" : "hide") as Command["icon"], keywords,

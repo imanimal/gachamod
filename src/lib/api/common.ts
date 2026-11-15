@@ -3,7 +3,13 @@ import { call, listen } from "../tauri";
 import { EVENTS, type GameId } from "./types";
 
 /** A message for a toast from the backend. `open`: the mod it is about (an install), which the toast offers to open. */
-export interface ToastEvent { text: string; bad?: boolean; open?: { game: GameId; modId: string } | null }
+export interface ToastEvent {
+  text: string; bad?: boolean; open?: { game: GameId; modId: string } | null;
+  /** A new install (not an update): these mods are turned on next, by the "Turn on new mods" setting. */
+  installed?: string[];
+  /** A download that failed: its game and queue item, so the toast can offer a fix. */
+  failed?: { game: GameId; item: number };
+}
 
 export const app = {
   info: () => call<{ name: string; version: string }>("app_info"),

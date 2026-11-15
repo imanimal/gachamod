@@ -279,13 +279,21 @@ pub fn f10_note(db: &crate::db::Db, game: &str) -> Option<String> {
     Some(format!("Press F10 in the game to load changes. {name} runs as administrator, so gachamod can only send it keys as administrator too"))
 }
 
-/// Start gachamod again as administrator (Windows asks the user first). The caller quits when this returns Ok; the
-/// new copy waits for it (`after_restart`).
-pub fn restart_elevated() -> Result<()> {
+/// Start gachamod again as administrator. Windows asks the player first, in front of `owner` (gachamod's window, 0
+/// for none). True: the new copy is starting, so the caller quits and the new copy waits for it (`after_restart`).
+/// False: the player said no and this copy carries on.
+pub fn restart_elevated(owner: isize) -> Result<bool> {
     let exe = std::env::current_exe()?;
-    if win::run_as_admin(&exe, &format!("--after-restart={}", std::process::id())) { Ok(()) }
-    else { Err(Error::Invalid("gachamod wasn't restarted: Windows didn't get a yes".into())) }
+    crate::logs::info("asking Windows to restart gachamod as administrator");
+    match win::run_as_admin(&exe, &format!("--after-restart={}", std::process::id()), owner) {
+        Ok(()) => Ok(true),
+        Err(ERROR_CANCELLED) => { crate::logs::info("the administrator prompt got a no"); Ok(false) }
+        Err(code) => Err(Error::Invalid(format!("Windows couldn't restart gachamod as administrator (error {code})"))),
+    }
 }
+
+/// Windows' error when the player answers No to its administrator prompt.
+const ERROR_CANCELLED: u32 = 1223;
 
 /// Where Windows keeps "Run this program as an administrator" for each program (the Compatibility tab).
 const LAYERS: &str = "Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
@@ -460,14 +468,38 @@ pub(crate) mod win {
         }
     }
 
-    pub fn run_as_admin(exe: &std::path::Path, args: &str) -> bool {
+    /// Start `exe` as administrator through Windows' prompt, owned by the window `owner` (0: none), and wait for the
+    /// answer. Err holds Windows' error code: 1223 when the player said no.
+    pub fn run_as_admin(exe: &std::path::Path, args: &str, owner: isize) -> Result<(), u32> {
         use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::UI::Shell::ShellExecuteW;
+        use windows_sys::Win32::Foundation::GetLastError;
+        use windows_sys::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+        use windows_sys::Win32::UI::Shell::{ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW};
         use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
         let wide = |s: &std::ffi::OsStr| -> Vec<u16> { s.encode_wide().chain(std::iter::once(0)).collect() };
         let (verb, file, params) = (wide("runas".as_ref()), wide(exe.as_os_str()), wide(args.as_ref()));
-        // SAFETY: every string is zero-terminated and outlives the call. A result above 32 means it started.
-        (unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), params.as_ptr(), std::ptr::null(), SW_SHOWNORMAL) }) as usize > 32
+        // The shell wants COM in a single-threaded apartment, which a pooled worker thread may not have (or may have
+        // the other kind), so the prompt gets a thread of its own. No UI: a refusal comes back as an error code
+        // instead of a Windows message box, and the call returns only once the player has answered.
+        let asked = std::thread::spawn(move || {
+            // SAFETY: COM is set up and torn down on this thread only. Every string is zero-terminated and outlives
+            // the call; the struct is plain data, zeroed, with its size set as the API requires.
+            unsafe {
+                let com = CoInitializeEx(std::ptr::null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as _);
+                let mut sei: SHELLEXECUTEINFOW = std::mem::zeroed();
+                sei.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+                sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+                sei.hwnd = owner as HWND;
+                sei.lpVerb = verb.as_ptr();
+                sei.lpFile = file.as_ptr();
+                sei.lpParameters = params.as_ptr();
+                sei.nShow = SW_SHOWNORMAL as i32;
+                let r = if ShellExecuteExW(&mut sei) != 0 { Ok(()) } else { Err(GetLastError()) };
+                if com >= 0 { CoUninitialize(); }
+                r
+            }
+        });
+        asked.join().unwrap_or(Err(0))
     }
 
     pub fn wait_for_exit(pid: u32, ms: u32) {
@@ -621,7 +653,7 @@ pub(crate) mod win {
     pub fn foreground_in(_pids: &[u32]) -> bool { false }
     pub fn main_window(_pids: &[u32]) -> Option<Win> { None }
     pub fn elevated(_pid: Option<u32>) -> bool { false }
-    pub fn run_as_admin(_exe: &std::path::Path, _args: &str) -> bool { false }
+    pub fn run_as_admin(_exe: &std::path::Path, _args: &str, _owner: isize) -> Result<(), u32> { Err(0) }
     pub fn wait_for_exit(_pid: u32, _ms: u32) {}
     pub fn exclusive_fullscreen() -> bool { false }
     pub fn rect(_w: Win) -> Option<(i32, i32, i32, i32)> { None }

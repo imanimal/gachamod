@@ -109,7 +109,7 @@ function Catalog() {
 export function permissionLines(p: ExtPermissions): string[] {
   const out: string[] = [];
   if (p.library) out.push("Reads your mods and characters");
-  if (p.player) out.push("Reads your player card");
+  if (p.player) out.push("Reads your GameBanana name");
   for (const o of p.net) {
     const m = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(?::(\d+))?$/.exec(o);
     out.push(m ? `Talks to an app on this PC${m[2] ? ` (port ${m[2]})` : ""}` : `Connects to ${o.replace(/^https:\/\//, "")}`);

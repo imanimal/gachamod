@@ -10,7 +10,10 @@ import { dialogs, errorText, fileUrl, installs, queue, type QueueItem, type Queu
 import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
 import { useQueue } from "../browse/useQueue";
 import { openVariantPicker } from "../browse/OnlineOverlays";
+import { EnableNewSwitch } from "../settings/Sections";
+import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/setup";
 import "./downloads.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 const ALL_KEY = "gm.downloads.all";
 const readAll = () => { try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; } };
@@ -73,6 +76,7 @@ export function Downloads() {
   const route = useRoute();
   const snap = useQueue();
   const speeds = useSpeeds(snap);
+  const setup = useSetup();
   const [busy, setBusy] = useState(false);
   const [allPref, setAllPref] = useState(readAll);
   const all = route.tab === "all" || allPref || !game;
@@ -101,6 +105,8 @@ export function Downloads() {
   };
 
   const gameName = (id: string) => games.find((g) => g.id === id)?.short ?? id;
+  /** The game a failed download had nowhere to go in (no Mods folder yet), or null. */
+  const noFolder = (i: QueueItem) => { const g = games.find((x) => x.id === i.req.game); return g && !g.modsDir ? g : null; };
   const row = (i: QueueItem) => {
     const thumb = fileUrl(i.req.thumb ?? i.req.meta.previewUrl ?? null);
     const name = i.req.meta.name || i.req.fileName || "Mod";
@@ -110,7 +116,7 @@ export function Downloads() {
     return (
       <li key={i.id} className={`dl-item is-${i.state}`}>
         <span className="dl-thumb">
-          {thumb ? <img src={thumb} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          {thumb ? <LazyImg src={thumb} alt="" decoding="async" onError={(e) => { e.currentTarget.style.display = "none"; }} />
             : <Icon name={i.req.localPath ? "folder" : "package"} />}
         </span>
         <div className="dl-main">
@@ -131,7 +137,17 @@ export function Downloads() {
             <Button size="sm" icon="mods" onClick={() => go({ view: "library", modId: i.modIds[0] })} disabled={other}
               title={other ? `Switch to ${gameName(i.req.game)} to see it` : "Open it in Mods"}>Show in Mods</Button>
           )}
-          {(i.state === "failed" || i.state === "cancelled") && <Button size="sm" icon="refresh" onClick={() => act(() => queue.retry(i.id))}>Retry</Button>}
+          {(i.state === "failed" || i.state === "cancelled") && (noFolder(i)
+            ? <>
+                <Button size="sm" variant="primary" icon={canInstallLoader(noFolder(i)!) ? "install" : "search"} busy={setup.running}
+                  title={canInstallLoader(noFolder(i)!) ? `Installs XXMI Launcher and ${noFolder(i)!.short}'s mod loader, then installs this mod` : `Looks for ${noFolder(i)!.short}'s Mods folder again, then installs this mod`}
+                  onClick={() => void getReady(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); })}>
+                  {canInstallLoader(noFolder(i)!) ? "Install mod loader" : "Find Mods folder"}
+                </Button>
+                <Button size="sm" icon="folder" title={`Pick ${noFolder(i)!.short}'s Mods folder yourself, then install this mod`}
+                  onClick={() => void pickModsFolder(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); })}>Pick folder</Button>
+              </>
+            : <Button size="sm" icon="refresh" onClick={() => act(() => queue.retry(i.id))}>Retry</Button>)}
           {!finished(i) && i.state !== "installing" && <IconButton icon="x" label="Cancel" onClick={() => act(() => queue.cancel(i.id))} />}
           {finished(i) && <IconButton icon="trash" label="Remove from the list" onClick={() => act(() => queue.remove(i.id))} />}
         </div>
@@ -160,6 +176,7 @@ export function Downloads() {
     <div className="page dl-page">
       <PageHeader title="Downloads" icon="downloads" sub={sub}
         actions={<>
+          <span title="A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods"><EnableNewSwitch size="sm" label="Turn on new mods" /></span>
           {game && <span title="Show the downloads of every game, grouped by game"><Toggle size="sm" checked={all} onChange={setAll} label="All games" /></span>}
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title="Install .zip, .7z or .rar files from this PC (or drop them on the window)">Install from files</Button>
           <Button variant="ghost" icon="trash" disabled={!done.length} title={all ? "Clear every finished download" : `Clear ${game?.short ?? "this game"}'s finished downloads`}

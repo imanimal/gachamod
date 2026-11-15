@@ -5,7 +5,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   ["Ctrl+K", "Search everything: pages, mods, characters, settings, actions"],
   ["/", "Find: the search field of the screen or the open window"],
   ["Ctrl+F", "Find, too"],
-  ["Ctrl+1 … Ctrl+8", "Home, Mods, Characters, Browse, Downloads, Profiles, Tools, Settings"],
+  ["Ctrl+1 … Ctrl+8", "Home, Browse, Mods, Characters, Downloads, Profiles, Tools, Settings"],
   ["Alt+Left, Alt+Right", "Back, forward (mouse buttons 4 and 5 too)"],
   ["Ctrl+Tab, Ctrl+Shift+Tab", "Next or previous game"],
   ["Ctrl+Enter", "Play the current game"],

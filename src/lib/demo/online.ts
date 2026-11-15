@@ -114,7 +114,7 @@ function install(id: number) {
     const m = added[0];
     const verb = cur.req.meta.replaces ? "Updated" : "Installed";
     const what = m?.name ?? "the mod";
-    demoEmit(EVENTS.toast, { text: m?.character ? `${verb} ${what} for ${m.character}` : `${verb} ${what}`, bad: false, open: m ? { game: cur.req.game, modId: m.id } : null });
+    demoEmit(EVENTS.toast, { text: m?.character ? `${verb} ${what} for ${m.character}` : `${verb} ${what}`, bad: false, open: m ? { game: cur.req.game, modId: m.id } : null, installed: cur.req.meta.replaces ? [] : added.map((x) => x.id) });
     pump();
   }, 900));
 }

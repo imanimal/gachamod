@@ -65,7 +65,6 @@ export function ConflictsPanel() {
   };
 
   return (
-    <>
     <Panel id="conflicts" title="Conflicts" icon="layers" className="tp tp-conflicts" count={list ? list.length : undefined}
       actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title="Look for conflicts again">Check again</Button>}>
       <p className="hint tp-intro">Mods that are on and change the same parts of a model. Only one of them shows in game.</p>
@@ -93,14 +92,12 @@ export function ConflictsPanel() {
         </ul>
       )}
     </Panel>
-    <KeyClashesPanel />
-    </>
   );
 }
 
 // ── key clashes ──
 
-function KeyClashesPanel() {
+export function KeyClashesPanel() {
   const { game, list, reload } = useGameList<KeyClash>(modKeys.clashes);
   const gated = useGameList<OnScreenMod>(modKeys.onScreenMods);
   const reloadGated = gated.reload;

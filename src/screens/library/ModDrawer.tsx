@@ -5,7 +5,8 @@
 import { Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { dialogs, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
-import { useModHealth } from "../../lib/fixes";
+import { useFixerBusy, useModHealth } from "../../lib/fixes";
+import { gbToolId } from "../../lib/gamebanana";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { trashPhrase } from "../settings/automatic";
 import { closeRoute, go, useRoute } from "../../lib/store";
@@ -25,7 +26,6 @@ import {
   clearDrawerSection, drawerSectionFor, ownPreview, previewSaved, resetPreview, setFavourite, setOn, setParent, trashMods,
 } from "./actions";
 import { publish } from "./data";
-import { fixerInApp, openFixer } from "../browse/state";
 import { KindLink } from "./ModCard";
 import { ModParts } from "./ModParts";
 import { Preview } from "./Preview";
@@ -114,6 +114,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
   const subs = mods.filter((m) => m.parent === mod.id);
   const blurred = mod.nsfw && nsfw !== "show" && !reveal;
   const broken = health && (health.status === "broken" || health.status === "unfixable");
+  const fixerBusy = useFixerBusy();
   return (
     <Drawer className="mod-drawer" title={mod.name} onClose={onClose}
       actions={<Toggle checked={mod.enabled} onChange={(v) => void setOn(game, [mod], v, mods)} label={mod.enabled ? "On" : "Off"} />}
@@ -194,7 +195,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="note t-warn mod-drawer-health" role="status">
           <Icon name="warn" />
           <div className="mod-drawer-health-t">
-            <strong>{health.status === "broken" ? "A game update broke this mod" : "A game update broke this mod, and gachamod can't fix it by itself"}</strong>
+            <strong>{health.status === "broken" || health.tool ? "A game update broke this mod" : "A game update broke this mod, and gachamod can't fix it by itself"}</strong>
             {health.reasons.length > 0 && <span>{health.reasons.slice(0, 4).join(". ")}</span>}
             <span className="mod-drawer-health-a">
               {health.status === "broken" && (
@@ -202,8 +203,8 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
                   title="Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back">Fix</Button>
               )}
               {health.status === "unfixable" && health.tool && (
-                <Button size="sm" variant="primary" icon={fixerInApp(health.tool) ? "downloads" : "external"} onClick={() => openFixer(health.tool!)}
-                  title={`${health.tool.name} rewrites what a hash swap can't. ${fixerInApp(health.tool) ? "Opens its page here, where you can download it" : "Opens its page in your browser"}`}>Get {health.tool.name}</Button>
+                <Button size="sm" variant="primary" icon="wand" busy={fixerBusy.has(`mod:${mod.id}`)} onClick={() => void fixForUpdate(game, [mod])}
+                  title={`Gets ${health.tool.name} from ${gbToolId(health.tool.url) !== null ? "GameBanana" : "GitHub"} and runs it on this mod. A backup is kept and Undo puts it back`}>Fix</Button>
               )}
               {health.status === "unfixable" && aiShown("useful", aiShow) && (
                 <Button size="sm" icon="ai" onClick={() => askAi({ kind: "fix-mod", game, modIds: [mod.id], detail: health.reasons.join("\n") })}

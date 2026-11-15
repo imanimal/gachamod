@@ -14,6 +14,7 @@ import { toast } from "../../ui/toast";
 import { fileName, setToolsCount } from "./toolsBadge";
 import { badgeCount, loadLint, useIgnored, useLint } from "./problems";
 import "./modtools.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 type ExportJob = { game: GameId; scope: PackScope; modIds: string[]; profileId: number | null };
 
@@ -378,7 +379,7 @@ function PackRow({ m, heading, thumb, on, disabled, onChange }:
         <Checkbox checked={on} disabled={disabled} onChange={onChange} label={
           <span className="pack-mod-main">
             <span className="pack-mod-img" aria-hidden="true">
-              {src && !broken ? <img src={src} alt="" loading="lazy" decoding="async" onError={() => setBroken(true)} /> : <Icon name="package" />}
+              {src && !broken ? <LazyImg src={src} alt="" decoding="async" onError={() => setBroken(true)} /> : <Icon name="package" />}
             </span>
             <span className="pack-mod-t">
               <span className="pack-mod-name">{m.name}</span>

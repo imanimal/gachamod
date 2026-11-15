@@ -5,7 +5,7 @@ import { call, inTauri } from "../tauri";
 export interface ExtPermissions {
   /** Read the mods, characters and owned characters of the game on screen. */
   library: boolean;
-  /** Read the player card (name, title, UID). */
+  /** Read the GameBanana name (title and UID are from older versions and usually empty). */
   player: boolean;
   /** Web origins it may call through gachamod. */
   net: string[];

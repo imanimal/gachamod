@@ -7,7 +7,7 @@ import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, 
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { appUpdateCheckPref, autoRescanPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, trashDaysPref, useTrashDays } from "./automatic";
+import { appUpdateCheckPref, autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
 import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "../library/shuffle";
 
@@ -43,12 +43,22 @@ function ShuffleRow() {
   );
 }
 
+/** Also on the Downloads page, where installs happen. */
+export function EnableNewSwitch({ size, label }: { size?: "sm"; label?: string }) {
+  const on = enableNewPref.use();
+  return <Toggle size={size} label={label} checked={on} onChange={(v) => void enableNewPref.set(v, v ? "New mods turn on when they install" : "New mods stay off until you turn them on")} />;
+}
+
 export function ModsSection() {
   const shown = useGames().filter((g) => g.shown);
   const nsfw = useNsfw();
   return (
     <Panel title="Mods" icon="mods" id="mods">
       <div className="set-rows">
+        <SetRow id="set-enable-new" label="Turn on new mods" hint="A mod you install turns on right away, and its character's other skin turns off"
+          tip="Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was">
+          <EnableNewSwitch />
+        </SetRow>
         <SetRow id="set-nsfw" label="Mods for adults" hint="Previews marked NSFW on GameBanana or by you">
           <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
             options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
@@ -117,6 +127,10 @@ export function AutomaticSection() {
         <SetRow id="set-all-parts" label="Install every mod in an archive" hint="Skips the window that asks which ones to install"
           tip="Some downloads hold several mods, like a skin and its icons. They install as one mod, and its details let you turn each part on or off">
           <Switch p={installAllPartsPref} on="Archives with several mods install all of them" off="Asking which mods to install from an archive" />
+        </SetRow>
+        <SetRow id="set-other-servers" label="Move slow downloads to another server" hint="When a GameBanana download stays under 1 MB/s"
+          tip="GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one">
+          <Switch p={otherServersPref} on="Slow downloads move to another server" off="Downloads stay on the server GameBanana picks" />
         </SetRow>
         <SetRow id="set-fix-updates" label="Look for new mod fixers" tip="When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded"
           hint="For mods a game update broke">

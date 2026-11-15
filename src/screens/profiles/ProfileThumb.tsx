@@ -9,6 +9,7 @@ import { onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
 import { useCharacters } from "./data";
 import { ProfileIcon } from "./ProfileIcon";
+import { LazyImg } from "../../ui/LazyImg";
 
 const TTL = 20_000;
 const modLists = new Map<GameId, { at: number; p: Promise<Map<string, ModEntry>> }>();
@@ -96,7 +97,7 @@ export function ProfileThumb({ game, profileId, size = "card", className, profil
     const first = p?.icon ? undefined : ok[0];
     return (
       <span className={`pthumb pthumb-mini${first ? " has-img" : ""}${className ? ` ${className}` : ""}`} style={{ ...color, width: px, height: px }}>
-        {first ? <img src={first.src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => lose(first.src)} />
+        {first ? <LazyImg src={first.src} alt="" decoding="async" draggable={false} onError={() => lose(first.src)} />
           : p ? <ProfileIcon profile={p} chars={chars} size={px} /> : null}
       </span>
     );
@@ -105,7 +106,7 @@ export function ProfileThumb({ game, profileId, size = "card", className, profil
   return (
     <span className={`pthumb pthumb-card${shown.length ? " has-img" : ""}${className ? ` ${className}` : ""}`} data-n={shown.length} style={color}>
       {shown.length
-        ? shown.map((x) => <img key={x.src} src={x.src} alt="" title={x.name} loading="lazy" decoding="async" draggable={false} onError={() => lose(x.src)} />)
+        ? shown.map((x) => <LazyImg key={x.src} src={x.src} alt="" title={x.name} decoding="async" draggable={false} onError={() => lose(x.src)} />)
         : p ? <span className="pthumb-face"><ProfileIcon profile={p} chars={chars} size={56} /></span> : null}
     </span>
   );

@@ -14,6 +14,7 @@ import { closeNewProfile, makeProfile, patchProfile, useNewProfileRequest, type 
 import { knownProfiles, useCharacters } from "./data";
 import { HotkeyField } from "./HotkeyField";
 import { PROFILE_GLYPHS, ProfileIcon } from "./ProfileIcon";
+import { LazyImg } from "../../ui/LazyImg";
 
 const EMOJIS = ["⭐", "🔥", "🌙", "☀️", "🌸", "🌊", "⚡", "❄️", "🍀", "🎀", "💎", "🗡️", "🛡️", "🎮", "🎧", "🎵", "📸", "🏖️", "🎃", "🎄",
   "🦈", "🐱", "🐰", "🦊", "🐺", "🐉", "🦋", "🍓", "🍜", "☕", "💜", "💙", "💚", "🧡", "🖤", "🤍", "👑", "🌈", "🚀", "🏆"];
@@ -275,7 +276,7 @@ function IconPicker({ icon, color, name, chars, onIcon, onColor }:
                 const v = `char:${c.name}`;
                 return (
                   <button key={c.name} type="button" role="radio" aria-checked={icon === v} className={`pe-tile pe-portrait${icon === v ? " on" : ""}`} title={c.name} onClick={() => onIcon(v)}>
-                    <img src={c.icon!} alt={c.name} loading="lazy" decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
+                    <LazyImg src={c.icon!} alt={c.name} decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                   </button>
                 );
               })}

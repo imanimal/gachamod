@@ -31,6 +31,7 @@ import { PlayButton } from "./PlayButton";
 import { DEFAULT_LAYOUT, WIDGETS, homeLayoutPref, move, normalize, setHomeEditing, setShown, useHomeEditing, type HomeLayout, type WidgetId } from "./layout";
 import "./commands";
 import "./home.css";
+import { LazyImg } from "../../ui/LazyImg";
 
 export function Home() {
   const game = useGame();
@@ -173,13 +174,13 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
 
   return (
     <section className="home-quick" style={{ "--g-accent": game.accent } as CSSProperties} aria-label="Play and profiles">
-      {banner && bannerOk && <img className="home-quick-img" src={banner} alt="" loading="lazy" decoding="async" onError={() => setBannerOk(false)} />}
+      {banner && bannerOk && <LazyImg className="home-quick-img" src={banner} alt="" decoding="async" onError={() => setBannerOk(false)} />}
       <div className="home-quick-top">
         <div className="home-quick-game">
           <h1 className="home-quick-name">{game.name}</h1>
           <p className="home-quick-status">
             <span>{status}</span>
-            <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+2)">{on} of {plural(total, "mod")} on</button>
+            <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+3)">{on} of {plural(total, "mod")} on</button>
             {importerUpdate && <Badge tone="info" icon="update" title={`XXMI Launcher installs ${game.importer} ${game.importerLatest} when it next starts. Click for its settings`} onClick={() => go({ view: "settings", section: "xxmi" })}>{game.importerLatest} available</Badge>}
           </p>
         </div>
@@ -255,7 +256,7 @@ function ModThumb({ src, adult, mode }: { src?: string | null; adult: boolean; m
   useEffect(() => setBroken(false), [src]);
   return (
     <span className={`home-tile-img${adult && mode === "blur" ? " nsfw-blur" : ""}`}>
-      {src && !broken ? <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={() => setBroken(true)} /> : <Icon name="image" className="thumb-ph" />}
+      {src && !broken ? <LazyImg src={src} alt="" decoding="async" draggable={false} onError={() => setBroken(true)} /> : <Icon name="image" className="thumb-ph" />}
     </span>
   );
 }

@@ -4,15 +4,15 @@
 //   npm run release -- 0.1.1           set the version to 0.1.1 everywhere, commit it, then release
 //   npm run release -- 0.1.1 --notes "Fixed the profile list"
 //
-// It builds the signed installer (scripts/build-installer.mjs), writes latest.json, pushes the current branch and
-// makes the GitHub release v<version> with both. Installed copies read releases/latest/download/latest.json and
-// only install an installer signed with the key in %USERPROFILE%\.tauri\gachamod.key, so keep a copy of that key
-// somewhere safe: without it no update can reach installed copies.
+// It builds the signed installer and gachamod setup (scripts/build-installer.mjs), writes latest.json, pushes the
+// current branch and makes the GitHub release v<version> with them. Installed copies read latest.json from the newest
+// release and only install an installer signed with the key in %USERPROFILE%\.tauri\gachamod.key, so keep a copy of
+// that key somewhere safe: without it no update can reach installed copies.
 //
 // Needs a clean working tree and the GitHub CLI (gh) signed in. Without --notes, the notes list the commits since
 // the last release.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,12 +98,21 @@ const build = spawnSync("node", [at("scripts/build-installer.mjs")], { cwd: root
 if (build.status !== 0) fail("The build failed, so nothing was released. A version change stays in your working tree.");
 
 const dir = at("target/release/bundle/nsis");
-const setup = `gachamod_${version}_x64-setup.exe`;
-if (!existsSync(join(dir, setup)) || !existsSync(join(dir, `${setup}.sig`))) fail(`The build didn't make ${setup} and its .sig in ${dir}.`);
-const signature = readFileSync(join(dir, `${setup}.sig`), "utf8").trim();
-const url = `https://github.com/${REPO}/releases/download/${tag}/${setup}`;
+const nsis = `gachamod_${version}_x64-setup.exe`;
+if (!existsSync(join(dir, nsis)) || !existsSync(join(dir, `${nsis}.sig`))) fail(`The build didn't make ${nsis} and its .sig in ${dir}.`);
+const setupDir = at("target/release/bundle/setup");
+const setups = existsSync(setupDir) ? readdirSync(setupDir).filter((f) => f.endsWith(".exe")).map((f) => join(setupDir, f)) : [];
+if (!setups.some((f) => f.endsWith("gachamod-setup.exe"))) fail(`The build didn't make gachamod-setup.exe in ${setupDir}.`);
 const out = at("target/release/bundle/release");
+rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+// NSIS's installer goes up as the update file, so the download people pick is gachamod-setup.exe. The signature
+// covers the file's bytes, not its name.
+const update = `gachamod_${version}_update.exe`;
+copyFileSync(join(dir, nsis), join(out, update));
+copyFileSync(join(dir, `${nsis}.sig`), join(out, `${update}.sig`));
+const signature = readFileSync(join(out, `${update}.sig`), "utf8").trim();
+const url = `https://github.com/${REPO}/releases/download/${tag}/${update}`;
 const latest = join(out, "latest.json");
 writeFileSync(latest, JSON.stringify({
   version,
@@ -124,11 +133,11 @@ const sha = run("git", ["rev-parse", "HEAD"]).out;
 const body = join(out, "notes.md");
 writeFileSync(body, `${notes}
 
-Download \`${setup}\` and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway.
+Download \`gachamod-setup.exe\` and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway. The \`gachamod-setup-<game>.exe\` files are the same installer in that game's theme.
 
-Already have gachamod? It updates by itself: the new version downloads in the background and installs when you close gachamod.
+Already have gachamod? It updates by itself: the new version downloads in the background and installs when you close gachamod. \`${update}\` is the file it downloads.
 `);
-run("gh", ["release", "create", tag, join(dir, setup), join(dir, `${setup}.sig`), latest,
+run("gh", ["release", "create", tag, ...setups, join(out, update), join(out, `${update}.sig`), latest,
   "-R", REPO, "--target", sha, "--title", `gachamod ${version}`, "--notes-file", body, "--latest"], { show: true });
 run("git", ["fetch", "--tags", "origin"], { ok: true });
 console.log(`\nReleased https://github.com/${REPO}/releases/tag/${tag}`);
