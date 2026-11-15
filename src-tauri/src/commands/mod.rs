@@ -11,4 +11,5 @@ pub mod library;
 pub mod modtools;
 pub mod online;
 pub mod profiles;
+pub mod report;
 pub mod system;

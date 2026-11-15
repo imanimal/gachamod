@@ -494,7 +494,7 @@ pub fn source(db: &crate::db::Db, game: &str, id: &str) -> Result<(PathBuf, Vec<
     let dir = PathBuf::from(&m.path);
     if !dir.is_dir() { return Err(Error::Invalid(format!("{}'s folder isn't there any more. Rescan to update the list", m.name))); }
     let mut saved = crate::library::saved_vars(db, game, id).unwrap_or_default();
-    if saved.is_empty() && m.enabled {
+    if saved.is_empty() && m.loaded() {
         if let Ok(imp) = crate::games::importer_dir(db, game) { saved = crate::ini::user_vars(&imp, &m.rel_path).unwrap_or_default(); }
     }
     Ok((dir, saved))

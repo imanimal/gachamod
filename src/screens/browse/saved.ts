@@ -40,7 +40,7 @@ export function describe(f: BrowseFilters): string {
     f.hq && "High quality",
     f.followed && "Following",
     f.hideInstalled && "Not installed",
-    f.sort !== "popular" && sortLabel(f.sort),
+    f.sort !== "popular" && f.sort !== "relevance" && sortLabel(f.sort),
   ].filter(Boolean) as string[];
   return parts.join(", ") || sortLabel(f.sort);
 }

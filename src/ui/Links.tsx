@@ -4,7 +4,7 @@
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import type { GameId } from "../lib/api";
 import type { GbCategoryRef } from "../lib/gamebanana";
-import { setFilters } from "../screens/browse/state";
+import { openWithFilters } from "../screens/browse/state";
 import { go } from "../lib/store";
 import { menuFor, menuHandler } from "./ContextMenu";
 import { Portrait } from "./Portrait";
@@ -46,7 +46,7 @@ export function CreatorLink({ id, name, avatar, modId, children, className }:
 /** A GameBanana category's name ("UI", "Weapons"): click shows its mods in Browse, right-click the same. */
 export function CategoryLink({ game, category, children, className }:
   { game: GameId; category: GbCategoryRef; children?: ReactNode; className?: string }) {
-  const open = () => { setFilters(game, { category, character: null }); go({ view: "browse" }); };
+  const open = () => { openWithFilters(game, { category, character: null }); go({ view: "browse" }); };
   return (
     <span role="link" tabIndex={0} className={`qlink qlink-cat${className ? ` ${className}` : ""}`} title={`Browse ${category.name} mods`}
       onClick={(e) => { stop(e); e.preventDefault(); open(); }}

@@ -452,7 +452,13 @@ pub fn running_games() -> Vec<&'static str> { running_in(&processes()) }
 
 /// True while one of the game's processes runs.
 /// In unit tests this is always false, so a game open on the PC running the tests can't change their results.
-pub fn running(game: &str) -> bool { !cfg!(test) && !game_pids(&processes(), game).is_empty() }
+pub fn running(game: &str) -> bool {
+    if cfg!(test) { return TEST_RUNNING.with(|r| r.get()); }
+    !game_pids(&processes(), game).is_empty()
+}
+
+// Tests never look at the real processes: a game counts as running when a test on this thread says so.
+thread_local! { pub(crate) static TEST_RUNNING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
 
 /// True while a process with this exe name runs (case-insensitive, e.g. "XXMI Launcher.exe"). One cheap process
 /// snapshot; other areas use it to check for XXMI Launcher and IMM.

@@ -286,7 +286,8 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .toast { pointer-events: auto; position: relative; overflow: hidden; display: flex; align-items: center; gap: .65rem; max-width: 30rem; padding: .7rem .7rem .7rem 1rem; border-radius: var(--radius);
   background: var(--surface-2); box-shadow: var(--shadow-lg), inset 0 0 0 1px var(--line-2); animation: toastIn var(--dur-slow) var(--ease-out); }
 .toast.gone { animation: toastOut 200ms ease-in forwards; }
-.toast .tt { flex: 1; min-width: 0; }
+/* never a wall of text: past three lines the rest is in the hover tip */
+.toast .tt { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 .toast > .i { color: var(--ok); }
 .toast.bad > .i { color: var(--bad); }
 .toast-act { flex: none; font-weight: 750; color: var(--accent-ink); padding: .3rem .6rem; border-radius: 7px; }
@@ -476,3 +477,8 @@ button.gallery-main { cursor: zoom-in; }
 .page-h.is-stuck .page-h-a { flex: 1; min-width: 0; }
 .page-h.is-stuck .page-h-a { flex-wrap: nowrap; }
 .page-h.is-stuck .page-h-a > .search { flex: 1 1 8rem; min-width: 8rem; width: auto; }
+
+/* a wait that says what it's for (kit Waiting) */
+.waiting { display: flex; flex-direction: column; gap: .5rem; }
+.waiting-t { display: flex; align-items: center; gap: .5rem; color: var(--text-2); }
+.waiting-hold { max-width: 34rem; color: var(--text-2); font-size: .86rem; line-height: 1.45; }

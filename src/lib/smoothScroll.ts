@@ -49,10 +49,11 @@ export function glide(el: Element, axis: "x" | "y", delta: number) {
   const from = run ? run.target : pos();
   const target = Math.max(0, Math.min(max, from + delta));
   if (run) { run.target = target; return; }
-  const r: Run = { target, last: pos(), raf: 0, t: performance.now() };
+  const r: Run = { target, last: pos(), raf: 0, t: 0 };
   state[axis] = r;
   const step = (now: number) => {
-    const dt = Math.min(64, now - r.t);
+    // a frame's timestamp can be older than the wheel event, so the first frame counts as one frame, never less
+    const dt = r.t ? Math.max(1, Math.min(64, now - r.t)) : 16.7;
     r.t = now;
     const cur = pos();
     if (Math.abs(cur - r.last) > 3) { state[axis] = undefined; return; }
@@ -65,6 +66,50 @@ export function glide(el: Element, axis: "x" | "y", delta: number) {
     r.raf = requestAnimationFrame(step);
   };
   r.raf = requestAnimationFrame(step);
+}
+
+const jumps = new WeakMap<Element, () => void>();
+const STOPPERS = ["wheel", "pointerdown", "keydown", "touchstart"] as const;
+
+/** Scroll `view` to put `el` where scrollIntoView would (scroll padding and margins count), in the same short time
+ * however far it is: a far target jumps to about a screen away and glides the rest. The browser's own smooth scroll
+ * takes over a second across a long page. Wheel, key or pointer input stops it, and so does a newer jump. `done` runs
+ * once it arrives or stops. */
+export function scrollToElement(view: HTMLElement, el: Element, block: ScrollLogicalPosition, done?: () => void) {
+  jumps.get(view)?.();
+  const from = view.scrollTop;
+  el.scrollIntoView({ block, behavior: "instant" });
+  const goal = view.scrollTop;
+  // where el sits in the page, to follow it if something above finishes loading and pushes it down mid-scroll
+  const offset = () => el.getBoundingClientRect().top - view.getBoundingClientRect().top + view.scrollTop;
+  const at = offset();
+  let raf = 0, t0 = 0, over = false;
+  const finish = () => {
+    if (over) return;
+    over = true;
+    cancelAnimationFrame(raf);
+    for (const e of STOPPERS) view.removeEventListener(e, finish);
+    if (jumps.get(view) === finish) jumps.delete(view);
+    done?.();
+  };
+  const d = goal - from;
+  if (reduced() || Math.abs(d) < 1) { finish(); return; }
+  const near = Math.max(240, view.clientHeight * 0.6);
+  const start = Math.abs(d) > near ? goal - Math.sign(d) * near : from;
+  const dur = Math.min(240, 120 + Math.min(Math.abs(d), near) * 0.15);
+  view.scrollTo({ top: start, behavior: "instant" });
+  jumps.set(view, finish);
+  for (const e of STOPPERS) view.addEventListener(e, finish, { passive: true });
+  const step = (now: number) => {
+    if (!t0) t0 = now;
+    const p = Math.min(1, (now - t0) / dur);
+    const target = Math.max(0, Math.min(view.scrollHeight - view.clientHeight, goal + offset() - at));
+    view.scrollTo({ top: start + (target - start) * (1 - Math.pow(1 - p, 3)), behavior: "instant" });
+    if (p < 1) { raf = requestAnimationFrame(step); return; }
+    el.scrollIntoView({ block, behavior: "instant" });
+    finish();
+  };
+  raf = requestAnimationFrame(step);
 }
 
 /** Smooth the mouse wheel everywhere in the window. Returns a function that stops it. */

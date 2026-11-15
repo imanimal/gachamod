@@ -1,16 +1,16 @@
 // A mod's details in a drawer (the route's modId, so Back closes it): big preview, its character and creator as
 // links, a warning with Fix when a game update broke it, a quick switch for how mods for adults show, name,
-// character, tags and notes (every edit with Undo), its keys and in-game options, then the files.
+// character, tags and notes (every edit with Undo), its parts, keys and in-game options, then the files.
 // Owner: LIBRARY area.
 import { Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent } from "react";
-import { dialogs, errorText, library, shell, type GameId, type ModEntry } from "../../lib/api";
+import { dialogs, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import { useModHealth } from "../../lib/fixes";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { trashPhrase } from "../settings/automatic";
 import { closeRoute, go, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
-import { Button, Drawer, Row, Segmented, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { Button, Drawer, IconButton, Row, Segmented, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
 import { KeyEditor } from "../../ui/KeyEditor";
@@ -21,10 +21,13 @@ import { InGameOptions } from "../ingame/InGameOptions";
 import { ModInsides } from "../modtools/ModInsides";
 import { characterNames } from "../characters/roster";
 import {
-  addTag, fixForUpdate, getUpdate, openFolder, openOnGb, patchMods, previewFromGb, removeTag, renameMod, setAdult, setCharacter,
-  clearDrawerSection, drawerSectionFor, ownPreview, previewSaved, resetPreview, setFavourite, setOn, trashMods,
+  addTag, fixForUpdate, getUpdate, openDetails, openFolder, openOnGb, patchMods, previewFromGb, removeTag, renameMod, setAdult, setCharacter,
+  clearDrawerSection, drawerSectionFor, ownPreview, previewSaved, resetPreview, setFavourite, setOn, setParent, trashMods,
 } from "./actions";
 import { publish } from "./data";
+import { fixerInApp, openFixer } from "../browse/state";
+import { KindLink } from "./ModCard";
+import { ModParts } from "./ModParts";
 import { Preview } from "./Preview";
 
 // three.js is large: the 3D view loads the first time it opens
@@ -42,16 +45,16 @@ export function ModDrawerHost({ game, mods, loaded }: { game: GameId; mods: ModE
       .catch(() => { if (live) { toast("That mod isn't installed anymore"); closeRoute(["modId"]); } });
     return () => { live = false; };
   }, [game, id, loaded, mod]);
-  return mod ? <ModDrawer game={game} mod={mod} onClose={() => closeRoute(["modId"])} /> : null;
+  return mod ? <ModDrawer game={game} mod={mod} mods={mods} onClose={() => closeRoute(["modId"])} /> : null;
 }
 
 const NSFW_OPTIONS: Array<{ value: NsfwMode; label: string; title: string }> = [
   { value: "hide", label: nsfwLabel("hide"), title: "Mods for adults don't show anywhere" },
   { value: "blur", label: nsfwLabel("blur"), title: "Their pictures are blurred until you click Show" },
-  { value: "show", label: nsfwLabel("show"), title: "Shown like any other mod" },
+  { value: "show", label: nsfwLabel("show"), title: "Pictures show unblurred. Warning: No panic button, sorry" },
 ];
 
-export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry; onClose: () => void }) {
+export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: ModEntry; mods: ModEntry[]; onClose: () => void }) {
   const nsfw = useNsfw();
   const health = useModHealth(game).get(mod.id);
   const aiShow = useAiShow();
@@ -83,7 +86,7 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
     const sec = drawerSectionFor(mod.id);
     if (!sec) return;
     if (sec === "model") { setModel(true); clearDrawerSection(); return; }
-    const sel = { keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts", ingame: ".mi-ingame" }[sec];
+    const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts", ingame: ".mi-ingame" }[sec];
     let tries = 0;
     const find = () => {
       const el = document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
@@ -107,11 +110,13 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
   };
   const getPreview = async () => { setFetching(true); await previewFromGb(game, mod); setFetching(false); };
 
+  const parentMod = mod.parent ? mods.find((m) => m.id === mod.parent) : undefined;
+  const subs = mods.filter((m) => m.parent === mod.id);
   const blurred = mod.nsfw && nsfw !== "show" && !reveal;
   const broken = health && (health.status === "broken" || health.status === "unfixable");
   return (
     <Drawer className="mod-drawer" title={mod.name} onClose={onClose}
-      actions={<Toggle checked={mod.enabled} onChange={(v) => void setOn(game, [mod], v)} label={mod.enabled ? "On" : "Off"} />}
+      actions={<Toggle checked={mod.enabled} onChange={(v) => void setOn(game, [mod], v, mods)} label={mod.enabled ? "On" : "Off"} />}
       footer={<>
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
           title={`Its files ${trashPhrase()}. A short record stays in Mods, Trash so you can download it again`}>Move to trash</Button>
@@ -139,10 +144,8 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
               Get preview from GameBanana
             </Button>
           )}
-          <Button size="sm" className="on-img" icon="image" busy={pic.busy} onClick={() => void pic.pick()}
-            title="Pick an image for this mod. You can also drop one here or paste one with Ctrl+V">
-            {mod.customPreview ? "Change preview" : "Set preview"}
-          </Button>
+          <IconButton size="sm" variant="secondary" className="on-img" icon="edit" disabled={pic.busy} onClick={() => void pic.pick()}
+            label={`${mod.customPreview ? "Change" : "Set"} the preview: pick an image, drop one here or paste one with Ctrl+V`} />
           {mod.customPreview && (
             <Button size="sm" className="on-img" icon="undo" disabled={pic.busy} onClick={() => void pic.clear()}
               title="Go back to the picture the mod came with. Also in the mod's menu">Reset preview</Button>
@@ -159,10 +162,33 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
       )}
 
       <p className="mod-drawer-who">
-        {mod.character ? <CharLink game={game} name={mod.character} portrait /> : <span className="hint">No character</span>}
+        {mod.character ? <CharLink game={game} name={mod.character} portrait /> : <KindLink mod={mod} />}
         {mod.source?.submitter && <> <span className="hint">by</span> <CreatorLink name={mod.source.submitter} modId={mod.source.modId} /></>}
         {mod.version && <span className="hint"> · v{mod.version.replace(/^v/i, "")}</span>}
       </p>
+
+      {mod.parent && (
+        <div className="mod-drawer-family">
+          <Icon name="link" />
+          {parentMod
+            ? <span>Sub-mod of <button type="button" className="link-btn" onClick={() => openDetails(parentMod)} title={`Open ${parentMod.name}. ${mod.name} turns off with it and comes back with it`}>{parentMod.name}</button></span>
+            : <span className="hint">The mod it went with isn't installed anymore</span>}
+          <Button size="sm" variant="ghost" onClick={() => void setParent(game, mod, "", mods)}
+            title="Make it a mod of its own again, so turning it on asks about the character's other mods">Unlink</Button>
+        </div>
+      )}
+      {subs.length > 0 && (
+        <div className="mod-drawer-family">
+          <Icon name="link" />
+          <span className="hint" title="Add-ons that go with this mod. They turn off with it and come back when it is turned on">Sub-mods</span>
+          {subs.map((s) => (
+            <span key={s.id} className="mod-drawer-sub">
+              <Toggle size="sm" checked={s.enabled} onChange={(v) => void setOn(game, [s], v, mods)} label={<span className="sr-only">{s.enabled ? `${s.name} is on` : `${s.name} is off`}</span>} />
+              <button type="button" className="link-btn" onClick={() => openDetails(s)} title={`Open ${s.name}`}>{s.name}</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {broken && (
         <div className="note t-warn mod-drawer-health" role="status">
@@ -176,8 +202,8 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
                   title="Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back">Fix</Button>
               )}
               {health.status === "unfixable" && health.tool && (
-                <Button size="sm" variant="primary" icon="external" onClick={() => void shell.openUrl(health.tool!.url)}
-                  title={`${health.tool.name} rewrites what a hash swap can't. Opens its page`}>Get {health.tool.name}</Button>
+                <Button size="sm" variant="primary" icon={fixerInApp(health.tool) ? "downloads" : "external"} onClick={() => openFixer(health.tool!)}
+                  title={`${health.tool.name} rewrites what a hash swap can't. ${fixerInApp(health.tool) ? "Opens its page here, where you can download it" : "Opens its page in your browser"}`}>Get {health.tool.name}</Button>
               )}
               {health.status === "unfixable" && aiShown("useful", aiShow) && (
                 <Button size="sm" icon="ai" onClick={() => askAi({ kind: "fix-mod", game, modIds: [mod.id], detail: health.reasons.join("\n") })}
@@ -226,11 +252,12 @@ export function ModDrawer({ game, mod, onClose }: { game: GameId; mod: ModEntry;
 
         <div className="mod-drawer-flags">
           <Toggle checked={mod.favorite} onChange={(v) => void setFavourite(game, [mod], v)} label="Favourite" />
-          <Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" hint="Hidden, blurred or shown as set for mods for adults" />
+          <span title="Hidden, blurred or shown as set for mods for adults (Settings, Mods)"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
         </div>
       </div>
 
       <section id="mod-keys" className="mod-drawer-sec">
+        <ModParts game={game} mod={mod} />
         <KeyEditor game={game} modId={mod.id} />
         <InGameOptions game={game} modId={mod.id} />
         <ModInsides mod={mod} />

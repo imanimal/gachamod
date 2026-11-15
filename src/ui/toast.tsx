@@ -10,8 +10,14 @@ const subs = new Set<(t: Toast) => void>();
 const updates = new Set<(id: number, patch: Partial<Toast>) => void>();
 const live = new Set<number>();
 
+const helpers: Array<{ test: (text: string) => boolean; action: ToastAction }> = [];
+/** Give every toast whose text passes `test`, and has no button of its own, this button. The F10 note from the
+ *  backend gets "Restart as administrator" this way (lib/elevation.ts). */
+export function toastHelper(test: (text: string) => boolean, action: ToastAction) { helpers.push({ test, action }); }
+
 /** Show a short message. With an action, it stays longer and offers one button. Returns its id. */
 export function toast(text: string, bad = false, action?: ToastAction): number {
+  action ??= helpers.find((h) => h.test(text))?.action;
   const t: Toast = { id: next++, text, bad, action, ms: action ? 9000 : bad ? 7000 : 4600 };
   subs.forEach((s) => s(t));
   return t.id;
@@ -64,7 +70,7 @@ export function Toasts() {
         <div key={t.id} className={`toast${t.bad ? " bad" : ""}${t.action ? " act" : ""}${t.leaving ? " gone" : ""}`}
           onMouseEnter={() => hold(t.id, true)} onMouseLeave={() => hold(t.id, false)}>
           <Icon name={t.bad ? "warn" : t.action?.label === "Redo" ? "redo" : "check"} />
-          <span className="tt" key={t.text}>{t.text}</span>
+          <span className="tt" key={t.text} title={t.text.length > 110 ? t.text : undefined}>{t.text}</span>
           {t.action && <button type="button" className="toast-act" onClick={() => void t.action!.run()}>{t.action.label}</button>}
           <button type="button" className="toast-x" aria-label="Dismiss" title="Dismiss" onClick={() => { live.delete(t.id); setList((l) => l.filter((x) => x.id !== t.id)); }}><Icon name="x" size={12} /></button>
           <i key={`${t.text}-${t.ms}`} className="t-life" style={{ animationDuration: `${t.ms}ms` }} aria-hidden="true" />

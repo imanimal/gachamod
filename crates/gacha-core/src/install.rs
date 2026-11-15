@@ -105,6 +105,34 @@ fn holds_ini(dir: &Path) -> bool { entries(dir).iter().any(|p| is_mod_ini(p)) }
 
 fn is_mod_dir(dir: &Path) -> bool { dir.join(crate::model::SIDECAR_FILE).is_file() || holds_ini(dir) }
 
+/// True when an ini in `inner` (or a folder or two below it) loads a file through `..` that is in `outer` but not in
+/// `inner`. Archives like `RoxyOveralls/{resources/Roxy.ini, toggles/, textures/}` keep the ini one folder down and
+/// load `../toggles/Menu.dds`: the mod is the outer folder, not the one with the ini.
+pub(crate) fn reaches_out(inner: &Path, outer: &Path) -> bool {
+    let norm = |p: PathBuf| -> PathBuf {
+        let mut out = PathBuf::new();
+        for c in p.components() {
+            match c { std::path::Component::ParentDir => { out.pop(); } std::path::Component::CurDir => {} c => out.push(c) }
+        }
+        out
+    };
+    walkdir::WalkDir::new(inner).max_depth(3).into_iter().flatten()
+        .filter(|e| e.file_type().is_file() && is_mod_ini(e.path()))
+        .any(|e| {
+            let Ok(bytes) = fs::read(e.path()) else { return false };
+            let base = e.path().parent().unwrap_or(inner).to_path_buf();
+            String::from_utf8_lossy(&bytes).lines().any(|line| {
+                let l = line.trim();
+                if l.starts_with(';') || l.starts_with('[') { return false; }
+                let Some((_, v)) = l.split_once('=') else { return false };
+                let v = v.trim().trim_matches('"');
+                if !v.contains("..") || Path::new(v).is_absolute() { return false; }
+                let p = norm(base.join(v.replace('\\', "/")));
+                p.starts_with(outer) && !p.starts_with(inner) && p.exists()
+            })
+        })
+}
+
 /// True when an ini file is somewhere below `dir` (skipped folders left out).
 fn leads_to_ini(dir: &Path) -> bool { is_mod_dir(dir) || child_dirs(dir).iter().any(|c| leads_to_ini(c)) }
 
@@ -145,7 +173,13 @@ fn walk(staging: &Path, dir: &Path, label: Option<String>, inherited_preview: Op
         return;
     }
     let kids: Vec<PathBuf> = child_dirs(dir).into_iter().filter(|c| leads_to_ini(c)).collect();
-    if kids.len() == 1 {
+    if kids.len() == 1 && reaches_out(&kids[0], dir) {
+        // the ini loads files from folders beside its own: this whole folder is the mod
+        let (ini_count, size) = tree_facts(dir);
+        let label = label.or(own_name).unwrap_or_else(|| "Mod".into());
+        let preview = own_image(dir).or(inherited_preview).map(|p| p.to_string_lossy().into_owned());
+        out.push(Candidate { key: rel_key(staging, dir), label, ini_count, size, preview });
+    } else if kids.len() == 1 {
         // a wrapper folder: the mod is the one folder inside; keep the outer name when the inner one says nothing
         let inner = &kids[0];
         let inner_name = crate::library::display_folder(&name_of(inner)).to_string();
@@ -253,7 +287,8 @@ pub fn unique_child(parent: &Path, name: &str) -> PathBuf {
         .map(|e| e.file_name().to_string_lossy().to_lowercase()).collect();
     let clash = |n: &str| {
         let l = n.to_lowercase();
-        taken.iter().any(|t| *t == l || crate::library::display_folder(t) == l)
+        let shown = crate::library::display_folder(&l);
+        taken.iter().any(|t| *t == l || crate::library::display_folder(t) == shown)
     };
     if !clash(name) { return parent.join(name); }
     (2..1000).map(|i| format!("{name} ({i})")).find(|n| !clash(n)).map(|n| parent.join(n)).unwrap_or_else(|| parent.join(format!("{name} ({})", crate::db::now())))
@@ -414,6 +449,33 @@ fn apply_setup(db: &crate::db::Shared, game: &str, entry: &ModEntry, s: &ModSetu
     }
 }
 
+/// Where `combine` gathers the parts inside a staging folder.
+const PARTS_DIR: &str = ".gachamod-parts";
+
+fn plural_parts(n: usize) -> String { if n == 1 { "1 part".into() } else { format!("{n} parts") } }
+
+/// Move each picked folder into `<staging>/.gachamod-parts/<label>` so they install as one mod with parts
+/// (library::parts). A part that overrides a hash an earlier part already does starts off (DISABLED), so two parts
+/// never draw over each other. Returns the candidate for the whole and how many parts start off.
+fn combine(staging: &Path, chosen: &[Candidate]) -> Result<(Candidate, usize)> {
+    let root = staging.join(PARTS_DIR);
+    if root.exists() { fs::remove_dir_all(&root)?; }
+    fs::create_dir_all(&root)?;
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut off = 0;
+    for c in chosen {
+        let src = staging.join(&c.key);
+        let hashes = crate::ini::quick_facts(&src).hashes;
+        let clash = hashes.iter().any(|h| seen.contains(h));
+        let name = sanitize_name(&c.label);
+        let folder = if clash { off += 1; format!("{DISABLED_PREFIX}{name}") } else { seen.extend(hashes); name };
+        move_dir(&src, &unique_child(&root, &folder))?;
+    }
+    let (ini_count, size) = tree_facts(&root);
+    let preview = chosen.iter().find_map(|c| c.preview.clone());
+    Ok((Candidate { key: PARTS_DIR.into(), label: chosen[0].label.clone(), ini_count, size, preview }, off))
+}
+
 fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
     let all = find_roots(staging)?;
     if all.is_empty() {
@@ -443,28 +505,33 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     };
 
     let base_name = meta.name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| chosen[0].label.clone());
-    let (mods_dir, character, one_skin, old, mut removed) = {
+    let (mods_dir, character, old, mut removed) = {
         let d = lock(db)?;
         let mods_dir = crate::games::mods_dir(&d, game)?;
         let character = meta.character.clone().filter(|c| !c.trim().is_empty()).or_else(|| {
             let hints: Vec<&str> = [meta.category.as_deref(), Some(base_name.as_str())].into_iter().flatten().collect();
             crate::library::infer_character(&d, game, &hints)
         });
-        let one_skin = d.setting(&format!("{game}.oneSkin")).ok().flatten().map(|v| v != "0").unwrap_or(true);
         let old = meta.replaces.as_deref().and_then(|id| crate::library::get(&d, game, id).ok());
         // the same GameBanana mod was removed before: the new copy takes its place (id, details, options, profiles)
         let removed = match (&old, meta.source.as_ref()) {
             (None, Some(src)) if src.mod_id > 0 => crate::library::removed_by_gb(&d, game, src.mod_id).unwrap_or_default(),
             _ => Vec::new(),
         };
-        (mods_dir, character, one_skin, old, removed)
+        (mods_dir, character, old, removed)
     };
     let group = sanitize_name(character.as_deref().or(meta.category.as_deref()).filter(|g| !g.trim().is_empty()).unwrap_or("Other"));
-    let preview_src = preview_in(staging);
     let mut notes = Vec::new();
+    // several picked folders without shared settings become the parts of one mod
+    let combined = chosen.len() > 1 && setup_of.iter().all(|s| s.is_none());
+    let (chosen, setup_of) = if combined {
+        let (c, off) = combine(staging, &chosen)?;
+        if off > 0 { notes.push(format!("Turned off {} of {base_name} that change the same things as another part. Switch parts in its details", plural_parts(off))); }
+        (vec![c], vec![None])
+    } else { (chosen, setup_of) };
+    let preview_src = preview_in(staging);
     let mut installed = Vec::new();
     let several = chosen.len() > 1;
-    let mut turned_off = 0;
 
     for (i, cand) in chosen.iter().enumerate() {
         let setup = setup_of.get(i).copied().flatten();
@@ -477,7 +544,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         let mut sidecar = Sidecar {
             format: 1, id: String::new(), name: name.clone(), character: character.clone(), source: meta.source.clone(),
             version: meta.version.clone().filter(|v| !v.is_empty()), installed_at: crate::db::now(), nsfw: meta.nsfw,
-            variant: (in_archive > 1).then(|| cand.key.clone()), ..Default::default()
+            variant: (in_archive > 1 && !combined).then(|| cand.key.clone()), ..Default::default()
         };
         // shared settings: the sender's id (so their profiles find it), details and folder
         if let Some(s) = setup {
@@ -535,15 +602,9 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         let target = match (target, setup) {
             (Some(t), _) => t,
             (None, Some(s)) => shared_target(&mods_dir, &group, &name, s),
-            (None, None) => {
-                let mut folder = sanitize_name(&name);
-                // variants of one character: only the first stays on
-                if several && i > 0 && character.is_some() && one_skin {
-                    folder = format!("{DISABLED_PREFIX}{folder}");
-                    turned_off += 1;
-                }
-                unique_child(&mods_dir.join(&group), &folder)
-            }
+            // a new mod comes in off: the user turns it on from its details, where gachamod asks about the
+            // character's other skins
+            (None, None) => unique_child(&mods_dir.join(&group), &format!("{DISABLED_PREFIX}{}", sanitize_name(&name))),
         };
 
         move_dir(&src, &target)?;
@@ -573,11 +634,14 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         if let Some(s) = setup { apply_setup(db, game, &entry, s, &mut notes); }
         installed.push(entry);
     }
-    if turned_off > 0 {
-        let who = character.as_deref().unwrap_or("this character");
-        notes.push(format!("Turned off {turned_off} of the variants so only one {who} skin is on"));
-    }
     crate::keys::after_install(db, game, &installed, &mut notes);
+    // an update of a live skin brings an ini without the gate, and with "every character" on a new mod joins its
+    // character in the menus
+    let joined = { let d = lock(db)?; crate::live::settle(&d, game) };
+    if joined {
+        let d = lock(db)?;
+        for e in &mut installed { if let Ok(now) = crate::library::get(&d, game, &e.id) { *e = now; } }
+    }
     crate::devtools::mark_changed(game);
     Ok(InstallOutcome { installed, needs_choice: None, notes })
 }
@@ -769,29 +833,109 @@ mod tests {
         fs::write(staging.join(format!("{PREVIEW_STEM}.jpg")), "img").unwrap();
         let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
         assert_eq!(o.installed.len(), 1);
-        let dir = mods.join("Ellen Joe/Coca Cola");
+        // a new mod comes in off
+        let dir = mods.join("Ellen Joe/DISABLED Coca Cola");
         assert!(dir.join("a.ini").is_file());
+        assert!(!o.installed[0].enabled);
         assert!(dir.join("preview.jpg").is_file());
         assert!(dir.join(crate::model::SIDECAR_FILE).is_file());
         assert!(!staging.exists());
 
-        // two variants: asks first, keeps staging, then installs both with only the first on
+        // two variants and an icon: asks first, keeps staging, then installs them as one mod with parts. Red draws
+        // the same thing as Blue, so it starts off; the icon stays on
         let staging = new_staging(&data).unwrap();
-        for v in ["Red", "Blue"] {
+        for (v, hash) in [("Red", "aaaa1111"), ("Blue", "aaaa1111"), ("Icon", "bbbb2222")] {
             fs::create_dir_all(staging.join(v)).unwrap();
-            fs::write(staging.join(v).join("a.ini"), "[x]").unwrap();
+            fs::write(staging.join(v).join("a.ini"), format!("[TextureOverride{v}]
+hash = {hash}
+")).unwrap();
         }
         let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
         let c = o.needs_choice.unwrap();
-        assert_eq!(c.len(), 2);
+        assert_eq!(c.len(), 3);
         assert!(staging.exists());
         let keys: Vec<String> = c.iter().map(|c| c.key.clone()).collect();
         let o = place(&db, &data, "zzz", &staging, &meta, &keys).unwrap();
-        assert_eq!(o.installed.len(), 2);
-        assert!(mods.join("Ellen Joe/Coca Cola - Blue").is_dir());
-        assert!(mods.join("Ellen Joe/DISABLED Coca Cola - Red").is_dir());
-        assert_eq!(o.notes.len(), 1);
+        assert_eq!(o.installed.len(), 1);
+        let dir = mods.join("Ellen Joe/DISABLED Coca Cola (2)");
+        assert!(dir.join("Blue/a.ini").is_file());
+        assert!(dir.join("DISABLED Red/a.ini").is_file());
+        assert!(dir.join("Icon/a.ini").is_file());
+        assert_eq!(o.installed[0].ini_count, 2);
+        assert_eq!(o.notes.len(), 1, "{:?}", o.notes);
         assert!(!staging.exists());
+
+        // each part switches on and off from the library
+        let d = db.lock().unwrap();
+        let id = o.installed[0].id.clone();
+        let parts = crate::library::parts(&d, "zzz", &id).unwrap();
+        let names: Vec<(&str, bool)> = parts.iter().map(|p| (p.name.as_str(), p.enabled)).collect();
+        assert_eq!(names, [("Blue", true), ("Icon", true), ("Red", false)]);
+        let e = crate::library::set_part(&d, "zzz", &id, "DISABLED Red", true).unwrap();
+        assert!(dir.join("Red/a.ini").is_file());
+        assert_eq!(e.ini_count, 3);
+        let e = crate::library::set_part(&d, "zzz", &id, "Icon", false).unwrap();
+        assert!(dir.join("DISABLED Icon/a.ini").is_file());
+        assert_eq!(e.ini_count, 2);
+        assert!(!e.enabled);
+    }
+
+    #[test]
+    fn a_download_joins_every_character() {
+        let t = Tmp::new("liveall");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let ini = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
+        fs::create_dir_all(mods.join("Ellen Joe/Maid")).unwrap();
+        fs::write(mods.join("Ellen Joe/Maid/mod.ini"), ini).unwrap();
+        crate::library::scan(&db, "zzz").unwrap();
+        crate::live::set_all(&db.lock().unwrap(), "zzz", true).unwrap();
+        // a character with no mods yet, and one more skin for Ellen
+        for (name, character) in [("Office", "Velina Airgid"), ("Bunny", "Ellen Joe")] {
+            let staging = new_staging(&data).unwrap();
+            fs::write(staging.join("mod.ini"), ini.replace("0011aabb", if name == "Office" { "22334455" } else { "0011aabb" })).unwrap();
+            let meta = InstallMeta { name: Some(name.into()), character: Some(character.into()), ..Default::default() };
+            place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        }
+        let d = db.lock().unwrap();
+        let info = crate::live::info(&d, "zzz").unwrap();
+        let mut sizes: Vec<usize> = info.groups.iter().map(|g| g.mods.len()).collect();
+        sizes.sort();
+        assert_eq!(sizes, [1, 2]);
+    }
+
+    #[test]
+    fn old_split_installs_are_combined() {
+        let t = Tmp::new("merge");
+        let mods = t.0.join("Mods");
+        let db = test_db(&mods);
+        let src = crate::model::ModSource { site: "gamebanana".into(), mod_id: 7, file_id: Some(9), ..Default::default() };
+        // what an older version made: one mod per folder, the icon turned off by the one-skin rule
+        for (folder, label, hash) in [("Yum - Main", "Main", "aaaa1111"), ("DISABLED Yum - Icon", "Icon", "bbbb2222")] {
+            let dir = mods.join("Anby").join(folder);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("a.ini"), format!("[TextureOverride{label}]
+hash = {hash}
+")).unwrap();
+            fs::write(dir.join("preview.jpg"), "img").unwrap();
+            let sc = Sidecar { format: 1, name: format!("Yum - {label}"), source: Some(src.clone()), variant: Some(label.into()), preview: Some("preview.jpg".into()), ..Default::default() };
+            let d = db.lock().unwrap();
+            crate::library::add_folder(&d, "zzz", &dir, Some(sc)).unwrap();
+        }
+        let list = crate::library::scan(&db, "zzz").unwrap();
+        assert_eq!(list.len(), 1, "{list:?}");
+        let m = &list[0];
+        assert_eq!(m.name, "Yum");
+        assert!(m.enabled);
+        assert_eq!(m.ini_count, 2);
+        let top = mods.join("Anby/Yum");
+        assert!(top.join("Main/a.ini").is_file());
+        assert!(top.join("Icon/a.ini").is_file());
+        assert!(top.join("preview.jpg").is_file());
+        assert!(!top.join("Main").join(crate::model::SIDECAR_FILE).exists());
+        // only once
+        assert_eq!(crate::library::scan(&db, "zzz").unwrap().len(), 1);
     }
 
     // ── previews and reinstalls (the "Velina" case: a texture jpg was taken as the preview) ──
@@ -828,7 +972,7 @@ mod tests {
         let staging = velina_staging(&data, true);
         assert_eq!(find_roots(&staging).unwrap()[0].preview, None, "a texture is never a candidate's preview");
         let o = place(&db, &data, "zzz", &staging, &gb_meta(900001), &[]).unwrap();
-        let dir = mods.join("Velina Airgid/Velina Maid");
+        let dir = mods.join("Velina Airgid/DISABLED Velina Maid");
         assert_eq!(fs::read_to_string(dir.join("preview.jpg")).unwrap(), "gb picture");
         assert!(o.installed[0].preview.as_deref().unwrap().ends_with("preview.jpg"));
 
@@ -857,6 +1001,8 @@ mod tests {
         let id = first.id.clone();
         let beach = {
             let d = db.lock().unwrap();
+            // it comes in off; the user turns it on and sets an option
+            let first = library::set_enabled(&d, "zzz", std::slice::from_ref(&id), true).unwrap().changed.remove(0);
             library::update_meta(&d, "zzz", &id, &library::MetaPatch {
                 name: Some("My Velina".into()), tags: Some(vec!["maid".into()]), favorite: Some(true), ..Default::default()
             }).unwrap();
@@ -882,7 +1028,10 @@ mod tests {
         {
             let d = db.lock().unwrap();
             assert!(library::archive_list(&d, None).unwrap().is_empty());
-            assert_eq!(ini::user_vars(&t.0, &back.rel_path).unwrap()[0].value, "2");
+            // it comes back off, and its options return when it is turned on
+            assert!(!back.enabled);
+            let on = library::set_enabled(&d, "zzz", std::slice::from_ref(&id), true).unwrap().changed.remove(0);
+            assert_eq!(ini::user_vars(&t.0, &on.rel_path).unwrap()[0].value, "2");
             assert!(profiles::members(&d, beach.id).unwrap().contains(&id));
 
             // from the trash (files still there) by GameBanana id too
@@ -906,6 +1055,37 @@ mod tests {
     }
 
     #[test]
+    fn ini_one_folder_down_keeps_its_neighbours() {
+        // RoxyOveralls/{resources/Roxy.ini, toggles/, textures/}: the ini loads ../toggles, so the mod is RoxyOveralls
+        let t = Tmp::new("roxy");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let staging = new_staging(&data).unwrap();
+        let top = staging.join("RoxyOveralls");
+        fs::create_dir_all(top.join("resources")).unwrap();
+        fs::create_dir_all(top.join("toggles")).unwrap();
+        fs::write(top.join("resources/Roxy.ini"), "[ResourceMenu]\nfilename = ../toggles/Menu.dds\n[CustomShaderMenu]\nvs = ..\\toggles\\draw_2d.hlsl\n").unwrap();
+        fs::write(top.join("toggles/Menu.dds"), "dds").unwrap();
+        fs::write(top.join("toggles/draw_2d.hlsl"), "hlsl").unwrap();
+        let c = find_roots(&staging).unwrap();
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].key, "RoxyOveralls");
+        let meta = InstallMeta { name: Some("Roxy - Overalls".into()), ..Default::default() };
+        place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        let dir = mods.join("Other/DISABLED Roxy - Overalls");
+        assert!(dir.join("resources/Roxy.ini").is_file());
+        assert!(dir.join("toggles/Menu.dds").is_file());
+
+        // a plain wrapper still unwraps
+        let staging = new_staging(&data).unwrap();
+        fs::create_dir_all(staging.join("Outer/Inner")).unwrap();
+        fs::create_dir_all(staging.join("Outer/extra")).unwrap();
+        fs::write(staging.join("Outer/Inner/a.ini"), "[ResourceA]\nfilename = a.dds\n").unwrap();
+        assert_eq!(find_roots(&staging).unwrap()[0].key, "Outer/Inner");
+    }
+
+    #[test]
     fn local_folder_is_copied_not_moved() {
         let t = Tmp::new("local");
         let mods = t.0.join("Mods");
@@ -915,6 +1095,6 @@ mod tests {
         let o = install_local(&db, &data, "zzz", &[t.0.join("mine/Burnice Swim")], &[]).unwrap();
         assert_eq!(o.installed.len(), 1);
         assert!(t.0.join("mine/Burnice Swim/b.ini").is_file());
-        assert!(mods.join("Other/Burnice Swim/b.ini").is_file());
+        assert!(mods.join("Other/DISABLED Burnice Swim/b.ini").is_file());
     }
 }

@@ -117,7 +117,8 @@ export function rosterOrder(list: RosterChar[], view: RosterView, showHidden = f
   const keep = list.filter((c) => (showHidden || !c.hidden) && (!view.onlyWithMods || c.mods.length > 0) && (!view.owned || c.owned));
   return keep.sort(view.sort === "name" ? byName
     : view.sort === "recent" ? (a, b) => b.last - a.last || byName(a, b)
-    : (a, b) => b.mods.length - a.mods.length || b.on - a.on || byName(a, b));
+    // nothing that changes with a toggle: a character must not jump in the strip while one of its mods turns on
+    : (a, b) => b.mods.length - a.mods.length || byName(a, b));
 }
 
 /** Every character name for a game (for pickers and search), without waiting on React. */

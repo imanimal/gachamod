@@ -1,5 +1,5 @@
 // Settings > GameBanana account: sign in on GameBanana's own page, then following creators and liking mods in the app
-// reach the real account. Starts turned off: it hasn't been tried with a real account yet. Owner: ACCOUNT area.
+// reach the user's account. Starts turned off. Owner: ACCOUNT area.
 import { useState } from "react";
 import { importFollowing, setSignInOn, signIn, signOut, useAccount } from "../../lib/account";
 import { inTauri } from "../../lib/tauri";
@@ -18,7 +18,7 @@ export function AccountSection() {
       <div className="set-rows">
         <SetRow id="set-gb-signin" label="Sign in to GameBanana"
           tip="You sign in on GameBanana's own page in a separate window, so gachamod never sees your password. It keeps the session encrypted for your Windows account"
-          hint={enabled ? "Following a creator here follows them on GameBanana too, and mods get a Like button" : "Off. It hasn't been tried with a real account yet, so it may not work"}>
+          hint={enabled ? "Following a creator here follows them on GameBanana too, and mods get a Like button" : "Off. Follows stay in gachamod and mods have no Like button"}>
           <Toggle checked={enabled} label="Sign in to GameBanana"
             onChange={(v) => { if (inTauri()) void setSignInOn(v); else setOn(v ? "1" : "0"); }} />
         </SetRow>

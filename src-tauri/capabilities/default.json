@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core APIs, the custom title bar's window keys, file dialogs.",
-  "windows": ["main"],
+  "description": "The main window (core APIs, the custom title bar's window keys, file dialogs) and the skin menu shown over a game.",
+  "windows": ["main", "overlay"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",

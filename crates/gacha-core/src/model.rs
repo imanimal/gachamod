@@ -92,6 +92,13 @@ pub struct Sidecar {
     /// key, "" for the archive's root). A shared link list uses it to pick the same one again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variant: Option<String>,
+    /// The mod this one is a sub-mod of (its id): an add-on that goes with it, like a hair recolour for one skin.
+    /// It never counts as a clash with its parent, and it turns off and back on with it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    /// A sub-mod that was on when its parent was turned off, so turning the parent on brings it back.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub off_with_parent: bool,
 }
 
 pub const SIDECAR_FILE: &str = ".gachamod.json";
@@ -111,7 +118,12 @@ pub struct ModEntry {
     pub rel_path: String,
     /// Absolute path of the mod folder.
     pub path: String,
+    /// On as the player sees it. A live skin that isn't the one showing counts as off (see `standby`).
     pub enabled: bool,
+    /// A live skin (live.rs) that isn't the one showing: its folder stays on so it can switch in without a reload,
+    /// but it draws nothing, so `enabled` is false. Use `loaded()` for "the folder is on".
+    #[serde(default)]
+    pub standby: bool,
     pub character: Option<String>,
     /// The folder it sits in, relative to Mods ("Ellen Joe"), or None at the top level.
     pub group: Option<String>,
@@ -136,6 +148,19 @@ pub struct ModEntry {
     /// The preview is one the user picked (library::set_preview).
     #[serde(default)]
     pub custom_preview: bool,
+    /// Folders inside it with their own inis, each switched on or off by itself (library::parts). 0 for most mods.
+    #[serde(default)]
+    pub parts: u32,
+    /// The mod this one is a sub-mod of (Sidecar::parent).
+    #[serde(default)]
+    pub parent: Option<String>,
+}
+
+impl ModEntry {
+    /// The folder is on, so the game loads it: on, or a live skin on standby.
+    pub fn loaded(&self) -> bool { self.enabled || self.standby }
+    /// The mod it belongs with: its parent, or itself. Mods with the same root never count as clashing.
+    pub fn root(&self) -> &str { self.parent.as_deref().unwrap_or(&self.id) }
 }
 
 /// What changed after a library action, so the UI can update in place and offer undo.

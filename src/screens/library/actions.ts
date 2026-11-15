@@ -12,6 +12,7 @@ import { toast } from "../../ui/toast";
 import { profilesChanged } from "../profiles/data";
 import { changeStates, publish, removeMods, toggleMods } from "./data";
 import { previewChanged } from "./Preview";
+import { askOverlap } from "./overlap";
 
 /** "Ellen hoodie" or "3 mods". */
 export const modsName = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : `${list.length} mods`);
@@ -21,12 +22,45 @@ const fail = (e: unknown) => toast(errorText(e), true);
 // ── on and off ──
 
 /** Turn mods on or off with Undo. `prior` is every mod of the game as it was (fetched when not given), so mods the
- *  one-skin rule turns off come back on Undo too. */
-export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?: ModEntry[]) {
+ *  one-skin rule turns off come back on Undo too. Turning one mod on while its character has another on asks first
+ *  (overlap.ts), by `at` or the focused element. False when nothing changed (the question was closed). */
+export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?: ModEntry[], at?: Element | null): Promise<boolean> {
   const ids = list.filter((m) => m.enabled !== on).map((m) => m.id);
-  if (!ids.length) { toast(on ? "They're already on" : "They're already off"); return; }
-  try { await toggleMods(game, ids, on, prior ?? await library.list(game)); }
-  catch (e) { fail(e); }
+  if (!ids.length) { toast(on ? "They're already on" : "They're already off"); return false; }
+  const from = at ?? document.activeElement;
+  try {
+    const all = prior ?? await library.list(game);
+    let turnOffOthers: boolean | undefined;
+    if (on && ids.length === 1) {
+      const mod = all.find((m) => m.id === ids[0]) ?? list.find((m) => m.id === ids[0])!;
+      const c = await askOverlap(game, mod, all, from);
+      if (!c) return false;
+      if (c.parent && !(await setParent(game, mod, c.parent, all))) return false;
+      turnOffOthers = c.turnOffOthers;
+    }
+    await toggleMods(game, ids, on, all, turnOffOthers);
+    return true;
+  } catch (e) { fail(e); return false; }
+}
+
+// ── sub-mods ──
+
+/** Make a mod a sub-mod of another (an id), or a mod of its own again with "". With Undo. */
+export async function setParent(game: GameId, mod: ModEntry, parent: string, all?: ModEntry[]): Promise<boolean> {
+  const before = mod.parent ?? "";
+  if (before === parent) return true;
+  const list = all ?? await library.list(game).catch(() => [] as ModEntry[]);
+  const name = (id: string) => list.find((m) => m.id === id)?.name ?? "the other mod";
+  try {
+    const run = async (p: string) => publish(game, { changed: [await library.updateMeta(game, mod.id, { parent: p })], removed: [], notes: [] });
+    await run(parent);
+    record({
+      label: parent ? `Made ${mod.name} a sub-mod of ${name(parent)}` : `${mod.name} is a mod of its own again`,
+      undo: () => run(before),
+      redo: () => run(parent),
+    });
+    return true;
+  } catch (e) { fail(e); return false; }
 }
 
 // ── details (name, character, tags, favourite, adult) ──
@@ -109,6 +143,16 @@ export async function trashMods(game: GameId, list: ModEntry[]) {
   try { await removeMods(game, list); } catch (e) { fail(e); }
 }
 
+/** Make several mods the parts of one mod (each part switches on or off in its details). */
+export async function combineMods(game: GameId, list: ModEntry[]) {
+  if (list.length < 2) return;
+  try {
+    const c = await library.merge(game, list.map((m) => m.id));
+    publish(game, c);
+    toast(c.notes.join(". "), false, c.changed[0] ? { label: "View parts", run: () => openDetails(c.changed[0]!, "parts") } : undefined);
+  } catch (e) { fail(e); }
+}
+
 export function exportMods(game: GameId, list: ModEntry[]) {
   if (list.length) emitApp({ type: "export-mods", game, modIds: list.map((m) => m.id) });
 }
@@ -117,15 +161,15 @@ export function openFolder(m: ModEntry) { shell.openPath(m.path).catch(fail); }
 export function openOnGb(m: ModEntry) { if (m.source) shell.openUrl(m.source.url).catch(fail); }
 
 /** Open a mod's details: in place on a page that shows mods, else in Mods. */
-export function openDetails(m: ModEntry, section?: DrawerSection) {
+export function openDetails(m: Pick<ModEntry, "id">, section?: DrawerSection) {
   drawerSection = section ? { id: m.id, section } : null;
   const r = currentRoute();
   if (r.view === "library" || (r.view === "characters" && r.character) || (r.view === "profiles" && r.profile !== undefined)) go({ ...r, modId: m.id });
   else go({ view: "library", modId: m.id });
 }
-/** A part of the drawer to scroll to when it opens: its toggles, its conflicts, its files and size, or its 3D view. It stays until
+/** A part of the drawer to scroll to when it opens: its parts, toggles, conflicts, files and size, or its 3D view. It stays until
  *  the drawer has scrolled there (clearDrawerSection), so an effect that runs twice still finds it. */
-export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "ingame";
+export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "ingame" | "parts";
 let drawerSection: { id: string; section: DrawerSection } | null = null;
 export const drawerSectionFor = (id: string): DrawerSection | null => (drawerSection?.id === id ? drawerSection.section : null);
 export function clearDrawerSection() { drawerSection = null; }

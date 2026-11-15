@@ -8,7 +8,7 @@ import { usePageReloads } from "../../lib/extensions";
 import { moveFocusFrom, setFrameNav } from "../../lib/gamepad";
 import { go, VIEWS, type Route, type View } from "../../lib/store";
 import { subscribeTheme, THEME_TOKENS } from "../../lib/theme";
-import { Button, Spinner } from "../../ui/kit";
+import { Button, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 
 export type ExtSlotName = "characterTab" | "page";
@@ -86,7 +86,7 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
   }, [ext, src]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <p className="hint ext-frame-err">{m.name} couldn't load its page: {error}</p>;
-  if (!src) return <div className="ext-frame-wait"><Spinner /></div>;
+  if (!src) return <Waiting className="ext-frame-wait" what={`Loading ${m.name}`} />;
   return (
     <iframe ref={ref} className="ext-frame" data-ext={ext.id} title={`${m.name}: ${(slot === "page" ? m.page : m.characterTab)?.title ?? ""}`}
       sandbox="allow-scripts" referrerPolicy="no-referrer" allow=""

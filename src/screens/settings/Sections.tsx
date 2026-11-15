@@ -2,19 +2,46 @@
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
-import { useGames } from "../../lib/store";
-import { Avatar, Confirm, IconButton, Panel, Segmented, Select, Toggle, plural } from "../../ui/kit";
+import { useGame, useGames } from "../../lib/store";
+import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, plural } from "../../ui/kit";
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { appUpdateCheckPref, autoRescanPref, fixesAutoUpdatePref, keepArchivesPref, modUpdateCheckPref, trashDaysPref, useTrashDays } from "./automatic";
+import { appUpdateCheckPref, autoRescanPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
+import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "../library/shuffle";
 
 /** "Keys only while the character is on screen" for new installs (the install flow reads it). Same key as
  *  lib/keybinds.ts uses. */
 const onScreenOnInstallPref = pref<boolean>("keys.onScreenOnInstall", false, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
 // ── mods ──
+
+const SHUFFLE_OPTIONS: Array<{ value: ShuffleWhen; label: string; title: string }> = [
+  { value: "off", label: "Off", title: "Outfits change only when you change them" },
+  { value: "play", label: "Each Play", title: "New outfits every time you press Play" },
+  { value: "day", label: "Once a day", title: "New outfits at the first Play of the day" },
+];
+
+function ShuffleRow() {
+  const when = shuffleWhenPref.use();
+  const game = useGame();
+  const [busy, setBusy] = useState(false);
+  const now = async () => {
+    if (!game) return;
+    setBusy(true);
+    try { await shuffleOutfits(game.id); } catch (e) { toast(errorText(e), true); } finally { setBusy(false); }
+  };
+  return (
+    <SetRow id="set-shuffle" label="Shuffle outfits" hint="For every character with two or more mods, one goes on at random and the others off. Undo puts them back">
+      <span className="set-shuffle">
+        <Segmented<ShuffleWhen> value={when} onChange={(v) => void shuffleWhenPref.set(v, v === "off" ? "Stopped shuffling outfits" : v === "play" ? "Shuffling outfits at each Play" : "Shuffling outfits once a day")}
+          label="When to shuffle" options={SHUFFLE_OPTIONS} size="sm" />
+        <Button size="sm" icon="dice" busy={busy} disabled={!game} onClick={() => void now()} title={game ? `Shuffle ${game.short}'s outfits now` : "Set up a game first"}>Shuffle now</Button>
+      </span>
+    </SetRow>
+  );
+}
 
 export function ModsSection() {
   const shown = useGames().filter((g) => g.shown);
@@ -24,13 +51,14 @@ export function ModsSection() {
       <div className="set-rows">
         <SetRow id="set-nsfw" label="Mods for adults" hint="Previews marked NSFW on GameBanana or by you">
           <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
-            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show" }]} />
+            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
         </SetRow>
+        <ShuffleRow />
       </div>
       {shown.length > 0 && (
         <div className="set-pergame" id="set-pergame">
           <div className="set-pergame-h"><span />
-            <span title="Turning on a skin turns off the character's other skins, so two never load at once">One skin per character</span>
+            <span title="What happens when you turn on a mod and its character already has another one on. Sub-mods never count">Another skin already on</span>
             <span title="Presses F10 for you when you switch back to the game after a change. F10 makes 3DMigoto load the mods again">Reload in game</span>
           </div>
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
@@ -40,13 +68,20 @@ export function ModsSection() {
   );
 }
 
+const ONE_SKIN: Array<{ value: string; label: string; title: string }> = [
+  { value: "ask", label: "Ask", title: "Ask each time: turn the other off, keep both on, or make the new one a sub-mod of it" },
+  { value: "auto", label: "Turn off", title: "Turn the other one off without asking, so two never load at once" },
+  { value: "0", label: "Keep", title: "Keep both on without asking" },
+];
+
 function PerGame({ game }: { game: GameState }) {
-  const [one, setOne] = useSetting(`${game.id}.oneSkin`, "1");
+  // "1" is what older versions saved for the switch that was here: it asks now too
+  const [one, setOne] = useSetting(`${game.id}.oneSkin`, "ask");
   const [auto, setAuto] = useSetting(`${game.id}.autoReload`, "1");
   return (
     <div className="set-pergame-r">
       <span className="row"><GameBadge game={game} size={24} />{game.name}</span>
-      <Toggle size="sm" checked={one !== "0"} onChange={(v) => setOne(v ? "1" : "0")} />
+      <Segmented size="sm" label={`${game.name}: another skin already on`} value={one === "auto" || one === "0" ? one : "ask"} onChange={setOne} options={ONE_SKIN} />
       <Toggle size="sm" checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
     </div>
   );
@@ -77,6 +112,10 @@ export function AutomaticSection() {
         </SetRow>
         <SetRow id="set-archives" label="Delete downloaded archives" hint="The .zip or .7z goes once the mod is installed">
           <Toggle checked={!keep} onChange={(v) => void keepArchivesPref.set(!v, v ? "Deleting archives after installs" : "Keeping archives after installs")} />
+        </SetRow>
+        <SetRow id="set-all-parts" label="Install every mod in an archive" hint="Skips the window that asks which ones to install"
+          tip="Some downloads hold several mods, like a skin and its icons. They install as one mod, and its details let you turn each part on or off">
+          <Switch p={installAllPartsPref} on="Archives with several mods install all of them" off="Asking which mods to install from an archive" />
         </SetRow>
         <SetRow id="set-fix-updates" label="Look for new mod fixers" tip="When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded"
           hint="For mods a game update broke">

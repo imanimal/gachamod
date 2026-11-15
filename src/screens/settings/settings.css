@@ -60,7 +60,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .theme-preview-btn { margin-top: auto; height: .9rem; width: 40%; border-radius: var(--radius-sm); background: var(--accent); }
 .theme-card-t { display: flex; flex-direction: column; padding: 0 .2rem .2rem; }
 .set-pergame { margin-top: 1rem; display: flex; flex-direction: column; gap: .3rem; }
-.set-pergame-h, .set-pergame-r { display: grid; grid-template-columns: 1fr 10rem 10rem; align-items: center; gap: .5rem; }
+.set-pergame-h, .set-pergame-r { display: grid; grid-template-columns: 1fr auto 10rem; align-items: center; gap: .5rem; }
 .set-pergame-h { font-size: .85em; color: var(--text-3); }
 .set-pergame-h span[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .set-pergame-r { padding: .3rem 0; }
@@ -124,3 +124,40 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .acct-user { gap: .6rem; }
 .acct-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
 .acct-user .hint { display: block; }
+
+/* ── Settings, Fun: the year card ── */
+.year { display: grid; gap: .9rem; padding: .2rem 0 .4rem; }
+.year-stat { display: grid; gap: .1rem; }
+.year-stat b { font-family: var(--font-display); font-size: 1.6rem; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
+.year-stat span { color: var(--text-2); }
+.set-shuffle { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+.onboard-steps { display: flex; flex-direction: column; gap: .55rem; width: min(100%, 34rem); margin: 0 auto .6rem; text-align: left; }
+.onboard-step { display: flex; align-items: flex-start; gap: .6rem; color: var(--text-2); }
+.onboard-step > .spin, .onboard-step > .i { margin-top: .2em; width: 1rem; height: 1rem; flex: none; }
+.onboard-step.is-done { color: var(--text-3); }
+.onboard-step.is-fail > .i { color: var(--warn); }
+.onboard-step-t { display: flex; flex-direction: column; gap: .2rem; }
+.onboard-step-t .hint { font-size: .84rem; line-height: 1.4; }
+
+/* feedback form and the administrator row (Feedback.tsx) */
+.feedback { display: flex; flex-direction: column; gap: .9rem; }
+.feedback .seg { align-self: flex-start; }
+.set-admin { display: flex; align-items: center; gap: .9rem; flex-shrink: 0; }
+/* Check this game */
+.check { display: flex; flex-direction: column; gap: .9rem; }
+.check p { margin: 0; }
+.check-at { margin-bottom: -.3rem !important; }
+.check-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem 1.2rem; margin: 0; }
+.check-facts > div { display: contents; }
+.check-facts dt { color: var(--text-2); }
+.check-facts dd { margin: 0; }
+.check-need { display: flex; align-items: center; gap: .7rem; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.check-need > .i { flex: none; color: var(--text-2); }
+.check-need > span { flex: 1; min-width: 0; }
+.check-need > .btn { flex: none; }
+.check-ask { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.check-q { flex-basis: 100%; font-weight: 600; }
+.check-seen { display: flex; align-items: flex-start; gap: .5rem; color: var(--text-2); }
+.check-seen > .i { flex: none; margin-top: .15em; }
+.check-seen.ok > .i { color: var(--accent-ink); }
+.check .waiting { padding: 0; }

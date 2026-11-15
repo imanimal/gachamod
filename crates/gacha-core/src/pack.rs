@@ -427,7 +427,7 @@ fn pick(db: &Db, req: &ExportRequest, with_vars: bool) -> Result<(String, Vec<Pi
         let importer = crate::games::importer_dir(db, game).ok();
         mods.iter().map(|m| {
             let mut v = library::saved_vars(db, game, &m.id).unwrap_or_default();
-            if v.is_empty() && m.enabled {
+            if v.is_empty() && m.loaded() {
                 if let Some(imp) = &importer { v = ini::user_vars(imp, &m.rel_path).unwrap_or_default(); }
             }
             (m.id.clone(), v)
@@ -1085,7 +1085,10 @@ fn import_all(db: &Shared, z: &mut zip::ZipArchive<File>, manifest: &Manifest, o
                 }
             }
         }
-        if changed { crate::devtools::mark_changed(&part.game); }
+        if changed {
+            crate::live::settle(&lock(db), &part.game);
+            crate::devtools::mark_changed(&part.game);
+        }
         res.downloads.extend(downloads);
         base += part.mods.len();
     }

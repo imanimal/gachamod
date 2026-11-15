@@ -14,6 +14,9 @@ export const modUpdateCheckPref = flag("updates.check", true);
 export const autoRescanPref = flag("library.autoScan", true);
 /** Keep the downloaded .zip/.7z after installing (the downloader reads "downloads.keep"). Off deletes them. */
 export const keepArchivesPref = flag("downloads.keep", false);
+/** An archive that holds several mods installs all of them as one mod without asking (the downloader reads
+ *  "downloads.allParts"). Off shows the picker. */
+export const installAllPartsPref = flag("downloads.allParts", false);
 /** Look on GameBanana for new fixer tools (Tools > Fixes lists them; nothing is downloaded). */
 export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 

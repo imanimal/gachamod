@@ -9,6 +9,7 @@ import { demoDb } from "./db";
 import { registerLibraryDemo } from "./library";
 import { registerModtoolsDemo } from "./modtools";
 import { registerOnlineDemo } from "./online";
+import { registerReportDemo } from "./report";
 import { registerSystemDemo } from "./system";
 
 export function installDemo() {
@@ -31,4 +32,5 @@ export function installDemo() {
   registerAiDemo();
   registerIngameDemo();
   registerExtensionsDemo();
+  registerReportDemo();
 }

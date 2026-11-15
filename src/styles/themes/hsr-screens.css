@@ -225,7 +225,7 @@
   .portrait-c { border-radius: 2px 7px 2px 2px; background: var(--gold); color: var(--ink); font-family: var(--font-num); }
 
   /* ── browse ── */
-  .gb-ch { border-radius: var(--cut-sm); }
+  .gb-ch { border-radius: var(--cut-sm); gap: calc(.4rem + 3.5px); padding-top: calc(.3rem + 3.5px); }
   .gb-ch.on { background: var(--hover); color: var(--text); font-weight: 700; }
   .gb-ch.on .gb-ch-img { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
   .gb-ch-all .gb-ch-img { background: var(--well); box-shadow: inset 0 0 0 1px var(--ctl-line); }

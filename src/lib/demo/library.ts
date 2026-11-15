@@ -3,7 +3,7 @@
 // GameBanana entries (fetched 2026-11-13), so "Open on GameBanana" leads somewhere. Owner: LIBRARY area.
 import { registerDemo } from "../tauri";
 import type { Character, ForeignImport, ForeignInfo, ModChange, ModEntry, OwnedImport, Profile, ProfilePatch } from "../api/types";
-import type { ArchiveEntry, CharacterRef, MetaPatch, ProfileSnapshot, SwitchReport, TrashEntry } from "../api/library";
+import type { ArchiveEntry, CharacterRef, MetaPatch, ModPart, ProfileSnapshot, SwitchReport, TrashEntry } from "../api/library";
 import { demoDb, demoId, demoNow, demoWait } from "./db";
 
 const SS = "https://images.gamebanana.com/img/ss/mods/";
@@ -116,6 +116,21 @@ function seedMods(game: string, seeds: Seed[]): ModEntry[] {
   });
 }
 
+// mods without a character, put in by hand (no GameBanana page): [name, group folder or null for the top level]
+const ZZZ_LOOSE: Array<[string, string | null]> = [
+  ["RabbitFX", null], ["ORFix", null], ["Cleaner HUD", "UI"], ["Bigger subtitles", "UI"], ["Eous plushie", "OtherMisc"],
+];
+
+function looseMods(game: string, list: Array<[string, string | null]>): ModEntry[] {
+  const modsDir = demoDb.games.find((g) => g.id === game)?.modsDir ?? "C:\\Users\\Player\\Mods";
+  return list.map(([name, group], i) => ({
+    id: hexId(900000 + i), game, name, folder: name, relPath: group ? `${group}/${name}` : name, path: `${modsDir}\\${group ? `${group}\\` : ""}${name}`,
+    enabled: i < 3, character: null, group, source: null, version: null, installedAt: demoNow() - (i + 2) * 86400 * 5,
+    sizeBytes: (40 + i * 170) * 1024, fileCount: 2 + i, iniCount: 1, preview: null, tags: [], notes: null, favorite: false, nsfw: false,
+    hasKeys: false, conflicts: 0, updateAvailable: false,
+  }));
+}
+
 const chars = (list: CharSeed[]): Character[] =>
   list.map(([name, id, icon]) => ({ name, gbCategoryId: id, icon: ICO + icon, modCount: 0, enabledCount: 0 }));
 
@@ -135,6 +150,24 @@ const findMod = (game: string, id: string) => {
   if (!m) throw err("That mod isn't in the library anymore. Rescan to refresh the list");
   return m;
 };
+
+/** Parts of demo mods: an "Operation Yum" mod came with its icons in the same archive. */
+const demoParts = new Map<string, ModPart[]>();
+/** Give a demo mod parts (an install of several folders from one archive). */
+export function demoSetParts(id: string, names: string[]) {
+  demoParts.set(id, names.map((name, i) => ({ folder: name, name, enabled: true, iniCount: i + 1, sizeBytes: (18 + i * 7) * 1024 * 1024 })));
+}
+function partsOf(m: ModEntry): ModPart[] {
+  let list = demoParts.get(m.id);
+  if (!list) {
+    const names = /operation yum/i.test(m.name) ? [m.name, "1 Icon Portrait", "2 Icon Big", "3 Icon Small"] : [];
+    list = names.map((name, i) => ({ folder: name, name, enabled: true, iniCount: i === 0 ? 3 : 1, sizeBytes: i === 0 ? 129_000_000 : 180_000 + i * 40_000 }));
+    demoParts.set(m.id, list);
+  }
+  return list;
+}
+
+const withParts = (m: ModEntry): ModEntry => ({ ...m, parts: partsOf(m).length });
 
 function stamp(p: Profile): Profile {
   const rows = members.get(p.id);
@@ -191,7 +224,7 @@ function onChange(game: string, change: ModChange) {
 
 /** Rename one mod like the backend does; false when it already was in that state. */
 function toggle(game: string, m: ModEntry, on: boolean): boolean {
-  if (m.enabled === on) return false;
+  if ((m.enabled || !!m.standby) === on) return false;
   const base = stripOff(m.folder) || "Mod";
   const siblings = new Set(mods(game).filter((x) => x.group === m.group && x.id !== m.id).map((x) => x.folder.toLowerCase()));
   const want = on ? base : `DISABLED ${base}`;
@@ -202,11 +235,45 @@ function toggle(game: string, m: ModEntry, on: boolean): boolean {
   m.relPath = m.group ? `${m.group}/${folder}` : folder;
   m.path = parentPath + folder;
   m.enabled = on;
+  m.standby = false;
   if (!on) m.conflicts = 0;
   return true;
 }
 
+/** Live switching (demo/ingame.ts) plugs in here, like live.rs does in the backend's library. */
+export const liveHooks: {
+  /** Ids of the live skins among these. */
+  live?: (game: string) => Set<string>;
+  /** Switch live skins: on picks one, off picks none when it's showing. */
+  switch?: (game: string, targets: Array<[string, boolean]>) => ModChange;
+  /** A skin that isn't live came on: the character's live skins show none. */
+  hide?: (game: string, character: string) => ModChange | null;
+} = {};
+
+/** Turn mods on or off. Live skins switch in game instead of being renamed (backend library::set_enabled). */
 export function setEnabled(game: string, ids: string[], on: boolean, oneSkin: boolean): ModChange {
+  const live = liveHooks.live?.(game) ?? new Set<string>();
+  const picks = ids.filter((i) => live.has(i));
+  if (!picks.length || !liveHooks.switch) return setFolders(game, ids, on, oneSkin);
+  const rest = ids.filter((i) => !live.has(i));
+  const change: ModChange = rest.length ? setFolders(game, rest, on, oneSkin) : { changed: [], removed: [], notes: [] };
+  const sw = liveHooks.switch(game, picks.map((i) => [i, on]));
+  if (oneSkin) {
+    const shown = sw.changed.filter((e) => e.enabled && e.character).map((e) => e.character!.toLowerCase());
+    const offs = mods(game).filter((o) => (o.enabled || o.standby) && !live.has(o.id) && !ids.includes(o.id) && shown.includes(o.character?.toLowerCase() ?? ""));
+    if (offs.length) {
+      const off = setFolders(game, offs.map((o) => o.id), false, false);
+      change.changed.push(...off.changed);
+    }
+  }
+  onChange(game, sw);
+  change.changed.push(...sw.changed);
+  change.notes.push(...sw.notes);
+  return change;
+}
+
+/** Rename folders only, live skins included. */
+export function setFolders(game: string, ids: string[], on: boolean, oneSkin: boolean): ModChange {
   const list = mods(game);
   const byId = new Map(list.map((m) => [m.id, m]));
   if (ids.length && !ids.some((id) => byId.has(id))) throw err("Those mods aren't in the library anymore. Rescan to refresh the list");
@@ -218,7 +285,7 @@ export function setEnabled(game: string, ids: string[], on: boolean, oneSkin: bo
     for (const id of ids) {
       const m = byId.get(id);
       const winner = m?.character ? last.get(m.character.toLowerCase()) : undefined;
-      if (m && winner && winner !== id && !m.enabled) {
+      if (m && winner && winner !== id && !m.enabled && rootOf(byId.get(winner)!) !== rootOf(m)) {
         skip.add(id);
         const note = `One skin per character: kept ${byId.get(winner)?.name} on for ${m.character}`;
         if (!change.notes.includes(note)) change.notes.push(note);
@@ -236,9 +303,12 @@ export function setEnabled(game: string, ids: string[], on: boolean, oneSkin: bo
     for (const id of turnedOn) {
       const m = byId.get(id);
       if (!m?.character) continue;
+      const hidden = liveHooks.hide?.(game, m.character);
+      if (hidden) { change.changed.push(...hidden.changed); change.notes.push(...hidden.notes); }
+      const live = liveHooks.live?.(game);
       for (const o of list) {
-        if (o.id === id || ids.includes(o.id) || !o.enabled || o.character?.toLowerCase() !== m.character.toLowerCase()) continue;
-        if (toggle(game, o, false)) { change.changed.push({ ...o }); change.notes.push(`Turned off ${o.name} (${m.character})`); }
+        if (o.id === id || ids.includes(o.id) || !o.enabled || live?.has(o.id) || rootOf(o) === rootOf(m) || o.character?.toLowerCase() !== m.character.toLowerCase()) continue;
+        if (toggle(game, o, false)) change.changed.push({ ...o });
       }
     }
   }
@@ -247,10 +317,41 @@ export function setEnabled(game: string, ids: string[], on: boolean, oneSkin: bo
 }
 
 const oneSkinOn = (game: string) => demoDb.settings.get(`${game}.oneSkin`) !== "0";
+const rootOf = (m: ModEntry) => m.parent || m.id;
+
+/** Sub-mods that were on when their parent went off (backend Sidecar::off_with_parent). */
+const offWithParent = new Set<string>();
+
+/** Sub-mods go with their parent (backend library::with_family): a sub-mod on brings its parent, a parent off takes
+ *  its sub-mods, and on again brings back the ones that were on. */
+function withFamily(game: string, ids: string[], on: boolean): { ids: string[]; notes: string[] } {
+  const list = mods(game);
+  const byId = new Map(list.map((m) => [m.id, m]));
+  const out = [...ids];
+  const notes: string[] = [];
+  for (const id of ids) offWithParent.delete(id);
+  if (on) {
+    for (const id of ids) {
+      const m = byId.get(id);
+      const p = m?.parent ? byId.get(m.parent) : undefined;
+      if (!m || !p || p.enabled || p.standby || out.includes(p.id)) continue;
+      out.push(p.id);
+      notes.push(`Turned on ${p.name} too, since ${m.name} is its sub-mod`);
+    }
+    for (const m of list) {
+      if (m.parent && out.includes(m.parent) && !out.includes(m.id) && !m.enabled && offWithParent.has(m.id)) { out.push(m.id); offWithParent.delete(m.id); notes.push(`Turned its sub-mod ${m.name} back on`); }
+    }
+  } else {
+    for (const m of list) {
+      if (m.parent && ids.includes(m.parent) && !out.includes(m.id) && m.enabled) { out.push(m.id); offWithParent.add(m.id); notes.push(`Turned off its sub-mod ${m.name} too`); }
+    }
+  }
+  return { ids: out, notes };
+}
 
 export function registerLibraryDemo() {
   if (!demoDb.mods.has("zzz")) {
-    setMods("zzz", seedMods("zzz", ZZZ));
+    setMods("zzz", [...seedMods("zzz", ZZZ), ...looseMods("zzz", ZZZ_LOOSE)]);
     setMods("gi", seedMods("gi", GI));
     setMods("ww", seedMods("ww", WW));
     for (const [game, list] of Object.entries(REMOVED)) {
@@ -296,12 +397,43 @@ export function registerLibraryDemo() {
 
   registerOwnedDemo();
   registerDemo({
-    library_list: ({ game }) => mods(String(game)).map((m) => ({ ...m })),
-    library_scan: async ({ game }) => { await demoWait(450); return mods(String(game)).map((m) => ({ ...m })); },
-    mod_get: ({ game, id }) => ({ ...findMod(String(game), String(id)) }),
-    mods_set_enabled: async ({ game, ids, on }) => {
+    library_list: ({ game }) => mods(String(game)).map(withParts),
+    library_scan: async ({ game }) => { await demoWait(450); return mods(String(game)).map(withParts); },
+    mod_get: ({ game, id }) => withParts(findMod(String(game), String(id))),
+    mod_parts: ({ game, id }) => partsOf(findMod(String(game), String(id))).map((p) => ({ ...p })),
+    mods_merge: async ({ game, ids }) => {
+      await demoWait(200);
+      const g = String(game);
+      const list = ((ids as string[]) ?? []).map((id) => findMod(g, id));
+      if (list.length < 2) throw err("Pick at least two mods to combine");
+      const lead = list.find((m) => m.enabled) ?? list[0]!;
+      const rest = list.filter((m) => m !== lead);
+      const names = [lead, ...rest].map((m) => m.name);
+      const cut = lead.name.lastIndexOf(" - ");
+      const prefix = cut > 0 && names.every((n) => n.startsWith(lead.name.slice(0, cut + 3))) ? lead.name.slice(0, cut + 3) : "";
+      const name = prefix ? prefix.slice(0, -3) : lead.name;
+      demoSetParts(lead.id, names.map((n) => n.slice(prefix.length)));
+      Object.assign(lead, { name, folder: name, relPath: `${lead.group ?? "Other"}/${name}`, enabled: true, parts: list.length, iniCount: list.reduce((n, m) => n + m.iniCount, 0) });
+      setMods(g, mods(g).filter((m) => !rest.includes(m)));
+      return { changed: [{ ...lead }], removed: rest.map((m) => m.id), notes: [`Combined ${list.length} mods into ${name}`] };
+    },
+    mod_set_part: async ({ game, id, folder, on }) => {
       await demoWait(120);
-      return setEnabled(String(game), (ids as string[]) ?? [], !!on, !!on && oneSkinOn(String(game)));
+      const m = findMod(String(game), String(id));
+      const part = partsOf(m).find((p) => p.folder === folder);
+      if (!part) throw err("That part isn't in the mod anymore. Reopen it to refresh the list");
+      part.enabled = !!on;
+      part.folder = on ? part.name : `DISABLED ${part.name}`;
+      m.iniCount = partsOf(m).filter((p) => p.enabled).reduce((n, p) => n + p.iniCount, 0);
+      return withParts(m);
+    },
+    mods_set_enabled: async ({ game, ids, on, turnOffOthers }) => {
+      await demoWait(120);
+      const fam = withFamily(String(game), (ids as string[]) ?? [], !!on);
+      const others = typeof turnOffOthers === "boolean" ? turnOffOthers : oneSkinOn(String(game));
+      const change = setEnabled(String(game), fam.ids, !!on, !!on && others);
+      change.notes.unshift(...fam.notes);
+      return change;
     },
     mod_update_meta: ({ game, id, patch }) => {
       const m = findMod(String(game), String(id));
@@ -314,6 +446,16 @@ export function registerLibraryDemo() {
       if (p.favorite !== undefined) m.favorite = p.favorite;
       if (p.nsfw !== undefined) m.nsfw = p.nsfw;
       if (p.version !== undefined) m.version = text(p.version);
+      if (p.parent !== undefined) {
+        const all = mods(String(game));
+        const pick = p.parent ? all.find((x) => x.id === p.parent) : undefined;
+        if (p.parent && !pick) throw err("That mod isn't in the library anymore");
+        const root = pick ? rootOf(pick) : null;
+        if (root === m.id) throw err(`${pick!.name} is already a sub-mod of ${m.name}`);
+        if (root && all.some((x) => x.parent === m.id)) throw err(`${m.name} has sub-mods of its own, so it can't be a sub-mod`);
+        m.parent = root;
+        offWithParent.delete(m.id);
+      }
       return { ...m };
     },
     // the browser has no files to copy: a pasted or dropped image becomes a blob URL, the old preview is remembered

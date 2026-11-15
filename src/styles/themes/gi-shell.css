@@ -67,7 +67,8 @@
   .nv.on .i, .nv.on:hover:not(:disabled) .i { color: var(--ink); }
   .nv-b { position: absolute; top: 4px; right: 4px; min-width: 1.2rem; height: 1.2rem; background: var(--cream); color: var(--ink); font-weight: 700; }
   .nv-b.t-bad { background: #e2513e; color: #fff; box-shadow: 0 0 0 1.5px #f1ebe0; }
-  .nv-b.t-run { top: 7px; right: 7px; width: .55rem; height: .55rem; margin: 0; background: var(--lime); }
+  .nv-b.t-run { background: var(--lime); }
+  .nv-b.t-run:empty { top: 7px; right: 7px; width: .55rem; height: .55rem; margin: 0; }
   .nv-b.t-run::after { border-color: var(--lime); }
   .nv.on .nv-b:not(.t-bad):not(.t-run) { background: var(--slate-btn); color: var(--cream); }
   .gbadge { font-weight: 700; }

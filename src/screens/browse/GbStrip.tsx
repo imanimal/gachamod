@@ -10,7 +10,7 @@ import { go, useGames } from "../../lib/store";
 import { Button, IconButton } from "../../ui/kit";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { rowKeys, useSideScroll } from "./sideScroll";
-import { setFilters, useLibIndex } from "./state";
+import { openWithFilters, useLibIndex } from "./state";
 import "./browse.css";
 
 export interface GbStripQuery {
@@ -79,7 +79,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
   if (!gs) return null;
 
   const seeAll = more ?? (() => {
-    setFilters(game, { sort, hq: !!query.hq, followed: !!query.followed, character: query.character ?? null, search: "" });
+    openWithFilters(game, { sort, hq: !!query.hq, followed: !!query.followed, character: query.character ?? null, search: "" });
     go({ view: "browse" });
   });
 

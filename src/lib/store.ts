@@ -122,8 +122,12 @@ export interface Route {
   view: View;
   /** library: this mod's details (a library id). browse: this GameBanana mod's page (a number). */
   modId?: string | number;
+  /** Any view: this GameBanana tool's page (a fixer, a script), opened over the page. */
+  toolId?: number;
   /** characters: this character's page. library and browse: only this character. */
   character?: string;
+  /** library: only mods without a character of this type ("ui", "tool", "weapon", "other"; library/kinds.ts). */
+  kind?: string;
   /** library and browse: start with this search text. */
   search?: string;
   /** settings and tools: scroll to the section with this id. */
@@ -184,6 +188,8 @@ const scrollOfView = () => (document.querySelector(".app .view") as HTMLElement 
 
 export const useRoute = () => useSyncExternalStore(route.sub, route.get);
 export const currentRoute = () => route.get();
+/** Call `cb` after every page change (usage counts). Returns what stops it. */
+export const onRoute = (cb: () => void) => route.sub(cb);
 /** Whether Back and Forward have somewhere to go. */
 export const useNav = () => useSyncExternalStore(nav.sub, nav.get);
 

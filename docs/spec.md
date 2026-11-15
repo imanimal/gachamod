@@ -148,10 +148,22 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
   Emits nothing itself (commands return the list). Must handle 1,000+ mods in under 2 seconds on an SSD: don't hash
   files, read inis only through quick_facts.
 - set_enabled: rename `X` to `DISABLED X` and back; if the target name exists, add " (2)". Move the saved variables
-  (ini::move_user_vars) so turning a mod off and on keeps its options. One skin per character: setting
-  `"<game>.oneSkin"` (default "1"); when turning on a mod with a character, turn off the other enabled mods with the
-  same character and say so in `notes` ("Turned off Coca Cola (Ellen Joe)"). Afterwards call
-  `profiles::on_change`.
+  (ini::move_user_vars) so turning a mod off and on keeps its options. One skin per character: when turning on a mod
+  with a character, turn off the other enabled mods with the same character and say so in `notes` ("Turned off Coca
+  Cola (Ellen Joe)"). `set_enabled_with(.., turn_off_others)` takes the user's answer; without one, setting
+  `"<game>.oneSkin"` decides ("0" keeps them on, anything else turns them off). Afterwards call `profiles::on_change`.
+- Asking (UI, `screens/library/overlap.ts`): turning one mod on from its switch, its details or its menu while its
+  character has another mod on opens a small menu by the switch: "Turn off Coca Cola", "Keep both on", "Make it a
+  sub-mod of Coca Cola". Closing it leaves the mod off. `"<game>.oneSkin"` "auto" turns the other off without asking,
+  "0" keeps both; "ask" (default, and the old "1") asks. Settings, Mods: "Another skin already on" per game. Bulk
+  turn-ons, profiles and hotkeys don't ask (the last one of each character wins, as before).
+- Sub-mods: `Sidecar.parent` (an id; `ModEntry.parent`) marks an add-on that goes with another mod (a hair recolour
+  for one outfit). Set through update_meta `parent` ("" unlinks); a sub-mod's parent stands in when picked as a parent,
+  and a mod with sub-mods can't become one. Mods with the same root (parent or self) never trip the one-skin rule.
+  Turning a sub-mod on turns its parent on; turning a parent off turns its sub-mods off and marks them
+  `off_with_parent`, and turning it on again brings those back. Profile switches set states as saved, without these
+  rules. UI: "Make sub-mod of" / "Unlink from X" in the mod menu, a "Sub-mod" tag on the card that opens the parent,
+  and in the details a "Sub-mod of X" line or the list of its sub-mods with switches.
 - update_meta writes the sidecar and the row. Changing `character` does not move the folder.
 - move_to_group moves the folder (and saved vars), creating the group folder; removes the old group folder if empty.
 - remove: move the folder to `<data>/trash/<game>/<trash id>/`; `trash` row; restore puts it back at its original
@@ -165,13 +177,16 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
   capture the outgoing profile's vars (ini::user_vars for each mod it has on), set enabled states to match the
   incoming profile (mods not in the profile's rows keep their current state only if they were installed after the
   profile was last updated; otherwise off), write the incoming vars (unless the game runs: `vars_pending`), mark
-  active. Mods added while a profile is active join it enabled.
+  active. Mods added while a profile is active join it as they are (new installs are off).
 
 UI:
 - `screens/library/Library.tsx` (view "library", label "Mods"): header with search, filter chips (All, On, Off,
-  Updates, Favourites, Problems), character chip row with portraits (from characters.list), sort (Recently added, Name,
+  Updates, Favourites, Problems), a chip row that scrolls sideways (wheel, arrow buttons, arrow keys): types for mods
+  without a character (UI, Tools and fixes, Weapons, Other, from `libKind` in library/kinds.ts: group folder and tags
+  first, then the name, with RabbitFX, ORFix and similar libraries always tools; route `kind`), then characters with
+  portraits (from characters.list), sort (Recently added, Name,
   Character, Size), grid/list toggle (remember in localStorage). Mod cards: preview image (blur when nsfw and setting
-  "ui.nsfw" is "blur"; hidden when "hide"), name, character, a Toggle that turns the mod on/off immediately (with Undo
+  "ui.nsfw" is "blur"; hidden when "hide"), name, character (or the type, a link to that type's chip), a Toggle that turns the mod on/off immediately (with Undo
   through history.record), badges (Update, Conflict, Keys), a "..." menu (Open folder, Move to character, Export as
   .gachamod: `emitApp({type:"export-mods"})`, Open on GameBanana, Remove). Multi-select with Ctrl/Shift click and a
   bulk bar (Turn on, Turn off, Export, Remove). "Rescan" button and an automatic scan when the screen opens if the
@@ -433,6 +448,11 @@ UI:
 - `gameInfo(gbId)`: name, icon, banner (cache in sessionStorage).
 - `listMods({ gbGameId, page, perPage<=50, sort, categoryId?, search? })` -> `{ items: GbCard[], total, complete }`
   using Mod/Index (sort keys: newest, updated, downloads, likes, views) or Util/Search/Results for text (15 per page).
+  That search ignores who made a mod, so Browse first lists `modsByNamedCreator`: mods by a member named like the
+  text (exactly) or like one of its words (close, see `nameClose`), matched against the other words. When no member
+  fits and no mod on the plain search's first page has every word (GameBanana drops words it can't place), it reads
+  up to 8 pages of a search for the other words for mods by a close name ("burnice haezeker" finds Burnice mods by
+  "Haezeker_").
 - `modPage(id)` -> GbMod (name, description HTML, summary, images at sizes, files with download URL, md5, size,
   added time, download count, analysis warnings, submitter with avatar, category and super category with ids,
   content ratings, initial visibility, likes, views, version, date added/updated, updates count).
@@ -450,12 +470,19 @@ UI:
   (convert to a thumbnail link). Strip everything else and all on* attributes and styles.
 Rust: `install.rs` (stage with archive::extract into `<data>/staging/<id>`; find_roots per "Finding mods" over the
 staging folder; place moves (rename, fall back to copy+delete across drives) into Mods; replace keeps the old
-sidecar id, enabled state and folder name, moves the old folder to trash with reason "replaced" first; preview_url
+sidecar id, enabled state and folder name, moves the old folder to trash with reason "replaced" first; anything else new
+comes in off (`DISABLED <name>`): installing never turns a mod on, the user does that from its details or GameBanana
+page (which shows a switch once it is installed), so the one-skin question comes up there; preview_url
 is downloaded to `preview.jpg` (best effort, short timeout); register with library::add_folder; clean staging.)
 `queue.rs` + `runner.rs`: persistent queue (queue_items rows), up to 3 downloads at once, installs one at a time,
 progress events throttled to ~8 per second per item, cancel and retry (resume via the .part file), NeedsChoice when
-an archive holds several candidates (emit variants-needed; `queue_choose` installs the picked keys), emits
-`library-changed {game}` after installs and a `toast` event ("Installed Coca Cola for Ellen Joe"). Downloads go to
+an archive holds several candidates (emit variants-needed; `queue_choose` installs the picked keys; setting
+"downloads.allParts" "1" installs every key without asking). Several picked keys install as one mod whose parts are
+the picked folders (`library::parts`, `set_part` renames a part's folder with DISABLED); a part that overrides a hash
+an earlier part does starts off. `library::merge` combines existing mods the same way, and the first scan of each
+game merges mods an older version installed one per folder from the same archive (setting "<game>.partsMerged"). Emits
+`library-changed {game}` after installs and a `toast` event ("Installed Coca Cola for Ellen Joe") with `open: {game,
+modId}`, which gives the toast an Open button for the mod's details. Downloads go to
 `<data>/downloads/<game>/`; keep the archive (setting "downloads.keep" default "0": delete after install).
 `install_local`: archives (zip/7z/rar) and folders; for a folder, copy it (don't move the user's folder).
 gachamod:// links (deep-link event -> app event open-gb-link): `gachamod:https://gamebanana.com/mmdl/<fileId>,Mod,
@@ -466,7 +493,9 @@ UI:
   (Popular, New, Updated, Most liked), character chip strip with portraits (characterList), category menu, NSFW
   setting (Hide, Blur, Show; setting "ui.nsfw", default "blur"). A masonry or uniform grid of large preview cards
   (image, name, character, submitter avatar, likes, views, date, "Installed" or "Update" badge by matching
-  source.modId against the library list) with infinite scroll (IntersectionObserver), skeleton cards while loading.
+  source.modId against the library list) with infinite scroll: 50 mods a page, cards shown 36 at a time (18 on
+  Home), and the next batch always loaded before it is needed, so scrolling near the end shows it at once. Skeleton
+  cards only while that batch hasn't arrived yet.
   Clicking opens the mod page in a wide Drawer: image gallery with a lightbox (arrow keys), title, submitter, stats,
   description (sanitised HTML), files list each with size, date, download count, analysis status and an Install
   button (primary on the newest file; "Update" when this mod is installed with an older file; "Reinstall" when same),
@@ -482,12 +511,22 @@ UI:
 
 ### Browse in detail (current build)
 
+Mod of the day: picks live in `curated/mod-of-the-day.json` on the main branch (`{ enabled, picks: [{ date, game,
+modId, name?, note? }] }`). `node scripts/motd.mjs <link> <game> [date] [note]` adds one, `on` / `off` switches the
+feature; commit and push to publish. Only people who can push to the repository can change it, so the app needs no
+sign-in or machine check. The app reads the file at most every 12 hours. While `enabled` is false nothing shows;
+when true, Browse's header gets a gift button for the current game's pick (today's, or the latest within three
+days), and Settings, Fun gets a switch to hide it (which also stops the reads).
+
 - One component, `GbBrowser { game, embedded?, onExpand?, character? }`, is the Browse page, the Home section
   (fixed height, Expand keeps the filters because they live in the per-game store) and the character page list
   (character fixed). `GbStrip` is a single scrolling row (wheel, arrows, keyboard, controller) with "See all".
-- Filters are remembered per game in localStorage `gm.browse.filters.<game>` (`useFilters`, `setFilters`); search
-  text is not saved. Sorts: For you, New, Updated, Popular this week, Popular this month, Most downloaded, Most
-  liked, Most viewed. Week and month are worked out here from the newest pages (up to 10) ranked by likes + views/100 +
+- Sort, type, High quality, Following and Hide installed are remembered per game in localStorage
+  `gm.browse.filters.<game>` (`useFilters`, `setFilters`). The character, category and search last only while the
+  browser stays open: a browser that mounts fresh drops them (`beginVisit`) unless something opened it to show them
+  (`openWithFilters`: a category link, See all, Expand). A saved filter set keeps them on purpose. Sorts: For you, New, Updated, Popular this week, Popular this month, Most downloaded, Most
+  liked, Most viewed, and Relevance while searching: a new search switches to it (For you would only search its own
+  picks) and clearing the search puts the earlier sort back. Week and month are worked out here from the newest pages (up to 10) ranked by likes + views/100 +
   comments/2, because Game/TopSubs only gives three. Picking a character clears the category and the other way
   round. Active filters show as chips you can remove one by one or with "Clear all".
 - The character row and grid come from `useCharacterList(game)`: stale-while-revalidate from
@@ -506,8 +545,11 @@ UI:
   mod's attention comes in its first day, about 70% within a week. bar and median are the 80th and 50th percentiles
   of A/shape over the type's mods aged 3 to 60 days among its 200 newest (kept a day, `gm.gb.hqbar.<gb id>[.kind]`).
   The creator's record T is the median A/shape of their mods in the game aged 3+ days (one request per creator,
-  kept 3 days in `gm.gb.records`, only fetched when it could change the answer), else the game's median, and at
-  most 1.5 bar. est = (A + 0.25T) / (shape + 0.25), times 1.2 if featured; a mod passes when est >= bar (`hqScore`
+  kept 3 days in `gm.gb.records`, only fetched when it could change the answer; kept ones are always used and at
+  most 16 more are fetched a call). A creator with fewer than two such mods in the game takes their best record
+  from another game that has a kept bar, as record / that bar times this game's bar (`borrowedRecord`), else the
+  game's median, and T is at most 1.5 bar. When the bar can't be measured, the game's last kept bar is used at any
+  age. est = (A + 0.25T) / (shape + 0.25), times 1.2 if featured; a mod passes when est >= bar (`hqScore`
   returns est / bar, `HQ_PASS` = 1). So a new mod by a creator whose mods usually reach the top fifth shows at
   once, and a day-old mod with 30 likes by a creator whose mods stay under 100 doesn't. Prioritised creators always
   pass. About 20% of outfits pass in each game measured.
@@ -598,7 +640,9 @@ UI:
   "UID" style tag (free text), all from setting "player" (JSON). Click opens an edit dialog. Compact but pretty.
 - `screens/tools/Tools.tsx` and `screens/settings/*`: owned by SETTINGS/AI now, see "Settings, Tools and the AI
   helper" below.
-- `screens/settings/Onboarding.tsx`: first start window: runs games.detect with a short animation, shows found games
+- `screens/settings/Onboarding.tsx`: first start window: runs games.detect, xxmi.status and imm.detect, each listed
+  with its own state (running with a timer, done, or failed with the reason), and past 10 seconds what could be
+  holding it. "Skip the search" appears after 5 seconds; results that arrive later still fill in. Then it shows found games
   as cards (game badge, folders, mod count) with toggles to show them, offers XXMI download link if not found
   (https://github.com/SpectrumQT/XXMI-Launcher/releases), offers "Move mods from IMM" when imm.detect finds it
   (MODTOOLS' ImmPanel logic: emit nothing, just go to Tools section "imm" after), then "Start". Sets setting
@@ -608,6 +652,21 @@ UI:
 - One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
+- Logs, crash reports, usage counts and feedback (`logs.rs`, `telemetry.rs`, `commands/report.rs`,
+  `lib/telemetry.ts`; docs/telemetry.md has every event). The log and crash files live in `<data folder>/logs`.
+  Usage counts and crash reports go to PostHog when they're on (both are on by default, with switches in Settings,
+  Feedback and data, and a line in onboarding). Feedback is sent from a form opened from Settings, the title bar's
+  Help menu, the search ("Send feedback") and a screen that hit an error.
+- Running as administrator: Settings, Games has "Restart as administrator" and an "Always" switch (Windows'
+  RUNASADMIN flag for gachamod.exe under HKCU AppCompatFlags\Layers, which the installer also sets when the player
+  says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
+  has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
+  (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
+- Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and
+  data, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
+  what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
+  the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
+- `npm run installer` builds the installer with build-machine folders written as `~` (scripts/build-installer.mjs).
 - Demo handlers for every SYSTEM command.
 
 ## Settings, Tools and the AI helper (SETTINGS/AI)
@@ -641,6 +700,22 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - Creators: followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the
   creator's page, an x to remove (setCreatorFlag, with Undo).
 - AI helper: off / most useful (default) / everything, the chatbot, and the jobs as buttons.
+- Mods also has "Shuffle outfits" (`screens/library/shuffle.ts`, pref "mods.shuffle": off, each Play, once a day at
+  the first Play): every character with two or more mods gets one of them on at random and the others off, as one
+  change with Undo. Mods hidden as for adults stay out. Also a dice button on Mods and "Shuffle outfits" in search.
+- Fun (`FunSection.tsx`, `lib/fun.ts`), all off by default:
+  - Chill mode ("fun.chill", html[data-chill], `styles/fun.css`): the app's own words in lower case. Content keeps
+    its case (mod, character, creator and profile names, descriptions, comments, tags, paths, fields); a line that
+    mixes both stays as written. Toasts and tips are lowercased whole.
+  - Pity counter ("fun.pity"): counts mods opened in Browse since the last install; at 90 a toast says hard pity
+    and it starts over.
+  - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx`): a few snowflakes from 20 December, hearts on 14 February.
+    Hidden when Animations is off.
+  - Your year in mods: a dialog with mods installed this year, the character with the most mods, the creator of
+    the most of them and hours played (`lib/playtime.ts` counts from game start to close, "stats.played").
+  - Mod of the day (`lib/motd.ts`): see Browse.
+- The Konami code (arrows, B, A; keyboard or controller) reveals a hidden theme, Clay ("fun.hiddenTheme"), and
+  offers to use it. Hidden themes (`ThemeInfo.hidden`) stay out of Appearance until found.
 
 ### Tools
 
@@ -648,6 +723,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 then MODTOOLS' panels. Wrappers hide when a panel renders nothing. Any setting XXMI Launcher owns (the backend's lock
 message says "in XXMI Launcher" or "Only XXMI Launcher") shows an "Open XXMI Launcher" button next to it. "Start with"
 is hidden for community games.
+
+The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
+(docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
+window label `overlay`), or a plainer menu the game draws itself (`crates/gacha-core/src/live/menu.rs`), which is also
+what opens in exclusive fullscreen. The panel says which one is better and why.
 
 ### The AI helper
 
@@ -693,8 +773,10 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
 
 ## Extensions (EXTENSIONS)
 
-The package format, the page API and the repo layout are in [extensions.md](extensions.md). The public list lives in
-its own repo, seeded from `extensions-repo/` here.
+The package format, the page API and the repo layout are in [extensions.md](extensions.md). The public list is the
+repo imanimal/gachamod-extensions (public, served from raw.githubusercontent.com). `extensions-repo/` here is the copy
+it started from; the demo and tests use its example packages. Its `docs/extensions.md` must match ours (a test checks),
+so push that copy to the public repo when the docs change.
 
 - Extensions page (`view: "extensions"`, not in the sidebar): reached from Settings, Extensions, from Get more themes
   under Custom themes and from search. Tabs Available and Installed (`tab: "installed"`), a filter for All, Themes
@@ -720,9 +802,16 @@ its own repo, seeded from `extensions-repo/` here.
 ## The window (shell)
 
 - Title bar (`shell/Titlebar.tsx`): Back and Forward, the breadcrumb, then "Search anything" in the middle of the
-  window (opens the palette, Ctrl+K), then Undo, Redo, Help and the window keys. Both sides stay empty enough to drag
-  the window. The search box grows in from a key when the app opens, after the first setup and after the tour; on a
+  window (opens the palette, Ctrl+K), then what's running, Undo, Redo, Help and the window keys. Both sides stay
+  empty enough to drag the window. The search box grows in from a key when the app opens, after the first setup and after the tour; on a
   narrow window it narrows before the breadcrumb does.
+- What's running (`shell/Activity.tsx`, `lib/activity.ts`): every backend call and GameBanana request is noted
+  with what it does and what can hold it up (`describeCall`, `HOLD`). Anything over 1.2 seconds shows in the title
+  bar with its time ("Reading the Mods folder 4s"), turning to the warning colour past 10 seconds. Clicking it, or
+  "Show what's running" in the palette, lists each wait with what could be holding it. On screen, waits use the
+  kit's `Waiting` (a line saying what it's for, a counter after 3 seconds, and past 10 seconds what could be holding
+  it), never a bare spinner. Network requests time out (30 seconds without an answer) so a dead connection becomes
+  an error instead of a wait.
 - Help menu: Take the tour, Keyboard and controller shortcuts (?), Search anything, Report a problem (GitHub issues).
 - Tour (`shell/Tour.tsx`): six short steps, each lighting one part of the window (search, the game, pages,
   profiles, Play, Help) with a card beside it. Arrows or Enter move on, Escape or B closes. Steps whose part isn't

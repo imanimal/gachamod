@@ -59,7 +59,7 @@ function offerRedo(e: Entry, toastId?: number) { show(e, `Undone: ${e.label.char
 export async function undo(target?: Entry, toastId?: number): Promise<boolean> {
   if (running) return false;
   const e = target ?? past[past.length - 1];
-  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast("Nothing to undo"); return false; }
+  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast("Nothing to undo. You haven't broken anything yet"); return false; }
   // undoing an older one first undoes what came after it, so the inverse runs on the state it expects
   while (past.length && past[past.length - 1] !== e) { const later = past[past.length - 1]; if (!(await undoOne(later))) return false; }
   const ok = await undoOne(e);

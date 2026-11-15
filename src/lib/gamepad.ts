@@ -10,6 +10,7 @@
 // It reads the pad only while this window has focus, so a pad used in the game never moves the app, and it polls
 // only while a pad is connected.
 import { focusSearch, topLayer } from "./keys";
+import { konamiPress } from "./fun";
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [role="button"], iframe[data-ext]';
 
@@ -70,7 +71,7 @@ export function installGamepad(opts: {
   const press = (name: string, now: number, on: boolean, fn: () => void, repeat = false) => {
     if (!on) { held.delete(name); return; }
     const next = held.get(name);
-    if (next === undefined) { held.set(name, now + (repeat ? 380 : Infinity)); fn(); }
+    if (next === undefined) { held.set(name, now + (repeat ? 380 : Infinity)); fn(); konamiPress(name); }
     else if (repeat && now >= next) { held.set(name, now + 110); fn(); }
   };
   const scroll = (amount: number) => (document.querySelector(".lightbox, .drawer-b, .dialog-b, .app .view") as HTMLElement | null)?.scrollBy({ top: amount });

@@ -104,7 +104,7 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
             {on.length > 0 && <Button size="sm" variant="ghost" icon="undo" onClick={() => void defaultOutfit()} title={`Turns off every mod for ${display}`}>Default outfit</Button>}
             <Button size="sm" variant="ghost" icon={owned ? "check" : "plus"} className={owned ? "char-owned on" : "char-owned"} aria-pressed={owned}
               onClick={() => void toggleOwned(game, display)}
-              title={owned ? `You own ${display}. Click to mark as not owned (O)` : `Mark ${display} as owned, so it shows under Owned (O)`}>
+              title={owned ? `You own ${display}. Click to mark as not owned (O)` : `Mark ${display} as owned, for the Owned filter on ${many} (O)`}>
               {owned ? "Owned" : "Mark as owned"}
             </Button>
           </div>

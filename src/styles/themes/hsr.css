@@ -69,7 +69,7 @@
 }
 
 /* ── plate: dialogs, menus and list rows. Ink text, darker status colours ── */
-[data-theme="hsr"] :is(.dialog, .popover, .palette, .apptip, .list-row, .set-row, .set-game, .tools-dev-row, .dl-item, .gb-file, .gb-post, .trash-item, .tp-conflict, .tp-problem, .mi-opt, .mi-key-row, .pack-mod, .set-importer, .set-pergame-r, .keys-list, .kv, .note.t-warn, .tools-blocked) {
+[data-theme="hsr"] :is(.dialog, .popover, .palette, .apptip, .ai-intro, .list-row, .set-row, .set-game, .tools-dev-row, .dl-item, .gb-file, .gb-post, .trash-item, .tp-conflict, .tp-problem, .mi-opt, .mi-key-row, .pack-mod, .set-importer, .set-pergame-r, .keys-list, .kv, .note.t-warn, .tools-blocked) {
   color-scheme: light;
   --bg: #dadcde; --bg-2: #edefef; --surface: #dadcde; --surface-2: #cbccd0; --surface-3: #bfc0c5; --raised: #26262a;
   --line: rgb(0 0 0 / .13); --line-2: rgb(0 0 0 / .26);
@@ -83,6 +83,25 @@
   --btn-bg: #f7f7f7; --btn-line: #c9c9cc; --row: #edefef; --row-hi: #f6f7f7;
   color: var(--text);
 }
+
+/* ── dark: settings and tools rows stay glass. A whole page of pale plates is too bright at night ── */
+[data-theme="hsr"]:not([data-scheme="light"]) :is(.set-row, .set-game, .set-importer, .set-pergame-r, .tools-dev-row) {
+  color-scheme: dark;
+  --bg: #0f1224; --bg-2: #0a0b14; --surface: #1b1c24; --surface-2: #262833; --surface-3: #323543; --raised: #e2e2e2;
+  --line: rgb(255 255 255 / .12); --line-2: rgb(255 255 255 / .26);
+  --text: #fff; --text-2: #c9ccd6; --text-3: #8e93a3;
+  --accent-ink: #ecd29c; --accent-soft: rgb(224 190 120 / .16);
+  --ok: #61fbdd; --warn: #fbac45; --bad: #ff8b7e; --info: #8fc3ff;
+  --ring: #fff; --hover: rgb(255 255 255 / .1);
+  --img-bg: #2c3245;
+  --ctl-line: rgb(255 255 255 / .3); --ctl-fill: rgb(130 145 185 / .16); --ctl-on-bg: #e4e5e7; --ctl-on-fg: #111113;
+  --well: rgb(6 8 16 / .55); --well-line: rgb(255 255 255 / .22); --track: rgb(255 255 255 / .16);
+  --btn-bg: #e2e2e2; --btn-line: #b9b8ba; --row: rgb(24 27 40 / .82); --row-hi: #e9eaec;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08);
+  color: var(--text);
+}
+/* the AI intro card is a plate; --raised turns dark on plates, so it names the plate colour */
+[data-theme="hsr"] .ai-intro { background: var(--plate); border-color: transparent; }
 
 [data-theme="hsr"] {
   /* ── buttons: pale pills, ink label, a thin line set inside the edge ── */

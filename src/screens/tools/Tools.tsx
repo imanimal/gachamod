@@ -2,12 +2,13 @@
 // panels. Owner: SETTINGS/AI area.
 // Fields save on change (400 ms after the last one) with a small "Saved". Sections have ids for go({ section }).
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Badge, Button, Confirm, PageHeader, Panel, Segmented, Select, TextField, Toggle, formatBytes, plural } from "../../ui/kit";
+import { Badge, Button, Confirm, PageHeader, Panel, Segmented, Select, TextField, Toggle, formatBytes, plural, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
 import { dev, errorKind, errorText, launchConfig, shell, type DevStatus, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
 import { allGames, consumeRoute, currentGame, emitApp, go, useGame, useRoute } from "../../lib/store";
 import { registerCommands } from "../../lib/search";
+import { scrollToElement } from "../../lib/smoothScroll";
 import { FixesPanel } from "./FixesPanel";
 import { InGamePanel } from "../ingame/InGamePanel";
 import { openXxmi } from "../settings/parts";
@@ -88,12 +89,22 @@ export function Tools() {
   // Problems comes first while one of them has a one-click fix
   const problemsFirst = useProblemsFirst(game?.id ?? null);
 
-  // scroll to a deep-linked section once the page has laid out
+  // scroll to a deep-linked section. Some only show once their config loads (Mod maker switches), so it waits up to a
+  // second for the section to appear.
   useEffect(() => {
     const id = route.section;
     if (!id) return;
-    const t = window.setTimeout(() => { document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); consumeRoute(["section"]); }, 120);
-    return () => window.clearTimeout(t);
+    const t0 = performance.now();
+    let raf = 0;
+    const find = () => {
+      const el = document.getElementById(id);
+      if (!el && performance.now() - t0 < 1000) { raf = requestAnimationFrame(find); return; }
+      const view = el?.closest<HTMLElement>(".view");
+      if (el && view) scrollToElement(view, el, "start");
+      consumeRoute(["section"]);
+    };
+    raf = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(raf);
   }, [route.section]);
 
   if (!game) return null;
@@ -165,7 +176,7 @@ function LaunchSections({ game }: { game: GameState }) {
   };
 
   if (loadError) return <Panel title="Launch" icon="play" id="launch"><p className="hint">{loadError}</p></Panel>;
-  if (!cfg) return <Panel title="Launch" icon="play" id="launch"><p className="hint">Loading…</p></Panel>;
+  if (!cfg) return <Panel title="Launch" icon="play" id="launch"><Waiting what="Reading launch options" /></Panel>;
 
   const lock = (k: string) => lockNote(cfg.locked[k]);
   const setMig = (patch: Partial<MigotoConfig>) => update({ migoto: { ...cfg.migoto, ...patch } });

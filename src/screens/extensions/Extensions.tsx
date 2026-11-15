@@ -10,11 +10,11 @@ import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
 import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ICONS } from "../../ui/icons";
-import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, Skeleton, Spinner, Tabs, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, Skeleton, Tabs, Waiting, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { ExtensionFrame, NeedsNote } from "./ExtensionFrame";
 import "./extensions.css";
 
-export const DOCS_URL = "https://github.com/imanimal/gachamod/blob/main/docs/extensions.md";
+export const DOCS_URL = "https://github.com/imanimal/gachamod-extensions/blob/main/docs/extensions.md";
 
 /** An icon name a package picked, if the app has it. */
 export const extIcon = (name: string | null | undefined, fallback: IconName = "puzzle"): IconName => (name && name in ICONS ? name as IconName : fallback);
@@ -90,7 +90,7 @@ function Catalog() {
               </Empty>
             )}
         </>
-      ) : list === null ? <div className="ext-wait"><Spinner /></div>
+      ) : list === null ? <Waiting className="ext-wait" what="Reading your extensions" />
         : shownInstalled.length ? (
           <div className="ext-grid">{shownInstalled.map((e) => <InstalledCard key={e.id} e={e} update={updateFor(e, listed)} />)}</div>
         ) : (
@@ -227,7 +227,7 @@ function ExtensionPage({ id }: { id: string }) {
   const list = useExtensions();
   const game = useGame();
   const e = list?.find((x) => x.id === id);
-  if (!list) return <div className="ext-wait"><Spinner /></div>;
+  if (!list) return <Waiting className="ext-wait" what="Reading your extensions" />;
   const m = e?.manifest;
   if (!e || !m?.page || !e.enabled || !game) {
     return (

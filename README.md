@@ -5,7 +5,7 @@ Zero, Wuthering Waves, Honkai Impact 3rd and Arknights: Endfield through XXMI La
 3DMigoto loader like Punishing: Gray Raven and Identity V. You browse GameBanana inside the app, install with one
 click, and switch skins per character. It works alongside XXMI Launcher and starts the game through it.
 
-It's early and Windows only. There is no installer yet; build it from source (below).
+It's early and Windows only.
 
 ## What it does
 
@@ -51,8 +51,8 @@ picks up changes on its own:
 
 `npm run app:attach` does the same but uses a dev server that is already running on port 1420. `npm run dev` runs
 the interface alone in a browser at http://localhost:1420 with made-up local data and the real GameBanana.
-`npm run tauri build` makes a release build and an installer; that one is slow and only needed to hand the app
-to someone else.
+`npm run installer` makes a release build and an installer in `target/release/bundle/nsis`; that one is slow and only
+needed to hand the app to someone else.
 
 ## Licence
 

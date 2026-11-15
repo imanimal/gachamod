@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emitApp, useGame } from "../../lib/store";
 import { errorKind, errorText, modtools, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
-import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, plural, type Tone } from "../../ui/kit";
+import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, Waiting, plural, type Tone } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
 import { turnOff } from "./toolsBadge";
@@ -44,9 +44,9 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
   if (failed) return <p className="mi mi-failed muted">{failed}</p>;
   if (!shown) {
     return (
-      <div className="mi mi-loading" aria-busy="true">
+      <Waiting className="mi mi-loading" what="Reading the mod's files">
         <Skeleton h="1.2rem" w="40%" /><Skeleton h="2.4rem" /><Skeleton h="2.4rem" />
-      </div>
+      </Waiting>
     );
   }
 

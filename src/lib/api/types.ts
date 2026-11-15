@@ -52,7 +52,10 @@ export interface ModEntry {
   folder: string;
   relPath: string;
   path: string;
+  /** On as the player sees it. A live skin that isn't the one showing is off (see `standby`). */
   enabled: boolean;
+  /** A live skin that isn't the one showing: its folder stays on so turning it on switches in game at once. */
+  standby?: boolean;
   character: string | null;
   group: string | null;
   source: ModSource | null;
@@ -71,6 +74,11 @@ export interface ModEntry {
   updateAvailable: boolean;
   /** The preview is one the user picked (library.setPreview). Missing on rows from before it existed. */
   customPreview?: boolean;
+  /** Folders inside it with their own inis, each switched on or off in its details (library.parts). */
+  parts?: number;
+  /** The mod this one is a sub-mod of: an add-on that goes with it. It never counts as clashing with it, turns off
+   *  with it, and turning it on turns the parent on too. */
+  parent?: string | null;
 }
 
 export interface ModChange { changed: ModEntry[]; removed: string[]; notes: string[] }

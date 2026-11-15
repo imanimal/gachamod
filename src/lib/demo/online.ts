@@ -5,7 +5,7 @@ import { demoEmit, registerDemo } from "../tauri";
 import { EVENTS, type ModEntry } from "../api/types";
 import type { Candidate, InstallOutcome, QueueItem, QueueRequest, QueueSnapshot } from "../api/online";
 import { demoDb, demoId, demoNow } from "./db";
-import { demoRestoreRemoved } from "./library";
+import { demoRestoreRemoved, demoSetParts } from "./library";
 
 let items: QueueItem[] = [];
 let nextId = 1;
@@ -93,7 +93,11 @@ function install(id: number) {
     timers.delete(id);
     const cur = items.find((i) => i.id === id);
     if (!cur || cur.state !== "installing") return;
-    const keys = chosen.get(id);
+    let keys = chosen.get(id);
+    if (!keys && Math.random() < 0.25) {
+      const candidates = variants(cur);
+      if (demoDb.settings.get("downloads.allParts") === "1") keys = candidates.map((c) => c.key);
+    }
     if (!keys && Math.random() < 0.25) {
       const candidates = variants(cur);
       set(id, { state: "needsChoice", candidates, staging: "%APPDATA%\\gachamod\\staging\\demo" });
@@ -109,8 +113,8 @@ function install(id: number) {
     demoEmit(EVENTS.libraryChanged, { game: cur.req.game });
     const m = added[0];
     const verb = cur.req.meta.replaces ? "Updated" : "Installed";
-    const what = added.length > 1 ? `${added.length} variants of ${cur.req.meta.name}` : m?.name ?? "the mod";
-    demoEmit(EVENTS.toast, { text: m?.character ? `${verb} ${what} for ${m.character}` : `${verb} ${what}`, bad: false });
+    const what = m?.name ?? "the mod";
+    demoEmit(EVENTS.toast, { text: m?.character ? `${verb} ${what} for ${m.character}` : `${verb} ${what}`, bad: false, open: m ? { game: cur.req.game, modId: m.id } : null });
     pump();
   }, 900));
 }
@@ -122,12 +126,14 @@ function place(item: QueueItem, keys: string[]): ModEntry[] {
   const name = meta.name || item.req.fileName.replace(/\.(zip|7z|rar)$/i, "") || "New mod";
   const character = meta.character ?? null;
   const group = character ?? meta.category ?? "Other";
-  const labels = keys.length ? keys.map((k) => k.split("/").pop() ?? k) : [null];
+  // several picked folders install as one mod with parts (library.parts)
+  const labels = keys.length === 1 ? keys.map((k) => k.split("/").pop() ?? k) : [null];
   const modsDir = demoDb.games.find((g) => g.id === game)?.modsDir ?? "C:\\Users\\Player\\Mods";
   const old = meta.replaces ? list.find((m) => m.id === meta.replaces) : undefined;
   const out: ModEntry[] = labels.map((label, n) => {
     const display = label ? `${name} - ${label}` : name;
-    const on = n === 0;
+    // new mods come in off (an update keeps the old copy's state below)
+    const on = false;
     const folder = `${on ? "" : "DISABLED "}${display}`;
     const base: ModEntry = {
       id: demoId(), game, name: display, folder, relPath: `${group}/${folder}`,
@@ -135,7 +141,9 @@ function place(item: QueueItem, keys: string[]): ModEntry[] {
       source: meta.source ?? null, version: meta.version ?? null, installedAt: demoNow(), sizeBytes: (12 + Math.floor(Math.random() * 60)) * 1024 * 1024,
       fileCount: 8 + Math.floor(Math.random() * 30), iniCount: 1, preview: meta.previewUrl ?? null, tags: [], notes: null, favorite: false,
       nsfw: !!meta.nsfw, hasKeys: Math.random() < 0.5, conflicts: 0, updateAvailable: false,
+      parts: keys.length > 1 ? keys.length : 0,
     };
+    if (keys.length > 1) demoSetParts(base.id, keys.map((k) => k.split("/").pop() ?? k));
     return n === 0 && old ? { ...base, id: old.id, name: old.name, folder: old.folder, relPath: old.relPath, path: old.path, enabled: old.enabled, tags: old.tags, notes: old.notes, favorite: old.favorite } : n === 0 ? demoRestoreRemoved(game, base) : base;
   });
   const rest = old ? list.filter((m) => m.id !== old.id) : list;

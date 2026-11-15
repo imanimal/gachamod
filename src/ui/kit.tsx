@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, ty
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { leave } from "./motion";
+import { STUCK_MS, seconds, useActivity, useElapsed } from "../lib/activity";
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
@@ -239,6 +240,24 @@ export function Progress({ value, tone = "accent", label }: { value: number | nu
 
 export function Spinner({ size }: { size?: number }) {
   return <span className="spin" aria-hidden="true" style={size ? { width: size, height: size } : undefined} />;
+}
+
+/** A wait that says what it's for. After a few seconds it counts up, and past ten it says what could be holding it:
+ *  `hold`, or else whatever gachamod is waiting on right now (lib/activity.ts). `children` go below it (skeletons). */
+export function Waiting({ what, hold, className, children }: { what: string; hold?: string; className?: string; children?: ReactNode }) {
+  const [since] = useState(Date.now);
+  const s = useElapsed(since);
+  const running = useActivity()[0];
+  const long = s * 1000 >= STUCK_MS;
+  const why = hold ?? (running ? `It's waiting on this: ${running.what.toLowerCase()}. ${running.hold}`
+    : "Nothing is running in the background, so this may be a fault in gachamod. Go to another page and back, or report it from Help.");
+  return (
+    <div className={cx("waiting", className)} role="status" aria-live="polite" aria-busy="true">
+      <p className="waiting-t"><Spinner /><span>{what}{s >= 3 ? ` (${seconds(s)})` : ""}</span></p>
+      {long && <p className="waiting-hold">{why}</p>}
+      {children}
+    </div>
+  );
 }
 
 export function Skeleton({ w, h, round, className }: { w?: number | string; h?: number | string; round?: boolean; className?: string }) {

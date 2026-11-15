@@ -12,8 +12,8 @@ import { closeRoute, patchRoute, useRoute } from "../../lib/store";
 import { menuFor, menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Badge, Button, Empty, IconButton, SearchField, Skeleton, Tabs, timeAgo } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { getUpdate, modsName, openDetails } from "../library/actions";
-import { toggleMods, useMods } from "../library/data";
+import { getUpdate, modsName, openDetails, setOn } from "../library/actions";
+import { useMods } from "../library/data";
 import { moveInGrid } from "../library/gridNav";
 import { ModCard } from "../library/ModCard";
 import { ModDrawerHost } from "../library/ModDrawer";
@@ -86,7 +86,8 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
     if (!ids.length) return;
     if (!on) setKept((k) => new Set([...k, ...ids]));
     if (p.active) {
-      try { await toggleMods(game, ids, on, mods); profilesChanged(game); } catch (e) { toast(errorText(e), true); }
+      // the profile in use: a normal switch, which asks about the character's other mods
+      if (await setOn(game, mods.filter((m) => ids.includes(m.id)), on, mods)) profilesChanged(game);
       return;
     }
     const before = inIds ?? new Set<string>();
@@ -101,9 +102,11 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
         const c = mods.find((m) => m.id === id)?.character?.toLowerCase();
         if (c && byChar.get(c) !== id) ins.splice(ins.indexOf(id), 1);
       }
+      // sub-mods and their parent go together
+      const roots = new Set(ins.map((id) => { const m = mods.find((x) => x.id === id); return m?.parent || id; }));
       for (const m of mods) {
         const c = m.character?.toLowerCase();
-        if (c && byChar.has(c) && before.has(m.id) && !ins.includes(m.id)) { outs.push(m.id); notes.push(`took out ${m.name} (one skin per ${m.character})`); }
+        if (c && byChar.has(c) && before.has(m.id) && !ins.includes(m.id) && !roots.has(m.parent || m.id)) { outs.push(m.id); notes.push(`took out ${m.name} (one skin per ${m.character})`); }
       }
       if (outs.length) setKept((k) => new Set([...k, ...outs]));
     }

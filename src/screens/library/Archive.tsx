@@ -130,7 +130,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
       {items === null ? (
         <div className="tiles archive-grid">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}</div>
       ) : !shown.length ? (
-        <Empty icon="trash" title={items.length ? "Nothing matches" : "Nothing removed yet"}>
+        <Empty icon="trash" title={items.length ? "Nothing matches" : "The trash is empty. Very tidy"}>
           {items.length ? "Try another search." : "Mods you remove show up here, so you can put them back or download them again with their settings."}
         </Empty>
       ) : (

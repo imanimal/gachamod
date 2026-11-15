@@ -22,7 +22,7 @@ pub struct GbUser { pub id: u64, pub name: String, pub avatar: Option<String> }
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountState {
-    /// False while sign-in is turned off (it is untested with a real account, so it starts off).
+    /// False while sign-in is turned off (it starts off).
     pub available: bool,
     pub user: Option<GbUser>,
 }

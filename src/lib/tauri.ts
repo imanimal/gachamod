@@ -1,6 +1,7 @@
 // The one place the UI touches Tauri. Outside Tauri (plain `npm run dev` in a browser) calls go to the
 // in-memory demo backend instead, so the UI can be worked on and tested without the Rust side.
 import type { InvokeArgs } from "@tauri-apps/api/core";
+import { describeCall, track } from "./activity";
 
 export const inTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -10,7 +11,20 @@ const demo: Record<string, Handler> = {};
 /** Register demo handlers used when running outside Tauri. */
 export function registerDemo(handlers: Record<string, Handler>) { Object.assign(demo, handlers); }
 
-export async function call<T>(cmd: string, args: InvokeArgs = {}): Promise<T> {
+/** What hears about every call (usage counts and the log, lib/telemetry.ts). */
+let watcher: { ran: (cmd: string, args: Record<string, unknown>) => void; failed: (cmd: string, e: unknown) => void } | null = null;
+export function watchCalls(w: NonNullable<typeof watcher>) { watcher = w; }
+
+/** Run a backend command. Each one is noted in lib/activity.ts while it runs, so a slow one shows what it is. */
+export function call<T>(cmd: string, args: InvokeArgs = {}): Promise<T> {
+  const d = describeCall(cmd);
+  watcher?.ran(cmd, args as Record<string, unknown>);
+  const p = d ? track(run<T>(cmd, args), d[0], d[1]) : run<T>(cmd, args);
+  if (watcher) p.catch((e) => watcher?.failed(cmd, e));
+  return p;
+}
+
+async function run<T>(cmd: string, args: InvokeArgs): Promise<T> {
   if (inTauri()) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<T>(cmd, args);

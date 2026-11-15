@@ -3,7 +3,7 @@
 // components it imports from screens/* (docs/spec.md, "Areas").
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./ui/Icon";
-import { Dialog } from "./ui/kit";
+import { Dialog, Waiting } from "./ui/kit";
 import { Toasts, toast } from "./ui/toast";
 import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
@@ -12,7 +12,10 @@ import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
 import { app as appApi, games as gamesApi, settings as settingsApi } from "./lib/api";
 import { held } from "./lib/tauri";
 import { back, currentGame, emitApp, forward, go, patchGame, refreshGames, setGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
-import { applyGameTheme, watchSystemScheme } from "./lib/theme";
+import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
+import { chillPref, HIDDEN_THEME, onKonami, watchKonamiKeys } from "./lib/fun";
+import { Seasonal } from "./ui/Seasonal";
+import { notePlaying } from "./lib/playtime";
 import { warmUp } from "./lib/warmup";
 import { PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
 import { installGamepad } from "./lib/gamepad";
@@ -39,6 +42,9 @@ import { Tools } from "./screens/tools/Tools";
 import { Settings } from "./screens/settings/Settings";
 import { Extensions } from "./screens/extensions/Extensions";
 import { Onboarding } from "./screens/settings/Onboarding";
+import { FeedbackHost } from "./screens/settings/Feedback";
+import { GameCheckHost } from "./screens/settings/GameCheck";
+import "./lib/elevation";
 import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
 import { installSmoothScroll } from "./lib/smoothScroll";
 
@@ -69,6 +75,18 @@ export function App() {
   // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
   useEffect(() => installSmoothScroll(), []);
 
+  // Settings, Fun: chill mode, and the Konami code, which reveals a hidden theme (lib/fun.ts)
+  const chill = chillPref.use();
+  useEffect(() => { if (chill) document.documentElement.dataset.chill = ""; else delete document.documentElement.dataset.chill; }, [chill]);
+  useEffect(() => {
+    onKonami((first) => {
+      const g = currentGame();
+      const use = g && themePick(g.id) !== HIDDEN_THEME ? { label: "Use it", run: () => setThemePick(g, HIDDEN_THEME) } : undefined;
+      toast(first ? "You found a hidden theme. It's in Settings, Appearance now" : "Still there, in Settings, Appearance", false, use);
+    });
+    return watchKonamiKeys();
+  }, []);
+
   // the current game's theme
   useEffect(() => { applyGameTheme(game); }, [game?.id, game?.theme, game?.accent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => watchSystemScheme(currentGame), []);
@@ -77,7 +95,7 @@ export function App() {
   useEffect(() => { if (game) void warmUp(game); }, [game?.id, game?.modsDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // a game starting or stopping
-  useEffect(() => held(gamesApi.onState((p) => patchGame(p.game, { running: p.running }))), []);
+  useEffect(() => held(gamesApi.onState((p) => { patchGame(p.game, { running: p.running }); notePlaying(p.game, p.running); })), []);
 
   // links and files the app was started with or handed later
   useEffect(() => {
@@ -89,7 +107,10 @@ export function App() {
     const offs = [
       held(appApi.onDeepLink((p) => open({ kind: "link", url: p.url }))),
       held(appApi.onOpenFile((p) => open({ kind: "file", path: p.path }))),
-      held(appApi.onToast((p) => toast(p.text, !!p.bad))),
+      held(appApi.onToast((p) => {
+        const o = p.open;
+        toast(p.text, !!p.bad, o ? { label: "Open", run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
+      })),
     ];
     return () => offs.forEach((f) => f());
   }, []);
@@ -176,6 +197,8 @@ export function App() {
       {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
       {games.length > 0 && <ErrorBoundary where="Mod tools" quiet><ModtoolsOverlays /></ErrorBoundary>}
       {games.length > 0 && <ErrorBoundary where="Profiles" quiet><NewProfileHost /></ErrorBoundary>}
+      <ErrorBoundary where="Feedback" quiet><FeedbackHost /></ErrorBoundary>
+      <ErrorBoundary where="Check this game" quiet><GameCheckHost /></ErrorBoundary>
       {onboard && <Onboarding onDone={() => { setOnboard(false); offerTour((text, action) => toast(text, false, action)); }} />}
       <DropZone />
       <ErrorBoundary where="AI helper" quiet><AiHost /></ErrorBoundary>
@@ -187,6 +210,7 @@ export function App() {
           <div className="keys-list">{PAD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
         </Dialog>
       )}
+      <Seasonal />
       <ContextMenuHost />
       <Tour />
       <Toasts />
@@ -195,7 +219,7 @@ export function App() {
 }
 
 function NoGame({ loaded }: { loaded: boolean }) {
-  if (!loaded) return null;
+  if (!loaded) return <Waiting className="nogame" what="Reading your games" />;
   return (
     <div className="nogame">
       <h1>No game set up yet</h1>

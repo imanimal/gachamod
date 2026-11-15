@@ -73,6 +73,8 @@ pub fn migrate(db: &Db) -> Result<()> {
     Ok(())
 }
 
+mod parts;
+pub use parts::{merge, parts, parts_in, set_part, ModPart};
 mod removed;
 pub use removed::{archive_forget, archive_list, drop_removed, purge_expired, removed_by_gb, trash_days, trash_purge, ArchiveEntry, Removed};
 
@@ -92,6 +94,8 @@ pub struct MetaPatch {
     pub favorite: Option<bool>,
     pub nsfw: Option<bool>,
     pub version: Option<String>,
+    /// Make it a sub-mod of this mod (an id), or "" to make it a mod of its own again.
+    pub parent: Option<String>,
 }
 
 /// A character name with its GameBanana category and icon, as the UI found it in GameBanana's category tree.
@@ -406,6 +410,7 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         rel_path: rel.into(),
         path: dir.to_string_lossy().into_owned(),
         enabled,
+        standby: false,
         character,
         group,
         source: sc.source.clone(),
@@ -423,6 +428,8 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         has_keys: qf.has_keys,
         conflicts: 0,
         update_available: false,
+        parts: parts_in(&dir).len() as u32,
+        parent: sc.parent.clone().filter(|p| !p.is_empty() && *p != sc.id),
     }
 }
 
@@ -483,6 +490,15 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
         w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint, ini_off });
         return;
     }
+    // one folder holds the ini and loads files from the folders beside it ("resources/Roxy.ini" loading
+    // "../toggles/Menu.dds"): this folder is the mod
+    if !rel.is_empty() && kids.len() >= 2 {
+        let with_ini: Vec<&PathBuf> = kids.iter().map(|(p, _)| p).filter(|p| fs::read_dir(p).into_iter().flatten().flatten().any(|e| is_ini(&e.file_name().to_string_lossy()))).collect();
+        if with_ini.len() == 1 && crate::install::reaches_out(with_ini[0], dir) {
+            w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint: display_folder(&name_of(dir)).to_string(), ini_off: false });
+            return;
+        }
+    }
     kids.sort_by_key(|(_, n)| n.to_ascii_lowercase());
     let own_name = name_of(dir);
     let only = if kids.len() == 1 && !rel.is_empty() { Some(display_folder(&own_name).to_string()) } else { None };
@@ -535,6 +551,7 @@ fn lock(db: &Shared) -> Result<std::sync::MutexGuard<'_, Db>> {
 pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
     let (root, prev, chars) = {
         let d = lock(db)?;
+        parts::merge_split_installs(&d, game);
         let root = games::mods_dir(&d, game)?;
         let prev: HashMap<String, ModEntry> = list(&d, game)?.into_iter().map(|m| (m.id.clone(), m)).collect();
         (root, prev, matcher(&d, game)?)
@@ -588,7 +605,8 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         hashes.push(qf.hashes);
         entries.push(e);
     }
-    let live = lock(db).map(|d| crate::live::groups_by_mod(&d, game)).unwrap_or_default();
+    // live skins that aren't showing count as off (live.rs)
+    let live = lock(db).map(|d| { crate::live::overlay(&d, game, &mut entries); crate::live::groups_by_mod(&d, game) }).unwrap_or_default();
     compute_conflicts(&mut entries, &hashes, &live);
 
     let d = lock(db)?;
@@ -609,6 +627,7 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         if let Ok(cx) = ctx(&d, game) { flush_mod_vars(&d, &cx, None); }
         let _ = profiles::flush_pending(&d, game);
     }
+    if crate::live::settle(&d, game) { return list(&d, game); }
     Ok(entries)
 }
 
@@ -692,7 +711,7 @@ fn flush_mod_vars(db: &Db, cx: &Ctx, only: Option<&str>) {
     };
     for id in ids {
         if only.is_some_and(|o| o != id) { continue; }
-        if let Ok(e) = get(db, &cx.game, &id) { if e.enabled { write_kept(db, cx, &e); } }
+        if let Ok(e) = get(db, &cx.game, &id) { if e.loaded() { write_kept(db, cx, &e); } }
     }
 }
 
@@ -701,7 +720,7 @@ fn flush_mod_vars(db: &Db, cx: &Ctx, only: Option<&str>) {
 pub fn saved_vars(db: &Db, game: &str, id: &str) -> Result<Vec<VarValue>> {
     let e = get(db, game, id)?;
     let kept = kept_vars(db, game, id)?;
-    if !e.enabled { return Ok(kept); }
+    if !e.loaded() { return Ok(kept); }
     let mut out = games::importer_dir(db, game).ok().and_then(|imp| ini::user_vars(&imp, &e.rel_path).ok()).unwrap_or_default();
     // values still waiting to be written win over what the file has
     for k in kept {
@@ -717,7 +736,7 @@ pub fn saved_vars(db: &Db, game: &str, id: &str) -> Result<Vec<VarValue>> {
 pub fn stash_vars(db: &Db, game: &str, id: &str, values: &[VarValue]) -> Result<()> {
     let e = get(db, game, id)?;
     keep_vars(db, game, id, values, true)?;
-    if e.enabled && !launch::running(game) {
+    if e.loaded() && !launch::running(game) {
         if let Ok(cx) = ctx(db, game) { write_kept(db, &cx, &e); }
     }
     Ok(())
@@ -727,7 +746,7 @@ pub fn stash_vars(db: &Db, game: &str, id: &str, values: &[VarValue]) -> Result<
 
 /// Rename one mod's folder to turn it on or off and update its row. False when it already was.
 fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<String>) -> Result<bool> {
-    if e.enabled == on { return Ok(false); }
+    if e.loaded() == on { return Ok(false); }
     if is_imm_rel(&e.rel_path) { return Err(imm_error()); }
     let rel = safe_rel(&e.rel_path).ok_or_else(|| Error::Invalid(format!("{}'s folder path looks wrong. Rescan to refresh the list", e.name)))?;
     let old = cx.root.join(rel);
@@ -747,6 +766,7 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
             }
             if renamed == 0 { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
             e.enabled = true;
+            e.standby = false;
             save_row(db, e)?;
             if kept_vars(db, &cx.game, &e.id).is_ok_and(|v| !v.is_empty()) && !cx.running { write_kept(db, cx, e); }
             return Ok(true);
@@ -768,6 +788,7 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
     }
     e.folder = folder;
     e.enabled = on;
+    e.standby = false;
     if !on { e.conflicts = 0; }
     save_row(db, e)?;
 
@@ -785,15 +806,116 @@ fn finish(db: &Db, game: &str, change: &ModChange) {
 }
 
 /// Turn mods on or off by renaming their folders. With the "one skin per character" setting on (default), turning a
-/// mod on turns off the other enabled mods of the same character, and says so in `notes`.
-pub fn set_enabled(db: &Db, game: &str, ids: &[String], on: bool) -> Result<ModChange> {
-    let one_skin = on && db.setting(&format!("{game}.oneSkin"))?.map(|v| v != "0").unwrap_or(true);
-    let targets: Vec<(String, bool)> = ids.iter().map(|i| (i.clone(), on)).collect();
-    apply(db, game, &targets, one_skin)
+/// mod on turns off the other enabled mods of the same character, and says so in `notes`. Live skins (live.rs) switch
+/// in game instead: their folders stay on and the character's pick changes, with no reload.
+pub fn set_enabled(db: &Db, game: &str, ids: &[String], on: bool) -> Result<ModChange> { set_enabled_with(db, game, ids, on, None) }
+
+/// `set_enabled` where the user already answered whether the character's other mods stay on: `Some(false)` keeps
+/// them on ("Keep both on"), `Some(true)` turns them off, `None` follows the "<game>.oneSkin" setting ("0" keeps
+/// them; anything else turns them off, since the UI asks before it gets here when the setting says to).
+///
+/// Sub-mods go with their parent: turning a sub-mod on turns its parent on, turning a parent off turns its sub-mods
+/// off, and turning it on again brings back the ones that were on.
+pub fn set_enabled_with(db: &Db, game: &str, ids: &[String], on: bool, turn_off_others: Option<bool>) -> Result<ModChange> {
+    let one_skin = on && match turn_off_others {
+        Some(v) => v,
+        None => db.setting(&format!("{game}.oneSkin"))?.map(|v| v != "0").unwrap_or(true),
+    };
+    let rows = list(db, game)?;
+    let (targets, flags, notes) = with_family(&rows, ids, on);
+    let mut change = route(db, game, &targets, one_skin)?;
+    for (id, flag) in flags { let _ = set_off_with_parent(db, game, &id, flag); }
+    change.notes.splice(0..0, notes);
+    Ok(change)
 }
 
-/// Set each mod to a state, without the one-skin rule (profile switches).
-pub(crate) fn apply_states(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<ModChange> { apply(db, game, targets, false) }
+/// The mods a switch reaches through sub-mod links, the `off_with_parent` marks to write afterwards, and notes.
+fn with_family(rows: &[ModEntry], ids: &[String], on: bool) -> (Vec<(String, bool)>, Vec<(String, bool)>, Vec<String>) {
+    let by_id: HashMap<&str, &ModEntry> = rows.iter().map(|m| (m.id.as_str(), m)).collect();
+    let mut targets: Vec<(String, bool)> = ids.iter().map(|i| (i.clone(), on)).collect();
+    let mut flags: Vec<(String, bool)> = Vec::new();
+    let mut notes = Vec::new();
+    let has = |t: &[(String, bool)], id: &str| t.iter().any(|(i, _)| i == id);
+    // a switched sub-mod is the user's own choice now
+    for id in ids {
+        if by_id.get(id.as_str()).is_some_and(|m| m.parent.is_some()) { flags.push((id.clone(), false)); }
+    }
+    if on {
+        let mut parents: Vec<String> = Vec::new();
+        for id in ids {
+            let Some(m) = by_id.get(id.as_str()) else { continue };
+            let Some(p) = m.parent.as_deref().and_then(|p| by_id.get(p)) else { continue };
+            if p.loaded() || has(&targets, &p.id) || parents.contains(&p.id) { continue; }
+            notes.push(format!("Turned on {} too, since {} is its sub-mod", p.name, m.name));
+            parents.push(p.id.clone());
+        }
+        targets.extend(parents.into_iter().map(|p| (p, true)));
+        let turning: Vec<String> = targets.iter().map(|(i, _)| i.clone()).collect();
+        for m in rows {
+            let Some(p) = m.parent.as_deref() else { continue };
+            if !turning.iter().any(|t| t == p) || has(&targets, &m.id) || m.loaded() || !off_with_parent(m) { continue; }
+            notes.push(format!("Turned its sub-mod {} back on", m.name));
+            targets.push((m.id.clone(), true));
+            flags.push((m.id.clone(), false));
+        }
+    } else {
+        for m in rows {
+            let Some(p) = m.parent.as_deref() else { continue };
+            if !ids.iter().any(|i| i == p) || has(&targets, &m.id) || !m.loaded() { continue; }
+            notes.push(format!("Turned off its sub-mod {} too", m.name));
+            targets.push((m.id.clone(), false));
+            flags.push((m.id.clone(), true));
+        }
+    }
+    (targets, flags, notes)
+}
+
+fn off_with_parent(m: &ModEntry) -> bool { read_sidecar(Path::new(&m.path)).is_some_and(|s| s.off_with_parent) }
+
+fn set_off_with_parent(db: &Db, game: &str, id: &str, flag: bool) -> Result<()> {
+    let dir = PathBuf::from(get(db, game, id)?.path);
+    let Some(mut sc) = read_sidecar(&dir) else { return Ok(()) };
+    if sc.off_with_parent == flag { return Ok(()); }
+    sc.off_with_parent = flag;
+    write_sidecar(&dir, &sc)
+}
+
+/// Set each mod to a state, without the one-skin rule (profile switches). Live skins switch in game.
+pub(crate) fn apply_states(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<ModChange> { route(db, game, targets, false) }
+
+/// Rename folders only, live skins included (live.rs turns a live skin's folder on or off with this).
+pub(crate) fn apply_folders(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<ModChange> { apply(db, game, targets, false) }
+
+/// Save a row as it is (live.rs marks skins as showing or on standby).
+pub(crate) fn put_row(db: &Db, e: &ModEntry) -> Result<()> { save_row(db, e) }
+
+/// Live skins go to live.rs, the rest are renamed.
+fn route(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Result<ModChange> {
+    let live = crate::live::groups_by_mod(db, game);
+    let (picks, rest): (Vec<(String, bool)>, Vec<(String, bool)>) = targets.iter().cloned().partition(|(i, _)| live.contains_key(i));
+    if picks.is_empty() { return apply(db, game, &rest, one_skin); }
+    let mut change = if rest.is_empty() { ModChange::default() } else { apply(db, game, &rest, one_skin)? };
+    let sw = crate::live::switch(db, game, &picks)?;
+    if one_skin {
+        // a live skin that shows now turns off the character's other skins that aren't live
+        let shown: Vec<String> = sw.changed.iter().filter(|e| e.enabled).filter_map(|e| e.character.clone()).collect();
+        let listed: HashSet<&str> = targets.iter().map(|(i, _)| i.as_str()).collect();
+        let offs: Vec<(String, bool)> = list(db, game)?.into_iter()
+            .filter(|o| o.loaded() && !live.contains_key(&o.id) && !listed.contains(o.id.as_str())
+                && o.character.as_deref().is_some_and(|oc| shown.iter().any(|c| c.eq_ignore_ascii_case(oc))))
+            .map(|o| (o.id, false)).collect();
+        if !offs.is_empty() {
+            // the swap the player asked for: no note, the cards show it
+            let off = apply(db, game, &offs, false)?;
+            change.notes.extend(off.notes);
+            change.changed.extend(off.changed);
+        }
+    }
+    let _ = profiles::on_change(db, game, &sw);
+    change.changed.extend(sw.changed);
+    change.notes.extend(sw.notes);
+    Ok(change)
+}
 
 fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Result<ModChange> {
     let cx = ctx(db, game)?;
@@ -818,7 +940,7 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
             let Some(e) = rows.get(id) else { continue };
             let Some(c) = e.character.as_deref() else { continue };
             if let Some(&winner) = last.get(&c.to_lowercase()) {
-                if winner != id.as_str() && !e.enabled {
+                if winner != id.as_str() && !e.enabled && rows.get(winner).is_none_or(|w| w.root() != e.root()) {
                     skip.insert(id);
                     if let Some(w) = rows.get(winner) {
                         let n = format!("One skin per character: kept {} on for {c}", w.name);
@@ -843,22 +965,20 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
     }
 
     if one_skin {
-        // live mods all stay on: the live group decides which one shows (live.rs)
+        // live skins aren't renamed here (route sends them to live.rs)
         let live = crate::live::groups_by_mod(db, game);
         for id in &turned_on {
             if live.contains_key(id) { continue; }
             let Some(c) = rows.get(id).filter(|e| e.enabled).and_then(|e| e.character.clone()) else { continue };
-            if let Some(note) = crate::live::hide_group(db, game, &c) { change.notes.push(note); }
+            let root = rows.get(id).map(|e| e.root().to_string()).unwrap_or_default();
+            change.changed.extend(crate::live::hide_group(db, game, &c));
             let others: Vec<String> = rows.values()
-                .filter(|o| o.enabled && o.id != *id && !listed.contains(o.id.as_str()) && !live.contains_key(&o.id) && o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(&c)))
+                .filter(|o| o.enabled && o.id != *id && o.root() != root && !listed.contains(o.id.as_str()) && !live.contains_key(&o.id) && o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(&c)))
                 .map(|o| o.id.clone()).collect();
             for oid in others {
                 let Some(o) = rows.get_mut(&oid) else { continue };
                 match toggle_one(db, &cx, o, false, &mut change.notes) {
-                    Ok(true) => {
-                        change.notes.push(format!("Turned off {} ({c})", o.name));
-                        change.changed.push(o.clone());
-                    }
+                    Ok(true) => change.changed.push(o.clone()),
                     Ok(false) => {}
                     Err(err) => errors.push((o.name.clone(), err)),
                 }
@@ -898,6 +1018,13 @@ pub fn update_meta(db: &Db, game: &str, id: &str, patch: &MetaPatch) -> Result<M
     if let Some(f) = patch.favorite { sc.favorite = f; }
     if let Some(n) = patch.nsfw { sc.nsfw = n; }
     if let Some(v) = &patch.version { sc.version = text(v); }
+    if let Some(p) = &patch.parent {
+        sc.parent = match text(p) {
+            None => None,
+            Some(p) => Some(parent_for(db, game, &e, &p)?),
+        };
+        sc.off_with_parent = false;
+    }
     if dir.is_dir() { write_sidecar(&dir, &sc)?; }
     e.name = sc.name.clone();
     e.character = sc.character.clone();
@@ -906,8 +1033,21 @@ pub fn update_meta(db: &Db, game: &str, id: &str, patch: &MetaPatch) -> Result<M
     e.favorite = sc.favorite;
     e.nsfw = sc.nsfw;
     e.version = sc.version.clone();
+    e.parent = sc.parent.clone();
     save_row(db, &e)?;
     Ok(e)
+}
+
+/// The id a mod can be a sub-mod of when the user picks `pick`: a sub-mod's own parent stands in for it, so sub-mods
+/// are never more than one level deep.
+fn parent_for(db: &Db, game: &str, e: &ModEntry, pick: &str) -> Result<String> {
+    let p = get(db, game, pick).map_err(|_| Error::Invalid("That mod isn't in the library anymore".into()))?;
+    let root = p.root().to_string();
+    if root == e.id { return Err(Error::Invalid(format!("{} is already a sub-mod of {}", p.name, e.name))); }
+    if list(db, game)?.iter().any(|o| o.parent.as_deref() == Some(e.id.as_str())) {
+        return Err(Error::Invalid(format!("{} has sub-mods of its own, so it can't be a sub-mod", e.name)));
+    }
+    Ok(root)
 }
 
 // ── the user's own preview ──
@@ -1072,7 +1212,7 @@ pub fn move_to_group(db: &Db, game: &str, id: &str, group: Option<&str>) -> Resu
     let parent = match &group { Some(g) => cx.root.join(safe_rel(g).unwrap_or_default()), None => cx.root.clone() };
     fs::create_dir_all(&parent)?;
     let new = unique_child(&parent, &e.folder);
-    let was_on = e.enabled;
+    let was_on = e.loaded();
     if was_on && cx.running { stash_from_ini(db, &cx, &e); }
     rename_dir(&old, &new)?;
 
@@ -1092,9 +1232,10 @@ pub fn move_to_group(db: &Db, game: &str, id: &str, group: Option<&str>) -> Resu
     e.path = new.to_string_lossy().into_owned();
     e.folder = folder;
     e.group = group;
-    e.enabled = !rel_disabled(&e.rel_path) && !only_off_inis(&new);
-    if !was_on && e.enabled && !cx.running { write_kept(db, &cx, &e); }
-    if was_on && !e.enabled { stash_from_ini(db, &cx, &e); }
+    let on = !rel_disabled(&e.rel_path) && !only_off_inis(&new);
+    (e.enabled, e.standby) = (on && !e.standby, on && e.standby);
+    if !was_on && e.loaded() && !cx.running { write_kept(db, &cx, &e); }
+    if was_on && !e.loaded() { stash_from_ini(db, &cx, &e); }
     save_row(db, &e)?;
     finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
     Ok(e)
@@ -1133,9 +1274,10 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
     }
     if existing.as_ref() != Some(&sc) { write_sidecar(dir, &sc)?; }
     let qf = ini::quick_facts(dir);
-    let e = build_entry(game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(dir), &sc, &qf, &chars);
+    let mut e = build_entry(game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(dir), &sc, &qf, &chars);
+    crate::live::overlay(db, game, std::slice::from_mut(&mut e));
     save_row(db, &e)?;
-    if e.enabled && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
+    if e.loaded() && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
     finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
     Ok(e)
 }
@@ -1158,7 +1300,7 @@ pub fn remove(db: &Db, data_dir: &Path, game: &str, ids: &[String], reason: &str
             change.removed.push(id.clone());
             continue;
         }
-        if e.enabled { stash_from_ini(db, &cx, &e); }
+        if e.loaded() { stash_from_ini(db, &cx, &e); }
         db.conn.execute(
             "INSERT INTO trash (game, mod_id, name, kept_path, original_rel, size, reason, removed_at, data) VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8)",
             params![game, e.id, e.name, e.rel_path, e.size_bytes as i64, reason, now(), serde_json::to_string(&e)?],
@@ -1231,9 +1373,10 @@ pub fn trash_restore(db: &Db, trash_id: i64) -> Result<ModChange> {
     let qf = ini::quick_facts(&target);
     let mut e = build_entry(&game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(&target), &sc, &qf, &chars);
     e.update_available = prev.is_some_and(|p| p.update_available);
+    crate::live::restored(db, &game, &mut e);
     save_row(db, &e)?;
     db.conn.execute("DELETE FROM trash WHERE id = ?1", [trash_id])?;
-    if e.enabled && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
+    if e.loaded() && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
     let change = ModChange { changed: vec![e], ..Default::default() };
     finish(db, &game, &change);
     Ok(change)

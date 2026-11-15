@@ -4,7 +4,7 @@
 .ext-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
 .ext-search { flex: 1 1 14rem; max-width: 22rem; margin-left: auto; }
 .ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: .8rem; }
-.ext-wait { display: grid; place-items: center; padding: 3rem 0; }
+.ext-wait { align-items: center; padding: 3rem 0; text-align: center; }
 .ext-err { margin: 0 0 .7rem; color: var(--warn); }
 
 .ext-card { display: flex; gap: .9rem; padding: .9rem 1rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
@@ -36,7 +36,7 @@
 /* a page an extension draws, in its frame */
 .ext-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: normal; }
 .ext-frame:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--radius-xs); }
-.ext-frame-wait { display: grid; place-items: center; min-height: 8rem; }
+.ext-frame-wait { align-items: center; justify-content: center; min-height: 8rem; text-align: center; }
 .ext-frame-err { margin: .5rem 0; color: var(--bad); }
 .ext-needs { display: flex; flex-direction: column; gap: .4rem; margin: 0 0 .8rem; }
 .ext-needs p { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; margin: 0; padding: .6rem .8rem; border-radius: var(--radius-sm); background: var(--surface-2); }

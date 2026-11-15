@@ -10,11 +10,12 @@ import { useModHealth } from "../../lib/fixes";
 import { usePortraitBatch, usePortraitsVersion, portraitNow } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { menuFor, openMenu, type MenuEntry } from "../../ui/ContextMenu";
-import { Button, IconButton, Skeleton } from "../../ui/kit";
+import { Button, IconButton, Skeleton, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import {
-  exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails, setFavourite, trashMods, warmProfiles,
+  exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails, setFavourite, setParent, trashMods, warmProfiles,
 } from "./actions";
+import { anchorFor, askOverlap } from "./overlap";
 import { toggleMods } from "./data";
 import { askLib } from "./LibDialogs";
 import { noteLibrary, profileItems } from "./menus";
@@ -50,6 +51,8 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
   shownRef.current = shown;
   const allRef = useRef(all);
   allRef.current = all;
+  // sub-mod cards name their parent
+  const names = useMemo(() => new Map(all.map((m) => [m.id, m.name])), [all]);
 
   useEffect(() => { noteLibrary(game, all, health); }, [game, all, health]);
   useEffect(() => { warmProfiles(game); }, [game]);
@@ -76,11 +79,20 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     const prior = allRef.current;
     const ids = list.filter((m) => m.enabled !== on).map((m) => m.id);
     if (!ids.length) return;
+    // one mod on while its character has another on: ask first (overlap.ts)
+    let turnOffOthers: boolean | undefined;
+    if (on && ids.length === 1) {
+      const mod = list.find((m) => m.id === ids[0])!;
+      const c = await askOverlap(game, mod, prior, anchorFor(mod.id));
+      if (!c) return;
+      if (c.parent && !(await setParent(game, mod, c.parent, prior))) return;
+      turnOffOthers = c.turnOffOthers;
+    }
     const want = new Set(ids);
     const before = new Map(prior.map((m) => [m.id, m.enabled]));
     setMods?.((l) => l.map((m) => (want.has(m.id) ? { ...m, enabled: on } : m)));
     try {
-      const ch = await toggleMods(game, ids, on, prior);
+      const ch = await toggleMods(game, ids, on, prior, turnOffOthers);
       // mods the one-skin rule skipped go back to how they were
       const done = new Set(ch.changed.map((m) => m.id));
       setMods?.((l) => l.map((m) => (want.has(m.id) && !done.has(m.id) && m.enabled !== before.get(m.id) ? { ...m, enabled: before.get(m.id)! } : m)));
@@ -191,9 +203,11 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
 
   if (loading) {
     return (
-      <div className="mod-grid is-loading" aria-busy="true">
-        {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
-      </div>
+      <Waiting what="Reading your mods">
+        <div className="mod-grid is-loading">
+          {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
+        </div>
+      </Waiting>
     );
   }
   if (!shown.length) return <>{empty}</>;
@@ -208,6 +222,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
         {shown.map((m, i) => (
           <ModCard key={m.id} game={game} mod={m} index={i} row={view === "list"} selected={selected.has(m.id)} nsfw={nsfw}
             showCharacter={showCharacter} health={health.get(m.id)} portrait={portraitOf(m)}
+            parentName={m.parent ? names.get(m.parent) : undefined}
             onOpen={onOpen} onToggle={onToggleCard} onMenu={onMenu} onUpdate={onUpdate} />
         ))}
       </div>

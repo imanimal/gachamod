@@ -193,8 +193,10 @@ impl Index {
         ALL.get_or_init(|| DATA.iter().map(|(g, t)| (*g, Index::build(t))).collect()).get(game)
     }
 
-    /// A fixer's name from its link: a known source's name, else the repository's ("ZZZ Mod Fixer").
-    fn tool_link(&self, url: &str) -> ToolLink {
+    /// A fixer's name from its link: a known source's name, else the repository's ("ZZZ Mod Fixer"). The data may say
+    /// more than the link ("<link> (--rendering-33)", "<link> and <link>"): the first link is the fixer.
+    fn tool_link(&self, text: &str) -> ToolLink {
+        let url = text.split_whitespace().find(|w| w.starts_with("https://") || w.starts_with("http://")).unwrap_or(text.trim());
         if let Some(s) = self.sources.iter().find(|s| !s.url.is_empty() && url.trim_end_matches('/').eq_ignore_ascii_case(s.url.trim_end_matches('/'))) {
             return ToolLink { name: s.name.clone(), url: url.into() };
         }
@@ -440,7 +442,7 @@ pub fn fix(shared: &crate::db::Shared, game: &str, ids: &[String]) -> Result<Fix
         if let Some((why, _)) = c.needs.first() { out.skipped.push(skip(why.clone())); continue; }
         if c.swaps.is_empty() { continue; }
         match fix_dir(&*lock()?, game, m, &c) {
-            Ok(Some(backup)) => { any_on |= m.enabled; out.changed.push(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }); }
+            Ok(Some(backup)) => { any_on |= m.loaded(); out.changed.push(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }); }
             Ok(None) => {}
             Err(e) => out.skipped.push(skip(e.to_string())),
         }
@@ -512,6 +514,15 @@ mod tests {
         let m = ModEntry { id: "x".into(), ..Default::default() };
         assert_eq!(health_of(&m, &c, &HashSet::new()).unwrap().status, "unfixable");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_tool_link_is_only_the_first_link() {
+        let ww = Index::get("ww").unwrap();
+        let t = ww.tool_link("https://github.com/Moonholder/Wuwa_Mod_Fixer (--rendering-33)");
+        assert_eq!(t.url, "https://github.com/Moonholder/Wuwa_Mod_Fixer");
+        let hsr = Index::get("hsr").unwrap();
+        assert_eq!(hsr.tool_link("https://gamebanana.com/tools/19559 and https://gamebanana.com/tools/19978").url, "https://gamebanana.com/tools/19559");
     }
 }
 

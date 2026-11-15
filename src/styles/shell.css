@@ -61,13 +61,15 @@
 .crumb-sep-b .i { width: .8rem; height: .8rem; }
 .crumb-sep-b:hover { background: var(--hover); color: var(--text); }
 .crumb-part:last-child .crumb-b { max-width: 22rem; }
+/* the game and the page keep their names; the last part (a mod, a character) shortens first */
+.crumb-game, .crumb > .crumb-sep, .crumb-part:not(:last-child) { flex-shrink: 0; }
 .sp { flex: 1; align-self: stretch; min-width: .5rem; }
 /* on a narrow window the breadcrumb gets the space the themes' decorations would take */
 @container app (max-width: 64rem) { :root .tb-l .sp { padding: 0; min-width: .5rem; } .tb-l .sp .glyphs { display: none; } }
 
 /* the search box (a button that opens the palette). It narrows before the breadcrumb does. It grows in from a key when the app opens, after the first
    setup and after the tour, so it's noticed. */
-.tb-search { display: flex; align-items: center; gap: .5rem; width: clamp(2.2rem, 100cqi - 44rem, 22rem); height: 1.95rem; padding: 0 .35rem 0 .65rem; overflow: hidden;
+.tb-search { display: flex; align-items: center; gap: .5rem; width: clamp(9rem, 100cqi - 56rem, 22rem); height: 1.95rem; padding: 0 .35rem 0 .65rem; overflow: hidden;
   border-radius: var(--radius-sm); background: var(--surface); color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line); font-size: .88em; text-align: left;
   transition: box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .tb-search .i { width: .95rem; height: .95rem; flex: none; }
@@ -167,7 +169,9 @@
 .nv-b.t-bad { background: var(--bad); color: var(--on-bad); }
 .nv-b.t-warn { background: var(--warn); color: #000; }
 .nv-b.t-ok { background: var(--ok); color: #000; }
-.nv-b.t-run { position: relative; width: .6rem; min-width: 0; height: .6rem; padding: 0; margin-right: .35rem; background: var(--accent); animation: pulse 1.3s ease-in-out infinite; }
+/* running: a pulsing dot, or a pulsing count when there is one (downloads) */
+.nv-b.t-run { background: var(--accent); animation: pulse 1.3s ease-in-out infinite; }
+.nv-b.t-run:empty { position: relative; width: .6rem; min-width: 0; height: .6rem; padding: 0; margin-right: .35rem; }
 /* the grid: fixed-height tiles, icon over the name, names sized to fit half the sidebar */
 :root[data-nav="grid"] .side-nav { grid-template-columns: 1fr 1fr; grid-auto-rows: var(--nv-h); gap: .3rem; }
 :root[data-nav="grid"] .nv { flex-direction: column; align-items: flex-start; justify-content: center; gap: .2rem; padding: 0 .55rem; font-size: .86em;
@@ -176,7 +180,7 @@
 :root[data-nav="grid"] .nv.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 :root[data-nav="grid"] .nv-t { flex: none; max-width: 100%; }
 :root[data-nav="grid"] .nv-b { position: absolute; top: .35rem; right: .35rem; }
-:root[data-nav="grid"] .nv-b.t-run { top: .55rem; right: .55rem; margin: 0; }
+:root[data-nav="grid"] .nv-b.t-run:empty { top: .55rem; right: .55rem; margin: 0; }
 
 /* profiles: the list scrolls when the window is short, the rest stays */
 .side-prof { flex: 1 1 auto; min-height: 4.6rem; display: flex; flex-direction: column; gap: .3rem; }
@@ -392,3 +396,22 @@
 .tour-x { margin: -.3rem -.4rem -.3rem 0; }
 .tour-card p { margin: .4rem 0 .75rem; color: var(--text-2); line-height: 1.45; }
 .tour-f { display: flex; justify-content: flex-end; gap: .4rem; }
+
+/* what gachamod is waiting on (shell/Activity.tsx) */
+.tb-act { display: inline-flex; align-items: center; gap: .45rem; height: 2rem; max-width: 18rem; padding: 0 .6rem; margin-right: .35rem; flex: none;
+  border-radius: var(--radius-sm); color: var(--text-2); font-size: .86rem; }
+.tb-act:hover { background: var(--hover); color: var(--text); }
+.tb-act .spin { width: .85rem; height: .85rem; }
+.tb-act .i { width: .95rem; height: .95rem; }
+.tb-act-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-act-s, .tb-act-n { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tb-act.is-long { color: var(--warn); }
+.act-list { display: flex; flex-direction: column; gap: .15rem; }
+.act-row { padding: .55rem .6rem; border-radius: var(--radius-sm); }
+.act-row + .act-row { border-top: 1px solid var(--line); border-radius: 0; }
+.act-head { display: flex; align-items: center; gap: .5rem; }
+.act-head b { flex: 1; font-weight: 600; }
+.act-s { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.act-hold { margin-top: .3rem; color: var(--text-2); font-size: .86rem; line-height: 1.4; }
+.act-row.is-long .act-s { color: var(--warn); }
+.act-none { padding: .6rem; color: var(--text-2); }

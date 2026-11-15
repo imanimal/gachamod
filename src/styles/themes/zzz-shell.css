@@ -100,7 +100,7 @@
   .nv-b { background: #0a0a0a; color: var(--yellow); font-style: normal; font-weight: 800; box-shadow: 0 0 0 1.5px #555; }
   .nv.on .nv-b { background: #0a0a0a; color: var(--acc); box-shadow: none; }
   .nv-b.t-bad { background: var(--red); color: #fff; box-shadow: 0 0 0 2px var(--ink); }
-  .nv-b.t-run { background: var(--acc); box-shadow: none; }
+  .nv-b.t-run { background: var(--acc); color: #0a0a0a; box-shadow: none; }
   .nv.on .nv-b.t-run { background: #0a0a0a; }
   /* grid tiles: rounded squares, their corners following the well's (13px less the 4px gap) */
   &[data-nav="grid"] .nv { padding: 0 .75rem; }

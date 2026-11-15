@@ -1,19 +1,23 @@
 // Mods: the current game's library (Installed) and the mods removed from it (Trash). Installed has search,
-// filters, a scrolling character row, sort, grid or list, and the shared mod grid with selection and its bulk bar.
-// The route holds the page: tab "archive", character (only that character's mods), modId (the details drawer).
-// Owner: LIBRARY area (docs/spec.md, "Library").
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { library, settings, type ModEntry } from "../../lib/api";
+// filters, a scrolling row of types and characters, sort, grid or list, and the shared mod grid with selection and its
+// bulk bar. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
+// a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { errorText, library, settings, type ModEntry } from "../../lib/api";
 import { checkUpdates } from "../../lib/gamebanana";
 import { useModHealth } from "../../lib/fixes";
 import { usePortraitBatch, portraitNow, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { consumeRoute, go, patchRoute, setBadge, useGame, useRoute } from "../../lib/store";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
-import { Button, Chip, Empty, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
+import { Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
+import { toast } from "../../ui/toast";
+import { shuffleOutfits } from "./shuffle";
 import { useBackendRoster } from "../characters/roster";
+import { rowKeys, useSideScroll } from "../browse/sideScroll";
 import { Archive } from "./Archive";
 import { useMods } from "./data";
+import { LIB_KINDS, libKind, type LibKind } from "./kinds";
 import { ModDrawerHost } from "./ModDrawer";
 import { ModGrid } from "./ModGrid";
 import "./menus";
@@ -50,7 +54,7 @@ export function Library() {
  *  it stays in the same place on both pages. */
 function LibTabs({ tab }: { tab: "installed" | "archive" }) {
   return (
-    <Segmented size="sm" label="Show" value={tab} onChange={(v) => patchRoute({ tab: v === "archive" ? "archive" : undefined, modId: undefined, character: undefined })}
+    <Segmented size="sm" label="Show" value={tab} onChange={(v) => patchRoute({ tab: v === "archive" ? "archive" : undefined, modId: undefined, character: undefined, kind: undefined })}
       options={[
         { value: "installed", label: "Installed", icon: "mods", title: "Mods in the Mods folder" },
         { value: "archive", label: "Trash", icon: "trash", title: "Mods you removed, to put back or download again" },
@@ -71,6 +75,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
   const modsRef = useRef(mods);
   modsRef.current = mods;
   const character = route.character ?? null;
+  const kind = LIB_KINDS.some((k) => k.value === route.kind) ? route.kind as LibKind : null;
 
   useEffect(() => { setPrefsState(loadPrefs(gid)); }, [gid]);
   const setPrefs = useCallback((p: Partial<Prefs>) => {
@@ -120,6 +125,9 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
     return [...counts.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
   }, [mods]);
   usePortraitBatch(gid, charRow.map((c) => c.name));
+  // mods without a character by type, and how many of each type there are
+  const kinds = useMemo(() => new Map(mods.filter((m) => !m.character).map((m) => [m.id, libKind(m)])), [mods]);
+  const kindRow = useMemo(() => LIB_KINDS.map((k) => ({ ...k, n: [...kinds.values()].filter((v) => v === k.value).length })).filter((k) => k.n > 0), [kinds]);
 
   const isProblem = useCallback((m: ModEntry) => m.conflicts > 0 || m.iniCount === 0 || health.get(m.id)?.status === "broken" || health.get(m.id)?.status === "unfixable", [health]);
   const counts = useMemo(() => ({
@@ -142,6 +150,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
         default: break;
       }
       if (ch && m.character?.toLowerCase() !== ch) return false;
+      if (kind && kinds.get(m.id) !== kind) return false;
       if (!words.length) return true;
       const hay = [m.name, m.character ?? "", m.tags.join(" "), m.source?.submitter ?? "", m.folder].join(" ").toLowerCase();
       return words.every((w) => hay.includes(w));
@@ -153,11 +162,12 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
       : prefs.sort === "size" ? (a, b) => b.sizeBytes - a.sizeBytes || byName(a, b)
       : (a, b) => b.installedAt - a.installedAt || byName(a, b));
     return out;
-  }, [mods, prefs, search, nsfw, character, isProblem]);
+  }, [mods, prefs, search, nsfw, character, kind, kinds, isProblem]);
 
-  const filtersOn = prefs.filter !== "all" || !!character || !!search.trim();
+  const filtersOn = prefs.filter !== "all" || !!character || !!kind || !!search.trim();
   const size = useMemo(() => mods.reduce((n, m) => n + m.sizeBytes, 0), [mods]);
-  const setCharacter = (c: string | null) => patchRoute({ character: c ?? undefined });
+  const setCharacter = (c: string | null) => patchRoute({ character: c ?? undefined, kind: undefined });
+  const setKind = (k: LibKind | null) => patchRoute({ kind: k ?? undefined, character: undefined });
 
   const filterChips: Array<{ id: Filter; label: string; title?: string }> = [
     { id: "all", label: "All" }, { id: "on", label: "On" }, { id: "off", label: "Off" },
@@ -174,6 +184,8 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           <LibTabs tab="installed" />
           <SearchField value={search} onChange={setSearch} placeholder="Search name, character, tag, creator" className="library-search" />
           <Button icon="refresh" busy={scanning} onClick={() => void rescan()} title="Read the Mods folder again (it also happens on its own when you open this screen)">Rescan</Button>
+          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
+            onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
           <Segmented size="sm" label="Layout" value={prefs.view} onChange={(v) => setPrefs({ view: v })}
             options={[{ value: "grid", label: "", icon: "grid", title: "Grid" }, { value: "list", label: "", icon: "list", title: "List" }]} />
         </>}>
@@ -186,17 +198,21 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           <Select<Sort> value={prefs.sort} onChange={(v) => setPrefs({ sort: v })}
             options={[{ value: "added", label: "Recently added" }, { value: "name", label: "Name" }, { value: "character", label: "Character" }, { value: "size", label: "Size" }]} />
         </div>
-        {charRow.length > 0 && (
-          <div className="library-chars" role="group" aria-label="Characters">
-            {charRow.map((c) => (
-              <Chip key={c.name} className="char-chip" img={portraitNow(gid, c.name, icons.get(c.name.toLowerCase()) ?? null)} icon="user" count={c.n}
-                on={character?.toLowerCase() === c.name.toLowerCase()} title={`Only ${c.name}'s mods. Right-click for more`}
-                onClick={() => setCharacter(character?.toLowerCase() === c.name.toLowerCase() ? null : c.name)}>
-                <span onContextMenu={menuHandler(() => menuFor("character", { game: gid, name: c.name }))}>{c.name}</span>
-              </Chip>
-            ))}
-          </div>
-        )}
+        {kindRow.length + charRow.length > 0 && <CharRow deps={[kindRow.length, charRow.length, character, kind]}>
+          {kindRow.map((k) => (
+            <Chip key={k.value} className="char-chip kind-chip" icon={k.icon} count={k.n} on={kind === k.value}
+              title={kind === k.value ? `${k.title}. Click again for every mod` : k.title}
+              onClick={() => setKind(kind === k.value ? null : k.value)}>{k.label}</Chip>
+          ))}
+          {kindRow.length > 0 && charRow.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
+          {charRow.map((c) => (
+            <Chip key={c.name} className="char-chip" img={portraitNow(gid, c.name, icons.get(c.name.toLowerCase()) ?? null)} icon="user" count={c.n}
+              on={character?.toLowerCase() === c.name.toLowerCase()} title={`Only ${c.name}'s mods. Right-click for more`}
+              onClick={() => setCharacter(character?.toLowerCase() === c.name.toLowerCase() ? null : c.name)}>
+              <span onContextMenu={menuHandler(() => menuFor("character", { game: gid, name: c.name }))}>{c.name}</span>
+            </Chip>
+          ))}
+        </CharRow>}
       </PageHeader>
 
       <ModGrid game={gid} mods={shown} all={mods} setMods={setMods} view={prefs.view} loading={!loaded} icons={icons}
@@ -216,5 +232,28 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           </Empty>
         )} />
     </>
+  );
+}
+
+/** The row of type and character chips. It scrolls sideways with the mouse wheel, the arrow buttons (shown when it
+ *  doesn't fit) and the arrow keys, and keeps the picked chip in view. */
+function CharRow({ deps, children }: { deps: unknown[]; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const { left, right, page } = useSideScroll(ref, deps);
+  useEffect(() => {
+    const el = ref.current, on = el?.querySelector<HTMLElement>(".chip.on");
+    if (!el || !on) return;
+    const box = el.getBoundingClientRect(), r = on.getBoundingClientRect();
+    if (r.left < box.left || r.right > box.right) el.scrollBy({ left: r.left - box.left - (box.width - r.width) / 2, behavior: "smooth" });
+  }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  const arrows = left || right;
+  return (
+    <div className="library-chars-wrap">
+      {arrows && <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />}
+      <div ref={ref} className="library-chars" role="toolbar" aria-label="Types and characters" onKeyDown={(e) => rowKeys(e, ".chip")}>
+        {children}
+      </div>
+      {arrows && <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />}
+    </div>
   );
 }

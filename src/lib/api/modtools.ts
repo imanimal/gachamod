@@ -139,6 +139,23 @@ export const fixes = {
   apply: (game: GameId, ids: string[]) => call<FixAll>("fixes_apply", { game, ids }),
 };
 
+/** A fixer file downloaded from GameBanana into the app's fixers folder (crates/gacha-core/src/fixers.rs). */
+export interface FixerFile {
+  toolId: number; fileId: number; tool: string; file: string;
+  /** The folder it is in. */
+  dir: string;
+  /** The one program in it (an .exe, else a .bat or .py), or the folder. */
+  main: string;
+  at: number;
+}
+export interface FixerRequest { toolId: number; fileId: number; tool: string; file: string; url: string; md5?: string | null }
+
+export const fixers = {
+  list: (game: GameId) => call<FixerFile[]>("fixers_list", { game }),
+  /** Only GameBanana links. Nothing in the file is run. */
+  download: (game: GameId, req: FixerRequest) => call<FixerFile>("fixers_download", { game, req }),
+};
+
 // ── keys: rebinding, turning keys off, "only while on screen" and clashes (crates/gacha-core/src/keys.rs) ──
 
 /** One `key =` or `back =` line of a key section. */

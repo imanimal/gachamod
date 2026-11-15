@@ -858,6 +858,32 @@ fn name_list(names: &[&str]) -> String {
     }
 }
 
+/// Sections the importer defines for every mod (ZZMI's `Core/ZZMI/main.ini` has `[CommandListSkinTexture]`),
+/// lowercased. Found from the mod folder up: the first folder with a d3dx.ini is the importer's. Read once per
+/// importer.
+fn importer_sections(dir: &Path) -> std::sync::Arc<HashSet<String>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, Arc<HashSet<String>>>>> = OnceLock::new();
+    let Some(root) = dir.ancestors().skip(1).find(|a| a.join("d3dx.ini").is_file()) else { return Arc::default() };
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(s) = cache.lock().ok().and_then(|c| c.get(root).cloned()) { return s; }
+    let mut set = HashSet::new();
+    let files = std::iter::once(root.join("d3dx.ini")).chain(
+        walkdir::WalkDir::new(root.join("Core")).max_depth(3).into_iter().flatten()
+            .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("ini")))
+            .map(|e| e.into_path()));
+    for f in files {
+        let Ok(bytes) = std::fs::read(&f) else { continue };
+        for l in String::from_utf8_lossy(&bytes).lines() {
+            let l = l.trim();
+            if let Some(name) = l.strip_prefix('[').and_then(|r| r.strip_suffix(']')) { set.insert(name.trim().to_lowercase()); }
+        }
+    }
+    let set = Arc::new(set);
+    if let Ok(mut c) = cache.lock() { c.insert(root.to_path_buf(), set.clone()); }
+    set
+}
+
 /// Everything that looks wrong in one mod's files, worst first, each with a fix when gachamod found one. `dir` is
 /// the mod folder.
 fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
@@ -871,6 +897,7 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
     }
     let used = used_resources(inis);
     let all_sections: HashSet<&str> = inis.iter().filter_map(|m| m.parsed.as_ref().ok()).flat_map(|i| i.sections.iter().map(|s| s.lower.as_str())).collect();
+    let mut core: Option<std::sync::Arc<HashSet<String>>> = None;
     let mut files: Option<HashMap<String, Vec<PathBuf>>> = None;
     let mut empty: Vec<&str> = Vec::new();
     let mut loads = false;
@@ -904,7 +931,8 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
             for run in s.get("run") {
                 let r = run.trim();
                 let lower = r.to_lowercase();
-                if lower.starts_with("commandlist") && !r.contains('\\') && !all_sections.contains(lower.as_str()) {
+                if lower.starts_with("commandlist") && !r.contains('\\') && !all_sections.contains(lower.as_str())
+                    && !core.get_or_insert_with(|| importer_sections(dir)).contains(&lower) {
                     out.push(problem("missing_section", "warn", Some(&m.rel), format!("{} runs [{r}], which isn't in the mod. That step is skipped", m.rel)));
                 }
             }
@@ -1013,7 +1041,7 @@ pub fn apply_fix(db: &Db, game: &str, id: &str, fix: &ProblemFix) -> Result<crat
         }
         _ => return Err(Error::Invalid("gachamod doesn't know that fix. Check again".into())),
     };
-    if m.enabled { crate::devtools::mark_changed(game); }
+    if m.loaded() { crate::devtools::mark_changed(game); }
     Ok(backup)
 }
 
@@ -1149,7 +1177,7 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
     let dir = PathBuf::from(&m.path);
     if !dir.is_dir() { return Err(Error::Invalid(format!("{}'s folder isn't there any more. Rescan to update the list", m.name))); }
     let mut saved = library::saved_vars(db, game, id).unwrap_or_default();
-    if saved.is_empty() && m.enabled {
+    if saved.is_empty() && m.loaded() {
         if let Ok(imp) = crate::games::importer_dir(db, game) { saved = user_vars(&imp, &m.rel_path).unwrap_or_default(); }
     }
     let mut out = inspect_dir(&dir, &saved);
@@ -1179,7 +1207,7 @@ pub fn set_var(db: &Db, game: &str, id: &str, value: &VarValue) -> Result<()> {
         return Err(Error::Conflict("Close the game first. It overwrites saved options when it closes".into()));
     }
     let value = VarValue { ini: value.ini.replace('\\', "/"), var: value.var.trim_start_matches('$').to_lowercase(), value: norm_value(&value.value) };
-    if m.enabled {
+    if m.loaded() {
         set_user_vars(&crate::games::importer_dir(db, game)?, &m.rel_path, std::slice::from_ref(&value))?;
     } else {
         let mut all = library::saved_vars(db, game, id).unwrap_or_default();
@@ -1387,6 +1415,23 @@ mod tests {
     }
 
     fn lint_dir(d: &Path) -> Vec<Problem> { lint_mod(d, &read_mod(d)) }
+
+    #[test]
+    fn importer_command_lists_count() {
+        // ZZMI defines [CommandListSkinTexture] in Core/ZZMI/main.ini; a mod that runs it isn't missing anything
+        let root = temp("importer");
+        fs::write(root.join("d3dx.ini"), "[Constants]\n").unwrap();
+        fs::create_dir_all(root.join("Core/ZZMI")).unwrap();
+        fs::write(root.join("Core/ZZMI/main.ini"), "[CommandListSkinTexture]\nrun = x\n").unwrap();
+        let d = root.join("Mods/Roxy");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("a.ini"), "[TextureOverrideBody]\nhash = 0011aabb\nrun = CommandListSkinTexture\nrun = CommandListNope\n").unwrap();
+        let ps = lint_dir(&d);
+        let missing: Vec<&str> = ps.iter().filter(|p| p.kind == "missing_section").map(|p| p.detail.as_str()).collect();
+        assert_eq!(missing.len(), 1, "{missing:?}");
+        assert!(missing[0].contains("CommandListNope"));
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     const REMAP_INI: &str = "[TextureOverrideRemap]\nhash = fe5c0180\nrun = CommandListRemap\n[CommandListRemap]\nvb1 = ResourceRemap.0\nib = ResourceBodyIB\n\
         [ResourceRemap.0]\nfilename = .\\Regular\\RaidenShogunRemapBlend.buf\n[ResourceBodyIB]\nfilename = Body.ib\n[ResourceDressIB]\nfilename = Dress.ib\n";

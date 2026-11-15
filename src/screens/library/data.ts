@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText, library, type GameId, type ModChange, type ModEntry } from "../../lib/api";
 import { held } from "../../lib/tauri";
 import { onApp } from "../../lib/store";
-import { record } from "../../lib/history";
+import { record, undo } from "../../lib/history";
 import { toast } from "../../ui/toast";
 import { autoRescanPref } from "../settings/automatic";
+import { sayF10 } from "../../lib/elevation";
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -18,6 +19,8 @@ let purged = false;
 type Listener = (game: GameId, change: ModChange) => void;
 const listeners = new Set<Listener>();
 export function publish(game: GameId, change: ModChange) { listeners.forEach((f) => f(game, change)); }
+/** Hear every published change (live switching keeps its picks in step with the library). */
+export function onPublish(f: Listener) { listeners.add(f); return () => { listeners.delete(f); }; }
 
 /** A list with a change applied: changed entries replaced (or added), removed ones dropped. */
 export function applyChange(list: ModEntry[], change: ModChange): ModEntry[] {
@@ -97,23 +100,25 @@ async function restoreStates(game: GameId, prior: Map<string, boolean>, ids: str
   if (ons.length) publish(game, await library.setEnabled(game, ons, true));
 }
 
-/** Turn mods on or off, show one toast with the notes and an Undo. `prior` is every mod's state before. Throws on
- *  failure (the caller shows it and undoes its optimistic change). */
-export async function toggleMods(game: GameId, ids: string[], on: boolean, prior: ModEntry[]): Promise<ModChange> {
-  const change = await library.setEnabled(game, ids, on);
+/** Turn mods on or off, show one toast with the notes and an Undo. `prior` is every mod's state before.
+ *  `turnOffOthers`: the user's answer about the character's other mods (overlap.ts). Throws on failure (the caller
+ *  shows it and undoes its optimistic change). */
+export async function toggleMods(game: GameId, ids: string[], on: boolean, prior: ModEntry[], turnOffOthers?: boolean): Promise<ModChange> {
+  const change = await library.setEnabled(game, ids, on, turnOffOthers);
   publish(game, change);
   const before = new Map(prior.map((m) => [m.id, m.enabled]));
   const changedIds = change.changed.map((m) => m.id);
   if (!changedIds.length) {
-    if (change.notes.length) toast(change.notes.join(". "));
+    const rest = sayF10(change.notes);
+    if (rest.length) toast(rest.join(". "));
     return change;
   }
   const mine = change.changed.filter((m) => ids.includes(m.id));
   const main = mine.length ? `Turned ${on ? "on" : "off"} ${nameOf(mine, "mods")}` : summarize(change);
   record({
-    label: [main, ...change.notes].join(". "),
+    label: [main, ...sayF10(change.notes)].join(". "),
     undo: () => restoreStates(game, before, changedIds),
-    redo: async () => { publish(game, await library.setEnabled(game, ids, on)); },
+    redo: async () => { publish(game, await library.setEnabled(game, ids, on, turnOffOthers)); },
   });
   return change;
 }
@@ -130,9 +135,13 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
   publish(game, merged);
   const before = new Map(prior.map((m) => [m.id, m.enabled]));
   const changedIds = merged.changed.map((m) => m.id);
-  if (!changedIds.length) { toast(merged.notes.length ? merged.notes.join(". ") : "Nothing to change"); return merged; }
+  if (!changedIds.length) {
+    const rest = sayF10(merged.notes);
+    if (rest.length || !merged.notes.length) toast(rest.length ? rest.join(". ") : "Nothing to change");
+    return merged;
+  }
   record({
-    label: [label, ...merged.notes].join(". "),
+    label: [label, ...sayF10(merged.notes)].join(". "),
     undo: () => restoreStates(game, before, changedIds),
     redo: async () => {
       if (offs.length) publish(game, await library.setEnabled(game, offs, false));
@@ -151,7 +160,8 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
   if (!change.removed.length) return change;
   const removedNames = list.filter((m) => change.removed.includes(m.id));
   let gone = change.removed;
-  record({
+  const many = removedNames.length >= 50;
+  const entry = record({
     label: `Removed ${nameOf(removedNames, "mods")}`,
     undo: async () => {
       const trash = await library.trash(game);
@@ -170,6 +180,7 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
       publish(game, ch);
       gone = ch.removed;
     },
-  });
+  }, many);
+  if (many) toast(`Removed ${removedNames.length} mods. Fresh start?`, false, { label: "Undo", run: () => void undo(entry) });
   return change;
 }

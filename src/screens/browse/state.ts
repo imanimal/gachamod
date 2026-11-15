@@ -1,14 +1,16 @@
-// Shared state for the GameBanana browser: the filters (one set per game, remembered, shared by the Browse page,
-// Home's embedded browser and the character pages, so Expand keeps them), what the library has (installed and
+// Shared state for the GameBanana browser: the filters (one set per game, shared by the Browse page, Home's
+// embedded browser and the character pages, so Expand keeps them), what the library has (installed and
 // archived mods by GameBanana id) and opening a mod's page. Owner: BROWSE area.
 import { useEffect, useSyncExternalStore } from "react";
-import { library, type ArchiveEntry, type GameId, type ModEntry } from "../../lib/api";
-import type { GbCategoryRef, GbKind, GbSort } from "../../lib/gamebanana";
+import { errorText, library, shell, type ArchiveEntry, type GameId, type ModEntry, type ToolLink } from "../../lib/api";
+import { gbToolId, type GbCategoryRef, type GbKind, type GbSort } from "../../lib/gamebanana";
+import { toast } from "../../ui/toast";
 import { closeRoute, currentRoute, go, onApp } from "../../lib/store";
+import { onPublish } from "../library/data";
 
 // ── filters ──
 
-/** GameBanana's sorts plus "foryou" (lib/recommend.ts). */
+/** GameBanana's sorts plus "foryou" (lib/recommend.ts). "relevance" only goes with a search. */
 export type BrowseSort = GbSort | "foryou";
 
 export interface BrowseFilters {
@@ -30,12 +32,13 @@ export interface BrowseFilters {
 }
 
 export const SORTS: Array<{ value: BrowseSort; label: string; title: string }> = [
+  { value: "relevance", label: "Relevance", title: "Best match for the search first" },
   { value: "foryou", label: "For you", title: "Mods you don't have that fit the characters and creators in your library" },
   { value: "newest", label: "New", title: "Newest first" },
   { value: "updated", label: "Updated", title: "Recently updated mods" },
   { value: "week", label: "Popular this week", title: "Most liked of the mods added in the last 7 days" },
   { value: "month", label: "Popular this month", title: "Most liked of the mods added in the last 30 days" },
-  { value: "popular", label: "Most downloaded", title: "Most downloaded of all time (best match when searching)" },
+  { value: "popular", label: "Most downloaded", title: "Most downloaded of all time" },
   { value: "likes", label: "Most liked", title: "Most liked of all time" },
   { value: "views", label: "Most viewed", title: "Most viewed of all time" },
 ];
@@ -55,6 +58,9 @@ const DEFAULTS: BrowseFilters = { sort: "popular", kind: null, category: null, c
 const filterKey = (game: GameId) => `gm.browse.filters.${game}`;
 const filters = new Map<GameId, BrowseFilters>();
 const filterSubs = new Set<() => void>();
+/** The sort from before a search switched to Relevance, put back when the search is cleared. */
+const sortBeforeSearch = new Map<GameId, BrowseSort>();
+const browseSort = (game: GameId, s: BrowseSort) => (s === "relevance" ? sortBeforeSearch.get(game) ?? DEFAULTS.sort : s);
 
 function readFilters(game: GameId): BrowseFilters {
   const hit = filters.get(game);
@@ -65,10 +71,8 @@ function readFilters(game: GameId): BrowseFilters {
     if (raw && typeof raw === "object") {
       f = {
         ...f,
-        sort: SORTS.some((s) => s.value === raw.sort) ? raw.sort! : f.sort,
+        sort: raw.sort !== "relevance" && SORTS.some((s) => s.value === raw.sort) ? raw.sort! : f.sort,
         kind: KINDS.some((k) => k.value === raw.kind) ? raw.kind! : null,
-        category: raw.category && typeof raw.category.id === "number" && typeof raw.category.name === "string" ? raw.category : null,
-        character: typeof raw.character === "string" && raw.character ? raw.character : null,
         hq: raw.hq === true, hideInstalled: raw.hideInstalled === true, followed: raw.followed === true,
       };
     }
@@ -79,17 +83,49 @@ function readFilters(game: GameId): BrowseFilters {
 
 export function getFilters(game: GameId): BrowseFilters { return readFilters(game); }
 
-/** Change some filters of a game (remembered, except the search text). */
+/** Change some filters of a game. Sort, type and the switches are remembered; the character, category and search
+ *  only last while the browser stays open (a saved filter set keeps them on purpose). */
 export function setFilters(game: GameId, patch: Partial<BrowseFilters>) {
   const cur = readFilters(game);
   const next = { ...cur, ...patch };
   if (patch.character) next.category = null;
   if (patch.category) next.character = null;
+  // a new search sorts by relevance (For you would only search its own picks); clearing it puts the sort back
+  if (patch.sort === undefined && next.search && !cur.search) next.sort = "relevance";
+  if (next.sort === "relevance") {
+    if (!next.search) next.sort = browseSort(game, "relevance");
+    else if (cur.sort !== "relevance") sortBeforeSearch.set(game, cur.sort);
+  }
   if (Object.keys(next).every((k) => next[k as keyof BrowseFilters] === cur[k as keyof BrowseFilters])) return;
   filters.set(game, next);
-  try { const { search: _s, ...keep } = next; localStorage.setItem(filterKey(game), JSON.stringify(keep)); } catch { /* storage off */ }
+  try {
+    const { search: _s, character: _c, category: _g, ...keep } = next;
+    keep.sort = browseSort(game, keep.sort);
+    localStorage.setItem(filterKey(game), JSON.stringify(keep));
+  } catch { /* storage off */ }
   filterSubs.forEach((f) => f());
 }
+
+// A browser opening fresh drops the last visit's character, category and search, unless something opened it to show
+// them (a category link, See all, Expand). Those mark the game just before they navigate.
+const carry = new Map<GameId, number>();
+
+/** Set filters for the browser that is about to open (and keep them when it does). */
+export function openWithFilters(game: GameId, patch: Partial<BrowseFilters> = {}) {
+  setFilters(game, patch);
+  carry.set(game, Date.now());
+}
+
+/** Called once as a browser mounts, before it reads the filters. Doesn't notify: nothing else shows them yet. */
+export function beginVisit(game: GameId) {
+  const at = carry.get(game);
+  if (at !== undefined && Date.now() - at < 5000) return;
+  const cur = readFilters(game);
+  if (cur.character || cur.category || cur.search) filters.set(game, { ...cur, character: null, category: null, search: "", sort: browseSort(game, cur.sort) });
+}
+
+/** The browser has mounted: a mark left for it is used up. */
+export function endCarry(game: GameId) { carry.delete(game); }
 
 const subFilters = (f: () => void) => { filterSubs.add(f); return () => { filterSubs.delete(f); }; };
 export function useFilters(game: GameId): BrowseFilters {
@@ -136,6 +172,8 @@ function wire() {
   const reload = (game: GameId) => { if (libs.has(game)) void loadLib(game); };
   void library.onChanged((p) => reload(p.game)).catch(() => {});
   onApp((e) => { if (e.type === "library-refresh") reload(e.game); });
+  // a mod turned on or off here or in Mods
+  onPublish((game) => reload(game));
 }
 
 /** The library index of a game, loading it on first use and keeping it current. */
@@ -156,9 +194,28 @@ export function libIndexNow(game: GameId): LibIndex {
 
 /** Open a GameBanana mod's page over the current page (a step in the history, so Back closes it). */
 export function openGbMod(id: number) {
-  go({ ...currentRoute(), modId: id });
+  const { toolId: _, ...r } = currentRoute();
+  go({ ...r, modId: id });
 }
 export function closeGbMod() { closeRoute(["modId"]); }
+
+/** Open a GameBanana tool's page (a fixer) over the current page, the same way. It takes the place of an open mod
+ *  page or mod details (Back brings them back). */
+export function openGbTool(id: number) {
+  const { modId: _, ...r } = currentRoute();
+  go({ ...r, toolId: id });
+}
+export function closeGbTool() { closeRoute(["toolId"]); }
+
+/** Open a fixer: a GameBanana tool's page in the app (with Download), anything else (GitHub) in the browser. */
+export function openFixer(link: ToolLink) {
+  const id = gbToolId(link.url);
+  if (id) openGbTool(id);
+  else void shell.openUrl(link.url).catch((e) => toast(errorText(e), true));
+}
+
+/** Whether openFixer stays in the app. */
+export const fixerInApp = (link: ToolLink) => gbToolId(link.url) !== null;
 
 /** The GameBanana mod id the route opens, if any: a number anywhere, a numeric text in Browse. */
 export function gbModOfRoute(r: { view: string; modId?: string | number }): number | null {

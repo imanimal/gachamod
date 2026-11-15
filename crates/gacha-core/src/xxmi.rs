@@ -145,6 +145,18 @@ pub fn status_cached(custom_root: Option<&str>) -> Option<XxmiStatus> {
     read_config(&root.join(CONFIG_FILE)).ok().map(|cfg| status_from(&root, &cfg))
 }
 
+/// One value of an importer's own settings (`Importers.<CODE>.Importer.<key>`, e.g. "window_mode"), as text.
+pub fn importer_setting(custom_root: Option<&str>, code: &str, key: &str) -> Option<String> {
+    let root = find_root(custom_root)?;
+    let cfg = read_config(&root.join(CONFIG_FILE)).ok()?;
+    let block = cfg["Importers"].as_object()?.iter().find(|(c, _)| c.eq_ignore_ascii_case(code)).map(|(_, b)| b)?;
+    match &block["Importer"][key] {
+        Value::String(s) => Some(s.trim().to_string()).filter(|s| !s.is_empty()),
+        Value::Null => None,
+        v => Some(v.to_string()),
+    }
+}
+
 /// Start a game with mods through XXMI Launcher (no GUI). `importer` is the code, e.g. "ZZMI".
 pub fn launch(custom_root: Option<&str>, importer: &str) -> Result<()> {
     let root = require_root(custom_root)?;

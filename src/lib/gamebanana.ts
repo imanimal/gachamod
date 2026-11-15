@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import type { GameId, ModEntry } from "./api";
 import { queue, type QueueItem, type QueueRequest } from "./api/online";
 import { currentGame } from "./store";
+import { toast } from "../ui/toast";
+import { pityReset } from "./fun";
+import { HOLD, track } from "./activity";
 
 export const GB = "https://gamebanana.com/apiv11";
 
@@ -75,13 +78,16 @@ export interface GbMod extends GbCard {
   visibility: "show" | "warn" | "hide";
   updatesCount: number;
   game: { id: number; name: string } | null;
+  /** A GameBanana tool (a fixer, a script) rather than a mod: it is downloaded, never installed. */
+  tool?: boolean;
 }
 
 export interface GbUpdate { id: number; name: string; version: string | null; added: number; changes: Array<{ cat: string; text: string }>; text: string }
 
 /** "popular" and "downloads" are most downloaded of all time; "week" and "month" are the most liked mods added in
- *  the last 7 or 30 days (gathered from the newest pages, GameBanana has no such sort). */
-export type GbSort = "popular" | "newest" | "updated" | "downloads" | "likes" | "views" | "week" | "month";
+ *  the last 7 or 30 days (gathered from the newest pages, GameBanana has no such sort). "relevance" is the best match
+ *  for a search (most downloaded without one). */
+export type GbSort = "relevance" | "popular" | "newest" | "updated" | "downloads" | "likes" | "views" | "week" | "month";
 
 export interface ListQuery {
   /** 0 lists every game (a creator's mods everywhere). */
@@ -137,9 +143,15 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
     for (let attempt = 0; ; attempt++) {
       let r: Response;
       try {
-        r = await fetch(url, { signal, headers: { Accept: "application/json" } });
+        // a connection that goes quiet fails after 30 seconds instead of waiting forever
+        const quiet = AbortSignal.timeout(30_000);
+        r = await track(fetch(url, { signal: signal ? AbortSignal.any([signal, quiet]) : quiet, headers: { Accept: "application/json" } }),
+          "Waiting on GameBanana", HOLD.gb);
       } catch (e) {
-        if (signal?.aborted || isAbort(e)) throw abortError();
+        if (signal?.aborted) throw abortError();
+        if (isAbort(e) || (e instanceof DOMException && e.name === "TimeoutError")) {
+          throw new Error("GameBanana didn't answer for 30 seconds. Check your connection, or try again in a minute.");
+        }
         if (attempt === 0) { await pause(800, signal); continue; }
         throw new Error(OFFLINE);
       }
@@ -256,7 +268,7 @@ const K_OUTFIT = /\b(over|outfits?|dress(es)?|skirts?|suits?|swimsuits?|bikinis?
 const K_SOFT = /\b(colou?rs?|colou?red|eyes?|hair ?colou?r|shader|shading|tint)\b/i;
 const K_HUE = "(black|white|pink|red|blue|green|purple|teal|gold|golden|silver|brown|dark|darker|pale|paler)";
 const K_HUED = new RegExp(`\\b(but|to|in)\\s+${K_HUE}\\b|\\(\\s*${K_HUE}\\s*\\)|\\b${K_HUE}\\s+(hair|skin|eyes|version|ver)\\b|\\bless pale\\b`, "i");
-const K_TOOL = /\b(fix(es|ed)?|remov(e|er|al)|fx|reshade|shaders?|camera|lib|library|toggler|filter|map\+?|outlines?|bloom|sharpen|x-?ray|downsizer|script|fps|censor|tools?|utility|cursor|screenshot)\b/i;
+export const K_TOOL = /\b(fix(es|ed)?|remov(e|er|al)|fx|reshade|shaders?|camera|lib|library|toggler|filter|map\+?|outlines?|bloom|sharpen|x-?ray|downsizer|script|fps|censor|tools?|utility|cursor|screenshot)\b/i;
 const K_PAINT = /paint|photoshop|gimp|sai\b|krita|clip studio|medibang|substance|procreate/i;
 const escapeRe = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -475,14 +487,13 @@ export async function gameInfo(gbGameId: number): Promise<GbGameInfo | null> {
 }
 
 const INDEX_SORT: Record<GbSort, string> = {
-  popular: "Generic_MostDownloaded", downloads: "Generic_MostDownloaded", newest: "Generic_Newest",
+  relevance: "Generic_MostDownloaded", popular: "Generic_MostDownloaded", downloads: "Generic_MostDownloaded", newest: "Generic_Newest",
   updated: "Generic_LatestUpdated", likes: "Generic_MostLiked", views: "Generic_MostViewed",
   week: "Generic_Newest", month: "Generic_Newest",
 };
-const SEARCH_ORDER: Partial<Record<GbSort, string>> = { newest: "date", updated: "udate", week: "date", month: "date", likes: "popularity", views: "popularity" };
+const SEARCH_ORDER: Partial<Record<GbSort, string>> = { popular: "popularity", downloads: "popularity", newest: "date", updated: "udate", week: "date", month: "date", likes: "popularity", views: "popularity" };
 const WINDOW_DAYS: Partial<Record<GbSort, number>> = { week: 7, month: 30 };
 
-/** Likes, plus views and comments in like-sized units (a mod gets roughly one like per 80 to 100 views). */
 /** A tool on GameBanana (a fixer, a script). */
 export interface GbTool { id: number; name: string; url: string; added: number; submitter: string | null }
 
@@ -499,6 +510,7 @@ export function gameTools(gbGameId: number): Promise<GbTool[]> {
   });
 }
 
+/** Likes, plus views and comments in like-sized units (a mod gets roughly one like per 80 to 100 views). */
 export const attention = (c: Pick<GbCard, "likes" | "views" | "comments">) => c.likes + c.views / 100 + (c.comments ?? 0) / 2;
 
 /** One page straight from GameBanana (no week/month gathering). */
@@ -588,7 +600,7 @@ export async function listByCreators(ids: number[], q: Omit<ListQuery, "page" | 
   if (lists.length && lists.every((l) => l.status === "rejected")) throw (lists[0] as PromiseRejectedResult).reason;
   let items = lists.flatMap((l) => (l.status === "fulfilled" ? l.value.items : []));
   const text = q.search?.trim().toLowerCase();
-  if (text) { const words = text.split(/\s+/); items = items.filter((c) => words.every((w) => `${c.name} ${c.character ?? ""} ${c.category?.name ?? ""}`.toLowerCase().includes(w))); }
+  if (text) { const words = text.split(/\s+/); items = items.filter((c) => cardHasWords(c, words)); }
   if (days) { const since = Date.now() / 1000 - days * 86400; items = items.filter((c) => c.added >= since); }
   const seen = new Set<number>();
   items = items.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
@@ -596,11 +608,23 @@ export async function listByCreators(ids: number[], q: Omit<ListQuery, "page" | 
   return { items, total: items.length, complete: true };
 }
 
+/** What a GameBanana page is: a mod, or a tool (fixers and scripts live under Tool). */
+export type GbModel = "Mod" | "Tool";
+
 /** Everything about one mod (Mod/<id>/ProfilePage). */
-export async function modPage(id: number, signal?: AbortSignal): Promise<GbMod | null> {
+export function modPage(id: number, signal?: AbortSignal): Promise<GbMod | null> {
+  return itemPage("Mod", id, signal);
+}
+
+/** Everything about one tool (Tool/<id>/ProfilePage, the same shape as a mod's page). */
+export function toolPage(id: number, signal?: AbortSignal): Promise<GbMod | null> {
+  return itemPage("Tool", id, signal);
+}
+
+async function itemPage(model: GbModel, id: number, signal?: AbortSignal): Promise<GbMod | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
-  return cached(`mod:${id}`, MIN5, async () => {
-    const o = obj(await getJson(`${GB}/Mod/${id}/ProfilePage`, signal));
+  return cached(`${model === "Mod" ? "mod" : "tool"}:${id}`, MIN5, async () => {
+    const o = obj(await getJson(`${GB}/${model}/${id}/ProfilePage`, signal));
     if (!o) return null;
     const gameId = num(obj(o._aGame)?._idRow);
     const charCat = gameId ? charCatForGb(gameId) : null;
@@ -632,15 +656,16 @@ export async function modPage(id: number, signal?: AbortSignal): Promise<GbMod |
       images, files: unique, superCategory, ratings, visibility,
       updatesCount: num(o._nUpdatesCount) ?? 0,
       game: game && gameId !== null ? { id: gameId, name: str(game._sName) ?? "" } : null,
+      ...(model === "Tool" ? { tool: true, character: null, kind: "tool" as const, url: card.url.includes("/tools/") ? card.url : `https://gamebanana.com/tools/${id}` } : {}),
     } satisfies GbMod;
   });
 }
 
-/** A mod's update posts, newest first. */
-export async function modUpdates(id: number): Promise<GbUpdate[]> {
+/** A mod's (or tool's) update posts, newest first. */
+export async function modUpdates(id: number, model: GbModel = "Mod"): Promise<GbUpdate[]> {
   try {
-    return await cached(`updates:${id}`, MIN5, async () => {
-      const o = obj(await getJson(`${GB}/Mod/${id}/Updates?_nPage=1&_nPerpage=20`));
+    return await cached(`updates:${model}:${id}`, MIN5, async () => {
+      const o = obj(await getJson(`${GB}/${model}/${id}/Updates?_nPage=1&_nPerpage=20`));
       return arr(o?._aRecords).map((r): GbUpdate | null => {
         const u = obj(r);
         const uid = num(u?._idRow);
@@ -691,9 +716,10 @@ async function commentPage(url: string, signal?: AbortSignal): Promise<GbComment
   });
 }
 
-/** A mod's comments, 15 a page (GameBanana ignores other page sizes). `popular` matches the site's default order. */
-export function modComments(id: number, page: number, sort: "popular" | "newest" = "popular", signal?: AbortSignal): Promise<GbCommentPage> {
-  return commentPage(`${GB}/Mod/${id}/Posts?_nPage=${page}&_nPerpage=15&_sSort=${sort}`, signal);
+/** A mod's (or tool's) comments, 15 a page (GameBanana ignores other page sizes). `popular` matches the site's
+ *  default order. */
+export function modComments(id: number, page: number, sort: "popular" | "newest" = "popular", signal?: AbortSignal, model: GbModel = "Mod"): Promise<GbCommentPage> {
+  return commentPage(`${GB}/${model}/${id}/Posts?_nPage=${page}&_nPerpage=15&_sSort=${sort}`, signal);
 }
 
 /** Replies to one comment, oldest first, 15 a page. */
@@ -854,22 +880,108 @@ export async function memberProfile(id: number, signal?: AbortSignal): Promise<G
   });
 }
 
+/** A member name to compare: lower case, without spaces, dots, dashes or underscores ("Mr.Avgv" and "mravgv" match). */
+const nameKey = (s: string) => s.toLowerCase().replace(/[\s._-]+/g, "");
+
 /** A member's id from their name: the submitter of `modId` when it matches, else GameBanana's member search. */
-export async function findMember(name: string, modId?: number | null): Promise<GbUser | null> {
-  const want = name.trim().toLowerCase();
+export async function findMember(name: string, modId?: number | null, signal?: AbortSignal): Promise<GbUser | null> {
+  const want = nameKey(name.trim());
   if (modId) {
     try {
-      const m = await modPage(modId);
-      if (m?.submitter && (!want || m.submitter.name.toLowerCase() === want)) return m.submitter;
-    } catch { /* try the search */ }
+      const m = await modPage(modId, signal);
+      if (m?.submitter && (!want || nameKey(m.submitter.name) === want)) return m.submitter;
+    } catch (e) { if (isAbort(e)) throw e; /* else try the search */ }
   }
   if (!want) return null;
-  return cached(`findmember:${want}`, 30 * 60_000, async () => {
-    const o = obj(await getJson(`${GB}/Util/Search/Results?_sModelName=Member&_sOrder=best_match&_sSearchString=${encodeURIComponent(name.trim())}&_nPage=1`));
-    const users = arr(o?._aRecords).map((r) => parseUser(r)).filter((u): u is GbUser => !!u);
-    return users.find((u) => u.name.toLowerCase() === want) ?? null;
+  return (await memberSearch(name, signal)).find((u) => nameKey(u.name) === want) ?? null;
+}
+
+/** GameBanana's member search, best match first (one page, kept 30 minutes). */
+function memberSearch(name: string, signal?: AbortSignal): Promise<GbUser[]> {
+  return cached(`members:${nameKey(name)}`, 30 * 60_000, async () => {
+    const o = obj(await getJson(`${GB}/Util/Search/Results?_sModelName=Member&_sOrder=best_match&_sSearchString=${encodeURIComponent(name.trim())}&_nPage=1`, signal));
+    return arr(o?._aRecords).map((r) => parseUser(r)).filter((u): u is GbUser => !!u);
   });
 }
+
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j]! + 1, row[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length]!;
+}
+
+/** Whether a search word is close to a creator's name: the name or one of its parts, the start of it ("haeze" for
+ *  "Haezeker_"), part of a longer name, or a typo or two away ("haezekr"). Words under 3 letters never match. */
+export function nameClose(word: string, name: string): boolean {
+  const w = nameKey(word);
+  if (w.length < 3) return false;
+  const keys = [nameKey(name), ...name.toLowerCase().split(/[\s._-]+/).filter(Boolean)];
+  return keys.some((k) => k === w
+    || (w.length >= 4 && k.startsWith(w))
+    || (w.length >= 5 && k.includes(w))
+    || (k.length >= 5 && w.startsWith(k))
+    || (w.length >= 5 && Math.abs(w.length - k.length) <= 2 && editDistance(w, k) <= (w.length >= 8 ? 2 : 1)));
+}
+
+const SCAN_PAGES = 8;
+
+/** Mods a search finds by who made them, which GameBanana's own search ignores. "avgv" lists AVGV's mods; "burnice
+ *  haezeker" lists Burnice mods by a creator named close to "haezeker". Members named like a word are looked up first
+ *  and their mods matched against the other words. When that finds nothing and GameBanana's search for the whole text
+ *  has no mod with every word, up to 8 pages of a search for the other words are read for mods by a close name.
+ *  Empty when the search names no creator. */
+export async function modsByNamedCreator(q: Omit<ListQuery, "page" | "submitterId"> & { search: string }): Promise<GbCard[]> {
+  const words = q.search.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const { signal } = q;
+  const quiet = async <T,>(p: Promise<T>, none: T) => { try { return await p; } catch (e) { if (isAbort(e)) throw e; return none; } };
+  const multi = words.length >= 2 && words.length <= 4;
+  const without = (i: number) => words.filter((_, j) => j !== i).join(" ");
+
+  const cands: { id: number; rest: string }[] = [];
+  const add = (id: number, rest: string) => { if (!cands.some((c) => c.id === id)) cands.push({ id, rest }); };
+  const whole = (await quiet(memberSearch(q.search, signal), [])).find((u) => nameKey(u.name) === nameKey(q.search));
+  if (whole) add(whole.id, "");
+  if (multi) {
+    const each = await Promise.all(words.map((w) => quiet(memberSearch(w, signal), [])));
+    each.forEach((users, i) => users.filter((u) => nameClose(words[i]!, u.name)).slice(0, 2).forEach((u) => add(u.id, without(i))));
+  }
+  const lists = await Promise.all(cands.slice(0, 6).map((c) => quiet(listByCreators([c.id], { ...q, search: c.rest }).then((r) => r.items), [])));
+  let out = lists.flat();
+
+  // GameBanana's search drops words it can't place ("burnice haezeker" lists every Burnice mod), so the scan runs
+  // when no mod on its first page has every word
+  if (!out.length && multi) {
+    const plain = await quiet(listMods({ ...q, page: 1 }), null);
+    const byName = (plain?.items ?? []).filter((c) => cardHasWords(c, words) && c.submitter && words.some((w) => nameClose(w, c.submitter!.name)));
+    if (byName.length) out = byName;
+    else if (plain && !plain.items.some((c) => cardHasWords(c, words))) {
+      // best match finds an older mod sooner than newest-first; the week and month lists keep their window
+      const scan = { ...q, sort: q.sort && WINDOW_DAYS[q.sort] ? q.sort : "popular" as const };
+      const found = await Promise.all(words.map(async (w, i) => {
+        const pick = (r: ListResult | null) => (r?.items ?? []).filter((c) => c.submitter && nameClose(w, c.submitter.name));
+        const first = await quiet(listMods({ ...scan, search: without(i), page: 1 }), null);
+        if (!first || first.complete) return pick(first);
+        const pages = Math.min(SCAN_PAGES, Math.ceil(first.total / Math.max(1, first.items.length)));
+        const rest = await Promise.all(Array.from({ length: pages - 1 }, (_, k) => quiet(listMods({ ...scan, search: without(i), page: k + 2 }), null)));
+        return [first, ...rest].flatMap(pick);
+      }));
+      out = found.flat().sort(SORT_CMP[q.sort ?? "popular"] ?? ((a, b) => attention(b) - attention(a)));
+    }
+  }
+  const seen = new Set<number>();
+  return out.filter((c) => (seen.has(c.id) ? false : (seen.add(c.id), true)));
+}
+
+/** Whether a mod's name, character, category or creator has every word (lower case). */
+export const cardHasWords = (c: GbCard, words: string[]) => {
+  const hay = `${c.name} ${c.character ?? ""} ${c.category?.name ?? ""} ${c.submitter?.name ?? ""}`.toLowerCase();
+  return words.every((w) => hay.includes(w.toLowerCase()));
+};
 
 // ── the High quality filter ──
 //
@@ -883,9 +995,10 @@ export async function findMember(name: string, modId?: number | null): Promise<G
 //   r       A / shape, the attention a mod is on track for
 //   bar     the 80th percentile of r over the game's outfits aged 3 to 60 days among its newest 200 mods (kept a
 //           day); `median` is the 50th. Another type picked (tools, UI ...) is measured among its own kind
-//   T       the creator's record: the median r of their mods in this game aged 3 days or more (kept 3 days), or the
-//           game's median when they have fewer than two; at most 1.5 bar, so a big name can't carry a mod nobody
-//           liked
+//   T       the creator's record: the median r of their mods in this game aged 3 days or more (kept 3 days). A creator
+//           with fewer than two here takes their best record from another game the app has measured, in units of
+//           that game's bar (top fifth in zzz counts as top fifth in ww); with none anywhere, the game's median. At
+//           most 1.5 bar, so a big name can't carry a mod nobody liked
 //   est     (A + 0.25 T) / (shape + 0.25), times 1.2 when GameBanana featured it
 //
 // A mod passes when est >= bar. Early on the record carries most of the weight: a new mod by a creator whose mods
@@ -945,10 +1058,17 @@ export async function hqBar(gbGameId: number, signal?: AbortSignal, kind: GbKind
     const now = Date.now() / 1000;
     const categoryId = kind === "outfit" ? null : kindCategory(kind, await categories(gbGameId));
     const cards: GbCard[] = [];
-    for (let p = 1; p <= 4; p++) {
-      const r = await rawPage({ gbGameId, categoryId, page: p, perPage: 50, signal }, "newest", p);
-      cards.push(...r.items);
-      if (r.complete) break;
+    try {
+      for (let p = 1; p <= 4; p++) {
+        const r = await rawPage({ gbGameId, categoryId, page: p, perPage: 50, signal }, "newest", p);
+        cards.push(...r.items);
+        if (r.complete) break;
+      }
+    } catch (e) {
+      // offline or GameBanana down: this game's last bar, however old, beats a guess sized for another game
+      const old = storeRead<HqBar>(key)?.value;
+      if (!isAbort(e) && old && old.bar > 0 && old.median > 0) return old;
+      throw e;
     }
     const onTrack = (keep: (c: GbCard, age: number) => boolean) => cards.filter((c) => keep(c, ageDays(c, now))).map((c) => hqOnTrack(c, now));
     let pool = onTrack((c, a) => c.kind === kind && a >= 3 && a <= 60);
@@ -962,7 +1082,7 @@ export async function hqBar(gbGameId: number, signal?: AbortSignal, kind: GbKind
 }
 
 const RECORD_KEY = "gm.gb.records";
-type Records = Record<string, { r: number | null; at: number }>;
+export type Records = Record<string, { r: number | null; at: number }>;
 let recordsKept: Records | null = null;
 const recordTable = (): Records => (recordsKept ??= storeRead<Records>(RECORD_KEY)?.value ?? {});
 
@@ -985,6 +1105,28 @@ export async function creatorRecord(gbGameId: number, memberId: number, signal?:
   });
 }
 
+/** A creator's kept record in one game: undefined when it isn't kept or is older than MEMBER_TTL. */
+function keptRecord(gbGameId: number, memberId: number): number | null | undefined {
+  const hit = recordTable()[`${gbGameId}:${memberId}`];
+  return hit && Date.now() - hit.at < MEMBER_TTL ? hit.r : undefined;
+}
+
+/** A creator's best record in the other games, in units of each game's bar, times this game's bar. `records` is the
+ *  record table ("game:member" to record), `barOf` a game's last measured bar. Null when no other game knows them. */
+export function borrowedRecord(records: Records, barOf: (gbGameId: number) => number | null, gbGameId: number, memberId: number, bar: number): number | null {
+  let best: number | null = null;
+  for (const [k, v] of Object.entries(records)) {
+    const [g, m] = k.split(":").map(Number);
+    if (m !== memberId || g === gbGameId || v.r == null) continue;
+    const other = barOf(g!);
+    if (!other || other <= 0) continue;
+    const r = (v.r / other) * bar;
+    if (best === null || r > best) best = r;
+  }
+  return best;
+}
+const keptBar = (gbGameId: number) => storeRead<HqBar>(`gm.gb.hqbar.${gbGameId}`)?.value.bar ?? null;
+
 /** The cards that pass High quality, in the same order: outfits only, or `kind` when one is picked. `prio`: member
  *  ids whose mods (of that kind) always pass. */
 export async function filterHq(cards: GbCard[], gbGameId: number, prio: Set<number>, signal?: AbortSignal, kind?: GbKind | null): Promise<GbCard[]> {
@@ -993,13 +1135,23 @@ export async function filterHq(cards: GbCard[], gbGameId: number, prio: Set<numb
   if (!typed.length) return typed;
   const bar = await hqBar(gbGameId, signal, want).catch((e) => { if (isAbort(e)) throw e; return HQ_DEFAULT; });
   const now = Date.now() / 1000;
-  // the record decides only young mods: look it up where it could change the answer, for at most 16 creators a call
+  // the record decides only young mods, so it's needed only where it could change the answer. Kept records cost
+  // nothing; at most 16 more creators are looked up a call
   const undecided = (c: GbCard) => hqScore(c, bar, 0, now) < HQ_PASS && hqScore(c, bar, bar.bar * 3, now) >= HQ_PASS;
-  const need = [...new Set(typed.filter((c) => c.submitter && !prio.has(c.submitter.id) && undecided(c)).map((c) => c.submitter!.id))].slice(0, 16);
+  const ids = [...new Set(typed.filter((c) => c.submitter && !prio.has(c.submitter.id) && undecided(c)).map((c) => c.submitter!.id))];
   const rec = new Map<number, number | null>();
-  await Promise.all(need.map(async (id) => {
+  const look: number[] = [];
+  for (const id of ids) { const k = keptRecord(gbGameId, id); if (k === undefined) look.push(id); else rec.set(id, k); }
+  await Promise.all(look.slice(0, 16).map(async (id) => {
     try { rec.set(id, await creatorRecord(gbGameId, id, signal)); } catch (e) { if (isAbort(e)) throw e; }
   }));
+  // a creator new to this game (or not looked up yet) is judged by how they do in the other games
+  const table = recordTable();
+  for (const id of ids) {
+    if (rec.get(id) != null) continue;
+    const b = borrowedRecord(table, keptBar, gbGameId, id, bar.bar);
+    if (b != null) rec.set(id, b);
+  }
   return typed.filter((c) => (c.submitter && prio.has(c.submitter.id)) || hqScore(c, bar, c.submitter ? rec.get(c.submitter.id) : null, now) >= HQ_PASS);
 }
 
@@ -1068,6 +1220,9 @@ export function buildRequest(game: GameId, mod: GbMod, file: GbFile, replaces?: 
 /** Queue one file of a mod for download and install. `replaces`: library id of the mod it updates. */
 export async function queueModFile(game: GameId, mod: GbMod, file: GbFile, replaces?: string): Promise<QueueItem | null> {
   const snap = await queue.add(buildRequest(game, mod, file, replaces));
+  pityReset();
+  const waiting = snap.items.filter((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled").length;
+  if (waiting === 25) toast("25 mods queued. Your drive has been notified");
   const mine = snap.items.filter((i) => i.req.game === game && i.req.fileId === file.id);
   return mine.find((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled") ?? mine[mine.length - 1] ?? null;
 }
@@ -1144,11 +1299,18 @@ function youtubeId(src: string | null): string | null {
   return m ? m[1]! : null;
 }
 
-/** Where a GameBanana link points inside the app: a member's page or a mod's page. */
-export function gbLinkTarget(url: string): { member: number } | { mod: number } | null {
-  const m = /^https:\/\/(?:www\.)?gamebanana\.com\/(members|mods)\/(\d+)(?:[/?#]|$)/i.exec(url);
+/** Where a GameBanana link points inside the app: a member's page, a mod's page or a tool's page. */
+export function gbLinkTarget(url: string): { member: number } | { mod: number } | { tool: number } | null {
+  const m = /^https:\/\/(?:www\.)?gamebanana\.com\/(members|mods|tools)\/(\d+)(?:[/?#]|$)/i.exec(url);
   if (!m) return null;
-  return m[1]!.toLowerCase() === "members" ? { member: Number(m[2]) } : { mod: Number(m[2]) };
+  const kind = m[1]!.toLowerCase(), id = Number(m[2]);
+  return kind === "members" ? { member: id } : kind === "tools" ? { tool: id } : { mod: id };
+}
+
+/** The tool id of a GameBanana tool link ("https://gamebanana.com/tools/24821"), else null. */
+export function gbToolId(url: string | null | undefined): number | null {
+  const t = gbLinkTarget((url ?? "").trim());
+  return t && "tool" in t ? t.tool : null;
 }
 
 /** Description HTML with everything unsafe removed and GameBanana's own markup made portable (docs/spec.md):

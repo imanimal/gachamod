@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: blob: https: asset: http://asset.localhost; media-src 'self' https: asset: http://asset.localhost; frame-src https://www.youtube-nocookie.com https://www.youtube.com http://gmext.localhost gmext:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://gamebanana.com https://*.gamebanana.com https://api.github.com https://*.fandom.com https://*.wiki.gg https://iopwiki.com https://itunes.apple.com",
+      "csp": "default-src 'self'; img-src 'self' data: blob: https: asset: http://asset.localhost; media-src 'self' https: asset: http://asset.localhost; frame-src https://www.youtube-nocookie.com https://www.youtube.com http://gmext.localhost gmext:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://raw.githubusercontent.com https://gamebanana.com https://*.gamebanana.com https://api.github.com https://*.fandom.com https://*.wiki.gg https://iopwiki.com https://itunes.apple.com",
       "assetProtocol": { "enable": true, "scope": ["**"] }
     }
   },
@@ -37,7 +37,7 @@
     ],
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
-      "nsis": { "installMode": "currentUser" }
+      "nsis": { "installMode": "currentUser", "installerHooks": "./windows/hooks.nsh" }
     }
   }
 }

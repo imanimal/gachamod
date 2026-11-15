@@ -11,6 +11,8 @@ import { gameMeta } from "../../lib/games";
 import { consumeRoute, refreshGames, setGames, useGames, useOnlyGame, useRoute } from "../../lib/store";
 import { focusGame } from "../../shell/commands";
 import { useAiShow } from "../../lib/ai";
+import { openKofi } from "../../lib/support";
+import { scrollToElement } from "../../lib/smoothScroll";
 import "./settings.css";
 import { AccountSection } from "./AccountSection";
 import { HotkeysSection } from "./HotkeysSection";
@@ -21,6 +23,8 @@ import { AiSection } from "./AiSection";
 import { ExtensionsSection } from "../extensions/ExtensionsSection";
 import { SECTIONS, sectionOf } from "./settingsSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
+import { FunSection } from "./FunSection";
+import { AdminRow, FeedbackSection } from "./Feedback";
 
 export { SetRow, openXxmi, useSetting };
 
@@ -58,32 +62,41 @@ export function Settings() {
     return () => ro.disconnect();
   }, []);
 
-  // scroll to a section or a single setting, mark its section in the list and light it up once it stops moving.
+  // scroll to a section or a single setting, mark its section in the list and light it up once it gets there.
   // Sections near the end can't reach the top of the page, so without the highlight it isn't clear which one it was.
   const pinned = useRef(false);
   const reveals = useRef(0);
   const reveal = useCallback((id: string) => {
     const el = document.getElementById(id) ?? document.getElementById(sectionOf(id) ?? "");
-    if (!el) return;
+    const view = el?.closest<HTMLElement>(".view");
+    if (!el || !view) return;
     const row = el.id.startsWith("set-");
     const section = row ? sectionOf(el.id) : el.id;
     if (section) setActive(section);
-    el.scrollIntoView({ behavior: "smooth", block: row ? "center" : "start" });
     pinned.current = true;
     const n = ++reveals.current;
-    whenSettled(el.closest(".view"), () => {
-      if (reveals.current === n) pinned.current = false;
+    scrollToElement(view, el, row ? "center" : "start", () => {
+      if (reveals.current !== n) return;
+      pinned.current = false;
       const cls = row ? "set-flash" : "set-ring";
       el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
     });
   }, []);
 
-  // a section or a single setting from the route
+  // a section or a single setting from the route. A row whose data is still loading may not be there on the first
+  // frame, so it waits a moment for it before settling for its section.
   useEffect(() => {
     const id = route.section;
     if (!id) return;
-    const t = window.setTimeout(() => { reveal(id); consumeRoute(["section"]); }, 120);
-    return () => window.clearTimeout(t);
+    const t0 = performance.now();
+    let raf = 0;
+    const go = () => {
+      if (!document.getElementById(id) && performance.now() - t0 < 400) { raf = requestAnimationFrame(go); return; }
+      reveal(id);
+      consumeRoute(["section"]);
+    };
+    raf = requestAnimationFrame(go);
+    return () => cancelAnimationFrame(raf);
   }, [route.section, reveal]);
 
   // sections that render nothing (a part still being built) stay out of the list
@@ -133,29 +146,13 @@ export function Settings() {
           <div className="set-ext" id="account"><AccountSection /></div>
           <AiSection />
           <TransferSection />
+          <FunSection />
+          <FeedbackSection />
           <AboutSection />
         </div>
       </div>
     </div>
   );
-}
-
-/** Runs `then` once the smooth scroll just started in `view` stops, or almost at once when nothing had to move. */
-function whenSettled(view: Element | null, then: () => void) {
-  if (!view) { then(); return; }
-  let done = false;
-  const top = view.scrollTop;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    view.removeEventListener("scrollend", finish);
-    window.clearTimeout(still);
-    window.clearTimeout(cap);
-    then();
-  };
-  view.addEventListener("scrollend", finish);
-  const still = window.setTimeout(() => { if (view.scrollTop === top) finish(); }, 100);
-  const cap = window.setTimeout(finish, 2500);
 }
 
 // ── games ──
@@ -177,6 +174,7 @@ function GamesSection() {
   return (
     <Panel title="Games" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
       <OnlyGameRow list={list} />
+      <AdminRow />
       <div className="set-games">{xxmiGames.map((g) => <GameRow key={g.id} game={g} />)}</div>
       {community.length > 0 && <>
         <h3 className="sub-h" id="set-community">Community games</h3>
@@ -370,6 +368,12 @@ function AboutSection() {
         <span>{dir ? <button type="button" className="set-folder-p mono" onClick={() => shell.openPath(dir).catch((e) => toast(errorText(e), true))} title="Open it">{dir}</button> : "…"}</span>
       </div>
       <UpdateRow />
+      <div className="set-rows set-update">
+        <div className="set-row">
+          <span><b>Tip jar</b><span className="hint">gachamod is free and has no ads. If it saves you some time, a tip on Ko-fi helps keep it going</span></span>
+          <Button size="sm" icon="coffee" onClick={openKofi} title="Opens ko-fi.com/aanimal in your browser">Tip on Ko-fi</Button>
+        </div>
+      </div>
       <p className="hint set-note">Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.
         Fonts: Manrope, Rubik, Anton and JetBrains Mono, under the SIL Open Font License.</p>
     </Panel>

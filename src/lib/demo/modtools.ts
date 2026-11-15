@@ -3,7 +3,7 @@
 import { demoEmit, registerDemo } from "../tauri";
 import { demoDb, demoId, demoNow, demoWait } from "./db";
 import type {
-  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, ModHealthRow, ExportRequest, HashHit, ImmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
+  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, FixerFile, FixerRequest, ModHealthRow, ExportRequest, HashHit, ImmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
   KeyClash, KeyEdit, KeyEntry, KeyLine, KeyTarget, ModEntry, ModInspect, ModKeys, ModProblems, OnScreenAll, OnScreenMod, PackFiles, PackPreview, PackPreviewMod, PreviewGame, PreviewProfile, ProblemFix,
   ModMesh, VarInfo, VarValue,
 } from "../api";
@@ -93,6 +93,8 @@ function demoLint(game: string): ModProblems[] {
 // Mod fixes: the 6th mod of each game uses outdated hashes gachamod swaps, the 7th needs a fixer it can't run.
 const fixDone = new Set<string>();
 const fixBackups = new Map<string, string>();
+/** Fixers "downloaded" in the demo, per game. */
+const fixerFiles = new Map<string, FixerFile[]>();
 const FIXERS: Record<string, { version: string; tool: { name: string; url: string } }> = {
   zzz: { version: "2.5", tool: { name: "ZZZ Mod Fixer", url: "https://github.com/Vonksdesu/ZZZ-Mod-Fixer" } },
   ww: { version: "3.5", tool: { name: "Wuwa Mod Fixer", url: "https://github.com/Moonholder/Wuwa_Mod_Fixer" } },
@@ -533,6 +535,17 @@ export function registerModtoolsDemo() {
         out.changed.push({ modId: m.id, name: m.name, backup: { id: bid, game: g, modId: m.id, modDir: m.path, files: [iniOf(m)], created: [], label: `Fixed ${m.name} for the game update (3 hashes)`, at: demoNow() } });
       }
       return out;
+    },
+    fixers_list: async ({ game }) => { await demoWait(60); return fixerFiles.get(String(game)) ?? []; },
+    fixers_download: async ({ game, req }) => {
+      const r = req as FixerRequest;
+      if (!/^https:\/\/([a-z0-9-]+\.)?gamebanana\.com\//i.test(r.url)) throw new Error("Fixers are only downloaded from GameBanana");
+      await demoWait(1400);
+      const dir = ["%APPDATA%", "gachamod", "fixers", String(game), r.tool, r.file.replace(/\.[^.]+$/, "")].join("\\");
+      const main = /\.(exe|bat|cmd|py)$/i.test(r.file) ? `${dir}\\${r.file}` : `${dir}\\fix.exe`;
+      const f: FixerFile = { toolId: r.toolId, fileId: r.fileId, tool: r.tool, file: r.file, dir, main, at: demoNow() };
+      fixerFiles.set(String(game), [...(fixerFiles.get(String(game)) ?? []).filter((x) => x.fileId !== r.fileId), f]);
+      return f;
     },
     pack_plan: async ({ req }) => { await demoWait(200); return demoPlan(req as ExportRequest); },
     pack_export: async ({ req }) => {

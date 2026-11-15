@@ -7,8 +7,13 @@
 .library > .page-h .library-search { flex: 0 1 24rem; }
 .library-filters, .library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
 .library-filters .field { min-width: 11rem; }
-.library-chars { flex-wrap: nowrap; overflow-x: auto; padding: .2rem .15rem; scrollbar-width: none; }
+/* types (UI, Tools and fixes ...) then characters, in one row that scrolls sideways (Library.tsx CharRow) */
+.library-chars-wrap { display: flex; align-items: center; gap: .25rem; width: 100%; min-width: 0; }
+.library-chars-wrap > .ibtn:disabled { opacity: .25; }
+.library-chars { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding: .2rem .15rem; scrollbar-width: none; scroll-padding-inline: 2rem; }
+.library-chars::-webkit-scrollbar { display: none; }
 .library-chars .char-chip { flex: none; }
+.library-chars-sep { flex: none; align-self: stretch; width: 1px; margin: .3rem .2rem; background: var(--line); }
 
 
 /* the shared grid (ModGrid): the bulk bar floats at the bottom of the view while there is a selection */
@@ -74,7 +79,8 @@
 .mod-drawer-taglist { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
 .mod-tag .i { width: .9em; height: .9em; }
 .mod-drawer-tagin { flex: 1; min-width: 8rem; height: 2rem; padding: 0 .6rem; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); }
-.mod-drawer-flags { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.mod-drawer-flags { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+.mod-drawer-flags > span { display: flex; }
 .mod-drawer-facts { display: flex; flex-direction: column; gap: .4rem; margin: 1.2rem 0; padding-top: 1rem; border-top: 1px solid var(--line); }
 .mod-drawer-facts .kv-v { display: flex; align-items: center; gap: .6rem; min-width: 0; }
 .mod-drawer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: .9em; }
@@ -90,11 +96,14 @@
 
 /* drawer additions */
 .mod-drawer-who { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; margin: -.4rem 0 .9rem; }
+.mod-drawer-family { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .6rem; margin: -.4rem 0 .9rem; color: var(--text-2); }
+.mod-drawer-sub { display: inline-flex; align-items: center; gap: .35rem; }
 .mod-drawer-health { margin-bottom: 1rem; }
 .mod-drawer-health-t { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
 .mod-drawer-health-a { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .2rem; }
 .mod-drawer-adult { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .mod-drawer-sec:empty { display: none; }
+.mod-parts-list { display: flex; flex-direction: column; gap: .6rem; }
 .mod-drawer-sec { display: flex; flex-direction: column; gap: var(--stack-gap); margin-top: 1.2rem; scroll-margin-top: 1rem; }
 
 /* archive */

@@ -8,11 +8,13 @@ import { IconButton, PageHeader } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { CreatorPage } from "./CreatorPage";
 import { GbBrowser } from "./GbBrowser";
-import { setFilters } from "./state";
+import { openGbMod, setFilters } from "./state";
+import { useMotd } from "../../lib/motd";
 import "./browse.css";
 
 export function Browse() {
   const game = useGame();
+  const motd = useMotd(game?.id ?? "");
   const route = useRoute();
 
   // one-shot route fields: a search or a character to show
@@ -31,8 +33,11 @@ export function Browse() {
   return (
     <div className="page gb-browse">
       <PageHeader title="Browse" icon="browse" sub={`Mods for ${game.name} on GameBanana`}
-        actions={<IconButton icon="external" label="Open GameBanana in the browser"
-          onClick={() => shell.openUrl(`https://gamebanana.com/games/${game.gamebananaId}`).catch((e) => toast(errorText(e), true))} />} />
+        actions={<>
+          {motd && <IconButton icon="gift" label={`Mod of the day, picked by animal${motd.name ? `: ${motd.name}` : ""}${motd.note ? `. ${motd.note}` : ""}`} onClick={() => openGbMod(motd.modId)} />}
+          <IconButton icon="external" label="Open GameBanana in the browser"
+            onClick={() => shell.openUrl(`https://gamebanana.com/games/${game.gamebananaId}`).catch((e) => toast(errorText(e), true))} />
+        </>} />
       <GbBrowser game={game.id} />
     </div>
   );

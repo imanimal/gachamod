@@ -14,12 +14,13 @@ import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle }
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
+import { hiddenThemePref } from "../../lib/fun";
 import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
 
 const SCHEME_OPTIONS: Array<{ value: SchemeChoice; label: string; icon?: "moon" | "sun" }> = [
   { value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" }, { value: "system", label: "System" },
 ];
-const LIGHT_NATIVE = THEMES.filter((t) => t.native === "light").map((t) => t.name);
+const LIGHT_NATIVE = THEMES.filter((t) => t.native === "light" && !t.hidden).map((t) => t.name);
 // the Light tip teases a little, and gives up once it's picked
 const modeOptions = (mode: SchemeMode): Array<{ value: SchemeMode; label: string; icon?: "moon" | "sun" | "controller"; title?: string }> => [
   { value: "game", label: "Game's own", icon: "controller", title: `Each theme as its game draws its menus: ${LIGHT_NATIVE.join(" and ")} light, the rest dark` },
@@ -32,6 +33,7 @@ export function AppearanceSection() {
   const game = useGame();
   const theme = useTheme();
   const [pick, setPick] = useState(() => (game ? themePick(game.id) : "auto"));
+  const found = hiddenThemePref.use();
   const [size, setSize] = useState(getTextSize());
   useEffect(() => { setPick(game ? themePick(game.id) : "auto"); }, [game?.id, theme.custom]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -53,7 +55,7 @@ export function AppearanceSection() {
       <div className="field-l">Theme {game ? `for ${game.name}` : ""}</div>
       <div className="set-themes">
         <ThemeCard id={defaultFor.id} name="Game's own" description={`${defaultFor.name}, the one ${game?.short ?? "the game"} uses`} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
-        {THEMES.map((t) => <ThemeCard key={t.id} id={t.id} name={t.name} description={t.description} on={pick === t.id} onClick={() => choose(t.id)} disabled={!game} />)}
+        {THEMES.filter((t) => !t.hidden || found || pick === t.id).map((t) => <ThemeCard key={t.id} id={t.id} name={t.name} description={t.description} on={pick === t.id} onClick={() => choose(t.id)} disabled={!game} />)}
       </div>
       <div className="set-rows">
         {accents.length > 1 && !theme.custom && (

@@ -10,6 +10,7 @@ pub mod devtools;
 pub mod download;
 pub mod extensions;
 pub mod error;
+pub mod fixers;
 pub mod fixes;
 pub mod games;
 pub mod gb_account;
@@ -21,6 +22,8 @@ pub mod keys;
 pub mod launch;
 pub mod library;
 pub mod live;
+pub mod gamecheck;
+pub mod logs;
 pub mod managers;
 pub mod mesh;
 pub mod model;
@@ -32,6 +35,7 @@ pub mod previews;
 pub mod profiles;
 pub mod queue;
 pub mod settings_file;
+pub mod telemetry;
 pub mod xxmi;
 
 pub use error::{Error, Result};
@@ -41,10 +45,12 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Sent as the User-Agent to GameBanana and anything else the app calls.
 pub fn user_agent() -> String { format!("gachamod/{APP_VERSION}") }
 
-/// The HTTP client every area shares (downloads, image fetches).
+/// The HTTP client every area shares (downloads, image fetches). A connection that goes quiet for 30 seconds fails
+/// with an error instead of waiting forever; a download that does keeps its part and resumes on retry.
 pub fn http_client() -> Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
         .user_agent(user_agent())
         .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(30))
         .build()?)
 }

@@ -59,7 +59,7 @@ export function menuFor<K extends keyof MenuSubjects>(kind: K, d: MenuSubjects[K
 
 // ── opening ──
 
-interface Open { x: number; y: number; items: MenuEntry[]; key: number; from: Element | null }
+interface Open { x: number; y: number; items: MenuEntry[]; key: number; from: Element | null; onClose?: () => void }
 let open: Open | null = null;
 let seq = 0;
 const subs = new Set<() => void>();
@@ -67,16 +67,25 @@ const emit = () => subs.forEach((f) => f());
 
 const visible = (items: MenuEntry[]) => items.some((i) => i && i !== "-" && !("header" in i));
 
-/** Show a menu at a point, or by an element (keyboard). Nothing shows when every entry is empty. */
-export function openMenu(at: { x: number; y: number } | Element, items: MenuEntry[]) {
+/** Show a menu at a point, or by an element (keyboard). Nothing shows when every entry is empty. `onClose` runs
+ *  when it closes, picked or not (before the picked item's own onClick). */
+export function openMenu(at: { x: number; y: number } | Element, items: MenuEntry[], onClose?: () => void) {
   if (!visible(items)) return;
+  open?.onClose?.();
   let x: number, y: number, from: Element | null = null;
   if (at instanceof Element) { const r = at.getBoundingClientRect(); x = r.left + Math.min(24, r.width / 2); y = r.top + Math.min(r.height, 28); from = at; }
   else { x = at.x; y = at.y; from = document.activeElement; }
-  open = { x, y, items, key: ++seq, from };
+  open = { x, y, items, key: ++seq, from, onClose };
   emit();
 }
-export function closeMenu() { if (!open) return; const f = open.from; open = null; emit(); if (f instanceof HTMLElement && f.isConnected) f.focus({ preventScroll: true }); }
+export function closeMenu() {
+  if (!open) return;
+  const { from: f, onClose } = open;
+  open = null;
+  emit();
+  if (f instanceof HTMLElement && f.isConnected) f.focus({ preventScroll: true });
+  onClose?.();
+}
 export const menuIsOpen = () => !!open;
 
 /** onContextMenu handler that opens these items. Stops the event so the shell's default menu stays away. */

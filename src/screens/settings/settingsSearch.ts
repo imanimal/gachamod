@@ -7,6 +7,7 @@ import { ideasTask } from "../../lib/recommend";
 import { registerCommands, type Command } from "../../lib/search";
 import { currentGame, go } from "../../lib/store";
 import { openXxmi } from "./parts";
+import { openFeedback, openGameCheck } from "../../lib/feedback";
 
 export interface SectionInfo { id: string; label: string; icon: IconName; keywords: string }
 
@@ -25,11 +26,14 @@ export const SECTIONS: SectionInfo[] = [
   { id: "account", label: "GameBanana account", icon: "user", keywords: "login log in sign in gamebanana gb account" },
   { id: "ai", label: "AI helper", icon: "ai", keywords: "ai chatbot chatgpt claude gemini copilot grok gpt llm assistant" },
   { id: "transfer", label: "Back up and move", icon: "export", keywords: "export import backup restore settings file new pc migrate" },
-  { id: "about", label: "About", icon: "info", keywords: "version data folder licences licenses credits update" },
+  { id: "fun", label: "Fun", icon: "sparkle", keywords: "fun extras chill lower case lowercase pity counter seasonal snow hearts year stats wrapped mod of the day" },
+  { id: "feedback", label: "Feedback and data", icon: "help", keywords: "feedback bug report problem suggestion idea contact developer telemetry usage analytics counts crash reports logs log file privacy" },
+  { id: "about", label: "About", icon: "info", keywords: "version data folder licences licenses credits update ko-fi kofi tip donate support" },
 ];
 
 /** Single settings: [row id (a route section), the section it sits in, title, keywords, icon]. */
 const SETTINGS: Array<[string, string, string, string, IconName]> = [
+  ["set-admin", "games", "Run as administrator", "admin administrator elevated uac f10 keys hotkeys zenless zzz always restart", "shield"],
   ["set-only-game", "games", "One-game mode", "one game only single focus just one exclusive hide other games main game", "focus"],
   ["set-community", "games", "Community games", "pgr punishing gray raven p5x persona gf2 girls frontline identity v stella sora taimanin 3dmigoto loader other games", "controller"],
   ["set-links", "integrations", "1-click installs from GameBanana", "gachamod links protocol url one click install handler default app", "link"],
@@ -39,6 +43,11 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-layout", "appearance", "Layout", "density compact comfortable spacing sidebar left right nav style corners round sharp buttons", "layout"],
   ["set-text-size", "appearance", "Text size", "font size zoom bigger smaller scale ui size", "sliders"],
   ["set-motion", "appearance", "Animations", "motion animation reduce reduced effects transitions", "sparkle"],
+  ["set-shuffle", "mods", "Shuffle outfits", "random randomize randomise outfits skins surprise each launch play daily", "dice"],
+  ["set-chill", "fun", "Chill mode", "lower case lowercase chill relaxed text casual", "sparkle"],
+  ["set-pity", "fun", "Pity counter", "pity gacha hard soft 90 browse count", "sparkle"],
+  ["set-seasonal", "fun", "Seasonal touches", "snow christmas winter valentine hearts holiday season", "snow"],
+  ["set-year", "fun", "Your year in mods", "year stats wrapped recap summary hours played most mods", "calendar"],
   ["set-nsfw", "mods", "Mods for adults", "nsfw 18+ adult lewd blur hide show censor", "eye"],
   ["set-pergame", "mods", "One skin per character", "single skin outfit only one at a time auto turn off others", "characters"],
   ["set-pergame", "mods", "Reload in game automatically", "f10 reload refresh in game auto press", "refresh"],
@@ -56,6 +65,11 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-creators-fav", "creators", "Favourite creators", "favorite favourites starred authors", "star"],
   ["set-creators-prio", "creators", "Prioritized creators", "priority whitelist first top authors", "crown"],
   ["set-creators-blocked", "creators", "Blocked creators", "block blacklist mute hide authors", "block"],
+  ["set-feedback", "feedback", "Send feedback", "feedback bug report problem suggestion idea contact developer message", "help"],
+  ["set-gamecheck", "feedback", "Check this game", "test testing tester check game report works switching skins menu genshin star rail wuthering waves endfield", "check"],
+  ["set-usage", "feedback", "Usage counts", "telemetry analytics usage statistics tracking privacy anonymous", "eye"],
+  ["set-crashes", "feedback", "Crash reports", "crash report error bug automatic send privacy", "bug"],
+  ["set-logs", "feedback", "Logs", "log logs file gachamod.log errors debug folder", "file"],
   ["set-ai-show", "ai", "Turn AI on or off", "ai off hide ai disable chatbot buttons show everything", "ai"],
   ["set-ai-chatbot", "ai", "Your chatbot", "chatgpt claude gemini copilot grok chatbot pick change", "ai"],
 ];
@@ -79,6 +93,8 @@ registerCommands("settings", () => {
     { id: "page:themes-online", title: "Get more themes", section: "Actions", icon: "palette", keywords: "themes download community share look skins",
       run: () => go({ view: "extensions", section: "themes" }) },
   );
+  list.push({ id: "act:feedback", title: "Send feedback", section: "Actions", icon: "help", keywords: "feedback bug report problem suggestion idea contact developer", run: () => openFeedback() });
+  list.push({ id: "act:gamecheck", title: "Check this game", section: "Actions", icon: "check", keywords: "test testing tester check game report switching skins menu", run: openGameCheck });
   list.push({ id: "act:xxmi", title: "Open XXMI Launcher", section: "Actions", icon: "external", keywords: "xxmi launcher open start run", run: openXxmi });
 
   const g = currentGame();

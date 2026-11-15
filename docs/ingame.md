@@ -380,10 +380,187 @@ Suggested build order: 7.1 and 7.2 first (live groups, channel, foreground rule,
 details (`InGameOptions`) and a Live tag on mod cards. Instead of the foreground rule, the app brings the game to the front for each tap
 (`devtools::focus_game`), so no `[System]` change is written. With the game closed a pick is saved to `d3dx_user.ini` for the next start.
 
-Not built yet: 7.3 to 7.6. Profiles don't pick live skins yet, and the one-skin rule leaves live mods alone.
+The channel in 7.2 was built with the cursor and didn't work in play: a game that hides the cursor puts it back in the
+middle of its window every frame, so the loader read the middle, never (slot, group). Seen in ZZZ on 2026-11-14. The
+channel is keys only now (`live_ini`, `win::tap`). While the app holds Clear, each of F13 to F22 it holds is one bit of a
+number (ten `[KeyGachamodBit<n>]` sections of `type = hold`). A tap of F23 keeps that number as the group, and a tap of
+F24 sets that group's `$g` to the number. With no group, the number 1 opens or closes the menu the game draws. A pick is
+two numbers and takes a little under half a second, after the game is brought forward. Nothing depends on screen size
+or display scaling any more.
 
-None of it has run in a real game. Spikes 1 and 2 above are the first things to check, plus the gate on `$\gachamod\live\gN` from
-a mod's own namespace and the pick surviving a restart.
+The app's idea of what shows can be behind (a pick made in the game's own menu), so while the game runs a pick is always
+sent, also when the app thinks that skin already shows. The game saves `d3dx_user.ini` about once a minute and on a
+reload: a save newer than the app's last pick is read back (`load_synced`, `saved_since_sent`), so the app follows picks
+made in the game.
+
+Every character (`<game>.liveAll`, the switch in the panel, `live::set_all` and `auto_add`): every mod that has a
+character, has an ini and isn't a sub-mod goes live, and new ones join after a scan. A mod taken out by hand is kept in
+the store's `out` list and stays out until the switch is turned on again.
+
+Buffer sizes: a mod with more vertices than the game's model has `[TextureOverride...VertexLimitRaise]` sections with
+`override_vertex_count` and `override_byte_stride`. The loader reads those when it first meets the buffer, not when a
+skin is picked. Gated, a skin that wasn't showing at the last reload drew wrong until one more F10 (seen in ZZZ with a
+character whose only mod had been off). Both keys now count as settings and stay above the gate, and every skin of a
+character asks for the largest count any of them needs for the same hash (`raises`, with the author's own number kept in
+a `; gachamod:was` line). Not yet checked in a game: that a first pick now shows without an F10.
+
+The library's own on/off goes through the same picks. `library::set_enabled` and `apply_states` (profile switches, so
+profile hotkeys too) send live skins to `live::switch`: on picks that skin (the last one per character wins), off picks
+none when it's the one showing. Their folders never rename, so nothing reloads. A live skin that isn't showing is on
+standby: `ModEntry.standby` is set, `enabled` is false, and `loaded()` says the folder is on. Code that cares about the
+folder (saved values, reloads) reads `loaded()`; everything the player sees reads `enabled`. Picks made while the game
+runs queue up, and the command that made them calls `live::flush_sends` once the database lock is free. A scan or an
+install gates a live skin again when its ini lost the gate (an update), and a skin back from the trash that isn't live
+loses old gates.
+
+Not built yet: 7.3 (toggles in the menu) and 7.6 (profiles with toggle values).
+
+To check in each game: spikes 1 and 2 above, the gate on `$\gachamod\live\gN` from a mod's own namespace, and the pick surviving
+a restart.
+
+## 11. The menu while playing
+
+The player opens a skin menu with one key (F7 by default, since F6 and F12 are the loaders' own and F10 reloads) or by
+pressing both sticks of a controller in. The game's setting `<game>.liveMenu` picks which menu, with `<game>.liveMenuKey`
+and `<game>.liveMenuPad` beside it (Tools > Switch skins in game, `MenuOptions`).
+
+| Setting | What opens | Where the key lives |
+|---|---|---|
+| `window` (default) | gachamod's own window over the game. In exclusive fullscreen, the menu the game draws | The app holds the key while the game runs |
+| `game` | Always the menu the game draws | A `[KeyMenuOpen]` section in live.ini |
+| `off` | Nothing | Nowhere |
+
+### The window over the game
+
+`src-tauri/src/overlay.rs` and `src/screens/ingame/Overlay.tsx`. A second Tauri window (label `overlay`): no frame, always
+on top, not in the taskbar, made when a game with live characters starts and dropped when it stops. The menu key is a
+global shortcut registered with the profile hotkeys (`hotkeys.rs`), and a thread reads XInput for both sticks while such a
+game runs. Opening places the window down the left side of the game's window and gives it the keyboard
+(`devtools::raise`). It lists every live character, the ones picked last first, with each skin as a picture, and has a
+search field. A pick goes through `overlay_pick` (the same `live::pick` and key channel as the app), which brings the
+game forward, and the window hides when it loses focus. Esc, the menu key and B close it. Closing the main window ends
+the app: the menu window is made again whenever its key is pressed, and would otherwise keep the app running with no
+window to close.
+
+The app can't show a window over exclusive fullscreen. `devtools::exclusive_fullscreen` asks Windows
+(`SHQueryUserNotificationState` says a Direct3D program holds the screen), and then the key sends the number 1 with no
+group, which runs `CommandListMenuToggle` in live.ini.
+
+`npm run dev` then http://localhost:1420/#overlay shows the window's UI with demo data.
+
+### The menu the game draws
+
+`crates/gacha-core/src/live/menu.rs`. Files next to live.ini, all written by the app:
+
+- `menu.hlsl`: one shader that draws a rectangle, a piece of a picture or a flat colour. No vertex buffer. Position, the
+  piece and the window size arrive in IniParams 86 to 89, which the draw list saves and puts back.
+- `menu<group>.dds`: one picture per character, a header and one row per skin with the thumbnail and name drawn in.
+  Text is drawn by Windows (GDI), so names in any language show. Made for the screen's height and scaled by the shader.
+- `menu0.dds`: the list of characters, one row each, when there are two or more.
+- `menu.dds`: the two footers with the key hints, the scroll buttons and the check mark.
+- `menu.json`: a hash per picture, so only pictures whose names or previews changed are made again.
+
+Sections added to live.ini: `[Present]` runs `CommandListMenuFrame` while `$open` is 1, which works out the window size
+(the same fallbacks as the ZZMI core's text printer), which row the mouse is over, and draws about six rectangles through
+`[CustomShaderMenuQuad]`. Showing a row sets `$g<group>`, the number the gates read, so no tap from the app is needed.
+
+Pages: one per character (by name) with its skins, and with two or more characters one more that lists the characters.
+Up and down move, right (or A) shows the row, a click on a row shows it (hold Alt for the cursor). Left, or a click on a
+character's header, goes to the list of characters with the cursor on the one that was open; right or a click there
+opens a character. Enter does the same as right but isn't in the hints, since games open their chat on Enter.
+
+Which character is on screen: every gated TextureOverride starts with `run = CommandList\gachamod\live\Seen<group>`,
+which sets a flag that `[Present]` reads and clears. The menu opens on that character each time its key is pressed, and
+the list of characters has its check on them. A live skin's keys also get `&& $\gachamod\live\open == 0`, so arrow keys
+in the menu don't flip its toggles. Mods gated by an older version get both on the next scan.
+
+Checked without a game: the shader compiles with fxc for vs_5_0 and ps_5_0, the generated sections balance their ifs and
+only run lists that exist (tests in `menu.rs`), and the .dds reads back. `GACHAMOD_MENU_PNG=<folder> cargo test -p gacha-core
+mock_picture` writes a picture of the menu and the generated sections there.
+
+### Games that run as administrator
+
+Zenless Zone Zero runs as administrator. Windows then drops every key an app that isn't one presses for the game
+(`SendInput`), and never passes that app a hotkey pressed in the game. Seen in ZZZ on 2026-11-14: gachamod's F7 opened
+its window while gachamod was in front and did nothing while the game was, and its F10 never reloaded the game.
+
+- `devtools::keys_blocked` is true while the game runs as administrator and gachamod doesn't. The reload watcher then
+  doesn't press F10. `devtools::f10_note` says "Press F10 in the game to load changes" once per game per run of the
+  app, the first time a change waits for it; a reload asked for by hand still fails with the longer reason.
+- A pick that can't be keyed in (the game runs as administrator, or wouldn't come to the front) waits in live.ini
+  (`live::defer`, `Store.waiting` and `Store.ask`). `[CommandListGachamodAsked]`, run from `[Present]`, sets those
+  groups once, on the first frame after a load, and stores the request's number in `$asked`, a saved value. Without it
+  F10 did nothing for an app pick: the game's saved value wins over live.ini's default at a load, so the app's pick was
+  lost, and when the game saved, the app read the old skin back. That is the "couldn't take a skin off" report of
+  2026-11-14 (gachamod not an administrator, the game one, picks made in the app and in the game's menu).
+- Until the game has saved `asked` equal to the request's number, what it saves for the waiting groups is older than the
+  app's pick and isn't read back. A tap that does reach the game takes its group out of the request
+  (`live::delivered`). With the game closed, waiting picks go into d3dx_user.ini, unless the game took them before it
+  closed (then its saved values are the newer ones).
+- A pick stays in the send queue until its tap is done, and those groups aren't read back meanwhile. Taps go one at a
+  time (`TAPPING`), the drawn menu's toggle included, since two at once would key in a mix of both numbers.
+- The game closed without a save since the app's last tap: the app's picks are newer, so they go into d3dx_user.ini
+  rather than being read back from it.
+- A group made while the game runs asks for its pick the same way, since its number may be one a removed group used
+  and the game may still have that group's pick saved.
+- A change to the `global persist $gN` defaults alone (a pick read back from the game) needs no reload, so a scan
+  after an in-game pick doesn't press F10.
+- live.ini binds the menu key in the game when gachamod can't hear it, which depends on whether gachamod runs as
+  administrator in this run. `live::on_start` writes live.ini again when the app starts, and `note_elevation` does when
+  the game starts, so switching gachamod between administrator and not doesn't leave F7 doing nothing.
+- The app notes whether each game ran as administrator (`<game>.elevated`, `live::note_elevation`, when the game starts).
+  While that is set and gachamod isn't an administrator, live.ini binds the menu key itself, whatever the setting, so the
+  key opens the menu the game draws. `LiveInfo.blocked` puts a notice in the panel with "Restart as administrator"
+  (`devtools::restart_elevated`: ShellExecute `runas`, and the new copy waits for the old one to quit).
+- Under `npm run app` that button ends the dev run. Start the terminal as administrator and run `npm run app` from it.
+
+### Checked in ZZZ on 2026-11-14
+
+With gachamod and the game both running as administrator, the game borderless at 2560x1440 and 125% scaling:
+
+- The drawn menu shows and is laid out right. It opens on the character on screen. Left shows the list of seven
+  characters, Enter opens one, up, down and Enter pick a skin, and the outfit changes in the same moment.
+- A pick from the app (`live::pick`), from the library's on and off (`set_enabled`) and from the menu window changes the
+  skin through the key channel, also when the app's idea of what shows was behind.
+- The app's F10 reloads the game, by hand (`dev_reload`) and by itself after a change while the game is in front.
+- F7 opens gachamod's window over the game, and the number 1 with no group closes and opens the drawn menu.
+- Every character made all seven characters with mods live, turned on the two mods that were off, and the game reloaded.
+
+Checked again later the same day, the game as administrator and gachamod not (keys pressed by a separate elevated
+helper, the app's logic driven from a small program on the real library):
+
+- An app pick while the keys can't reach the game: live.ini gets the request, F10 shows the picked skin.
+- Then a pick in the game's menu, then F10 again: the game's pick stays, the old request doesn't come back. The app reads
+  the game's pick back once the game saves `asked`.
+- The loader saves d3dx_user.ini 5 to 15 seconds after a change made by a key (the drawn menu or the key channel), not
+  after a reload. F10 a second after a pick in the game's menu keeps that pick.
+- The drawn menu: right shows a skin and opens a character on the list, left goes to the list, a click with Alt held
+  picks a row, F7 closes. The hints read "→ show" and "→ open".
+- A pick keyed in by an administrator copy of the app changes the skin at once, with no note.
+- Every Velina skin raises buffer sizes (`override_vertex_count`); after one F10 each skin, also ones not shown at that
+  load, drew right on its first pick. That settles the buffer size change above.
+- A mod whose ini had an `endif` with no `if` (Pearlescent Angel Velina, hair part) was left out of "every character"
+  without a word. The gate now turns such an endif into a comment (the loader skips it anyway); the mod joined and
+  shows right, hair included.
+- A download of a new character's mods joins "every character" at once (`live::settle` after an install), not at the
+  next scan.
+
+### Still to check
+
+1. Both sticks pressed in open the menu, and the D-pad and A work in both menus.
+2. Exclusive fullscreen with Over the game chosen: F7 opens the drawn menu. If nothing opens, Windows didn't report
+   exclusive fullscreen, and Inside the game is the setting to use.
+3. A mod toggle bound to an arrow key doesn't fire while the drawn menu is open (the mods here bind arrows only with
+   Ctrl, Alt or Shift).
+4. The other loaders. Their `check_foreground_window` may differ, and a game that doesn't run as administrator needs
+   no administrator rights for gachamod. Players with those games run Help, Check this game (docs/testing.md).
+5. An F10 pressed before the game saved a request it took (no key pressed since): the request runs again at that load.
+   It sets the same skin the app picked, so it only matters if the player picked another one in the game and pressed
+   F10 within a few seconds.
+
+Known limits: the game also sees the keys and buttons pressed in the drawn menu. A pick from the app or the menu window
+brings the game forward first and takes most of a second. XXMI Launcher writes `check_foreground_window` into d3dx.ini at
+launch (it was 1 in these runs), so the loader only reads keys while the game is in front.
 
 ## Sources
 

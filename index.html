@@ -21,7 +21,7 @@
         // all themes dark or light (gm.schemeMode), else each theme keeps its own choice; Teyvat and Talos-II are light
         // by default, the rest dark
         var mode = g("gm.schemeMode");
-        var c = (custom && custom.scheme) || (mode === "dark" || mode === "light" || mode === "system" ? mode : null) || g("gm.scheme." + theme) || (theme === "default" ? g("gm.scheme") : null) || (theme === "gi" || theme === "ef" ? "light" : "dark");
+        var c = (custom && custom.scheme) || (mode === "dark" || mode === "light" || mode === "system" ? mode : null) || g("gm.scheme." + theme) || (theme === "default" ? g("gm.scheme") : null) || (theme === "gi" || theme === "ef" || theme === "clay" ? "light" : "dark");
         var s = c === "system" ? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : c;
         r.setAttribute("data-theme", theme);
         r.setAttribute("data-scheme", s);

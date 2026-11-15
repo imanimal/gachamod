@@ -65,8 +65,8 @@ ignored by git. Retake them from the finished app with a real library. For the d
 - Profile hotkeys switching and reloading mods in each game.
 - The app's update check reads the GitHub releases of `imanimal/gachamod`, which is private. Make the releases public
   before launch or the check never finds anything.
-- Left out until they work in a real game: switching skins in the game without a reload, GameBanana sign-in and
-  extensions. Add a line to the "Everything else" list when each one is ready.
+- Switching skins without F10, GameBanana sign-in and extensions: check each one in the app, then add a line for it
+  to the "Everything else" list.
 - After the first release, ask GameBanana staff for 1-click install (their wiki page 1999). Once approved, an
   "install with gachamod" link shows on mod pages of the supported games.
 

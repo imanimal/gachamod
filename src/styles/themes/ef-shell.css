@@ -60,7 +60,8 @@
   .nv-b { border-radius: 2px; background: #f4f4f4; color: #111; font-weight: 700; }
   .nv.on .nv-b { background: #111; color: var(--acc); }
   .nv-b.t-bad { background: var(--red); color: #fff; }
-  .nv-b.t-run { background: var(--lime); border-radius: 1px; }
+  .nv-b.t-run { background: var(--lime); color: #111; }
+  .nv-b.t-run:empty { border-radius: 1px; }
   .nv-b.t-run::after { border-radius: 1px; border-color: var(--lime); }
   .nv.on .nv-b.t-run { background: #111; }
   .nv:disabled { opacity: .35; }

@@ -88,7 +88,7 @@ const GENDER = new Set(["female", "male", "f", "m"]);
 
 async function wiki(api: string, params: Record<string, string>): Promise<WikiAnswer> {
   const q = new URLSearchParams({ action: "query", format: "json", origin: "*", ...params });
-  const r = await fetch(`${api}?${q}`, { headers: { Accept: "application/json" } });
+  const r = await fetch(`${api}?${q}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
   if (!r.ok) throw new Error(`wiki ${r.status}`);
   return (await r.json()) as WikiAnswer;
 }

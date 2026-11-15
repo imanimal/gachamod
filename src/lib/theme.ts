@@ -20,6 +20,8 @@ export interface ThemeInfo {
   /** The scheme the game's own menus use, the default until the user picks one. */
   native: Scheme;
   accents?: AccentInfo[];
+  /** Left out of Appearance until it's found (the Konami code; lib/fun.ts). */
+  hidden?: boolean;
 }
 
 export const THEMES: ThemeInfo[] = [
@@ -47,6 +49,7 @@ export const THEMES: ThemeInfo[] = [
       { id: "signal", name: "Signal", color: "#ffee00" }, { id: "orange", name: "Orange", color: "#ff8a1f" },
       { id: "lime", name: "Lime", color: "#c5e03a" }, { id: "cyan", name: "Cyan", color: "#3fd0f0" },
     ] },
+  { id: "clay", name: "Clay", description: "Warm ivory or soft charcoal, a clay accent, serif titles", schemes: ["dark", "light"], native: "light", hidden: true },
 ];
 
 /** gachamod's own colour, used when no game is set up. */

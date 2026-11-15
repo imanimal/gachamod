@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { dialogs, errorText, hotkeys, library, type Character, type GameId, type ModEntry, type Profile } from "../../lib/api";
 import { onColor as inkOn } from "../../lib/theme";
 import { Icon } from "../../ui/Icon";
-import { Button, Dialog, Segmented, Tabs, TextField, plural } from "../../ui/kit";
+import { Button, Dialog, Segmented, Tabs, TextField, Waiting, plural } from "../../ui/kit";
 import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
 import { Preview } from "../library/Preview";
@@ -321,7 +321,7 @@ function BannerPicker({ game, banner, onPick }: { game: GameId; banner: string; 
           tabs={[{ value: "file", label: "From this PC" }, { value: "mods", label: "A mod's preview" }, { value: "link", label: "Link" }]} />
         {banner && <Button size="sm" variant="ghost" icon="x" onClick={() => onPick("")}>No banner</Button>}
       </div>
-      {tab === "mods" && (mods === null ? <p className="hint">Loading previews…</p> : mods.length ? (
+      {tab === "mods" && (mods === null ? <Waiting what="Reading the mods in this profile" /> : mods.length ? (
         <div className="pe-banners" role="radiogroup" aria-label="Mod previews">
           {mods.map((m) => (
             <button key={m.id} type="button" role="radio" aria-checked={banner === m.preview} className={`pe-banner-tile${banner === m.preview ? " on" : ""}`}

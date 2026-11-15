@@ -1,15 +1,18 @@
 // A GameBanana mod's page in a wide drawer: gallery, creator and stats, files with Install buttons, the keys the
 // description lists, the description as the author formatted it, update posts and comments. It opens over any screen
-// from the route (a numeric route.modId, see OnlineOverlays). Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+// from the route (a numeric route.modId, see OnlineOverlays). A GameBanana tool (a fixer, route.toolId) opens in the
+// same drawer with Download in place of Install: the file goes to the fixers folder and is never run.
+// Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { errorText, type GameState, type ModEntry, type QueueItem, type QueueSnapshot } from "../../lib/api";
-import { gbLinkTarget, imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, type GbFile, type GbImage, type GbMod, type GbUpdate } from "../../lib/gamebanana";
+import { downloadFixer, showFixer, useFixerBusy, useFixerFiles } from "../../lib/fixes";
+import { gbLinkTarget, imageAt, isAbort, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, toolPage, type GbFile, type GbImage, type GbMod, type GbUpdate } from "../../lib/gamebanana";
 import { detectKeybinds } from "../../lib/keybinds";
 import { likeMod, useAccount, useLiked } from "../../lib/account";
 import { useNsfw } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
 import { DescKeys } from "../../ui/DescKeys";
-import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, formatBytes, formatCount, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, Toggle, formatBytes, formatCount, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CategoryLink, CharLink, CreatorLink } from "../../ui/Links";
 import { menuFor, openMenu } from "../../ui/ContextMenu";
@@ -19,8 +22,10 @@ import { openCreator, openExternal, takeWantFiles } from "./actions";
 import { Comments } from "./Comments";
 import { AdultSwitch } from "./GbBrowser";
 import { Lightbox } from "./Lightbox";
-import { openGbMod, useLibIndex } from "./state";
+import { openGbMod, openGbTool, useLibIndex } from "./state";
 import { useQueue } from "./useQueue";
+import { setOn } from "../library/actions";
+import { pityOpened } from "../../lib/fun";
 
 const activeStates = new Set(["waiting", "downloading", "installing", "needsChoice"]);
 
@@ -31,8 +36,8 @@ export function queueLabel(i: QueueItem): string {
   return i.archive ? "Waiting to install" : "Waiting";
 }
 
-/** Clicks and keys inside sanitized GameBanana HTML: links (GameBanana mods and members open in the app, others in
- *  the browser), spoilers (click to show) and pictures (`onImage`). */
+/** Clicks and keys inside sanitized GameBanana HTML: links (GameBanana mods, tools and members open in the app,
+ *  others in the browser), spoilers (click to show) and pictures (`onImage`). */
 export function descHandler(onImage?: (img: HTMLImageElement) => void) {
   return (e: MouseEvent | KeyboardEvent) => {
     const key = "key" in e;
@@ -47,6 +52,7 @@ export function descHandler(onImage?: (img: HTMLImageElement) => void) {
       if (!url) return;
       const inApp = gbLinkTarget(url);
       if (inApp && "mod" in inApp) openGbMod(inApp.mod);
+      else if (inApp && "tool" in inApp) openGbTool(inApp.tool);
       else if (inApp && "member" in inApp) openCreator(inApp.member);
       else openExternal(url);
       return;
@@ -55,7 +61,9 @@ export function descHandler(onImage?: (img: HTMLImageElement) => void) {
   };
 }
 
-export function ModDrawer({ game: here, modId, onClose }: { game: GameState; modId: number; onClose: () => void }) {
+/** `tool`: modId is a GameBanana tool's id (a fixer), downloaded rather than installed. */
+export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: GameState; modId: number; tool?: boolean; onClose: () => void }) {
+  useEffect(() => { if (!tool) pityOpened(); }, [modId, tool]);
   const games = useGames();
   const nsfw = useNsfw();
   const snap = useQueue();
@@ -77,11 +85,11 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
   useEffect(() => {
     const c = new AbortController();
     setMod(null); setError(null); setPosts(null); setShown(0); setReveal(false); setPostsOpen(false);
-    modPage(modId, c.signal)
-      .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError("GameBanana didn't send this mod's page."); } })
+    (tool ? toolPage : modPage)(modId, c.signal)
+      .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError(`GameBanana didn't send this ${tool ? "tool" : "mod"}'s page.`); } })
       .catch((e) => { if (!c.signal.aborted && !isAbort(e)) setError(errorText(e)); });
     return () => c.abort();
-  }, [modId, attempt]);
+  }, [modId, attempt, tool]);
 
   useEffect(() => {
     if (mod && wantFiles) window.setTimeout(() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
@@ -90,15 +98,16 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
   useEffect(() => {
     if (!postsOpen || posts || !mod) return;
     let live = true;
-    modUpdates(mod.id).then((u) => { if (live) setPosts(u); }).catch(() => { if (live) setPosts([]); });
+    modUpdates(mod.id, mod.tool ? "Tool" : "Mod").then((u) => { if (live) setPosts(u); }).catch(() => { if (live) setPosts([]); });
     return () => { live = false; };
   }, [postsOpen, posts, mod]);
 
   // the game it installs into: the mod's own game when that is set up here
   const target = mod?.game ? games.find((g) => g.gamebananaId === mod.game!.id) ?? null : here;
   const lib = useLibIndex(target?.id ?? here.id);
-  const installed = lib.byMod.get(modId) ?? [];
-  const archived = installed.length ? undefined : lib.archived.get(modId);
+  // tool ids are their own numbers: a mod with the same id is a different thing
+  const installed = tool ? [] : lib.byMod.get(modId) ?? [];
+  const archived = installed.length || tool ? undefined : lib.archived.get(modId);
 
   const closeLightbox = useCallback(() => setLightbox(null), []);
   const found = useMemo(() => detectKeybinds(mod ? sanitizeHtml(mod.descriptionHtml) : ""), [mod]);
@@ -122,18 +131,19 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
     document.getElementById(found.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const title = mod?.name ?? (error ? "Couldn't open this mod" : "Loading");
-  const url = mod?.url ?? `https://gamebanana.com/mods/${modId}`;
+  const what = tool ? "fixer" : "mod";
+  const title = mod?.name ?? (error ? `Couldn't open this ${what}` : "Loading");
+  const url = mod?.url ?? `https://gamebanana.com/${tool ? "tools" : "mods"}/${modId}`;
   const blurred = !!mod?.nsfw && !reveal && nsfw !== "show";
   return (
     <Drawer title={title} onClose={onClose} width="min(60rem, 94vw)" className="gb-drawer"
       actions={<>
         {mod?.nsfw && <span className="gb-drawer-adult"><AdultSwitch value={nsfw} /></span>}
-        {mod && <IconButton icon="more" label="More (right-click works too)" onClick={(e) => openMenu(e.currentTarget, menuFor("gbmod", { game: target?.id ?? here.id, card: mod }))} />}
-        {mod && <LikeButton id={mod.id} name={mod.name} />}
+        {mod && !tool && <IconButton icon="more" label="More (right-click works too)" onClick={(e) => openMenu(e.currentTarget, menuFor("gbmod", { game: target?.id ?? here.id, card: mod }))} />}
+        {mod && !tool && <LikeButton id={mod.id} name={mod.name} />}
         <IconButton icon="external" label="Open on GameBanana" onClick={() => openExternal(url)} />
       </>}>
-      {error && <Empty icon="warn" title="Couldn't load this mod" actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>}>{error}</Empty>}
+      {error && <Empty icon="warn" title={`Couldn't load this ${what}`} actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>}>{error}</Empty>}
       {!mod && !error && (
         <div className="gb-drawer-skel">
           <Skeleton className="gb-gallery-main" h="22rem" />
@@ -165,7 +175,7 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
           <div className="gb-mod-tags">
             {mod.character && target && <CharLink game={target.id} name={mod.character} className="badge t-accent gb-tag-char" portrait />}
             {mod.character && !target && <Badge tone="accent" icon="characters">{mod.character}</Badge>}
-            {mod.category && mod.category.name !== mod.character && (target
+            {mod.category && mod.category.name !== mod.character && (target && !tool
               ? <CategoryLink game={target.id} category={mod.category} className="badge" />
               : <Badge>{mod.category.name}</Badge>)}
             {mod.version && <Badge title="Version">{mod.version}</Badge>}
@@ -173,7 +183,12 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
               ? <span className="gb-nsfw-mark is-inline" title={mod.ratings.join(", ") || "Marked for adults"}>18+</span>
               : <Badge tone="bad" title={mod.ratings.join(", ") || "Marked for adults"}>18+</Badge>)}
             {installed.length > 0 && (target?.id === here.id
-              ? <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
+              ? <>
+                <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
+                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "New mods come in off. Turn it on here or in Mods"}>
+                  <Toggle size="sm" checked={installed[0]!.enabled} onChange={(v) => void setOn(here.id, [installed[0]!], v)} label={installed[0]!.enabled ? "On" : "Off"} />
+                </span>
+              </>
               : <Badge tone="ok" icon="check">Installed</Badge>)}
             {archived && (target?.id === here.id
               ? <Badge tone="info" icon="trash" title="You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash" onClick={() => go({ view: "library", tab: "archive" })}>Removed</Badge>
@@ -183,9 +198,15 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
 
           <section ref={filesRef} className="gb-files" aria-label="Files">
             <h3 className="sub-h">Files</h3>
-            {!target && mod.game && <p className="hint">This is a mod for {mod.game.name}, which isn't set up in gachamod.</p>}
-            <FileList mod={mod} game={target} installed={installed} archived={!!archived} snap={snap} older={older} setOlder={setOlder}
-              onInstall={install} onMenu={(el, file, replaces) => setMenu({ el, file, replaces })} />
+            {tool ? (
+              <ToolFiles tool={mod} game={target ?? here} older={older} setOlder={setOlder} />
+            ) : (
+              <>
+                {!target && mod.game && <p className="hint">This is a mod for {mod.game.name}, which isn't set up in gachamod.</p>}
+                <FileList mod={mod} game={target} installed={installed} archived={!!archived} snap={snap} older={older} setOlder={setOlder}
+                  onInstall={install} onMenu={(el, file, replaces) => setMenu({ el, file, replaces })} />
+              </>
+            )}
           </section>
 
           <DescKeys found={found} onJump={found.anchor ? jumpKeys : undefined} />
@@ -213,7 +234,7 @@ export function ModDrawer({ game: here, modId, onClose }: { game: GameState; mod
             </section>
           )}
 
-          <div ref={commentsRef}><Comments key={mod.id} modId={mod.id} url={url} onLink={onPlain} /></div>
+          <div ref={commentsRef}><Comments key={mod.id} modId={mod.id} model={tool ? "Tool" : "Mod"} url={url} onLink={onPlain} /></div>
         </div>
       )}
       {lightbox && <Lightbox images={lightbox.images} start={lightbox.start} onClose={closeLightbox} />}
@@ -255,21 +276,25 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
   );
 }
 
-function FileList({ mod, game, installed, archived, snap, older, setOlder, onInstall, onMenu }: {
+function FileList({ mod, game, installed, archived, snap, older, setOlder, onInstall, onMenu, actionFor }: {
   mod: GbMod; game: GameState | null; installed: ModEntry[]; archived: boolean; snap: QueueSnapshot; older: boolean; setOlder: (v: boolean) => void;
   onInstall: (f: GbFile, replaces?: string) => void; onMenu: (el: HTMLElement, f: GbFile, replaces: string) => void;
+  /** Each file's button, in place of Install (a tool's Download). */
+  actionFor?: (f: GbFile, newest: boolean) => ReactNode;
 }) {
   const newest = newestFile(mod);
   const current = mod.files.filter((f) => !f.archived);
   const old = mod.files.filter((f) => f.archived);
-  if (!mod.files.length) return <p className="muted">This mod has no files to download.</p>;
+  if (!mod.files.length) return <p className="muted">This {mod.tool ? "fixer" : "mod"} has no files to download.</p>;
   const row = (f: GbFile) => {
     const q = game ? snap.items.find((i) => i.req.game === game.id && i.req.fileId === f.id && activeStates.has(i.state)) : undefined;
     const same = installed.find((m) => m.source?.fileId === f.id);
     const base = installed[0];
     const baseTime = base?.source?.remoteUpdated ?? base?.installedAt ?? 0;
     let action;
-    if (!game) {
+    if (actionFor) {
+      action = actionFor(f, f === newest);
+    } else if (!game) {
       action = null;
     } else if (q) {
       action = (
@@ -325,6 +350,37 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
           {older && <ul className="gb-file-list">{old.map(row)}</ul>}
         </>
       )}
+    </>
+  );
+}
+
+const NO_QUEUE: QueueSnapshot = { items: [] } as unknown as QueueSnapshot;
+
+/** A tool's files with Download: saved in gachamod's fixers folder and shown in File Explorer, never run. */
+function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameState; older: boolean; setOlder: (v: boolean) => void }) {
+  const have = useFixerFiles(game.id);
+  const busy = useFixerBusy();
+  const action = (f: GbFile, newest: boolean) => {
+    const got = have.find((x) => x.fileId === f.id);
+    if (busy.has(`file:${f.id}`)) return <Button busy disabled>Downloading</Button>;
+    if (got) {
+      return (
+        <div className="row">
+          <Button icon="folder" title={`Show ${got.file} in File Explorer`} onClick={() => showFixer(got)}>Show file</Button>
+          <IconButton icon="refresh" label="Download it again" onClick={() => void downloadFixer(game.id, tool, f)} />
+        </div>
+      );
+    }
+    return (
+      <Button variant={newest ? "primary" : "secondary"} icon="downloads" title="Save it in gachamod's fixers folder. gachamod doesn't run it"
+        onClick={() => void downloadFixer(game.id, tool, f)}>Download</Button>
+    );
+  };
+  return (
+    <>
+      <p className="hint">Saved in gachamod's fixers folder. Run it the way the description says.</p>
+      <FileList mod={tool} game={game} installed={[]} archived={false} snap={NO_QUEUE} older={older} setOlder={setOlder}
+        onInstall={() => {}} onMenu={() => {}} actionFor={action} />
     </>
   );
 }

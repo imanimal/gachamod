@@ -17,3 +17,12 @@
 .live-h { margin: 1rem 0 .4rem; font-size: 1em; font-weight: 600; }
 .live-ready { display: flex; flex-direction: column; gap: .45rem; }
 .live-opts { flex-wrap: wrap; gap: .4rem; }
+.live-blocked { display: flex; align-items: center; gap: .7rem; margin-top: .7rem; padding: .6rem .7rem; border: 1px solid var(--warn); border-radius: var(--radius); }
+.live-blocked p { flex: 1; margin: 0; font-size: .92em; }
+.live-blocked .icon { flex: none; color: var(--warn); }
+.live-all { margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
+.live-menu { display: flex; flex-direction: column; gap: .6rem; margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
+.live-menu-row { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem 1rem; }
+.live-menu-l { align-self: center; font-weight: 600; }
+.live-menu .hotkey-field { width: 14rem; }
+.live-menu .hint { margin: 0; }

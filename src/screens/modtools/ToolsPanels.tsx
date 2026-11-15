@@ -70,7 +70,7 @@ export function ConflictsPanel() {
       actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title="Look for conflicts again">Check again</Button>}>
       <p className="hint tp-intro">Mods that are on and change the same parts of a model. Only one of them shows in game.</p>
       {!list ? <Loading /> : list.length === 0 ? (
-        <p className="tp-none muted">No conflicts between the mods that are on.</p>
+        <p className="tp-none muted">No conflicts between the mods that are on. Enjoy it while it lasts.</p>
       ) : (
         <ul className="tp-list tp-conflict-list">
           {list.map((g) => (

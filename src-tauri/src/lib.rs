@@ -3,6 +3,7 @@
 
 mod commands;
 mod hotkeys;
+mod overlay;
 mod runner;
 mod state;
 
@@ -52,6 +53,12 @@ struct Pending(std::sync::Mutex<Vec<Opened>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // started again as administrator: wait for the copy that asked to be gone
+    gacha_core::devtools::after_restart(&std::env::args().collect::<Vec<_>>());
+    // a start that isn't an administrator's while an administrator's copy runs: hand that copy the link or file and
+    // quit (Windows hides it from the single-instance check)
+    if gacha_core::devtools::hand_to_elevated_copy(&context.config().identifier) { return; }
     tauri::Builder::default()
         // a second start (a gachamod:// link, a double-clicked .gachamod) hands its arguments here and exits
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -61,6 +68,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(hotkeys::plugin())
         .manage(hotkeys::Held::default())
+        .manage(overlay::Showing::default())
         .manage(Pending::default())
         // EXTENSIONS: extension pages and their files (http://gmext.localhost/<id>/<file> on Windows)
         .register_asynchronous_uri_scheme_protocol("gmext", |ctx, req, responder| {
@@ -74,19 +82,49 @@ pub fn run() {
                 Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
                 _ => app.path().app_data_dir()?,
             };
+            // SYSTEM: gachamod's own log, and a crash file for every panic
+            gacha_core::logs::init(&data_dir);
+            gacha_core::logs::catch_panics(env!("CARGO_PKG_VERSION"));
+            gacha_core::logs::started(env!("CARGO_PKG_VERSION"));
+            gacha_core::devtools::accept_hand_offs(&app.config().identifier);
             let state = state::AppState::new(data_dir)?;
             app.manage(state);
             *app.state::<Pending>().0.lock().unwrap() = opened_from_args(std::env::args());
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
             if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
+            // INGAME: live.ini says who holds the menu key for this run (its pictures may be drawn again: off the
+            // main thread)
+            let live_db = app.state::<state::AppState>().db.clone();
+            std::thread::spawn(move || { if let Ok(d) = live_db.lock() { gacha_core::live::on_start(&d); } });
             // SYSTEM: game start/stop events and automatic F10 reloads; links and .gachamod files nobody else holds
             let handle = app.handle().clone();
+            let notes = app.handle().clone();
             gacha_core::devtools::watch(app.state::<state::AppState>().db.clone(), move |g, r| {
                 let _ = handle.emit(events::GAME_STATE, serde_json::json!({ "game": g, "running": r }));
+                // INGAME: a game that runs as administrator decides who holds the menu key
+                if r { if let Ok(d) = handle.state::<state::AppState>().db.lock() { gacha_core::live::note_elevation(&d, g); } }
                 hotkeys::on_game_state(&handle, r);
-            });
+                overlay::on_game_state(&handle);
+            }, move |_, text| { let _ = notes.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false })); });
+            // INGAME: both sticks pressed in opens the skin menu. The menu window is made again whenever its key is
+            // pressed, so closing the main window ends the app rather than leave it running with no window to close
+            overlay::watch_pad(app.handle().clone());
+            if let Some(w) = app.get_webview_window("main") {
+                let handle = app.handle().clone();
+                w.on_window_event(move |e| { if let tauri::WindowEvent::Destroyed = e { handle.exit(0); } });
+            }
             commands::app::start_daily_check(app.handle().clone());
+            // SYSTEM: usage counts and crash reports go out every few minutes and at quit, when they're on
+            let (http, tdb) = { let s = app.state::<state::AppState>(); (s.http.clone(), s.db.clone()) };
+            if let Ok(d) = tdb.lock() { gacha_core::telemetry::note_start(&d); }
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                loop {
+                    gacha_core::telemetry::flush(&http, &tdb).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+                }
+            });
             let off = app.state::<state::AppState>().db.lock().map(|db| gacha_core::platform::turned_off(&db)).unwrap_or_default();
             if let Ok(exe) = std::env::current_exe() { let _ = gacha_core::platform::register_free(&exe, &off); }
             Ok(())
@@ -106,6 +144,9 @@ pub fn run() {
             commands::library::library_scan,
             commands::library::library_list,
             commands::library::mod_get,
+            commands::library::mod_parts,
+            commands::library::mod_set_part,
+            commands::library::mods_merge,
             commands::library::mods_set_enabled,
             commands::library::mod_update_meta,
             commands::library::mod_move,
@@ -152,11 +193,32 @@ pub fn run() {
             commands::modtools::fixes_info,
             commands::modtools::fixes_health,
             commands::modtools::fixes_apply,
+            commands::modtools::fixers_list,
+            commands::modtools::fixers_download,
             commands::modtools::mod_mesh,
             commands::ingame::live_info,
             commands::ingame::live_add,
             commands::ingame::live_remove,
             commands::ingame::live_pick,
+            commands::ingame::live_menu_set,
+            commands::ingame::live_set_all,
+            commands::ingame::app_restart_admin,
+            // ── SYSTEM: logs, crash reports, usage counts, feedback, administrator ──
+            commands::report::report_state,
+            commands::report::report_set,
+            commands::report::telemetry_events,
+            commands::report::feedback_send,
+            commands::report::log_write,
+            commands::report::report_ui_error,
+            commands::report::admin_state,
+            commands::report::admin_set_always,
+            commands::report::game_check_setup,
+            commands::report::game_check_saved,
+            commands::report::game_check_menu,
+            commands::report::game_check_send,
+            overlay::overlay_game,
+            overlay::overlay_hide,
+            overlay::overlay_pick,
             commands::modtools::hash_lookup,
             commands::modtools::pack_plan,
             commands::modtools::pack_export,
@@ -239,6 +301,18 @@ pub fn run() {
             commands::extensions::extensions_pack_folder,
             commands::extensions::extensions_pack_theme,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running gachamod");
+        .build(context)
+        .expect("error while running gachamod")
+        .run(|app, e| {
+            if let tauri::RunEvent::Exit = e {
+                gacha_core::logs::quitting();
+                // what's left to send goes now, for a few seconds at most
+                if let Some(s) = app.try_state::<state::AppState>() {
+                    let (http, db) = (s.http.clone(), s.db.clone());
+                    tauri::async_runtime::block_on(async move {
+                        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), gacha_core::telemetry::flush(&http, &db)).await;
+                    });
+                }
+            }
+        });
 }

@@ -67,7 +67,7 @@
   .home-first, .home-edit-bar { border-radius: 4px; }
 
   /* ── browse ── */
-  .gb-ch { border-radius: 3px; }
+  .gb-ch { border-radius: 3px; gap: calc(.4rem + 3px); padding-top: calc(.3rem + 3px); }
   .gb-ch.on { background: var(--sheet); box-shadow: inset 0 -2px 0 var(--gold-line); }
   .gb-ch.on .gb-ch-img { box-shadow: 0 0 0 1.5px rgb(0 0 0 / .6), 0 0 0 3px var(--gold-ink); }
   .gb-prio { border-radius: 2px; transform: rotate(45deg) scale(.85); }

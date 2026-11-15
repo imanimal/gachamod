@@ -13,9 +13,10 @@ import { closeRoute, currentGame, emitApp, go, onApp, setBadge, setGame, useGame
 import { registerBrowseCommands } from "./commands";
 import { registerBrowseMenus } from "./menus";
 import { ModDrawer } from "./ModDrawer";
-import { gbModOfRoute } from "./state";
+import { closeGbTool, gbModOfRoute } from "./state";
 import { useQueue } from "./useQueue";
 import { withCreator, openCreator } from "./actions";
+import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
 
 registerBrowseMenus();
@@ -93,6 +94,7 @@ export function OnlineOverlays() {
   return (
     <>
       <GbModHost />
+      <GbToolHost />
       <BrowseCommands />
       {item && item.state === "needsChoice" && <VariantPicker key={item.id} item={item} candidates={item.candidates} onClose={close} />}
     </>
@@ -107,6 +109,16 @@ function GbModHost() {
   const close = useCallback(() => closeRoute(["modId"]), []);
   if (!id || !game) return null;
   return <ModDrawer key={id} game={game} modId={id} onClose={close} />;
+}
+
+/** The same drawer for a GameBanana tool (route.toolId), with Download in place of Install. */
+function GbToolHost() {
+  const route = useRoute();
+  const game = useGame();
+  const id = typeof route.toolId === "number" && route.toolId > 0 ? route.toolId : null;
+  const close = useCallback(() => closeGbTool(), []);
+  if (!id || !game) return null;
+  return <ModDrawer key={`tool-${id}`} game={game} modId={id} tool onClose={close} />;
 }
 
 function BrowseCommands() {
@@ -159,6 +171,15 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
     try { await queue.choose(item.id, keys); onClose(); }
     catch (e) { toast(errorText(e), true); setBusy(false); }
   };
+  /** Install every one now, and every archive after this without asking. */
+  const always = async () => {
+    setBusy(true);
+    try {
+      await queue.choose(item.id, candidates.map((c) => c.key));
+      await installAllPartsPref.set(true, "Archives with several mods now install all of them without asking");
+      onClose();
+    } catch (e) { toast(errorText(e), true); setBusy(false); }
+  };
   const cancel = async () => {
     setBusy(true);
     try { await queue.cancel(item.id); onClose(); }
@@ -170,6 +191,8 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
       title={`${name} has ${candidates.length} mods inside`}
       footer={<>
         <Button variant="ghost" onClick={() => setPicked(all ? new Set() : new Set(candidates.map((c) => c.key)))}>{all ? "Pick none" : "Pick all"}</Button>
+        <Button variant="ghost" icon="layers" disabled={busy} onClick={() => void always()}
+          title="Installs all of these now, and from now on every archive with several mods installs all of them without this window. Turn it off in Settings, Automatic">Always install all</Button>
         <span className="sp" />
         <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title="Don't install anything from this archive">Cancel</Button>
         <Button variant="primary" icon="install" busy={busy} disabled={!keys.length} onClick={() => void choose()}>
@@ -177,7 +200,7 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
         </Button>
       </>}>
       <p className="hint gb-picker-hint">
-        Pick the ones you want. Each goes into its own folder{item.req.meta.character ? `, and only the first stays on so one ${item.req.meta.character} skin is worn` : ""}.
+        Pick the ones you want. They install as one mod, and you can turn each part on or off in its details.
       </p>
       <div className="gb-picker-grid">
         {candidates.map((c) => {

@@ -1,7 +1,7 @@
 // The title bar: Back and Forward (right-click lists recent pages), a breadcrumb you can click (game, view, then the
 // open character, mod, creator or section; the chevrons between them open a menu), the search box in the middle
 // (it opens the palette, and grows in when the app opens to show it's there), Undo and Redo (right-click lists the
-// history), Help (the tour, shortcuts) and the window keys. The empty parts drag the window. Owner: SHELL area.
+// history), what gachamod is waiting on (shell/Activity.tsx), Help (the tour, shortcuts) and the window keys. The empty parts drag the window. Owner: SHELL area.
 import { useRef, type MouseEvent as ReactMouseEvent } from "react";
 import { Icon } from "../ui/Icon";
 import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
@@ -12,10 +12,10 @@ import { allGames, back, forward, go, goIndex, recentPages, useDailyGames, useGa
 import { pageName, subCrumbs, useNamesVersion, VIEW_INFO, viewLabel } from "./names";
 import { switchEntries } from "./Sidebar";
 import { openPalette, startTour, toggleHelp, useSearchIntro } from "./state";
-import { shell } from "../lib/api";
-import { toast } from "../ui/toast";
+import { openKofi } from "../lib/support";
+import { openFeedback, openGameCheck } from "../lib/feedback";
+import { Activity } from "./Activity";
 
-const ISSUES = "https://github.com/imanimal/gachamod/issues";
 const at = (e: ReactMouseEvent) => ({ x: e.clientX, y: e.clientY });
 const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
 
@@ -71,7 +71,9 @@ export function Titlebar() {
     { label: "Keyboard and controller shortcuts", icon: "keyboard", keys: "?", onClick: toggleHelp },
     { label: "Search anything", icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
     "-",
-    { label: "Report a problem", icon: "bug", title: "Opens gachamod's issues on GitHub", onClick: () => shell.openUrl(ISSUES).catch((e) => toast(String(e), true)) },
+    { label: "Send feedback", icon: "help", title: "Tell the developer about a problem or an idea. It goes straight from here", onClick: () => openFeedback() },
+    { label: "Check this game", icon: "check", title: "Walks through switching skins while you play, then sends what worked to the developer. About ten minutes", onClick: openGameCheck },
+    { label: "Tip on Ko-fi", icon: "coffee", title: "gachamod is free. Tips go to the person making it (ko-fi.com/aanimal)", onClick: openKofi },
   ];
 
   return (
@@ -122,6 +124,7 @@ export function Titlebar() {
       </button>
 
       <div className="tb-side tb-r" data-tauri-drag-region>
+        <Activity />
         <span className="tb-nav">
           <button type="button" className="tb-k" disabled={!hist.canUndo} aria-label="Undo"
             title={nextUndo ? `Undo: ${nextUndo.label} (Ctrl+Z). Right-click for more` : "Nothing to undo (Ctrl+Z)"}

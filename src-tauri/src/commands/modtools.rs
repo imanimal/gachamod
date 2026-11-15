@@ -5,6 +5,7 @@ use gacha_core::imm::{self, ImmInfo};
 use gacha_core::mesh::{self, ModMesh};
 use gacha_core::keys::{self, DrawRef, IniOutline, KeyClash, KeyEdit, KeyTarget, ModKeys, OnScreenAll, OnScreenMod};
 use gacha_core::backups::Backup;
+use gacha_core::fixers::{self, FixerFile, FixerRequest};
 use gacha_core::fixes::{self, FixAll, FixInfo, ModHealth};
 use gacha_core::ini::{self, ConflictGroup, HashHit, ModInspect, ModProblems, ProblemFix, VarValue};
 use gacha_core::pack::{self, ExportPlan, ExportRequest, ExportResult, ImportOptions, ImportResult, PackPreview};
@@ -72,6 +73,19 @@ pub async fn fixes_apply(st: State<'_, AppState>, game: String, ids: Vec<String>
     blocking(move || fixes::fix(&db, &game, &ids)).await
 }
 
+/// Fixers downloaded for a game (Tools > Fixes).
+#[tauri::command]
+pub async fn fixers_list(st: State<'_, AppState>, game: String) -> Result<Vec<FixerFile>> {
+    let data = st.data_dir.clone();
+    blocking(move || fixers::list(&data, &game)).await
+}
+
+/// Download one file of a GameBanana fixer into the app's fixers folder. Nothing in it is run.
+#[tauri::command]
+pub async fn fixers_download(st: State<'_, AppState>, game: String, req: FixerRequest) -> Result<FixerFile> {
+    fixers::fetch(&st.http, &st.data_dir, &game, req).await
+}
+
 #[tauri::command]
 pub async fn hash_lookup(st: State<'_, AppState>, game: String, hash: String) -> Result<Vec<HashHit>> {
     let db = st.db.clone();
@@ -103,7 +117,12 @@ pub async fn pack_inspect(st: State<'_, AppState>, path: String) -> Result<PackP
 pub async fn pack_import(app: tauri::AppHandle, st: State<'_, AppState>, path: String, opts: ImportOptions) -> Result<ImportResult> {
     let db = st.db.clone();
     let a = app.clone();
-    let mut r = blocking(move || pack::import(&db, std::path::Path::new(&path), &opts, &|done, total| { let _ = a.emit("pack-progress", serde_json::json!({ "done": done, "total": total })); })).await?;
+    let mut r = blocking(move || {
+        let mut r = pack::import(&db, std::path::Path::new(&path), &opts, &|done, total| { let _ = a.emit("pack-progress", serde_json::json!({ "done": done, "total": total })); })?;
+        // a profile it switched to may have picked live skins
+        r.notes.extend(gacha_core::live::flush_sends(&db));
+        Ok(r)
+    }).await?;
     let mut reqs = std::mem::take(&mut r.downloads);
     if !reqs.is_empty() {
         r.notes.extend(pack::resolve(&st.http, &mut reqs).await);

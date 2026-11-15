@@ -7,6 +7,7 @@ import { record } from "../../lib/history";
 import { held } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
 import { publish, summarize } from "../library/data";
+import { sayF10 } from "../../lib/elevation";
 
 const subs = new Set<(game: GameId) => void>();
 const lastLists = new Map<GameId, Profile[]>();
@@ -78,7 +79,7 @@ export async function switchProfile(game: GameId, to: Profile, from: Profile | n
   const r = await go(to);
   const parts = [`Switched to ${to.name}`, r.change.changed.length ? summarize(r.change) : "No mods needed changing"];
   if (r.varsPending) parts.push("Mod options apply after you close the game");
-  parts.push(...r.change.notes);
+  parts.push(...sayF10(r.change.notes));
   if (from && from.id !== to.id) {
     record({ label: parts.join(". "), undo: () => go(from), redo: () => go(to) });
   } else {

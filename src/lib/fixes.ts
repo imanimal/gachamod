@@ -1,10 +1,12 @@
 // Mod fixes: game updates change the hashes and buffer layouts mods target, and the community publishes fixers
 // (scripts that rewrite a mod's .ini). The app keeps the fixers' hash tables, knows which hashes a game update broke,
 // flags installed mods that still use them and fixes them in one click (with a backup and Undo). Mods that need more
-// than a hash swap (a buffer rewrite) are marked with the fixer that does it. Owner: FIXES area.
-// Rust: crates/gacha-core/src/fixes.rs.
+// than a hash swap (a buffer rewrite) are marked with the fixer that does it, which the player can download from
+// GameBanana here (gachamod never runs it). Owner: FIXES area.
+// Rust: crates/gacha-core/src/fixes.rs, fixers.rs.
 import { useEffect, useSyncExternalStore } from "react";
-import { backups, errorText, fixes as fixesApi, type FixAll, type GameId, type ModBackup, type ModHealthRow, type ToolLink } from "./api";
+import { backups, errorText, fixers as fixersApi, fixes as fixesApi, shell, type FixAll, type FixerFile, type GameId, type ModBackup, type ModHealthRow, type ToolLink } from "./api";
+import { newestFile, toolPage, type GbFile } from "./gamebanana";
 import { record } from "./history";
 import { emitApp, onApp } from "./store";
 import { toast } from "../ui/toast";
@@ -112,4 +114,77 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   }
   void reloadHealth(game);
   return r.changed.length;
+}
+
+// ── fixers downloaded from GameBanana ──
+
+const NO_FILES: FixerFile[] = [];
+const fixerLists = new Map<GameId, FixerFile[]>();
+const fixerLoading = new Set<GameId>();
+/** "tool:<id>" and "file:<id>" while a download runs. */
+let fixerBusy: ReadonlySet<string> = new Set();
+const setBusy = (key: string, on: boolean) => {
+  const next = new Set(fixerBusy);
+  if (on) next.add(key); else next.delete(key);
+  fixerBusy = next;
+  notify();
+};
+
+function loadFixers(game: GameId) {
+  if (fixerLoading.has(game)) return;
+  fixerLoading.add(game);
+  fixersApi.list(game).then((l) => { fixerLists.set(game, l); notify(); }).catch(() => {}).finally(() => fixerLoading.delete(game));
+}
+
+/** The fixer files downloaded for a game. */
+export function useFixerFiles(game: GameId | null | undefined): FixerFile[] {
+  const list = useSyncExternalStore(subscribe, () => (game ? fixerLists.get(game) ?? NO_FILES : NO_FILES));
+  useEffect(() => { if (game && !fixerLists.has(game)) loadFixers(game); }, [game]);
+  return list;
+}
+
+/** Downloads running now ("tool:<id>", "file:<id>"). */
+export function useFixerBusy(): ReadonlySet<string> {
+  return useSyncExternalStore(subscribe, () => fixerBusy);
+}
+
+/** Show a downloaded fixer in File Explorer. */
+export function showFixer(f: FixerFile) {
+  void shell.revealPath(f.main).catch((e) => toast(errorText(e), true));
+}
+
+/** Download one file of a GameBanana tool into the fixers folder. Says so in a toast with Show. */
+export async function downloadFixer(game: GameId, tool: { id: number; name: string }, file: GbFile): Promise<FixerFile | null> {
+  const key = `file:${file.id}`;
+  if (fixerBusy.has(key)) return null;
+  setBusy(key, true);
+  try {
+    const f = await fixersApi.download(game, { toolId: tool.id, fileId: file.id, tool: tool.name, file: file.name, url: file.downloadUrl, md5: file.md5 });
+    fixerLists.set(game, [...(fixerLists.get(game) ?? []).filter((x) => x.fileId !== f.fileId), f]);
+    toast(`Downloaded ${tool.name}`, false, { label: "Show", run: () => showFixer(f) });
+    return f;
+  } catch (e) {
+    toast(errorText(e), true);
+    return null;
+  } finally {
+    setBusy(key, false);
+  }
+}
+
+/** Download a tool's newest file (the one-click Download in Tools > Fixes). */
+export async function downloadNewestFixer(game: GameId, toolId: number): Promise<FixerFile | null> {
+  const key = `tool:${toolId}`;
+  if (fixerBusy.has(key)) return null;
+  setBusy(key, true);
+  try {
+    const tool = await toolPage(toolId);
+    const file = tool && newestFile(tool);
+    if (!tool || !file) { toast(tool ? `${tool.name} has no file to download on GameBanana` : "GameBanana didn't send this fixer's page", true); return null; }
+    return await downloadFixer(game, tool, file);
+  } catch (e) {
+    toast(errorText(e), true);
+    return null;
+  } finally {
+    setBusy(key, false);
+  }
 }

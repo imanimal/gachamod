@@ -5,7 +5,7 @@
 // Owner: LIBRARY area (docs/spec.md, "Characters").
 import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { dialogs, fileUrl, type GameId } from "../../lib/api";
-import { charNoun } from "../../lib/games";
+import { article, charNoun } from "../../lib/games";
 import { usePortrait, usePortraitBatch } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { emitApp, go, useGame, useRoute } from "../../lib/store";
@@ -13,7 +13,7 @@ import { inTauri } from "../../lib/tauri";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
-import { Button, Chip, Empty, IconButton, PageHeader, SearchField, Select, Skeleton, TextField, Toggle } from "../../ui/kit";
+import { Button, Chip, Empty, IconButton, PageHeader, SearchField, Select, Skeleton, TextField, Toggle, Waiting } from "../../ui/kit";
 import { Popover } from "../../ui/Popover";
 import { useMods } from "../library/data";
 import { moveInGrid } from "../library/gridNav";
@@ -97,15 +97,15 @@ function Roster({ game, roster, loading, ready }: { game: GameId; roster: Roster
     <>
       <PageHeader title={noun} icon="characters" sub={sub}
         actions={<>
-          <SearchField value={search} onChange={setSearch} placeholder={`Find a ${one}`} />
+          <SearchField value={search} onChange={setSearch} placeholder={`Find ${article(one)} ${one}`} />
           <Toggle checked={view.onlyWithMods} onChange={(v) => setView({ onlyWithMods: v })} label="Only with mods" />
           <Chip on={!!view.owned} icon="check" count={ownedCount} onClick={() => setView({ owned: !view.owned })}
-            title={view.owned ? `Show every ${one}` : `Only the ${noun.toLowerCase()} you own. Mark one with O or its right-click menu, or import them all`}>Owned</Chip>
+            title={view.owned ? `Show every ${one}` : `Only the ${noun.toLowerCase()} you own. Mark one with O or the right-click menu, or import them all`}>Owned</Chip>
           <Select<RosterSort> value={view.sort} onChange={(v) => setView({ sort: v })}
             options={[{ value: "mods", label: "Most mods" }, { value: "recent", label: "Recently modded" }, { value: "name", label: "Name" }]} />
           {hiddenCount > 0 && (
             <Chip on={showHidden} icon="hide" count={hiddenCount} onClick={() => setShowHidden((v) => !v)}
-              title={showHidden ? "Leave out the ones you hid" : "Show the ones you hid (right-click one to show it again for good)"}>Hidden</Chip>
+              title={showHidden ? "Leave out the ones you hid" : "Show the ones you hid. To bring one back for good, right-click and pick Show in the roster"}>Hidden</Chip>
           )}
           <ImportOwned game={game} />
         </>} />
@@ -114,11 +114,13 @@ function Roster({ game, roster, loading, ready }: { game: GameId; roster: Roster
       {ready && <OtherManagers game={game} />}
 
       {roster === null || loading ? (
-        <div className="portraits roster">{Array.from({ length: 14 }, (_, i) => <Skeleton key={i} className="roster-skel" />)}</div>
+        <Waiting what={roster === null ? "Reading the character list" : "Reading your mods"}>
+          <div className="portraits roster">{Array.from({ length: 14 }, (_, i) => <Skeleton key={i} className="roster-skel" />)}</div>
+        </Waiting>
       ) : !shown.length ? (
         view.owned && !q && !ownedCount ? (
           <Empty icon="characters" title={`No owned ${noun.toLowerCase()} yet`} actions={<ImportOwned game={game} primary />}>
-            Import them from an optimizer or scanner export (drop the file here), or press O on a {one} to mark it.
+            Import them from an optimizer or scanner export (drop the file here), or press O on {article(one)} {one} to mark it.
           </Empty>
         ) : (
           <Empty icon="characters" title={q ? `No ${one} by that name` : view.onlyWithMods ? `No ${noun.toLowerCase()} with mods yet` : `No ${noun.toLowerCase()} yet`}>
@@ -150,7 +152,7 @@ function Tile({ game, c }: { game: GameId; c: RosterChar }) {
   const mods = n ? `${n === 1 ? "1 mod" : `${n} mods`}, ${c.on ? `${c.on} on` : "default outfit"}` : "no mods yet";
   return (
     <button type="button" role="listitem" className={`portrait roster-tile${n ? "" : " dim"}${c.hidden ? " is-hidden" : ""}${c.owned ? " is-owned" : ""}`}
-      title={`${c.name}: ${mods}${c.owned ? ". You own it" : ""}. O marks it as ${c.owned ? "not owned" : "owned"}`}
+      title={`${c.name}: ${mods}${c.owned ? ", owned" : ""}. Press O to mark as ${c.owned ? "not owned" : "owned"}`}
       onClick={() => go({ view: "characters", character: c.name })} onKeyDown={onKey}
       onContextMenu={menuHandler(() => menuFor("character", { game, name: c.name }))}>
       {wearing && <span className="portrait-bg"><img src={fileUrl(wearing.preview)} alt="" loading="lazy" decoding="async" /></span>}

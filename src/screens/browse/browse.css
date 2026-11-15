@@ -18,12 +18,12 @@
 
 /* the character row: one line that scrolls sideways, or a grid when open */
 .gb-chars { display: flex; align-items: center; gap: .25rem; min-width: 0; }
-.gb-chars-list { flex: 1; min-width: 0; display: flex; gap: .2rem; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 2rem; padding: .15rem; }
+.gb-chars-list { flex: 1; min-width: 0; display: flex; gap: .2rem; overflow-x: auto; scrollbar-width: none; scroll-padding-inline: 2rem; padding: .35rem; }
 .gb-chars-list::-webkit-scrollbar { display: none; }
 .gb-chars.is-open { align-items: flex-start; }
 .gb-chars.is-open .gb-chars-list { flex-wrap: wrap; overflow: visible; }
 .gb-chars-arrow:disabled { opacity: .25; }
-.gb-ch { flex: none; display: flex; flex-direction: column; align-items: center; gap: .2rem; width: 4.1rem; padding: .3rem .1rem .25rem; border-radius: var(--radius-sm); color: var(--text-2); }
+.gb-ch { flex: none; display: flex; flex-direction: column; align-items: center; gap: .4rem; width: 4.1rem; padding: .3rem .1rem .25rem; border-radius: var(--radius-sm); color: var(--text-2); }
 .gb-ch:hover { background: var(--hover); color: var(--text); }
 .gb-ch.on { background: var(--accent-soft); color: var(--text); }
 .gb-ch.on .gb-ch-img { box-shadow: 0 0 0 2px var(--accent); }

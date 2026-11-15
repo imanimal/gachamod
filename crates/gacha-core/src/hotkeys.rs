@@ -33,7 +33,12 @@ fn key_name(k: &str) -> Option<String> {
 }
 
 /// Check a combo and write it the one standard way: "ctrl + alt + 1" becomes "Ctrl+Alt+1".
-pub fn normalize(combo: &str) -> Result<String> {
+pub fn normalize(combo: &str) -> Result<String> { normalize_with(combo, false) }
+
+/// The key that opens the skin menu: a combo like the others, or F1 to F24 by itself (nobody types those).
+pub fn normalize_menu(combo: &str) -> Result<String> { normalize_with(combo, true) }
+
+fn normalize_with(combo: &str, bare_f: bool) -> Result<String> {
     let (mut ctrl, mut alt, mut shift, mut win) = (false, false, false, false);
     let mut key = None;
     for part in combo.split('+').map(str::trim) {
@@ -49,7 +54,8 @@ pub fn normalize(combo: &str) -> Result<String> {
         }
     }
     let key = key.ok_or_else(|| Error::Invalid("A hotkey needs a key as well as Ctrl, Alt or Win".into()))?;
-    if !(ctrl || alt || win) { return Err(Error::Invalid(format!("{key} needs Ctrl, Alt or Win with it, like Ctrl+Alt+{key}"))); }
+    let f_key = key.len() > 1 && key.starts_with('F') && key[1..].chars().all(|c| c.is_ascii_digit());
+    if !(ctrl || alt || win) && !(bare_f && f_key && !shift) { return Err(Error::Invalid(format!("{key} needs Ctrl, Alt or Win with it, like Ctrl+Alt+{key}"))); }
     if key == "F10" { return Err(Error::Invalid("F10 is the game's reload key. Pick another key".into())); }
     let mut out = Vec::new();
     if ctrl { out.push("Ctrl".to_string()); }
@@ -68,6 +74,26 @@ pub fn plugin_form(combo: &str) -> String {
         k if k.starts_with("Num") && k.len() == 4 => format!("Numpad{}", &k[3..]),
         k => k.to_string(),
     }).collect::<Vec<_>>().join("+")
+}
+
+/// The combo as a 3DMigoto key binding ("F7" is "no_modifiers VK_F7", "Ctrl+Alt+M" is "no_shift ctrl alt M").
+pub fn migoto_form(combo: &str) -> String {
+    let parts: Vec<&str> = combo.split('+').collect();
+    let has = |m: &str| parts.iter().any(|p| *p == m);
+    let key = match parts.last().copied().unwrap_or_default() {
+        k if k.len() == 1 => k.to_string(),
+        k if k.starts_with("Num") && k.len() == 4 => format!("VK_NUMPAD{}", &k[3..]),
+        "PageUp" => "VK_PRIOR".to_string(),
+        "PageDown" => "VK_NEXT".to_string(),
+        k => format!("VK_{}", k.to_ascii_uppercase()),
+    };
+    if !(has("Ctrl") || has("Alt") || has("Shift") || has("Win")) { return format!("no_modifiers {key}"); }
+    let mut out = Vec::new();
+    for (m, word) in [("Ctrl", "ctrl"), ("Alt", "alt"), ("Shift", "shift"), ("Win", "windows")] {
+        out.push(if has(m) { word.to_string() } else { format!("no_{word}") });
+    }
+    out.push(key);
+    out.join(" ")
 }
 
 pub fn enabled(db: &Db) -> bool { db.setting(ENABLED).ok().flatten().as_deref() != Some("0") }
@@ -133,6 +159,17 @@ mod tests {
         assert!(normalize("Ctrl+A+B").is_err());
         assert!(normalize("Ctrl+F10").is_err(), "F10 is the reload key");
         assert!(normalize("Ctrl+Enter").is_err());
+    }
+
+    #[test]
+    fn the_menu_key_may_be_a_bare_f_key() {
+        assert_eq!(normalize_menu("f7").unwrap(), "F7");
+        assert_eq!(normalize_menu("ctrl+alt+m").unwrap(), "Ctrl+Alt+M");
+        assert!(normalize_menu("M").is_err() && normalize_menu("Shift+F7").is_err() && normalize_menu("F10").is_err());
+        assert_eq!(migoto_form("F7"), "no_modifiers VK_F7");
+        assert_eq!(migoto_form("Ctrl+Alt+M"), "ctrl alt no_shift no_windows M");
+        assert_eq!(migoto_form("Alt+Num3"), "no_ctrl alt no_shift no_windows VK_NUMPAD3");
+        assert_eq!(migoto_form("Ctrl+PageUp"), "ctrl no_alt no_shift no_windows VK_PRIOR");
     }
 
     #[test]

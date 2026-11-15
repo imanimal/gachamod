@@ -1,6 +1,9 @@
 // Skeleton commands every area uses. Owner: skeleton.
 import { call, listen } from "../tauri";
-import { EVENTS } from "./types";
+import { EVENTS, type GameId } from "./types";
+
+/** A message for a toast from the backend. `open`: the mod it is about (an install), which the toast offers to open. */
+export interface ToastEvent { text: string; bad?: boolean; open?: { game: GameId; modId: string } | null }
 
 export const app = {
   info: () => call<{ name: string; version: string }>("app_info"),
@@ -8,7 +11,8 @@ export const app = {
   startupOpened: () => call<Array<{ kind: "link"; url: string } | { kind: "file"; path: string }>>("startup_opened"),
   onDeepLink: (cb: (p: { url: string }) => void) => listen<{ url: string }>(EVENTS.deepLink, cb),
   onOpenFile: (cb: (p: { path: string }) => void) => listen<{ path: string }>(EVENTS.openFile, cb),
-  onToast: (cb: (p: { text: string; bad?: boolean }) => void) => listen<{ text: string; bad?: boolean }>(EVENTS.toast, cb),
+  /** `open`: the mod the toast is about (an install), so it can offer to open it. */
+  onToast: (cb: (p: ToastEvent) => void) => listen<ToastEvent>(EVENTS.toast, cb),
 };
 
 /** Small string settings kept in the app's database. Keys are dotted: "ui.nsfw", "zzz.oneSkin". */

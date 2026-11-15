@@ -37,7 +37,12 @@ pub async fn profile_delete(st: State<'_, AppState>, id: i64) -> Result<()> {
 #[tauri::command]
 pub async fn profile_activate(st: State<'_, AppState>, id: i64) -> Result<SwitchReport> {
     let db = st.db.clone();
-    blocking(move || profiles::activate(&*lock(&db)?, id)).await
+    blocking(move || {
+        let mut r = profiles::activate(&*lock(&db)?, id)?;
+        // live skins switch in the running game once the database is free
+        r.change.notes.extend(gacha_core::live::flush_sends(&db));
+        Ok(r)
+    }).await
 }
 
 #[tauri::command]
@@ -69,5 +74,9 @@ pub async fn profile_restore(st: State<'_, AppState>, snapshot: profiles::Profil
 #[tauri::command]
 pub async fn profile_set_mods(st: State<'_, AppState>, profile_id: i64, mod_ids: Vec<String>, enabled: bool) -> Result<SwitchReport> {
     let db = st.db.clone();
-    blocking(move || profiles::set_mods(&*lock(&db)?, profile_id, &mod_ids, enabled)).await
+    blocking(move || {
+        let mut r = profiles::set_mods(&*lock(&db)?, profile_id, &mod_ids, enabled)?;
+        r.change.notes.extend(gacha_core::live::flush_sends(&db));
+        Ok(r)
+    }).await
 }

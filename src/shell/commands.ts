@@ -8,11 +8,14 @@ import { record, redo, undo } from "../lib/history";
 import { nsfwPref, setNsfw, type NsfwMode } from "../lib/prefs";
 import { allGames, back, currentGame, emitApp, forward, go, onlyGame, setBadge, setGame, setGames, setOnlyGame, type Route } from "../lib/store";
 import { registerCommands, type Command } from "../lib/search";
+import { openKofi } from "../lib/support";
 import { registerMenu, type MenuEntry } from "../ui/ContextMenu";
 import { toast } from "../ui/toast";
 import { play } from "../screens/home/PlayButton";
 import { refreshGameIcon } from "../ui/GameBadge";
 import { sideCollapsed, startTour, toggleHelp, toggleSide } from "./state";
+import { openActivity } from "./Activity";
+import { shuffleOutfits } from "../screens/library/shuffle";
 
 // ── actions shared by the palette, the game menu and the sidebar ──
 
@@ -84,7 +87,7 @@ registerMenu("game", ({ id }) => {
     { header: g.name },
     !cur && { label: `Switch to ${g.short}`, icon: "swap", onClick: () => setGame(id) },
     { label: g.running ? "Running" : "Play", icon: "play", disabled: g.running || (!g.viaXxmi && !g.gameDir), onClick: () => void play(g) },
-    { label: "Play without mods", icon: "play", disabled: g.running || !g.gameDir, onClick: () => void play(g, true) },
+    { label: "Play without mods", icon: "play", title: "Starts the game with no mods, the way the developers intended. Brave", disabled: g.running || !g.gameDir, onClick: () => void play(g, true) },
     "-",
     { label: "Open Mods folder", icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
     { label: "Rescan mods", icon: "refresh", disabled: !g.modsDir, onClick: () => void rescan(g) },
@@ -140,8 +143,10 @@ registerCommands("shell.actions", () => {
     { id: "act:forward", title: "Forward", section: "Actions", icon: "right", keywords: "next page", hint: "Alt+Right", run: () => forward() },
     { id: "act:sidebar", title: sideCollapsed() ? "Expand the sidebar" : "Collapse the sidebar", section: "Actions", icon: "sidebar", keywords: "sidebar minimise minimize collapse expand hide menu rail compact", hint: "Ctrl+B", run: toggleSide },
     { id: "act:shortcuts", title: "Keyboard shortcuts", section: "Actions", icon: "keyboard", keywords: "keys hotkeys help controller gamepad bindings", hint: "?", run: toggleHelp },
+    { id: "act:activity", title: "Show what's running", section: "Actions", icon: "clock", keywords: "loading waiting stuck hung frozen slow busy spinner progress background tasks", run: openActivity },
     { id: "act:tour", title: "Take the tour", section: "Actions", icon: "sparkle", keywords: "help tutorial guide intro how start new", run: startTour },
     { id: "act:appupdate", title: "Check for gachamod updates", section: "Actions", icon: "update", keywords: "app update new version upgrade", run: () => void checkAppUpdate() },
+    { id: "act:kofi", title: "Tip on Ko-fi", section: "Actions", icon: "coffee", keywords: "kofi ko-fi tip donate support coffee money thanks developer", run: openKofi },
     ...NSFW.map(([v, title, keywords]) => ({ id: `act:nsfw:${v}`, title, section: "Actions", icon: (v === "show" ? "eye" : "hide") as Command["icon"], keywords,
       hint: nsfw === v ? "On now" : undefined, run: () => setNsfw(v) })),
   ];
@@ -149,6 +154,7 @@ registerCommands("shell.actions", () => {
     list.push(
       { id: "act:play", title: `Play ${g.name}`, section: "Actions", icon: "play", keywords: "start launch run game", hint: "Ctrl+Enter", priority: 6, run: () => void play(g) },
       { id: "act:vanilla", title: "Play without mods", section: "Actions", icon: "play", keywords: "vanilla clean start launch no mods", run: () => void play(g, true) },
+      { id: "act:shuffle", title: "Shuffle outfits", section: "Actions", icon: "dice", keywords: "random randomize randomise outfits skins surprise mix", run: () => void shuffleOutfits(g.id).catch((e) => toast(String(e), true)) },
       { id: "act:rescan", title: "Rescan mods", section: "Actions", icon: "refresh", keywords: "refresh reload scan look again find new", run: () => void rescan(g) },
       { id: "act:updates", title: "Check mods for updates", section: "Actions", icon: "update", keywords: "update outdated new version gamebanana", run: () => void checkModUpdates(g) },
       { id: "act:folder", title: "Open the Mods folder", section: "Actions", icon: "folder", keywords: "explorer files directory location show in folder", run: () => openModsFolder(g) },

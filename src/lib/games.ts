@@ -42,3 +42,5 @@ const FALLBACK: GameMeta = { noun: ["Character", "Characters"] };
 export const gameMeta = (id: GameId | null | undefined): GameMeta => (id ? META[id] : undefined) ?? FALLBACK;
 /** "Agents", "Characters" ... for a game. `one` gives the singular. */
 export const charNoun = (id: GameId | null | undefined, one = false) => gameMeta(id).noun[one ? 0 : 1];
+/** "a" or "an" for a word: "an agent", "a resonator". */
+export const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");

@@ -2,11 +2,13 @@
 // (gacha-core live.rs, docs/ingame.md). Characters with two or more mods can be made live with one click. Owner: INGAME
 // area.
 import { useState } from "react";
-import { fileUrl, type GameId, type LiveGroup, type LiveMod } from "../../lib/api";
-import { Button, IconButton, Panel, Skeleton } from "../../ui/kit";
+import { errorText, fileUrl, live, type GameId, type LiveGroup, type LiveMod, type MenuSettings } from "../../lib/api";
+import { toast } from "../../ui/toast";
+import { Button, Checkbox, IconButton, Panel, Segmented, Skeleton, Toggle } from "../../ui/kit";
+import { HotkeyField } from "../profiles/HotkeyField";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
-import { makeLive, pickLive, stopLive, useLive } from "./data";
+import { makeLive, pickLive, setAll, setMenu, stopLive, useLive } from "./data";
 import "./ingame.css";
 
 export function InGamePanel({ game }: { game: GameId }) {
@@ -17,9 +19,17 @@ export function InGamePanel({ game }: { game: GameId }) {
   return (
     <Panel title="Switch skins in game" icon="swap" count={info?.groups.length || undefined}>
       <p className="hint">
-        Pick a character's skin here while you play and it changes in the game at once, without a reload. gachamod
-        brings the game to the front for a moment to send it. This hasn't been tried in a real game yet.
+        A character set up here keeps every skin loaded, so the one showing changes at once, without pressing F10. Pick
+        it from the menu while you play, here, in Mods, or by switching profiles with a hotkey.
       </p>
+      {info?.blocked && <Blocked menu={info.menu} />}
+      {info && <MenuOptions game={game} menu={info.menu} blocked={info.blocked} />}
+      {info && (
+        <div className="live-all">
+          <Toggle checked={info.all} disabled={!!busy} onChange={(on) => void run("all", () => setAll(game, on))} label="Every character"
+            hint="Every mod that has a character stays loaded, so the menu lists all of them and any one shows at once. New mods join by themselves. With many mods the game takes longer to load them." />
+        </div>
+      )}
       {info === null && <div className="live-list"><Skeleton h="4.5rem" /><Skeleton h="4.5rem" /></div>}
       {info && info.groups.length > 0 && (
         <div className="live-list">
@@ -55,6 +65,54 @@ export function InGamePanel({ game }: { game: GameId }) {
         <p className="muted">This needs two or more mods for one character. Mods without a character can't be switched here.</p>
       )}
     </Panel>
+  );
+}
+
+const MENU_HINT: Record<MenuSettings["style"], (key: string) => string> = {
+  window: (key) => `Press ${key} while you play and gachamod's menu opens over the game, with previews, search and every character. The game has to run borderless or windowed, and when it runs as administrator (Zenless Zone Zero does) gachamod has to as well. Otherwise ${key} opens the plainer menu the game draws.`,
+  game: (key) => `Press ${key} while you play and the game draws a plain menu itself. Use this when you play in exclusive fullscreen. Borderless or windowed gets the better menu with Over the game.`,
+  off: () => "No menu while you play. Skins still switch from here, from Mods and with profile hotkeys.",
+};
+
+/** How the menu opens while playing: gachamod's window over the game, the plainer one the game draws, or none. */
+/** The game runs as administrator and gachamod doesn't: what that costs, and the one click that fixes it. */
+function Blocked({ menu }: { menu: MenuSettings }) {
+  const [busy, setBusy] = useState(false);
+  const restart = () => { setBusy(true); live.restartAsAdmin().catch((e) => { toast(errorText(e), true); setBusy(false); }); };
+  return (
+    <div className="live-blocked" role="status">
+      <Icon name="warn" />
+      <p>
+        This game runs as administrator and gachamod doesn't, so Windows keeps gachamod's keys away from it.
+        {menu.style === "off" ? " " : ` ${menu.key} opens the plainer menu the game draws, not gachamod's menu over the game. `}
+        After a change here, press F10 in the game to load it. Restarting gachamod as administrator fixes both.
+      </p>
+      <Button size="sm" variant="primary" busy={busy} disabled={busy} onClick={restart}
+        title="Closes gachamod and opens it again as administrator. Windows asks you first">Restart as administrator</Button>
+    </div>
+  );
+}
+
+function MenuOptions({ game, menu, blocked }: { game: GameId; menu: MenuSettings; blocked: boolean }) {
+  const set = (patch: Partial<MenuSettings>) => void setMenu(game, menu, { ...menu, ...patch });
+  return (
+    <div className="live-menu">
+      <div className="live-menu-row">
+        <span className="live-menu-l">Menu while you play</span>
+        <Segmented label="Menu while you play" size="sm" value={menu.style} onChange={(style) => set({ style })} options={[
+          { value: "window", label: "Over the game", title: "gachamod's own menu on top of the game. The better one. Needs borderless or windowed" },
+          { value: "game", label: "Inside the game", title: "A plainer menu the game draws itself. Works in exclusive fullscreen" },
+          { value: "off", label: "Off", title: "No menu while you play" },
+        ]} />
+      </div>
+      {menu.style !== "off" && (
+        <div className="live-menu-row">
+          <HotkeyField label="Key that opens it" value={menu.key} bareF keep onChange={(key) => { if (key && key !== menu.key) set({ key }); }} />
+          <Checkbox checked={menu.pad} onChange={(pad) => set({ pad })} label="Pressing both sticks in opens it too" />
+        </div>
+      )}
+      <p className="hint">{MENU_HINT[menu.style](menu.key)} {blocked ? "Press F10 in the game after a change here." : "The game reloads once after a change here."}</p>
+    </div>
   );
 }
 

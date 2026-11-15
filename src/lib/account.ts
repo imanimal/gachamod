@@ -1,7 +1,7 @@
-// Signing in to GameBanana from the app, so following creators and liking mods reach the user's real account.
+// Signing in to GameBanana from the app, so following creators and liking mods reach the user's GameBanana account.
 // The user signs in on GameBanana's own page in a separate window; the app never sees the password, and the session
-// cookie stays in Rust (src-tauri commands/account.rs, gacha-core gb_account.rs). Sign-in starts turned off until it
-// has been tried with a real account: Settings > Account turns it on. Owner: ACCOUNT area.
+// cookie stays in Rust (src-tauri commands/account.rs, gacha-core gb_account.rs). Sign-in starts turned off and
+// Settings > Account turns it on. Owner: ACCOUNT area.
 import { useSyncExternalStore } from "react";
 import { errorText, settings } from "./api";
 import { record } from "./history";

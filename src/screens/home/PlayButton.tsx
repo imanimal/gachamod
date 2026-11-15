@@ -8,6 +8,7 @@ import { toast } from "../../ui/toast";
 import { errorText, games, settings, xxmi, type GameState } from "../../lib/api";
 import { windowAction } from "../../lib/tauri";
 import { go, useGame } from "../../lib/store";
+import { shuffleBeforePlay } from "../library/shuffle";
 import "./home.css";
 
 // shared by every Play button, so the sidebar's and Home's agree
@@ -35,6 +36,7 @@ export async function play(game: GameState, vanilla = false) {
   starting.set(game.id, Date.now());
   changed();
   try {
+    if (!vanilla) await shuffleBeforePlay(game.id);
     await games.launch(game.id, vanilla);
     toast(vanilla ? `Starting ${game.name} without mods` : `Starting ${game.name}`);
     const close = await settings.get(`${game.id}.closeOnLaunch`).catch(() => null);
@@ -100,7 +102,9 @@ export function PlayButton({ big = false }: { big?: boolean }) {
 
   const isStarting = startTime !== undefined && !isRunning;
   const label = isRunning ? `Running ${elapsed(Date.now() - (startedAt.get(game.id) ?? Date.now()))}` : isStarting ? "Starting" : "Play";
-  const tip = isRunning ? `${game.name} is running (${label.toLowerCase()})` : game.viaXxmi ? `Start ${game.name} with mods through XXMI (Ctrl+Enter)` : `Start ${game.name} (Ctrl+Enter)`;
+  const ranMs = isRunning ? Date.now() - (startedAt.get(game.id) ?? Date.now()) : 0;
+  const tip = isRunning && ranMs >= 4 * 3600_000 ? `Running for ${Math.floor(ranMs / 3600_000)} hours. Maybe drink some water`
+    : isRunning ? `${game.name} is running (${label.toLowerCase()})` : game.viaXxmi ? `Start ${game.name} with mods through XXMI (Ctrl+Enter)` : `Start ${game.name} (Ctrl+Enter)`;
 
   return (
     <div className={`${cls}${isRunning ? " running" : ""}${isStarting ? " starting" : ""}`}>
@@ -113,7 +117,7 @@ export function PlayButton({ big = false }: { big?: boolean }) {
       {menu && (
         <Popover anchor={more.current} onClose={() => setMenu(false)} width="15em" label="Start options">
           <Menu items={[
-            { label: "Play without mods", icon: "play", disabled: isRunning || isStarting, hint: "Starts the game's own exe, no mods load",
+            { label: "Play without mods", icon: "play", disabled: isRunning || isStarting, hint: "Starts the game with no mods, the way the developers intended. Brave",
               onClick: () => { setMenu(false); void play(game, true); } },
             ...(game.xxmi ? [{ label: "Open XXMI Launcher", icon: "external" as const, onClick: () => {
               setMenu(false); xxmi.open().catch((e) => toast(errorText(e), true));

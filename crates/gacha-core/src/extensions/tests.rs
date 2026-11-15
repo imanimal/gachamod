@@ -234,6 +234,10 @@ fn keeps_storage() {
 #[test]
 fn repo_examples_check_out() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../extensions-repo");
+    // the public repo carries a copy of the docs for people making packages
+    let doc = |p: PathBuf| fs::read_to_string(p).unwrap().replace("\r\n", "\n");
+    assert!(doc(repo.join("docs/extensions.md")) == doc(repo.join("../docs/extensions.md")),
+        "copy docs/extensions.md to extensions-repo/docs/extensions.md (and push it to gachamod-extensions)");
     for e in fs::read_dir(repo.join("packages")).unwrap().flatten() {
         let m = read_manifest(&e.path()).unwrap_or_else(|err| panic!("{}: {err}", e.path().display()));
         assert_eq!(m.id, e.file_name().to_string_lossy());

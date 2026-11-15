@@ -1,8 +1,10 @@
 // One installed mod in a grid or list: preview, name, character (a link to its page), badges, an on/off switch and
 // a "..." menu. The card's main button opens the details (Ctrl/Shift click selects). Owner: LIBRARY area.
-import { memo, type MouseEvent } from "react";
+import { memo, type KeyboardEvent, type MouseEvent } from "react";
 import type { GameId, ModEntry } from "../../lib/api";
 import type { ModHealth } from "../../lib/fixes";
+import { go } from "../../lib/store";
+import { kindName, libKind } from "./kinds";
 import { Badge, IconButton, Toggle, formatBytes } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
@@ -28,9 +30,21 @@ export interface ModCardProps {
   onUpdate: (mod: ModEntry) => void;
   /** The card's hover tip, when the page gives its switch another meaning (a profile's page). */
   tip?: string;
+  /** The name of the mod this one is a sub-mod of. */
+  parentName?: string;
 }
 
-export const ModCard = memo(function ModCard({ game, mod, index, row, selected, nsfw, showCharacter, health, portrait, onOpen, onToggle, onMenu, onUpdate, tip }: ModCardProps) {
+/** The type of a mod without a character ("UI", "Tools and fixes"): click shows every mod of that type on Mods. */
+export function KindLink({ mod }: { mod: ModEntry }) {
+  const kind = libKind(mod), label = kindName(kind);
+  const open = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); e.preventDefault(); go({ view: "library", kind }); };
+  return (
+    <span role="link" tabIndex={0} className="qlink" title={`Show every mod in ${label}. If it's for a character, set one in its details`}
+      onClick={open} onKeyDown={(e) => { if (e.key === "Enter") open(e); }} onMouseDown={(e) => e.stopPropagation()}>{label}</span>
+  );
+}
+
+export const ModCard = memo(function ModCard({ game, mod, index, row, selected, nsfw, showCharacter, health, portrait, onOpen, onToggle, onMenu, onUpdate, tip, parentName }: ModCardProps) {
   const cls = ["card", "mod-card", row && "is-row", selected && "sel", !mod.enabled && "is-off"].filter(Boolean).join(" ");
   const broken = health && (health.status === "broken" || health.status === "unfixable");
   const by = mod.source?.submitter;
@@ -45,7 +59,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
           <span className="mod-card-name">{mod.name}</span>
           <span className="mod-card-char">
             {showCharacter
-              ? mod.character ? <CharLink game={game} name={mod.character} /> : mod.group ?? "No character"
+              ? mod.character ? <CharLink game={game} name={mod.character} /> : <KindLink mod={mod} />
               : by ? `by ${by}` : mod.version ? `v${mod.version.replace(/^v/i, "")}` : formatBytes(mod.sizeBytes)}
           </span>
           {row && <span className="mod-card-meta">{formatBytes(mod.sizeBytes)}{mod.version ? ` · v${mod.version.replace(/^v/i, "")}` : ""}</span>}
@@ -72,9 +86,12 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
             title={`Changes the same parts as ${mod.conflicts === 1 ? "another mod" : `${mod.conflicts} other mods`} that ${mod.conflicts === 1 ? "is" : "are"} on. Click to pick which one wins`}>Conflict</Badge>
         )}
         {mod.iniCount === 0 && <Badge tone="warn" icon="warn" onClick={() => openDetails(mod, "files")} title="No .ini file found, so the game won't load it. Click to see its files">No ini</Badge>}
+        {(mod.parts ?? 0) > 0 && <Badge tone="muted" icon="layers" onClick={() => openDetails(mod, "parts")} title="Folders inside it that turn on and off by themselves. Click to switch them">{mod.parts} parts</Badge>}
+        {mod.parent && parentName && <Badge tone="muted" icon="link" onClick={() => openDetails({ id: mod.parent! })}
+          title={`A sub-mod of ${parentName}: it turns off with it and never counts as another skin. Click to open ${parentName}`}>Sub-mod</Badge>}
         {mod.hasKeys && <Badge tone="muted" icon="key" onClick={() => openDetails(mod, "keys")} title="Has toggles or options. Click to see them">Toggles</Badge>}
         {live && <Badge tone="muted" icon="swap" onClick={() => openDetails(mod, "ingame")}
-          title={`Switches in game with ${live}'s other live skins, so it can stay on while another one shows. Click to pick`}>Live</Badge>}
+          title={`Turning it on switches ${live}'s skin in game at once, without F10. Click for its in-game options`}>Live</Badge>}
       </span>
       <span className="mod-card-foot">
         <Toggle size="sm" checked={mod.enabled} onChange={(v) => onToggle(mod, v)} label={<span className="sr-only">{mod.enabled ? "On" : "Off"}</span>} />

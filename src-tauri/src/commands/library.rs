@@ -29,9 +29,36 @@ pub async fn mod_get(st: State<'_, AppState>, game: String, id: String) -> Resul
 }
 
 #[tauri::command]
-pub async fn mods_set_enabled(st: State<'_, AppState>, game: String, ids: Vec<String>, on: bool) -> Result<ModChange> {
+/// `turn_off_others`: what the user picked when the UI asked about the character's other mods (None follows the
+/// "<game>.oneSkin" setting).
+pub async fn mods_set_enabled(st: State<'_, AppState>, game: String, ids: Vec<String>, on: bool, turn_off_others: Option<bool>) -> Result<ModChange> {
     let db = st.db.clone();
-    blocking(move || library::set_enabled(&*lock(&db)?, &game, &ids, on)).await
+    blocking(move || {
+        let mut c = library::set_enabled_with(&*lock(&db)?, &game, &ids, on, turn_off_others)?;
+        // live skins switch in the running game once the database is free
+        c.notes.extend(gacha_core::live::flush_sends(&db));
+        Ok(c)
+    }).await
+}
+
+/// The folders inside a mod that hold their own inis, each on or off (library::parts).
+#[tauri::command]
+pub async fn mod_parts(st: State<'_, AppState>, game: String, id: String) -> Result<Vec<library::ModPart>> {
+    let db = st.db.clone();
+    blocking(move || library::parts(&*lock(&db)?, &game, &id)).await
+}
+
+#[tauri::command]
+pub async fn mod_set_part(st: State<'_, AppState>, game: String, id: String, folder: String, on: bool) -> Result<ModEntry> {
+    let db = st.db.clone();
+    blocking(move || library::set_part(&*lock(&db)?, &game, &id, &folder, on)).await
+}
+
+/// Make several mods the parts of one mod (library::merge).
+#[tauri::command]
+pub async fn mods_merge(st: State<'_, AppState>, game: String, ids: Vec<String>) -> Result<ModChange> {
+    let db = st.db.clone();
+    blocking(move || library::merge(&*lock(&db)?, &game, &ids)).await
 }
 
 #[tauri::command]

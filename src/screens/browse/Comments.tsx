@@ -6,7 +6,7 @@ import { Icon } from "../../ui/Icon";
 import { CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { errorText, shell } from "../../lib/api";
-import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, type GbCommentPage } from "../../lib/gamebanana";
+import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, type GbCommentPage, type GbModel } from "../../lib/gamebanana";
 
 type OnLink = (e: MouseEvent | KeyboardEvent) => void;
 
@@ -42,7 +42,7 @@ function usePages(load: (page: number, signal: AbortSignal) => Promise<GbComment
   return { data, error, busy, more, retry };
 }
 
-export function Comments({ modId, url, onLink }: { modId: number; url: string; onLink: OnLink }) {
+export function Comments({ modId, model = "Mod", url, onLink }: { modId: number; model?: GbModel; url: string; onLink: OnLink }) {
   const ref = useRef<HTMLElement>(null);
   const [seen, setSeen] = useState(false);
   useEffect(() => {
@@ -52,7 +52,7 @@ export function Comments({ modId, url, onLink }: { modId: number; url: string; o
     io.observe(el);
     return () => io.disconnect();
   }, [seen]);
-  const { data, error, busy, more, retry } = usePages((p, s) => modComments(modId, p, "popular", s), seen);
+  const { data, error, busy, more, retry } = usePages((p, s) => modComments(modId, p, "popular", s, model), seen);
   const openSite = () => void shell.openUrl(url).catch((e) => toast(errorText(e), true));
 
   return (

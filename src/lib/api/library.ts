@@ -10,7 +10,12 @@ export interface MetaPatch {
   favorite?: boolean;
   nsfw?: boolean;
   version?: string;
+  /** Make it a sub-mod of this mod (an id), or "" to make it a mod of its own again. */
+  parent?: string;
 }
+
+/** A folder inside a mod with its own inis. `folder` is its name now (with DISABLED when off). */
+export interface ModPart { folder: string; name: string; enabled: boolean; iniCount: number; sizeBytes: number }
 
 export interface CharacterRef { name: string; gbCategoryId?: number | null; icon?: string | null }
 
@@ -63,7 +68,17 @@ export const library = {
   scan: (game: GameId) => call<ModEntry[]>("library_scan", { game }),
   list: (game: GameId) => call<ModEntry[]>("library_list", { game }),
   get: (game: GameId, id: string) => call<ModEntry>("mod_get", { game, id }),
-  setEnabled: (game: GameId, ids: string[], on: boolean) => call<ModChange>("mods_set_enabled", { game, ids, on }),
+  /** Folders inside the mod with their own inis (an archive's several mods installed as one). Empty when there's
+   *  nothing to switch. */
+  parts: (game: GameId, id: string) => call<ModPart[]>("mod_parts", { game, id }),
+  /** Turn one part on or off by its current folder name. Returns the mod with its new counts. */
+  setPart: (game: GameId, id: string, folder: string, on: boolean) => call<ModEntry>("mod_set_part", { game, id, folder, on }),
+  /** Make several mods the parts of one mod. The first one that is on keeps its id and details. */
+  merge: (game: GameId, ids: string[]) => call<ModChange>("mods_merge", { game, ids }),
+  /** `turnOffOthers`: the user's answer about the character's other mods that are on (true turns them off, false
+   *  keeps them on). Left out, the "<game>.oneSkin" setting decides. Sub-mods go with their parent either way. */
+  setEnabled: (game: GameId, ids: string[], on: boolean, turnOffOthers?: boolean) =>
+    call<ModChange>("mods_set_enabled", { game, ids, on, turnOffOthers: turnOffOthers ?? null }),
   updateMeta: (game: GameId, id: string, patch: MetaPatch) => call<ModEntry>("mod_update_meta", { game, id, patch }),
   move: (game: GameId, id: string, group: string | null) => call<ModEntry>("mod_move", { game, id, group }),
   remove: (game: GameId, ids: string[]) => call<ModChange>("mods_remove", { game, ids }),

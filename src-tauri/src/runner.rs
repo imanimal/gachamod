@@ -37,6 +37,11 @@ pub fn keep_archives(db: &Shared) -> bool {
     lk(db).setting("downloads.keep").ok().flatten().is_some_and(|v| v == "1")
 }
 
+/// "downloads.allParts" is "1": an archive with several mods installs all of them without asking.
+pub fn install_all_parts(db: &Shared) -> bool {
+    lk(db).setting("downloads.allParts").ok().flatten().is_some_and(|v| v == "1")
+}
+
 /// Where an item's download goes: `<data>/downloads/<game>/` and `<fileId>-<name>`.
 pub fn download_target(data_dir: &Path, item: &QueueItem) -> (PathBuf, String) {
     let game = download::safe_file_name(&item.req.game);
@@ -298,7 +303,9 @@ impl Runner {
                 let what = if o.installed.len() > 1 { format!("{} variants of {name}", o.installed.len()) } else { name };
                 let mut text = match character { Some(c) => format!("{verb} {what} for {c}"), None => format!("{verb} {what}") };
                 if !o.notes.is_empty() { text = format!("{text}. {}", o.notes.join(". ")); }
-                self.toast(text, false);
+                // the toast opens the mod, where it can be turned on
+                let open = o.installed.first().map(|m| serde_json::json!({ "game": item.req.game, "modId": m.id }));
+                let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false, "open": open }));
             }
             Err(e) => {
                 // a broken archive is fetched again on Retry
@@ -329,7 +336,14 @@ impl Runner {
             }
         };
         let (db, data, game, meta, choose, s) = (self.db.clone(), self.data.clone(), item.req.game.clone(), item.req.meta.clone(), item.choose.clone(), staging.clone());
-        let outcome = tauri::async_runtime::spawn_blocking(move || install::place(&db, &data, &game, &s, &meta, &choose)).await
+        let all = choose.is_empty() && install_all_parts(&db);
+        let outcome = tauri::async_runtime::spawn_blocking(move || {
+            let o = install::place(&db, &data, &game, &s, &meta, &choose)?;
+            match o.needs_choice {
+                Some(c) if all => install::place(&db, &data, &game, &s, &meta, &c.into_iter().map(|c| c.key).collect::<Vec<_>>()),
+                _ => Ok(o),
+            }
+        }).await
             .unwrap_or_else(|e| Err(Error::Invalid(e.to_string())))?;
         Ok((staging, outcome))
     }

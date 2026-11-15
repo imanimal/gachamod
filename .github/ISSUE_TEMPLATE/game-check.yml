@@ -1,0 +1,62 @@
+name: Game check
+description: How switching skins while playing went in your game (the same steps as Help, Check this game)
+title: "Game check: "
+labels: ["game check"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for checking. Help, Check this game in gachamod asks the same things and sends them for you, so use this only if you'd rather post here.
+  - type: dropdown
+    id: game
+    attributes:
+      label: Game
+      options: [Genshin Impact, "Honkai: Star Rail", Zenless Zone Zero, Wuthering Waves, "Arknights: Endfield", Honkai Impact 3rd, Another game]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: gachamod and loader versions
+      description: gachamod's is in Settings, About. The loader's (GIMI, SRMI, WWMI, EFMI) is in XXMI Launcher.
+      placeholder: gachamod 0.1.0, WWMI 1.3.2
+  - type: dropdown
+    id: admin
+    attributes:
+      label: Did gachamod run as administrator?
+      options: ["Yes", "No", "Don't know"]
+  - type: dropdown
+    id: pick
+    attributes:
+      label: A skin picked in gachamod changed in the game
+      options: ["Yes", "No", "Skipped"]
+  - type: dropdown
+    id: menu
+    attributes:
+      label: Pressing the menu key (F7) in the game opened
+      options: [gachamod's menu over the game, A menu drawn in the game, Nothing, Skipped]
+  - type: dropdown
+    id: menu-pick
+    attributes:
+      label: A skin picked in that menu changed in the game
+      options: ["Yes", "No", "Skipped"]
+  - type: dropdown
+    id: reload
+    attributes:
+      label: After F10, each character still wore the skin picked last
+      options: ["Yes", "No", "Skipped"]
+  - type: dropdown
+    id: pad
+    attributes:
+      label: Pressing both controller sticks in opened the menu
+      options: ["Yes", "No", No controller]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      placeholder: For example, the menu showed on the other screen, or a skin needed two picks to change.
+  - type: textarea
+    id: log
+    attributes:
+      label: Loader log (optional)
+      description: The end of d3d11_log.txt in the loader's folder (for example XXMI Launcher\WWMI). Replace your Windows user name if it shows up.
+      render: text

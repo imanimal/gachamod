@@ -76,9 +76,10 @@
   .nv-b.t-bad { min-width: 1.3rem; width: 1.3rem; height: 1.3rem; padding: 0; border-radius: 2px; background: var(--crimson); color: #fff; box-shadow: none; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); font-size: .68em; }
   .nv-b.t-warn { background: var(--warn); color: #16181b; box-shadow: none; }
   .nv-b.t-ok { background: var(--ok); color: #16181b; box-shadow: none; }
-  .nv-b.t-run { border-radius: 1px; transform: rotate(45deg); background: var(--gold-hi); box-shadow: none; }
+  .nv-b.t-run { background: var(--gold-hi); color: #101113; box-shadow: none; }
+  .nv-b.t-run:empty { border-radius: 1px; transform: rotate(45deg); }
   .nv-b.t-run::after { border-radius: 1px; border-color: var(--gold-hi); }
-  .nv.on .nv-b.t-run { background: #101113; }
+  .nv.on .nv-b.t-run { background: #101113; color: var(--gold-hi); }
 
   /* what is left over: one line of script and a caption, never a big empty block */
   .side-deco { display: flex; flex-direction: column; justify-content: flex-end; gap: .3rem; max-height: 2.6rem; padding: 0 .2rem; color: rgb(206 185 156 / .3); }
@@ -169,7 +170,7 @@
   .nv.on .i, .nv.on:hover:not(:disabled) .i { color: #fff; }
   .nv-b { color: var(--gold-ink); box-shadow: inset 0 0 0 1px rgb(120 100 60 / .45); }
   .nv.on .nv-b { color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .45); }
-  .nv-b.t-run { background: var(--gold-dk); }
+  .nv-b.t-run { background: var(--gold-dk); color: #fff; }
   .nv.on .nv-b.t-run { background: var(--gold); }
   .side-deco { color: rgb(120 100 60 / .35); }
 

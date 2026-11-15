@@ -233,7 +233,7 @@ fn write_vars(db: &Db, id: i64, game: &str) -> Result<()> {
     let importer = games::importer_dir(db, game).ok();
     for (mod_id, vals) in vars {
         let Ok(m) = library::get(db, game, &mod_id) else { continue };
-        if m.enabled {
+        if m.loaded() {
             if let Some(imp) = &importer { let _ = ini::set_user_vars(imp, &m.rel_path, &vals); }
         } else {
             let _ = library::stash_vars(db, game, &mod_id, &vals);

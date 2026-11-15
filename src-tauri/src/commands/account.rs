@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 const LABEL: &str = "gb-login";
 const USER_KEY: &str = "account.gbUser";
-/// Sign-in is off until it has been tried with a real account (Settings > Account turns it on).
+/// Sign-in starts off (Settings > Account turns it on).
 const ON_KEY: &str = "account.gbSignIn";
 
 fn state_of(st: &AppState) -> AccountState {

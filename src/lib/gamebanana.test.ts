@@ -1,7 +1,24 @@
 // Tests for the GameBanana helpers that don't need a DOM: links, list parsing, update checks.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { HQ_PASS, buildRequest, characterList, gbLinkTarget, hasNewerFile, hqScore, hqShape, kindOf, listByCreators, listMods, modPage, onCharacters, parseGbLink } from "./gamebanana";
+import { HQ_PASS, borrowedRecord, buildRequest, characterList, gbLinkTarget, hasNewerFile, hqScore, hqShape, kindOf, listByCreators, listMods, modPage, nameClose, onCharacters, parseGbLink } from "./gamebanana";
 import type { ModEntry } from "./api";
+
+describe("nameClose", () => {
+  it("matches a creator's name loosely", () => {
+    expect(nameClose("avgv", "AVGV")).toBe(true);
+    expect(nameClose("haezeker", "Haezeker_")).toBe(true);
+    expect(nameClose("haeze", "Haezeker")).toBe(true);
+    expect(nameClose("haezekr", "Haezeker")).toBe(true);
+    expect(nameClose("haise", "Haise Sasaki")).toBe(true);
+    expect(nameClose("sasaki", "Haise Sasaki")).toBe(true);
+  });
+  it("leaves other names alone", () => {
+    expect(nameClose("burnice", "LeoMods_")).toBe(false);
+    expect(nameClose("ab", "ab")).toBe(false);
+    expect(nameClose("blue", "Bluetooth Bob")).toBe(true);
+    expect(nameClose("haezeker", "Heehee Haha")).toBe(false);
+  });
+});
 
 describe("parseGbLink", () => {
   it("reads every link shape", () => {
@@ -185,6 +202,20 @@ describe("the High quality score", () => {
   it("scales with the game: the same numbers pass in a small game, not in a big one", () => {
     expect(hqScore(mod(24 * 10, 120, 6000), { bar: 150, median: 60 }, null, now)).toBeGreaterThanOrEqual(HQ_PASS);
     expect(hqScore(mod(24 * 10, 120, 6000), { bar: 600, median: 200 }, null, now)).toBeLessThan(HQ_PASS);
+  });
+  it("carries a creator's record to a game they're new to, scaled to its bar", () => {
+    // top of zzz (twice its bar), so-so in gi (half its bar), first mod in ww whose bar is 150
+    const records = { "19567:7": { r: 800, at: 0 }, "8552:7": { r: 600, at: 0 }, "20357:7": { r: null, at: 0 }, "19567:8": { r: 900, at: 0 } };
+    const bars: Record<number, number> = { 19567: 400, 8552: 1200 };
+    const barOf = (g: number) => bars[g] ?? null;
+    expect(borrowedRecord(records, barOf, 20357, 7, 150)).toBe(300);
+    // no other game knows them, or the only one has no bar kept
+    expect(borrowedRecord(records, barOf, 20357, 9, 150)).toBeNull();
+    expect(borrowedRecord({ "1:7": { r: 500, at: 0 } }, barOf, 20357, 7, 150)).toBeNull();
+    // with that record a fresh mod with few likes shows; without it, it waits
+    const ww = { bar: 150, median: 60 };
+    expect(hqScore(mod(1, 1, 20), ww, 300, now)).toBeGreaterThanOrEqual(HQ_PASS);
+    expect(hqScore(mod(1, 1, 20), ww, null, now)).toBeLessThan(HQ_PASS);
   });
   it("collects most attention in the first days", () => {
     expect(hqShape(0)).toBe(0);
