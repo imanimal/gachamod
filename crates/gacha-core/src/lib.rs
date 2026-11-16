@@ -19,6 +19,7 @@ pub mod imm;
 pub mod ini;
 pub mod install;
 pub mod keys;
+pub mod keylist;
 pub mod launch;
 pub mod library;
 pub mod live;

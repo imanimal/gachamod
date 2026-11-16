@@ -582,6 +582,53 @@ its window while gachamod was in front and did nothing while the game was, and i
   (`devtools::restart_elevated`: ShellExecute `runas`, and the new copy waits for the old one to quit).
 - Under `npm run app` that button ends the dev run. Start the terminal as administrator and run `npm run app` from it.
 
+### The key list
+
+Held back since 2026-11-16: `keylist::SHOWN` and `KEY_LIST_SHOWN` (src/lib/api/keylist.ts) are false, so the list is off,
+F8 isn't held, live.ini gets none of its sections and the UI shows none of it. Saved settings stay. Set both to true
+to bring it back.
+
+`crates/gacha-core/src/keylist.rs`, `src/lib/api/keylist.ts`. While playing, one key (F8 by default) shows each mod's
+toggle keys: the key, what it changes ("Jacket"), and a note for keys that are held or cycle through more than two
+options. It rides on the skin menu, so it needs a game with live characters (`KeyList.available`).
+
+Where it shows (`<game>.keyListStyle`):
+
+| Setting | What shows | Where the key lives |
+|---|---|---|
+| `window` (default) | The Keys tab of gachamod's window over the game, every mod that is on. In exclusive fullscreen, the panel the game draws | The app holds the key while the game runs (`keylist::window_keys`, `hotkeys.rs`) |
+| `game` | Always the panel the game draws | A `[KeyGachamodKeys]` section in live.ini |
+
+As with the skin menu, live.ini binds the key itself when the game runs as administrator and gachamod doesn't. The
+window opens on its Keys tab through the event `overlay-open` with `{ game, tab: "keys" }` (`overlay::toggle_keys`), and
+a press while the window shows closes it.
+
+Settings, per game: `<game>.keyList` ("0" turns it off), `<game>.keyListKey`, `<game>.keyListOwn` (also list mods with
+their own key help), and the player's pick per mod in `keyList.pick.<game>`. The key can't be the skin menu key or a
+profile hotkey, and the skin menu key can't be changed to the key list key (`keylist::set`, `live::set_menu`).
+
+Mods with their own key help are left out unless the player picks them or turns on `own`. A mod counts as having its
+own help when a key section or its variables name a help panel (`[KeyHelp]`, `$showinfo`, words like help, info, guide,
+hotkey, or ui, hud, menu as whole words), or when the mod loads a picture with such a name or with "toggle" in it
+(`ToggleGuide.dds`). The key that shows the mod's help is kept when found (`helpKey`).
+
+The panel the game draws (`live/menu.rs`, `key_list_sections`): one picture per listed live skin, `menuk<group>_<slot>.dds`,
+with a header holding the mod's name, a row per key (at most 14, the last one "<n> more keys" when cut) and a footer
+"F8 hide keys". `[Present]` runs `CommandListKeysFrame` while `$keys` is 1. For each live skin whose character is on
+screen (`$s<group>`) and whose slot shows (`$g<group>`), it draws that picture in the top right corner, the next one
+under it, so several characters on screen stack. When none was drawn it draws `menukeys.dds`, which says no character
+on screen has mod keys. It uses the menu's window size, `CustomShaderMenuQuad` and `menu.hlsl`, and puts IniParams 86
+to 89 back after. `menukeys.json` keeps a hash per picture, so only changed ones are made again. Only live skins can
+show here: the game knows which character is on screen from their gates. With the key list off, or no live skin with
+keys listed, none of these sections or files exist.
+
+The key channel's number 2 with no group runs `CommandListKeysToggle` (`menu::KEYS`, `live::send_keys_toggle`), which
+the app's key sends in exclusive fullscreen. With the skin menu's controller option on, Y in the drawn skin menu shows
+or hides the key list too (`[KeyMenuKeys]`, `XB_Y`).
+
+F8 is also 3DMigoto's frame analysis key, but only while hunting is on (`hunting = 1` or 2 in d3dx.ini), which players
+normally have off.
+
 ### Checked in ZZZ on 2026-11-14
 
 With gachamod and the game both running as administrator, the game borderless at 2560x1440 and 125% scaling:
@@ -630,6 +677,11 @@ helper, the app's logic driven from a small program on the real library):
 7. The Browse and Downloads tabs over a game (checked in a browser with the demo data only): the list loads more as
    it scrolls, Install from a card and from a mod's page, the mod showing under My mods once it is installed, and a
    page handed to gachamod's own window (the Mods for adults button on an empty list) bringing that window forward.
+8. The key list the game draws, in ZZZ: the sheets show in the top right corner at the right size, stack for two
+   characters on screen, follow a skin picked in either menu, and "No mod keys" shows for a character without a sheet.
+   IniParams put back after it don't disturb other mods.
+9. F8 in exclusive fullscreen with Over the game chosen: the number 2 shows and hides the drawn key list.
+10. Y in the drawn skin menu shows the key list, and doesn't also do something in the game that matters.
 
 Known limits: the game also sees the keys and buttons pressed in the drawn menu. A pick from the app or the menu window
 brings the game forward first and takes most of a second. XXMI Launcher writes `check_foreground_window` into d3dx.ini at

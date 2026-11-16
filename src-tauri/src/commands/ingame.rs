@@ -1,5 +1,6 @@
 //! Switching skins in game without a reload (gacha-core live.rs, docs/ingame.md). Owner: INGAME area.
 use crate::state::{blocking, AppState};
+use gacha_core::keylist::{self, KeyList, KeyListSettings, ModKeyList};
 use gacha_core::live::{self, LiveChange, LiveInfo, MenuSettings, Picked};
 use gacha_core::Result;
 use tauri::State;
@@ -82,6 +83,35 @@ pub async fn app_restart_admin(app: tauri::AppHandle, window: tauri::WebviewWind
     crate::commands::app::skip_update_on_quit(&app);
     app.exit(0);
     Ok(true)
+}
+
+/// Every mod of the game that has keys, with the key list's settings (gacha-core keylist.rs).
+#[tauri::command]
+pub async fn keylist_get(st: State<'_, AppState>, game: String) -> Result<KeyList> {
+    let db = st.db.clone();
+    blocking(move || keylist::list(&*lock(&db)?, &game)).await
+}
+
+/// Change the key list's settings, then hold or let go of its key.
+#[tauri::command]
+pub async fn keylist_set(app: tauri::AppHandle, st: State<'_, AppState>, game: String, settings: KeyListSettings) -> Result<KeyListSettings> {
+    let db = st.db.clone();
+    blocking(move || {
+        let out = keylist::set(&*lock(&db)?, &game, &settings)?;
+        menu_key(&app);
+        Ok(out)
+    }).await
+}
+
+/// Show one mod in the key list, leave it out, or go back to automatic (`listed` null).
+#[tauri::command]
+pub async fn keylist_choose(app: tauri::AppHandle, st: State<'_, AppState>, game: String, mod_id: String, listed: Option<bool>) -> Result<ModKeyList> {
+    let db = st.db.clone();
+    blocking(move || {
+        let out = keylist::choose(&*lock(&db)?, &game, &mod_id, listed)?;
+        menu_key(&app);
+        Ok(out)
+    }).await
 }
 
 /// Pick what a character shows. While the game runs the pick is sent to it (the database isn't held meanwhile).

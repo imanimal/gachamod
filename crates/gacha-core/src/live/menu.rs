@@ -7,6 +7,9 @@
 //! keys, a controller or the mouse, and draw the rectangles each frame while it is open. Picking a row sets the
 //! group's number, the same number the gates in the mod inis read, so the skin changes in that frame.
 //!
+//! The key list the game draws (keylist.rs) rides on the same window size and shader: `menuk<group>_<slot>.dds` is one
+//! picture per live skin with its keys, drawn in the top right corner while that skin's character is on screen.
+//!
 //! Every size is in menu pixels: the pictures are made for the screen's height, and the shader scales them when the
 //! game's window is another size. Owner: INGAME area.
 
@@ -15,9 +18,11 @@ use std::collections::HashMap;
 use std::path::Path;
 
 /// Bump when the pictures or the ini change shape, so files made by an older version are made again.
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 /// The number the app sends with no group to open or close the menu.
 pub(crate) const TOGGLE: u32 = 1;
+/// The number the app sends with no group to show or hide the key list the game draws.
+pub(crate) const KEYS: u32 = 2;
 const NL: &str = "\r\n";
 
 const BG: [u8; 4] = [0x13, 0x16, 0x1d, 255];
@@ -59,6 +64,42 @@ impl Layout {
 
 /// One character's page: its group number and the slot of each row after "None".
 pub(crate) struct IniPage { pub n: u32, pub slots: Vec<u32> }
+
+/// Sizes of the key list's pictures in menu pixels, from the menu's layout (the numbers at 1080 are in `of`).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct KeyLayout {
+    pub w: u32,
+    pub head: u32,
+    pub row: u32,
+    pub foot: u32,
+    pub pad: u32,
+    /// Width of the key column and of the note column.
+    pub key_w: u32,
+    pub note_w: u32,
+    /// Gap between the screen's top and right edges and the list, and between two sheets.
+    pub margin: u32,
+    pub gap: u32,
+}
+
+/// Rows a sheet shows at most. A longer list shows one less and a last row with how many more there are.
+const KEY_ROWS: usize = 14;
+
+impl KeyLayout {
+    pub fn of(l: &Layout) -> Self {
+        KeyLayout { w: l.s(400), head: l.s(44), row: l.s(30), foot: l.s(30), pad: l.s(14), key_w: l.s(118), note_w: l.s(84), margin: l.s(40), gap: l.s(12) }
+    }
+    /// The height of a sheet with `rows` keys.
+    pub fn sheet_h(&self, rows: usize) -> u32 { self.head + self.row * rows.min(KEY_ROWS) as u32 + self.foot }
+    /// The height of the picture that says no character on screen has keys.
+    pub fn none_h(&self) -> u32 { self.head + self.foot }
+}
+
+/// One key sheet as live.ini draws it: a live skin (group and slot) and the height of its picture.
+pub(crate) struct IniSheet { pub n: u32, pub slot: u32, pub h: u32 }
+
+/// The key list the game draws. `sheets` is never empty (no sheet, no key list). `key` is the key list key as a
+/// 3DMigoto binding when the game binds it itself; `pad`: Y shows it from the skin menu.
+pub(crate) struct KeyListIni { pub sheets: Vec<IniSheet>, pub key: Option<String>, pub pad: bool }
 
 /// The menu's keys. `open` is a 3DMigoto binding ("no_modifiers VK_F7") and `pad_open` both sticks pressed in; both
 /// are left out when the app holds the key and opens the menu itself. `pad`: a controller moves and picks in it.
@@ -103,14 +144,17 @@ const SLOTS: [u32; 4] = [86, 87, 88, 89];
 const XYZW: [char; 4] = ['x', 'y', 'z', 'w'];
 
 /// The lines for live.ini's [Constants]. `$open` and the on-screen flags are always there: the gated mod inis read
-/// them whether the menu is on or not.
-pub(crate) fn constants(pages: &[IniPage], on: bool) -> String {
+/// them whether the menu is on or not. `key_list`: the key list's own variables too.
+pub(crate) fn constants(pages: &[IniPage], on: bool, key_list: bool) -> String {
     let mut o = Out::default();
     o.l("global $open = 0");
     for p in pages { o.l(format!("global $s{} = 0", p.n)); }
     if on {
         for v in VARS { o.l(format!("global ${v} = 0")); }
         for i in 0..16 { o.l(format!("global $b{i} = 0")); }
+        if key_list {
+            for v in ["keys", "kx", "ky"] { o.l(format!("global ${v} = 0")); }
+        }
     }
     o.0
 }
@@ -119,7 +163,9 @@ pub(crate) fn constants(pages: &[IniPage], on: bool) -> String {
 ///
 /// Pages 0 to n-1 are the characters, in the order given, each with its skins. With two or more characters, page n
 /// lists the characters themselves: left goes there from a character, and showing a row there opens that character.
-pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>) -> String {
+///
+/// `key_list`: the key list the game draws in its top right corner, which rides on the menu's window size and shader.
+pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_list: Option<&KeyListIni>) -> String {
     let mut o = Out::default();
     o.l("");
     o.l("; a gated skin runs one of these when it is drawn, so the menu knows which character is on screen");
@@ -136,6 +182,13 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>) -> St
     o.l("");
     o.l("; ── the menu the game draws ──");
     o.section("Present");
+    let key_list = key_list.filter(|k| !k.sheets.is_empty());
+    if key_list.is_some() {
+        // the on-screen flags are still set here: `post` clears them after the frame
+        o.l("if $keys == 1");
+        o.l("  run = CommandListKeysFrame");
+        o.l("endif");
+    }
     for (k, p) in pages.iter().enumerate() {
         o.l(format!("if $s{} == 1", p.n));
         o.l(format!("  $here = {k}"));
@@ -462,7 +515,64 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>) -> St
         o.l("key = XB_B");
         o.l("run = CommandListMenuToggle");
     }
+    if let Some(kl) = key_list { key_list_sections(&mut o, kl, l); }
     o.0
+}
+
+/// The key list's sections: a sheet per live skin with keys, drawn down the top right corner for each character on
+/// screen whose skin it is, and a small picture saying there are none when no sheet was drawn.
+fn key_list_sections(o: &mut Out, kl: &KeyListIni, l: &Layout) {
+    let k = KeyLayout::of(l);
+    o.l("");
+    o.l("; ── the key list the game draws ──");
+    o.section("CommandListKeysFrame");
+    o.l("run = CommandListMenuWindow");
+    o.l("if $ww > 0 && $wh > 0");
+    o.l(format!("  $k = $wh / {}", l.gen_h));
+    for (i, s) in SLOTS.iter().enumerate() {
+        for (j, c) in XYZW.iter().enumerate() { o.l(format!("  $b{} = {c}{s}", i * 4 + j)); }
+    }
+    o.l(format!("  $kx = $ww / $k - {}", k.margin + k.w));
+    o.l(format!("  $ky = {}", k.margin));
+    for s in &kl.sheets {
+        o.l(format!("  if $s{} == 1 && $g{} == {}", s.n, s.n, s.slot));
+        o.l(format!("    ps-t100 = ResourceKeys{}_{}", s.n, s.slot));
+        o.quad("$kx", "$ky", k.w.to_string(), s.h.to_string(), "0", "0");
+        o.l(format!("    $ky = $ky + {}", s.h + k.gap));
+        o.l("  endif");
+    }
+    o.l("  ; none of the characters on screen has a sheet");
+    o.l(format!("  if $ky == {}", k.margin));
+    o.l("    ps-t100 = ResourceKeysNone");
+    o.quad("$kx", "$ky", k.w.to_string(), k.none_h().to_string(), "0", "0");
+    o.l("  endif");
+    o.l("  ps-t100 = null");
+    for (i, s) in SLOTS.iter().enumerate() {
+        for (j, c) in XYZW.iter().enumerate() { o.l(format!("  {c}{s} = $b{}", i * 4 + j)); }
+    }
+    o.l("endif");
+
+    o.section("CommandListKeysToggle");
+    o.l("$keys = 1 - $keys");
+
+    for s in &kl.sheets {
+        o.section(&format!("ResourceKeys{}_{}", s.n, s.slot));
+        o.l(format!("filename = menuk{}_{}.dds", s.n, s.slot));
+    }
+    o.section("ResourceKeysNone");
+    o.l("filename = menukeys.dds");
+
+    if let Some(key) = &kl.key {
+        o.section("KeyGachamodKeys");
+        o.l(format!("key = {key}"));
+        o.l("run = CommandListKeysToggle");
+    }
+    if kl.pad {
+        o.section("KeyMenuKeys");
+        o.l("condition = $open == 1");
+        o.l("key = XB_Y");
+        o.l("run = CommandListKeysToggle");
+    }
 }
 
 /// The words under a character's skins and under the list of characters. `key` is the menu key as the player
@@ -679,6 +789,108 @@ pub(crate) fn render_chrome(l: &Layout, hint: &str, list_hint: &str) -> Canvas {
     c
 }
 
+/// One live skin's keys for the key list the game draws.
+pub(crate) struct Sheet { pub n: u32, pub slot: u32, pub name: String, pub rows: Vec<crate::keylist::KeyRow> }
+
+/// The dim note after a key: how it works when that isn't a plain press.
+fn key_note(r: &crate::keylist::KeyRow) -> String {
+    match r.kind.as_str() {
+        "hold" => "Hold".into(),
+        "cycle" if r.options > 2 => format!("{} options", r.options),
+        _ => String::new(),
+    }
+}
+
+/// The words in a sheet's footer, and in the picture that says no character on screen has keys. `key` is the key
+/// list key as the player reads it ("F8").
+pub(crate) fn key_hints(key: &str) -> (String, String) { (format!("{key} hide keys"), format!("{key} hide this")) }
+
+/// A sheet: the mod's name, one row per key (the key, what it changes, a note), and the key that hides it.
+pub(crate) fn render_sheet(s: &Sheet, l: &Layout, hint: &str) -> Canvas {
+    let k = KeyLayout::of(l);
+    let mut c = Canvas::new(k.w, k.sheet_h(s.rows.len()), BG);
+    c.fill(0, 0, k.w, k.head, BAND);
+    c.fill(0, 0, l.bar, k.head, [ACCENT[0], ACCENT[1], ACCENT[2], 255]);
+    c.text(k.pad + l.bar, 0, k.w.saturating_sub(2 * k.pad + l.bar), k.head, &s.name, l.s(17), true, TEXT);
+    let cut = s.rows.len() > KEY_ROWS;
+    let shown = if cut { KEY_ROWS - 1 } else { s.rows.len() };
+    let what_x = k.pad + k.key_w;
+    let what_w = k.w.saturating_sub(what_x + k.note_w + k.pad);
+    for (i, r) in s.rows.iter().take(shown).enumerate() {
+        let y = k.head + i as u32 * k.row;
+        c.text(k.pad, y, k.key_w.saturating_sub(l.s(8)), k.row, &r.keys.join(", "), l.s(15), true, ACCENT);
+        c.text(what_x, y, what_w, k.row, &r.what, l.s(15), false, TEXT);
+        c.text(k.w - k.pad - k.note_w + l.s(8), y, k.note_w - l.s(8), k.row, &key_note(r), l.s(13), false, DIM);
+        c.fill(k.pad, y + k.row - 1, k.w - 2 * k.pad, 1, LINE);
+    }
+    if cut {
+        let y = k.head + shown as u32 * k.row;
+        c.text(k.pad, y, k.w - 2 * k.pad, k.row, &format!("{} more keys", s.rows.len() - shown), l.s(14), false, DIM);
+    }
+    let fy = k.head + s.rows.len().min(KEY_ROWS) as u32 * k.row;
+    c.fill(0, fy, k.w, k.foot, BAND);
+    c.text(k.pad, fy, k.w - 2 * k.pad, k.foot, hint, l.s(13), false, DIM);
+    c
+}
+
+/// The picture drawn when none of the characters on screen has a sheet.
+pub(crate) fn render_no_keys(l: &Layout, hint: &str) -> Canvas {
+    let k = KeyLayout::of(l);
+    let mut c = Canvas::new(k.w, k.none_h(), BG);
+    c.text(k.pad, 0, k.w - 2 * k.pad, k.head, "No mod keys for the characters on screen", l.s(15), false, TEXT);
+    c.fill(0, k.head, k.w, k.foot, BAND);
+    c.text(k.pad, k.head, k.w - 2 * k.pad, k.foot, hint, l.s(13), false, DIM);
+    c
+}
+
+/// Write the key list's pictures that changed since last time (hashes in `menukeys.json`), and remove the ones of
+/// sheets that are gone. With no sheets every key list file goes. True when a file was written or removed.
+pub(crate) fn write_key_assets(dir: &Path, sheets: &[Sheet], l: &Layout, key: &str) -> Result<bool> {
+    let mut changed = false;
+    let marks = dir.join("menukeys.json");
+    let old: HashMap<String, String> = std::fs::read(&marks).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    let mut new: HashMap<String, String> = HashMap::new();
+    let mut files: Vec<String> = Vec::new();
+    if !sheets.is_empty() {
+        let base = format!("{VERSION}:{}", l.gen_h);
+        let (hint, none_hint) = key_hints(key);
+        let mark = stamp(&[base.clone(), none_hint.clone()]);
+        let file = dir.join("menukeys.dds");
+        if old.get("none") != Some(&mark) || !file.is_file() {
+            crate::xxmi::write_atomic(&file, &dds(&render_no_keys(l, &none_hint)))?;
+            changed = true;
+        }
+        new.insert("none".into(), mark);
+        files.push("menukeys.dds".into());
+        for s in sheets {
+            let mut parts = vec![base.clone(), hint.clone(), s.name.clone()];
+            for r in &s.rows { parts.extend([r.keys.join("\u{1}"), r.what.clone(), key_note(r)]); }
+            let mark = stamp(&parts);
+            let id = format!("{}_{}", s.n, s.slot);
+            let file = dir.join(format!("menuk{id}.dds"));
+            if old.get(&id) != Some(&mark) || !file.is_file() {
+                crate::xxmi::write_atomic(&file, &dds(&render_sheet(s, l, &hint)))?;
+                changed = true;
+            }
+            new.insert(id.clone(), mark);
+            files.push(format!("menuk{id}.dds"));
+        }
+    }
+    // sheets of skins that aren't live or listed any more
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_ascii_lowercase();
+            if name.starts_with("menuk") && name.ends_with(".dds") && !files.contains(&name) && std::fs::remove_file(e.path()).is_ok() { changed = true; }
+        }
+    }
+    if new.is_empty() {
+        let _ = std::fs::remove_file(&marks);
+    } else if new != old {
+        crate::xxmi::write_atomic(&marks, &serde_json::to_vec(&new)?)?;
+    }
+    Ok(changed)
+}
+
 /// A .dds file holding `c` as plain 8-bit RGBA, the one format every loader build reads the same way.
 pub(crate) fn dds(c: &Canvas) -> Vec<u8> {
     let mut b = Vec::with_capacity(148 + c.px.len());
@@ -757,7 +969,7 @@ fn file_mark(path: &str) -> String {
 
 fn is_ours(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
-    n == "menu.hlsl" || n == "menu.json" || (n.starts_with("menu") && n.ends_with(".dds")) || (n.starts_with("menu") && n.ends_with(".bin"))
+    n == "menu.hlsl" || n == "menu.json" || n == "menukeys.json" || (n.starts_with("menu") && n.ends_with(".dds")) || (n.starts_with("menu") && n.ends_with(".bin"))
 }
 
 /// Take the menu's files out of the live folder (the menu was turned off, or nothing is live any more).
@@ -901,7 +1113,7 @@ mod tests {
     #[test]
     fn ini_has_the_menu_and_balanced_ifs() {
         let l = Layout::new(1080);
-        let t = sections(&pages(), &l, Some(&Keys { open: Some("no_modifiers VK_F7".into()), pad_open: true, pad: true }));
+        let t = sections(&pages(), &l, Some(&Keys { open: Some("no_modifiers VK_F7".into()), pad_open: true, pad: true }), None);
         assert!(t.contains("[CommandListSeen2]\r\n$s2 = 1\r\n"));
         assert!(t.contains("[KeyMenuOpen]\r\nkey = no_modifiers VK_F7\r\nkey = XB_LEFT_THUMB XB_RIGHT_THUMB\r\nrun = CommandListMenuToggle\r\n"));
         // row 2 of the first character is slot 4
@@ -912,7 +1124,12 @@ mod tests {
         assert!(t.contains("[KeyMenuList]\r\ncondition = $open == 1\r\nkey = VK_LEFT\r\nkey = XB_DPAD_LEFT\r\nrun = CommandListMenuList\r\n"));
         assert!(t.contains("[ResourceMenuPage7]\r\nfilename = menu7.dds\r\n"));
         assert!(t.contains("post $s7 = 0\r\n"));
-        // every section closes the ifs it opens, and every list it runs is there
+        assert!(!t.contains("Keys"), "no key list asked for");
+        balanced(&t, &constants(&pages(), true, false));
+    }
+
+    /// Every section closes the ifs it opens, every list it runs is there, and every variable it uses is declared.
+    fn balanced(t: &str, consts: &str) {
         let mut depth = 0i32;
         let mut names = Vec::new();
         for line in t.lines() {
@@ -927,8 +1144,6 @@ mod tests {
             let Some(target) = line.trim().strip_prefix("run = ") else { continue };
             assert!(target.starts_with("BuiltIn") || names.iter().any(|n| n == target), "{target} is missing");
         }
-        // every variable used is declared
-        let consts = constants(&pages(), true);
         for v in t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '$' || c == '_')).filter(|w| w.starts_with('$')) {
             assert!(v.starts_with("$g") || consts.contains(&format!("global {v} = 0")), "{v} isn't declared");
         }
@@ -938,15 +1153,79 @@ mod tests {
     fn one_character_has_no_arrows_and_off_keeps_the_flags() {
         let l = Layout::new(1080);
         let one = vec![IniPage { n: 1, slots: vec![1, 2] }];
-        let t = sections(&one, &l, Some(&Keys { open: None, pad_open: false, pad: false }));
+        let t = sections(&one, &l, Some(&Keys { open: None, pad_open: false, pad: false }), None);
         assert!(!t.contains("CommandListMenuList") && !t.contains("ResourceMenuList") && !t.contains("[KeyMenuOpen]") && !t.contains("XB_"));
         assert!(t.contains("[CommandListMenuShow]\r\n; show the row the keys are on: row 0 is none of them\r\nif $char == 0\r\n  if $sel == 0\r\n    $g1 = 0\r\n"));
         // the app opens it, and a controller still moves in it
-        let t = sections(&one, &l, Some(&Keys { open: None, pad_open: false, pad: true }));
+        let t = sections(&one, &l, Some(&Keys { open: None, pad_open: false, pad: true }), None);
         assert!(!t.contains("[KeyMenuOpen]") && t.contains("key = XB_DPAD_UP") && t.contains("[KeyMenuClose]"));
-        let off = sections(&one, &l, None);
+        let off = sections(&one, &l, None, None);
         assert!(off.contains("[CommandListSeen1]") && !off.contains("[Present]"));
-        assert!(constants(&one, false).contains("global $open = 0") && constants(&one, false).contains("global $s1 = 0"));
+        assert!(constants(&one, false, false).contains("global $open = 0") && constants(&one, false, false).contains("global $s1 = 0"));
+    }
+
+    fn key_list(key: Option<&str>, pad: bool) -> KeyListIni {
+        KeyListIni { sheets: vec![IniSheet { n: 2, slot: 4, h: 200 }, IniSheet { n: 7, slot: 3, h: 104 }], key: key.map(str::to_string), pad }
+    }
+
+    #[test]
+    fn key_list_draws_a_sheet_per_skin_on_screen() {
+        let l = Layout::new(1080);
+        let k = KeyLayout::of(&l);
+        let keys = Keys { open: None, pad_open: false, pad: true };
+        let t = sections(&pages(), &l, Some(&keys), Some(&key_list(None, true)));
+        assert!(t.contains("[Present]\r\nif $keys == 1\r\n  run = CommandListKeysFrame\r\nendif\r\n"));
+        // a sheet shows while its character is on screen wearing that skin, and the next one goes under it
+        assert!(t.contains(&format!("  if $s2 == 1 && $g2 == 4\r\n    ps-t100 = ResourceKeys2_4\r\n$qx = $kx\r\n$qy = $ky\r\n$qw = {}\r\n$qh = 200\r\n", k.w)));
+        assert!(t.contains(&format!("    $ky = $ky + {}\r\n  endif\r\n  if $s7 == 1 && $g7 == 3\r\n", 200 + k.gap)));
+        assert!(t.contains(&format!("  $kx = $ww / $k - {}\r\n  $ky = {}\r\n", k.margin + k.w, k.margin)));
+        assert!(t.contains(&format!("  if $ky == {}\r\n    ps-t100 = ResourceKeysNone\r\n", k.margin)) && t.contains("[ResourceKeysNone]\r\nfilename = menukeys.dds\r\n"));
+        assert!(t.contains("[ResourceKeys7_3]\r\nfilename = menuk7_3.dds\r\n"));
+        assert!(t.contains("[CommandListKeysToggle]\r\n$keys = 1 - $keys\r\n"));
+        // the app holds the key, and Y shows it from the skin menu
+        assert!(!t.contains("[KeyGachamodKeys]"));
+        assert!(t.contains("[KeyMenuKeys]\r\ncondition = $open == 1\r\nkey = XB_Y\r\nrun = CommandListKeysToggle\r\n"));
+        balanced(&t, &constants(&pages(), true, true));
+        // the game binds the key itself, and without a controller there is no Y
+        let t = sections(&pages(), &l, Some(&keys), Some(&key_list(Some("no_modifiers VK_F8"), false)));
+        assert!(t.contains("[KeyGachamodKeys]\r\nkey = no_modifiers VK_F8\r\nrun = CommandListKeysToggle\r\n") && !t.contains("XB_Y"));
+        balanced(&t, &constants(&pages(), true, true));
+        // no sheet, or the menu off: nothing of the key list
+        let none = KeyListIni { sheets: vec![], key: Some("no_modifiers VK_F8".into()), pad: true };
+        assert!(!sections(&pages(), &l, Some(&keys), Some(&none)).contains("Keys"));
+        assert!(!sections(&pages(), &l, None, Some(&key_list(Some("no_modifiers VK_F8"), true))).contains("Keys"));
+    }
+
+    fn row(what: &str, kind: &str, options: u32) -> crate::keylist::KeyRow {
+        crate::keylist::KeyRow { keys: vec!["F6".into()], what: what.into(), kind: kind.into(), options, on_screen: true }
+    }
+
+    #[test]
+    fn key_sheets_are_written_once_and_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let l = Layout::new(1080);
+        let k = KeyLayout::of(&l);
+        let sheets = vec![Sheet { n: 3, slot: 1, name: "Maid".into(), rows: vec![row("Jacket", "cycle", 3), row("Glow", "hold", 0)] }];
+        assert!(write_key_assets(dir.path(), &sheets, &l, "F8").unwrap());
+        assert!(dir.path().join("menuk3_1.dds").is_file() && dir.path().join("menukeys.dds").is_file() && dir.path().join("menukeys.json").is_file());
+        assert!(!write_key_assets(dir.path(), &sheets, &l, "F8").unwrap());
+        // another key in the footer makes it again
+        assert!(write_key_assets(dir.path(), &sheets, &l, "F9").unwrap());
+        // a long list is cut, and its picture is as high as the ini says
+        let many: Vec<_> = (0..20).map(|i| row(&format!("Part {i}"), "toggle", 2)).collect();
+        assert_eq!(render_sheet(&Sheet { n: 3, slot: 1, name: "Maid".into(), rows: many.clone() }, &l, "F8 hide keys").h, k.sheet_h(many.len()));
+        assert_eq!(k.sheet_h(many.len()), k.head + 14 * k.row + k.foot);
+        // a sheet that's gone loses its picture, and no sheets take every key list file away
+        let other = vec![Sheet { n: 4, slot: 2, name: "Coat".into(), rows: many }];
+        assert!(write_key_assets(dir.path(), &other, &l, "F8").unwrap());
+        assert!(!dir.path().join("menuk3_1.dds").exists() && dir.path().join("menuk4_2.dds").is_file());
+        // the menu's own pictures are left alone
+        std::fs::write(dir.path().join("menu4.dds"), b"x").unwrap();
+        assert!(write_key_assets(dir.path(), &[], &l, "F8").unwrap());
+        let left: Vec<String> = std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(left, vec!["menu4.dds".to_string()]);
+        assert_eq!(key_note(&row("Jacket", "cycle", 2)), "");
+        assert_eq!(key_note(&row("Jacket", "cycle", 5)), "5 options");
     }
 
     #[test]
@@ -1007,7 +1286,16 @@ mod tests {
         // and the sections as they go into live.ini, to read through
         let keys = Keys { open: Some("no_modifiers VK_F7".into()), pad_open: true, pad: true };
         let text = format!("[Constants]
-{}{}", constants(&pages(), true), sections(&pages(), &l, Some(&keys)));
+{}{}", constants(&pages(), true, true), sections(&pages(), &l, Some(&keys), Some(&key_list(None, true))));
         std::fs::write(std::path::Path::new(&out).join("menu-sections.ini"), text).unwrap();
+        // a key sheet, cut after its rows run out, and the picture shown when no one on screen has keys
+        let mut rows = vec![row("Jacket", "cycle", 3), row("Glow", "hold", 0), row("Hat", "toggle", 2)];
+        rows[1].keys = vec!["Ctrl+H".into(), "Pad LB+Pad A".into()];
+        rows.extend((0..14).map(|i| row(&format!("Accessory {i}"), "toggle", 2)));
+        let (hint, none_hint) = key_hints("F8");
+        let s = render_sheet(&Sheet { n: 1, slot: 1, name: "Ellen Joe: Maid (School uniform)".into(), rows }, &l, &hint);
+        image::RgbaImage::from_raw(s.w, s.h, s.px).unwrap().save(std::path::Path::new(&out).join("menu-keys.png")).unwrap();
+        let s = render_no_keys(&l, &none_hint);
+        image::RgbaImage::from_raw(s.w, s.h, s.px).unwrap().save(std::path::Path::new(&out).join("menu-no-keys.png")).unwrap();
     }
 }

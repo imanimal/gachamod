@@ -515,9 +515,11 @@ fn by_name(store: &Store) -> Vec<&GroupRec> {
     v
 }
 
-fn live_ini(store: &Store, set: &MenuSettings, lay: &menu::Layout, reach: bool) -> String {
+/// `key_list`: the key list the game draws, when it is on and a live skin has keys to show.
+fn live_ini(store: &Store, set: &MenuSettings, lay: &menu::Layout, reach: bool, key_list: Option<&menu::KeyListIni>) -> String {
     let nl = "\r\n";
     let on = set.style != "off";
+    let key_list = key_list.filter(|k| on && !k.sheets.is_empty());
     let pages: Vec<menu::IniPage> = by_name(store).into_iter().map(|g| menu::IniPage { n: g.n, slots: g.slots.iter().map(|s| s.slot).collect() }).collect();
     let mut s = String::new();
     s.push_str(&format!("; gachamod writes this file to switch skins in game without a reload. Your changes here are replaced.{nl}"));
@@ -526,7 +528,7 @@ fn live_ini(store: &Store, set: &MenuSettings, lay: &menu::Layout, reach: bool) 
     s.push_str(&format!("global persist $asked = 0{nl}"));
     for i in 0..BITS { s.push_str(&format!("global $c{i} = 0{nl}")); }
     s.push_str(&format!("global $cv = 0{nl}global $cg = 0{nl}"));
-    s.push_str(&menu::constants(&pages, on));
+    s.push_str(&menu::constants(&pages, on, key_list.is_some()));
     s.push_str(&format!("{nl}; how the app talks to the game: while it holds Clear, the keys F13 to F22 it holds are the bits of a number,{nl}"));
     s.push_str(&format!("; a tap of F23 keeps that number as the group, and a tap of F24 shows that slot of the group{nl}"));
     for i in 0..BITS {
@@ -545,12 +547,16 @@ fn live_ini(store: &Store, set: &MenuSettings, lay: &menu::Layout, reach: bool) 
         s.push_str(&format!("; with no group, {} opens or closes the menu{nl}", menu::TOGGLE));
         s.push_str(&format!("if $cg == 0 && $cv == {}{nl}  run = CommandListMenuToggle{nl}endif{nl}", menu::TOGGLE));
     }
+    if key_list.is_some() {
+        s.push_str(&format!("; with no group, {} shows or hides the key list{nl}", menu::KEYS));
+        s.push_str(&format!("if $cg == 0 && $cv == {}{nl}  run = CommandListKeysToggle{nl}endif{nl}", menu::KEYS));
+    }
     s.push_str(&format!("$cg = 0{nl}"));
     // the game binds the key itself when it always draws the menu, and when the app's own key can't work with this
     // game: otherwise the app holds the key and decides
     let direct = set.style == "game" || !reach;
     let keys = on.then(|| menu::Keys { open: direct.then(|| crate::hotkeys::migoto_form(&set.key)), pad_open: direct && set.pad, pad: set.pad });
-    let mut menu = menu::sections(&pages, lay, keys.as_ref());
+    let mut menu = menu::sections(&pages, lay, keys.as_ref(), key_list);
     let waiting: Vec<&GroupRec> = store.groups.iter().filter(|g| store.waiting.contains(&g.n)).collect();
     if !waiting.is_empty() {
         // a saved value wins over the defaults above at a load, so picks the app couldn't key in are asked for here:
@@ -591,7 +597,19 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
     std::fs::create_dir_all(&dir)?;
     let set = menu_settings(db, game);
     let lay = menu::Layout::new(screen_height());
-    let text = live_ini(store, &set, &lay, reaches(db, game));
+    let reach = reaches(db, game);
+    let sheets = if set.style == "off" { Vec::new() } else { key_sheets(db, game, store) };
+    let key_list = (!sheets.is_empty()).then(|| {
+        let ks = crate::keylist::settings(db, game);
+        let kl = menu::KeyLayout::of(&lay);
+        menu::KeyListIni {
+            sheets: sheets.iter().map(|s| menu::IniSheet { n: s.n, slot: s.slot, h: kl.sheet_h(s.rows.len()) }).collect(),
+            // the game binds the key when it always draws the list, or when the app's own key can't reach it
+            key: (ks.style == "game" || !reach).then(|| crate::hotkeys::migoto_form(&ks.key)),
+            pad: set.pad,
+        }
+    });
+    let text = live_ini(store, &set, &lay, reach, key_list.as_ref());
     let mut changed = false;
     let old = std::fs::read(&file).ok();
     if old.as_deref() != Some(text.as_bytes()) {
@@ -603,6 +621,8 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
     }
     if set.style == "off" { return Ok(menu::clear(&dir) || changed); }
     // the pictures are a nicety: a pick must not fail because one couldn't be drawn
+    let key = crate::keylist::settings(db, game).key;
+    if menu::write_key_assets(&dir, &sheets, &lay, &key).unwrap_or(false) { changed = true; }
     let mods = crate::library::list(db, game).unwrap_or_default();
     let by_id: HashMap<&str, &ModEntry> = mods.iter().map(|m| (m.id.as_str(), m)).collect();
     let pages: Vec<menu::Page> = by_name(store).into_iter().map(|g| menu::Page {
@@ -613,6 +633,20 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
         }).collect(),
     }).collect();
     Ok(menu::write_assets(&dir, &pages, &lay, &set.key).unwrap_or(false) || changed)
+}
+
+/// The key list's sheets: each live skin the key list shows, with its keys, in the menu's order.
+fn key_sheets(db: &Db, game: &str, store: &Store) -> Vec<menu::Sheet> {
+    let ids: Vec<&str> = store.groups.iter().flat_map(|g| g.slots.iter().map(|s| s.mod_id.as_str())).collect();
+    let mut listed = crate::keylist::listed_rows(db, game, &ids);
+    if listed.is_empty() { return Vec::new(); }
+    let mut out = Vec::new();
+    for g in by_name(store) {
+        for s in &g.slots {
+            if let Some((name, rows)) = listed.remove(&s.mod_id) { out.push(menu::Sheet { n: g.n, slot: s.slot, name, rows }); }
+        }
+    }
+    out
 }
 
 pub fn menu_settings(db: &Db, game: &str) -> MenuSettings {
@@ -629,6 +663,8 @@ pub fn set_menu(db: &Db, game: &str, set: &MenuSettings) -> Result<MenuSettings>
     if set.style == "game" && menu_settings(db, game).style != "game" { tester_only(db, game)?; }
     let key = crate::hotkeys::normalize_menu(&set.key)?;
     if crate::hotkeys::combos(db).unwrap_or_default().contains(&key) { return Err(Error::Invalid(format!("{key} already switches a profile. Pick another key"))); }
+    let keys = crate::keylist::settings(db, game);
+    if keys.on && keys.key == key { return Err(Error::Invalid(format!("{key} already shows the key list. Pick another key"))); }
     db.set_setting(&format!("{game}.liveMenu"), &set.style)?;
     db.set_setting(&format!("{game}.liveMenuKey"), &key)?;
     db.set_setting(&format!("{game}.liveMenuPad"), if set.pad { "1" } else { "0" })?;
@@ -680,6 +716,11 @@ pub(crate) fn fast_saves(db: &Db, game: &str) {
 pub fn menu_keys(db: &Db) -> Vec<(String, MenuSettings)> {
     crate::games::GAMES.iter().filter(|g| !load(db, g.id).groups.is_empty())
         .map(|g| (g.id.to_string(), menu_settings(db, g.id))).filter(|(g, s)| s.style == "window" && reaches(db, g)).collect()
+}
+
+/// Every game with live characters, and whether gachamod's keys reach it (the key list's keys hang on this).
+pub fn menu_keys_all(db: &Db) -> Vec<(String, bool)> {
+    crate::games::GAMES.iter().filter(|g| !load(db, g.id).groups.is_empty()).map(|g| (g.id.to_string(), reaches(db, g.id))).collect()
 }
 
 /// With the game closed, the saved value is what it loads next time (it wins over live.ini's default).
@@ -1297,6 +1338,15 @@ pub fn send_menu_toggle(game: &str) -> Result<()> {
     Ok(())
 }
 
+/// Show or hide the key list the game draws (the app's key list key was pressed while the game holds the screen).
+pub fn send_keys_toggle(game: &str) -> Result<()> {
+    if std::env::var_os("GACHAMOD_NO_RELOAD").is_some() { return Ok(()); }
+    let _one = TAPPING.lock().unwrap_or_else(|e| e.into_inner());
+    crate::devtools::focus_game(game)?;
+    win::tap(0, menu::KEYS);
+    Ok(())
+}
+
 /// Tell the running game: bring it to the front and key in the group and the slot.
 pub fn send(game: &str, group: u32, slot: u32) -> Result<()> {
     if cfg!(test) { return if TEST_TAPS.with(|t| t.get()) { Ok(()) } else { Err(Error::Invalid("out of reach".into())) }; }
@@ -1418,14 +1468,14 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
     #[test]
     fn live_ini_reads_the_keys() {
         let s = Store { groups: vec![GroupRec { n: 2, character: "Ellen".into(), active: 4, next: 5, slots: vec![] }], ..Default::default() };
-        let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true);
+        let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, None);
         // the app's own key can open the game's menu, and the game binds no key of its own for it
         assert!(t.contains("if $cg == 0 && $cv == 1\r\n  run = CommandListMenuToggle\r\nendif\r\n$cg = 0\r\n") && !t.contains("[KeyMenuOpen]"));
-        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false, fast_save: true }, &menu::Layout::new(1080), true);
+        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false, fast_save: true }, &menu::Layout::new(1080), true, None);
         assert!(direct.contains("[KeyMenuOpen]\r\nkey = ctrl alt no_shift no_windows M\r\nrun = CommandListMenuToggle"));
-        let off = live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true);
+        let off = live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true, None);
         // a game that runs as administrator while the app doesn't: the app's key can't work, so the game binds it
-        let alone = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), false);
+        let alone = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), false, None);
         assert!(alone.contains("[KeyMenuOpen]\r\nkey = no_modifiers VK_F7\r\nkey = XB_LEFT_THUMB XB_RIGHT_THUMB\r\nrun = CommandListMenuToggle"));
         assert!(off.contains("[CommandListSeen2]") && !off.contains("CommandListMenuToggle"));
         assert!(t.contains("namespace = gachamod\\live\r\n"));
@@ -1436,5 +1486,21 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
         assert!(t.contains("[KeyGachamodGroup]\r\nkey = VK_CLEAR VK_F23\r\nrun = CommandListGachamodGroup\r\n"));
         assert!(t.contains("[CommandListGachamodPick]\r\nrun = CommandListGachamodNumber\r\nif $cg == 2\r\n  $g2 = $cv\r\nendif\r\n"));
         assert!(!t.contains("cursor_screen"));
+    }
+
+    #[test]
+    fn live_ini_has_the_key_list_when_a_sheet_exists() {
+        let s = Store { groups: vec![GroupRec { n: 2, character: "Ellen".into(), active: 4, next: 5, slots: vec![SlotRec { slot: 4, mod_id: "m".into() }] }], waiting: vec![2], ask: 3, ..Default::default() };
+        let kl = menu::KeyListIni { sheets: vec![menu::IniSheet { n: 2, slot: 4, h: 150 }], key: None, pad: true };
+        let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, Some(&kl));
+        // the number 2 with no group shows or hides it
+        assert!(t.contains("if $cg == 0 && $cv == 2\r\n  run = CommandListKeysToggle\r\nendif\r\n$cg = 0\r\n"));
+        assert!(t.contains("global $keys = 0\r\n") && !t.contains("global persist $keys"));
+        // the waiting picks are still asked for first in [Present]
+        assert!(t.contains("[Present]\r\nrun = CommandListGachamodAsked\r\nif $keys == 1\r\n  run = CommandListKeysFrame\r\nendif\r\n"));
+        // no sheet, or the menu off: none of it
+        let none = menu::KeyListIni { sheets: vec![], key: None, pad: true };
+        assert!(!live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, Some(&none)).contains("Keys"));
+        assert!(!live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true, Some(&kl)).contains("Keys"));
     }
 }

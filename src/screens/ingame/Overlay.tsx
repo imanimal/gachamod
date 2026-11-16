@@ -1,10 +1,11 @@
 // The menu shown over a running game (src-tauri overlay.rs): its own window, opened with the menu key or by pressing
-// both sticks of a controller. It has three tabs.
+// both sticks of a controller. It has four tabs.
 // My mods: characters down the left with their pictures and a search above them, the picked character's skins and
 // other mods on the right, and any mod's details. Picking a skin shows it in the game, and the menu closes or stays
 // open by its "Close after picking" setting along the bottom. A mod that doesn't switch in game turns on alone (the
 // character's other mods go off); Shift+click, Shift+Enter or "Turn on with others" in its right-click menu keeps
 // the others on.
+// Keys: the toggle keys of the mods showing now (OverlayKeys.tsx). The key list's own key (F8) opens the menu here.
 // Browse: the app's own GameBanana browser (browse/GbBrowser.tsx), whole: every sort and filter, the character row,
 // more mods as the list scrolls, a mod's page with its files, and creators' pages.
 // Downloads: the app's Downloads screen.
@@ -12,7 +13,7 @@
 // page is a route. A page only the app has (Settings, Tools) opens in gachamod's own window.
 // In a browser, #overlay shows it with the demo data. Owner: INGAME area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { app as appApi, errorText, fileUrl, library, skinMenu, type GameId, type GameState, type LiveGroup, type ModEntry } from "../../lib/api";
+import { KEY_LIST_SHOWN, app as appApi, errorText, fileUrl, library, skinMenu, type GameId, type GameState, type LiveGroup, type ModEntry } from "../../lib/api";
 import { installGamepad, moveFocus } from "../../lib/gamepad";
 import { installUndoKeys } from "../../lib/history";
 import "../../lib/places";
@@ -34,11 +35,14 @@ import { OnlineOverlays } from "../browse/OnlineOverlays";
 import { openGbMod, openWithFilters } from "../browse/state";
 import { Downloads } from "../downloads/Downloads";
 import { isNewSkin, markShown, newSkinTip, reloadLive, useLive } from "./data";
+import { useKeyList } from "./KeyListParts";
+import { KeysTab } from "./OverlayKeys";
 import "./overlay.css";
 
-type Tab = "mine" | "browse" | "downloads";
-const TABS: Tab[] = ["mine", "browse", "downloads"];
-const VIEW_OF: Record<Tab, View> = { mine: "library", browse: "browse", downloads: "downloads" };
+// Keys has no page of its own in the app: it shows over whatever page the menu is on, until another tab or page opens
+type Tab = "mine" | "keys" | "browse" | "downloads";
+const TABS: Tab[] = ["mine", "keys", "browse", "downloads"];
+const VIEW_OF: Record<Exclude<Tab, "keys">, View> = { mine: "library", browse: "browse", downloads: "downloads" };
 /** The tab a page shows in, or null for a page only the app's own window has. */
 const tabOf = (r: Route): Tab | null => (r.view === "library" ? "mine" : r.view === "browse" ? "browse" : r.view === "downloads" ? "downloads" : null);
 /** Mods with no character sit under this name, last in the list. */
@@ -63,6 +67,8 @@ function touch(game: GameId, character: string) {
 export function Overlay() {
   const [game, setMenuGame] = useState<GameId | null>(null);
   const [opened, setOpened] = useState(0);
+  /** The tab the menu was opened on: the key list's own key opens it on Keys. */
+  const [openTab, setOpenTab] = useState<"keys" | null>(null);
   const games = useGames();
   const current = useGameId();
   const state = games.find((g) => g.id === game) ?? null;
@@ -74,7 +80,9 @@ export function Overlay() {
     void refreshGames();
     void skinMenu.game().then((g) => { if (g) setMenuGame(g); });
     const offs = [
-      held(listen<{ game: GameId }>("overlay-open", (p) => { setMenuGame(p.game); void reloadLive(p.game); setOpened((n) => n + 1); })),
+      held(listen<{ game: GameId; tab?: "keys" }>("overlay-open", (p) => {
+        setMenuGame(p.game); setOpenTab(p.tab === "keys" ? "keys" : null); void reloadLive(p.game); setOpened((n) => n + 1);
+      })),
       // what the backend says ("Installed X for Y"). The app's own window turns a new mod on (library/afterInstall.ts);
       // here the message shows with the way to the mod
       held(appApi.onToast((p) => {
@@ -94,7 +102,7 @@ export function Overlay() {
   if (!game) return <div className="ov"><div className="ov-wait"><Waiting what="Finding the game this menu is for" /></div></div>;
   return (
     <>
-      <Menu key={game} game={game} state={state} opened={opened} />
+      <Menu key={game} game={game} state={state} opened={opened} openTab={openTab} />
       {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
       <ContextMenuHost />
       <Toasts />
@@ -121,11 +129,18 @@ function useMods(game: GameId, opened: number): [ModEntry[] | null, () => Promis
   return [mods, load];
 }
 
-function Menu({ game, state, opened }: { game: GameId; state: GameState | null; opened: number }) {
+function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState | null; opened: number; openTab: "keys" | null }) {
   const info = useLive(game);
   const [mods, reloadMods] = useMods(game, opened);
+  const kl = useKeyList(game, opened);
+  const keysOn = KEY_LIST_SHOWN && (kl.list?.settings.on ?? true);
+  const tabList = keysOn ? TABS : TABS.filter((t) => t !== "keys");
+  const tabsRef = useRef(tabList);
+  tabsRef.current = tabList;
   const route = useRoute();
-  const tab = tabOf(route) ?? "mine";
+  /** The page Keys was picked on: Keys shows while that page does, so any page opened after it leaves Keys. */
+  const [keysAt, setKeysAt] = useState<Route | null>(null);
+  const tab: Tab = keysOn && keysAt === route ? "keys" : tabOf(route) ?? "mine";
   const tabRef = useRef(tab);
   tabRef.current = tab;
   /** How many downloads are running or waiting, or failed when none are, for the tab's name (OnlineOverlays counts). */
@@ -145,7 +160,15 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
   const close = useCallback(() => void skinMenu.hide(game), [game]);
   const detailRef = useRef(detail);
   detailRef.current = detail;
-  const setTab = useCallback((t: Tab) => { setDetail(null); go({ view: VIEW_OF[t] }); }, []);
+  const setTab = useCallback((t: Tab) => {
+    setDetail(null);
+    if (t === "keys") { setKeysAt(currentRoute()); return; }
+    setKeysAt(null);
+    go({ view: VIEW_OF[t] });
+  }, []);
+  const openKeySettings = useCallback(() => {
+    skinMenu.openInApp(game, { view: "tools", section: "keylist" }).catch((e) => toast(errorText(e), true));
+  }, [game]);
   /** Esc, B and the Back button: out of a mod's details, back from a creator's page to the mods, else close the menu. */
   const leave = useCallback(() => {
     const r = currentRoute();
@@ -184,7 +207,8 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
   const who = shown.find((w) => w.name === sel) ?? shown[0] ?? null;
   const loading = info === null || mods === null;
 
-  // each time it opens: My mods, no search or details left over, on the character played last, on the skin that is showing
+  // each time it opens: My mods (or Keys when its own key opened it), no search or details left over, on the character
+  // played last, on the skin that is showing
   useEffect(() => {
     setQ("");
     setNote(null);
@@ -192,7 +216,8 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
     setDetail(null);
     setSel(null);
     go({ view: "library" });
-  }, [opened]);
+    setKeysAt(openTab === "keys" ? currentRoute() : null);
+  }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pages the app's parts ask for (a card's Installed tag, a character's name, a toast's button). A mod of the
   // library opens its details here. A character opens their skins, or their mods on GameBanana when there are none.
@@ -235,7 +260,7 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
       field?.focus();
       return !!field;
     };
-    const turn = (d: 1 | -1) => setTab(TABS[(TABS.indexOf(tabRef.current) + d + TABS.length) % TABS.length]!);
+    const turn = (d: 1 | -1) => { const ts = tabsRef.current; setTab(ts[(ts.indexOf(tabRef.current) + d + ts.length) % ts.length]!); };
     const details = () => (document.activeElement?.closest(".ov-cell")?.querySelector<HTMLElement>(".ov-more") ?? null)?.click();
     const onKey = (e: KeyboardEvent) => {
       // a right-click menu that is open takes the keys
@@ -352,8 +377,11 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
   const toSkins = () => window.setTimeout(() =>
     (root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile, .ov-rail .ov-who"))?.focus(), 0);
   const tipFor = (character: string) => (on: boolean) => setHint(on ? newSkinTip(character) : null);
-  const tabs = "Tab or the bumpers switch between My mods, Browse and Downloads";
-  const keys = tab === "mine"
+  const tabs = `Tab or the bumpers switch between My mods, ${keysOn ? "Keys, " : ""}Browse and Downloads`;
+  const listKey = kl.list?.settings.key;
+  const keys = tab === "keys"
+    ? `Arrows or the D-pad move between mods, typing searches, ${tabs}, Esc${listKey ? `, ${listKey}` : ""} or ${key} closes.`
+    : tab === "mine"
     ? `Arrows or the D-pad move, Enter or A picks, Shift+click or Shift+Enter turns a mod on next to the others, right-click or the menu button shows more, I shows details, ${tabs}, Esc or ${key} closes.`
     : tab === "browse"
       ? `Click a mod for its page with its files, I or X installs the one in focus, right-click or the menu button shows more, typing searches, ${tabs}, Esc or ${key} ${route.user ? "goes back to the mods" : "closes"}.`
@@ -366,6 +394,8 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
         <Segmented size="sm" label="What to show" value={tab} onChange={setTab}
           options={[
             { value: "mine", label: "My mods", icon: "mods", title: "Your characters, their skins and their other mods (Tab switches)" },
+            ...(keysOn ? [{ value: "keys" as const, label: "Keys", icon: "keyboard" as const,
+              title: `The toggle keys of the mods showing now${listKey ? `. ${listKey} opens the menu on this tab` : ""} (Tab switches)` }] : []),
             { value: "browse", label: "Browse", icon: "browse", title: "Every mod for this game on GameBanana, with every sort and filter (Tab switches)" },
             { value: "downloads", label: downloading ? `Downloads (${downloading})` : failed ? `Downloads (${failed} failed)` : "Downloads", icon: "downloads",
               title: downloading ? `${plural(downloading, "download")} running or waiting (Tab switches)`
@@ -374,7 +404,7 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
         {tab === "browse" && route.user !== undefined && <Button size="sm" variant="ghost" icon="left" onClick={leave} title="Back to the mods (Esc)">Back</Button>}
         <span className="grow" />
         <IconButton icon="expand" label="Open this page in gachamod's own window" title="Open this page in gachamod's own window. The menu closes"
-          onClick={() => { skinMenu.openInApp(game, route).catch((e) => toast(errorText(e), true)); }} />
+          onClick={() => { if (tab === "keys") openKeySettings(); else skinMenu.openInApp(game, route).catch((e) => toast(errorText(e), true)); }} />
         <IconButton icon="x" label="Close" title={`Close (Esc or ${key})`} onClick={close} />
       </header>
 
@@ -446,6 +476,8 @@ function Menu({ game, state, opened }: { game: GameId; state: GameState | null; 
               </main>
             )}
           </>)
+        ) : tab === "keys" ? (
+          <KeysTab game={game} list={kl.list} error={kl.error} onRetry={() => void kl.reload()} onMine={() => setTab("mine")} onSettings={openKeySettings} />
         ) : tab === "browse" ? (
           // the app's own browser and creator pages, scrolling inside the menu
           <div className="ov-page ov-scroll" key={route.user ?? "mods"}>

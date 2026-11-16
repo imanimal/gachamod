@@ -1,10 +1,11 @@
 //! The skin menu over the game (gacha_core::live, menu style "window"): a small always-on-top window with the app's
 //! own UI (src/screens/ingame/Overlay.tsx), opened by the menu key or by pressing both sticks of a controller while a
 //! game runs. A window can't show over a game that holds the screen in exclusive fullscreen, so there the same key
-//! opens the plainer menu the game draws itself. Owner: INGAME area.
+//! opens the plainer menu the game draws itself. The key list key (gacha_core::keylist) opens the same window on its
+//! Keys tab, or the key list the game draws. Owner: INGAME area.
 use crate::state::{blocking, AppState};
 use gacha_core::model::events;
-use gacha_core::{devtools, gamecheck, launch, live, Result};
+use gacha_core::{devtools, gamecheck, keylist, launch, live, Result};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -44,7 +45,11 @@ fn window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
 pub fn on_game_state<R: Runtime>(app: &AppHandle<R>) {
     let Some(st) = app.try_state::<AppState>() else { return };
     let running = launch::running_in(&launch::processes());
-    let wanted = st.db.lock().map(|d| live::menu_keys(&d).iter().any(|(g, _)| running.contains(&g.as_str()))).unwrap_or(false);
+    // the skin menu's key or the key list's key may be the app's, each on its own
+    let wanted = st.db.lock().map(|d| {
+        live::menu_keys(&d).iter().any(|(g, _)| running.contains(&g.as_str()))
+            || keylist::window_keys(&d).iter().any(|(g, _)| running.contains(&g.as_str()))
+    }).unwrap_or(false);
     if wanted { let _ = window(app); } else if let Some(w) = app.get_webview_window(LABEL) { let _ = w.destroy(); }
 }
 
@@ -89,15 +94,49 @@ pub fn toggle<R: Runtime>(app: &AppHandle<R>, game: &str) {
         }
         return;
     }
-    let Some(w) = window(app) else { return };
     gamecheck::note_menu(game, "window");
+    open(app, game, None);
+}
+
+/// Show the menu window over `game`, on `tab` ("keys") or where it was.
+fn open<R: Runtime>(app: &AppHandle<R>, game: &str, tab: Option<&str>) {
+    let Some(w) = window(app) else { return };
     if let Ok(mut s) = app.state::<Showing>().0.lock() { *s = Some(game.to_string()); }
     place(&w, game);
     let _ = w.show();
     let _ = w.set_focus();
     #[cfg(windows)]
     if let Ok(h) = w.hwnd() { devtools::raise(h.0 as isize); }
-    let _ = app.emit_to(LABEL, OPENED, serde_json::json!({ "game": game }));
+    let payload = match tab {
+        Some(t) => serde_json::json!({ "game": game, "tab": t }),
+        None => serde_json::json!({ "game": game }),
+    };
+    let _ = app.emit_to(LABEL, OPENED, payload);
+}
+
+/// The key list key was pressed while `game` runs: the Keys tab of the menu window, or in exclusive fullscreen the
+/// key list the game draws. A press while the window shows closes it.
+pub fn toggle_keys<R: Runtime>(app: &AppHandle<R>, game: &str) {
+    if app.get_webview_window(LABEL).is_some_and(|w| w.is_visible().unwrap_or(false)) {
+        hide(app);
+        let _ = devtools::show_game(game);
+        return;
+    }
+    if devtools::exclusive_fullscreen() {
+        if let Err(e) = live::send_keys_toggle(game) {
+            let _ = app.emit(events::TOAST, serde_json::json!({ "text": e.to_string(), "bad": true }));
+        }
+        return;
+    }
+    open(app, game, Some("keys"));
+}
+
+/// The running game whose key list `combo` shows.
+pub fn keys_game_for<R: Runtime>(app: &AppHandle<R>, combo: &str) -> Option<String> {
+    let st = app.try_state::<AppState>()?;
+    let keys = st.db.lock().ok().map(|d| keylist::window_keys(&d))?;
+    let running = launch::running_in(&launch::processes());
+    keys.into_iter().find(|(g, k)| k == combo && running.contains(&g.as_str())).map(|(g, _)| g)
 }
 
 /// The running game whose menu `combo` opens.

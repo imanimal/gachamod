@@ -6,6 +6,7 @@ import { registerAccountDemo } from "./account";
 import { registerAiDemo } from "./ai";
 import { registerExtensionsDemo } from "./extensions";
 import { registerIngameDemo } from "./ingame";
+import { registerKeylistDemo } from "./keylist";
 import { demoDb } from "./db";
 import { registerLibraryDemo } from "./library";
 import { registerModtoolsDemo } from "./modtools";
@@ -32,6 +33,7 @@ export function installDemo() {
   registerOnlineDemo();
   registerAiDemo();
   registerIngameDemo();
+  registerKeylistDemo();
   registerExtensionsDemo();
   registerReportDemo();
   registerAccountDemo();

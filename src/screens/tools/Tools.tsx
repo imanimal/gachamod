@@ -8,11 +8,12 @@ import { Badge, Button, Confirm, PageHeader, Panel, Segmented, Select, TextField
 import { toast } from "../../ui/toast";
 import { placeFor } from "../../lib/places";
 import { saved } from "../../ui/motion";
-import { dev, errorKind, errorText, launchConfig, shell, type DevStatus, type GameId, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
+import { KEY_LIST_SHOWN, dev, errorKind, errorText, launchConfig, shell, type DevStatus, type GameId, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
 import { allGames, currentGame, emitApp, go, useGame } from "../../lib/store";
-import { registerCommands } from "../../lib/search";
+import { registerCommands, type Command } from "../../lib/search";
 import { FixesPanel } from "./FixesPanel";
 import { InGamePanel } from "../ingame/InGamePanel";
+import { KeyListPanel } from "../ingame/KeyListPanel";
 import { openXxmi } from "../settings/parts";
 import { Paged, type PageInfo } from "../settings/Paged";
 import { ConflictsPanel, HashLookupPanel, ImmPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
@@ -62,11 +63,13 @@ const LOG_LABEL: Record<string, string> = { DISABLED: "Off", WARNING: "Warnings"
 registerCommands("tools", () => {
   const g = currentGame();
   if (!g) return [];
-  return [
+  const all: Command[] = [
     { id: "tools:fixes", title: "Fix mods after a game update", section: "Pages", icon: "wand", where: "Tools › Problems and fixes", keywords: "fixer fixes broken mods hash game update patch repair",
       run: () => go({ view: "tools", section: "fixes" }) },
     { id: "tools:ingame", title: "In-game menu", section: "Pages", icon: "gamepad", where: "Tools › Switch skins in game", keywords: "in game overlay switch mods without reload f10 toggle menu",
       run: () => go({ view: "tools", section: "ingame" }) },
+    { id: "tools:keylist", title: "Key list in game", section: "Pages", icon: "keyboard", where: "Tools › Switch skins in game", keywords: "mod keys toggles hotkeys help f8 in game overlay cheat sheet",
+      run: () => go({ view: "tools", section: "keylist" }) },
     { id: "tools:migoto", title: "Mod maker switches", section: "Pages", icon: "code", where: "Tools › Mod makers", keywords: "hunting mode dump shaders log 3dmigoto debug warnings",
       run: () => go({ view: "tools", section: "migoto" }) },
     { id: "tools:dev", title: "Shader cache and logs", section: "Pages", icon: "bug", where: "Tools › Mod makers", keywords: "shader cache clear frame dumps log d3dx ini d3dx_user wipe reload",
@@ -76,6 +79,7 @@ registerCommands("tools", () => {
     ...(allGames().filter((x) => x.modsDir && x.modCount > 0).length > 1 ? [{ id: "tools:share-all", title: "Share every game", section: "Actions", icon: "share" as const,
       hint: ".gachamod", where: "Tools › Share and move", keywords: "export share send friend backup gachamod pack links all games library", run: () => emitApp({ type: "export-pack", game: g.id, scope: "all" }) }] : []),
   ];
+  return all.filter((c) => KEY_LIST_SHOWN || c.id !== "tools:keylist");
 });
 
 /** A lock message from the backend, with a button to open XXMI Launcher when the setting lives there. */
@@ -114,7 +118,7 @@ function ToolsPages({ game }: { game: GameState }) {
           problems: <><ProblemsPanel /><FixesPanel game={game.id} /></>,
           conflicts: <><ConflictsPanel /><KeyClashesPanel /></>,
           launch: <LaunchPanel game={game} l={launch} />,
-          ingame: <InGamePanel game={game.id} />,
+          ingame: <><InGamePanel game={game.id} />{KEY_LIST_SHOWN && <KeyListPanel game={game.id} />}</>,
           packs: <><PacksPanel /><ImmPanel /></>,
           migoto: <><MigotoPanel l={launch} /><DevSection game={game} /><HashLookupPanel /></>,
         }}

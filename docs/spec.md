@@ -889,6 +889,10 @@ Downloads are the app's own `GbBrowser`, `ModDrawer`, `CreatorPage` and `Downloa
 page history. A change to those shows in the menu too, so check both. Pages the menu doesn't have open in the main
 window (`skinMenu.openInApp`, event `app-go`, handled in `App.tsx`).
 
+The key list (`crates/gacha-core/src/keylist.rs`, `lib/api/keylist.ts`, docs/ingame.md "The key list") shows each
+mod's toggle keys while playing: the Keys tab of the window over the game (F8 by default), or a panel the game draws in
+its top right corner (`live/menu.rs`). Its settings and the pick per mod are in the Key list panel on the same Tools page.
+
 ### The AI helper
 
 No API key and no account. The helper writes a prompt for the chatbot the user already uses (`chatbotPref`: ChatGPT,

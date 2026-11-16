@@ -305,6 +305,9 @@ pub fn run() {
             commands::ingame::live_pick,
             commands::ingame::live_menu_set,
             commands::ingame::live_set_all,
+            commands::ingame::keylist_get,
+            commands::ingame::keylist_set,
+            commands::ingame::keylist_choose,
             commands::ingame::app_restart_admin,
             // ── SYSTEM: logs, crash reports, usage counts, feedback, administrator ──
             commands::report::report_state,

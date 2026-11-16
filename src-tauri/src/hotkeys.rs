@@ -31,6 +31,8 @@ pub fn sync<R: Runtime>(app: &AppHandle<R>) -> Vec<Taken> {
             let mut c = hotkeys::combos(&d).unwrap_or_default();
             // the key that opens the skin menu over each game (gacha_core::live, style "window")
             for (_, set) in gacha_core::live::menu_keys(&d) { if !c.contains(&set.key) { c.push(set.key); } }
+            // and the key that shows the key list (gacha_core::keylist, style "window")
+            for (_, key) in gacha_core::keylist::window_keys(&d) { if !c.contains(&key) { c.push(key); } }
             c
         }
         Err(_) => return vec![],
@@ -70,6 +72,11 @@ pub fn on_game_state<R: Runtime>(app: &AppHandle<R>, running: bool) {
 fn pressed<R: Runtime>(app: &AppHandle<R>, sc: &Shortcut) {
     let Some(combo) = app.state::<Held>().0.lock().ok().and_then(|m| m.get(&sc.id()).cloned()) else { return };
     let app = app.clone();
+    if let Some(game) = crate::overlay::keys_game_for(&app, &combo) {
+        // off the thread that delivers key events: opening may make the window
+        tauri::async_runtime::spawn_blocking(move || crate::overlay::toggle_keys(&app, &game));
+        return;
+    }
     if let Some(game) = crate::overlay::game_for(&app, &combo) {
         // off the thread that delivers key events: opening may make the window
         tauri::async_runtime::spawn_blocking(move || crate::overlay::toggle(&app, &game));
