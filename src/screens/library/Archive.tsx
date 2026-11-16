@@ -125,7 +125,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
               : "Removing a mod deletes its files. "}
             Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.
           </span>
-          <Button size="sm" variant="ghost" icon="settings" title="Keep removed mods' files (Settings, Storage)"
+          <Button size="sm" variant="ghost" icon="settings" title="Keep removed mods' files (Settings, Trash and removed mods)"
             onClick={() => go({ view: "settings", section: "set-trash-days" })}>{trashDays > 0 ? "Change" : "Keep files"}</Button>
         </div>
       )}

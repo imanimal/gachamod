@@ -1,4 +1,4 @@
-// The tip jar. Help menu, Settings > About and the palette all open this one page.
+// The tip jar. Help menu, Settings > About and updates, and the palette all open this one page.
 import { errorText, shell } from "./api";
 import { toast } from "../ui/toast";
 

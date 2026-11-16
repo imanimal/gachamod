@@ -6,7 +6,7 @@ import { pref } from "./prefs";
 import { call, inTauri } from "./tauri";
 import { currentRoute } from "./store";
 
-/** Setting "render.log" (Settings, Feedback and data, and Appearance). */
+/** Setting "render.log" (Settings, Feedback, privacy and logs, and Appearance). */
 export const renderLogPref = pref<boolean>("render.log", true, (r) => (r === "0" ? false : r === "1" ? true : undefined), (v) => (v ? "1" : "0"));
 
 interface PageEvent { text: string; incident?: string; title?: string }

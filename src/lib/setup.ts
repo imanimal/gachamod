@@ -1,7 +1,7 @@
 // Getting games ready for mods without picking folders: one click installs XXMI Launcher and each game's mod loader
 // (gacha-core xxmi_setup.rs), and while a game is still missing its Mods folder the app looks again by itself, when the
 // window comes back to the front and every 30 seconds. Every place that offers setup uses this: the first start,
-// Settings, Games, and a download that had nowhere to go. Owner: SYSTEM area.
+// Settings, Games and mod loaders, and a download that had nowhere to go. Owner: SYSTEM area.
 import { oxford } from "./notes";
 import { useSyncExternalStore } from "react";
 import { dialogs, errorText, games as gamesApi, xxmi, type GameId, type GameState, type SetupProgress } from "./api";

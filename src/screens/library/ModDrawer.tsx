@@ -265,7 +265,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
 
         <div className="mod-drawer-flags">
           <Toggle checked={mod.favorite} onChange={(v) => void setFavourite(game, [mod], v)} label="Favourite" />
-          <span title="Hidden, blurred or shown as set for mods for adults (Settings, Mods)"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
+          <span title="Hidden, blurred or shown as set for mods for adults (Settings, Mods and downloads)"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
         </div>
       </div>
 

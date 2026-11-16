@@ -175,7 +175,7 @@ fn write_paths(db: &Db, id: &str, p: &GamePaths, by_user: bool) -> Result<()> {
 
 fn not_set_up(id: &str, what: &str) -> Error {
     let name = def(id).map(|g| g.name).unwrap_or(id);
-    Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games installs its mod loader or finds the folder"))
+    Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games and mod loaders installs its mod loader or finds the folder"))
 }
 
 /// The game's Mods folder (created if its importer folder exists). Every area uses this.

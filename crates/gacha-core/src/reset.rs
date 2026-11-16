@@ -1,4 +1,4 @@
-//! Starting over (Settings > About > Reset gachamod). gachamod can't move its database while it has it open, so the
+//! Starting over (Settings > About and updates > Reset gachamod). gachamod can't move its database while it has it open, so the
 //! button leaves a note and restarts, and the next start does the work before anything opens. Nothing the user made
 //! is deleted: the database, the trash and anything unknown move to `backups/before-reset-<time>/`. Only what
 //! gachamod can get again goes: downloads, unpacked files, caches, downloaded fixers and the GameBanana sign-in.

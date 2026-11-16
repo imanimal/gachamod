@@ -194,7 +194,7 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
       footer={<>
         <Button variant="ghost" onClick={() => setPicked(all ? new Set() : new Set(candidates.map((c) => c.key)))}>{all ? "Pick none" : "Pick all"}</Button>
         <Button variant="ghost" icon="layers" disabled={busy} onClick={() => void always()}
-          title="Installs all of these now, and from now on every archive with several mods installs all of them without this window. Turn it off in Settings, Automatic">Always install all</Button>
+          title="Installs all of these now, and from now on every archive with several mods installs all of them without this window. Turn it off in Settings, Downloads and installing">Always install all</Button>
         <span className="sp" />
         <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title="Don't install anything from this archive">Cancel</Button>
         <Button variant="primary" icon="install" busy={busy} disabled={!keys.length} onClick={() => void choose()}>

@@ -46,7 +46,7 @@ async function checkAppUpdate() {
     const c = await appUpdate.check();
     if (!c.reachable) toast("Couldn't get update info right now. Try again later");
     else if (!c.available) toast(`gachamod ${c.current} is the newest version`);
-    else toast("A new version of gachamod is out", false, { label: "See it", run: () => go({ view: "settings", section: "about" }) });
+    else toast("A new version of gachamod is out", false, { label: "See it", run: () => go({ view: "settings", section: "updates" }) });
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -99,7 +99,7 @@ registerMenu("game", ({ id }) => {
     shownCount > 1 && { label: `Only show ${g.short}`, icon: "focus", checked: onlyGame()?.id === id,
       title: "One-game mode: the sidebar and menus offer only this game. The others stay set up and search still finds them",
       onClick: () => focusGame(onlyGame()?.id === id ? null : id) },
-    { label: "Hide game", icon: "hide", disabled: shownCount <= 1, title: shownCount <= 1 ? "It's the only game shown" : "Hidden games come back from Settings, Games", onClick: () => void hideGame(id) },
+    { label: "Hide game", icon: "hide", disabled: shownCount <= 1, title: shownCount <= 1 ? "It's the only game shown" : "Hidden games come back from Settings, Games and mod loaders", onClick: () => void hideGame(id) },
   ];
   return items;
 });
@@ -116,7 +116,7 @@ const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords
   { route: { view: "tools" }, title: () => "Tools", keywords: "utilities fixes launch options shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
   { route: { view: "settings" }, title: () => "Settings", keywords: "options preferences config configuration setup", icon: "settings", hint: "Ctrl+8" },
   { route: { view: "library", tab: "archive" }, title: () => "Trash", keywords: "removed deleted trash bin recycle restore redownload archive history", icon: "trash", where: "Mods › Trash" },
-  { route: { view: "settings", section: "games" }, title: () => "Game folders", keywords: "paths folders setup add game xxmi location directory", icon: "folder", where: "Settings › Games" },
+  { route: { view: "settings", section: "games" }, title: () => "Game folders", keywords: "paths folders setup add game xxmi location directory", icon: "folder", where: "Settings › Games and mod loaders" },
   { route: { view: "settings", section: "appearance" }, title: () => "Appearance", keywords: "theme dark light mode colours colors accent look skin", icon: "palette", where: "Settings › Appearance" },
   { route: { view: "tools", section: "launch" }, title: () => "Launch options", keywords: "start arguments args priority window mode exe xxmi", icon: "sliders", where: "Tools › Launch" },
 ];

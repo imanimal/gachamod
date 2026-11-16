@@ -1,4 +1,5 @@
-// Settings > Appearance (theme per game, light or dark, accent, layout, text size, animations) and Custom themes.
+// Settings > Appearance: Theme and colours (theme per game, accent, light or dark), Layout, text size and animations,
+// Custom themes, and Hardware acceleration and rendering log.
 // Owner: SETTINGS/AI area. Applying themes is lib/theme.ts (THEMES area); saving custom ones is ./customThemes.ts.
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { currentGame, go, useGame } from "../../lib/store";
@@ -33,18 +34,13 @@ const modeOptions = (mode: SchemeMode): Array<{ value: SchemeMode; label: string
   { value: "system", label: "System", title: "Dark or light as Windows is set" },
 ];
 
+/** The theme for the current game, its accent, and light or dark. */
 export function AppearanceSection() {
   const game = useGame();
   const theme = useTheme();
   const [pick, setPick] = useState(() => (game ? themePick(game.id) : "auto"));
   const found = hiddenThemePref.use();
-  const [size, setSize] = useState(getTextSize());
   useEffect(() => { setPick(game ? themePick(game.id) : "auto"); }, [game?.id, theme.custom]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    const h = (e: Event) => setSize((e as CustomEvent<number>).detail);
-    window.addEventListener("pm-text-size", h);
-    return () => window.removeEventListener("pm-text-size", h);
-  }, []);
 
   const choose = (id: string) => { if (!game) return; setThemePick(game, id); setPick(id); };
   const defaultFor = THEMES.find((t) => t.id === (game?.theme || "default")) ?? THEMES[0]!;
@@ -55,7 +51,7 @@ export function AppearanceSection() {
   useEffect(() => { setAccent(accentPick(theme.id)); }, [theme.id]);
 
   return (
-    <Panel title="Appearance" icon="palette" id="appearance">
+    <Panel title="Theme and colours" icon="palette" id="appearance">
       <div className="field-l">Theme {game ? `for ${game.name}` : ""}</div>
       <div className="set-themes">
         <ThemeCard id={defaultFor.id} name="Game's own" description={`${defaultFor.name}, the one ${game?.short ?? "the game"} uses`} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
@@ -88,6 +84,23 @@ export function AppearanceSection() {
             )}
           </>
         )}
+      </div>
+    </Panel>
+  );
+}
+
+/** Spacing, the sidebar, corners and buttons, then text size, animations and the first-start hints. */
+export function LayoutSection() {
+  const theme = useTheme();
+  const [size, setSize] = useState(getTextSize());
+  useEffect(() => {
+    const h = (e: Event) => setSize((e as CustomEvent<number>).detail);
+    window.addEventListener("pm-text-size", h);
+    return () => window.removeEventListener("pm-text-size", h);
+  }, []);
+  return (
+    <Panel title="Layout, text size and animations" icon="layout" id="layout">
+      <div className="set-rows">
         <LayoutRows />
         <SetRow id="set-text-size" label="Text size" hint="Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets">
           <Segmented value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }} label="Text size"
@@ -99,6 +112,16 @@ export function AppearanceSection() {
         <SetRow id="set-hints" label="First-start hints" hint="Right after setup, Browse, Install and Downloads look faintly selected until you've used them once">
           <HintsSwitch />
         </SetRow>
+      </div>
+    </Panel>
+  );
+}
+
+/** How the window is drawn, for when it goes black or flickers. The rendering log also shows under Log files. */
+export function GraphicsSection() {
+  return (
+    <Panel title="Hardware acceleration and rendering log" icon="sliders" id="graphics">
+      <div className="set-rows">
         <SetRow id="set-gpu" label="Hardware acceleration" hint="Draws gachamod with the graphics card. Turn it off if the window goes black or flickers. Counts from the next start"
           tip="When the window is too broken to reach this, start gachamod.exe with --disable-gpu to turn it off">
           <GpuSwitch />
@@ -230,7 +253,7 @@ export function CustomThemesSection() {
           ))}
         </div>
       )}
-      {!list.length && !edit && <p className="hint ctheme-intro">Your own colours, corners and spacing on top of any theme in Appearance. Themes other people share can be imported here.</p>}
+      {!list.length && !edit && <p className="hint ctheme-intro">Your own colours, corners and spacing on top of any theme above. Themes other people share can be imported here.</p>}
       {edit
         ? <ThemeEditor key={`${edit.theme.id}:${edit.isNew}`} start={edit.theme} isNew={edit.isNew} note={edit.note} onClose={() => setEdit(null)} />
         : (
@@ -352,7 +375,7 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
       <div className="ctheme-layout">
         {LAYOUT_ROWS.map((r) => (
           <div key={r.key} className="ctheme-line">
-            <span className="field-l" title={r.key === "density" ? "Not set keeps what you picked in Appearance" : undefined}>{r.label}</span>
+            <span className="field-l" title={r.key === "density" ? "Not set keeps what you picked under Layout, text size and animations" : undefined}>{r.label}</span>
             <Segmented value={t.layout[r.key] ?? ""} onChange={(v) => setLay(r.key, v)} label={r.label} options={[NOT_SET, ...r.options]} size="sm" />
           </div>
         ))}

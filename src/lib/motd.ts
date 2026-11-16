@@ -1,6 +1,6 @@
 // Mod of the day: a GameBanana mod a day, picked by animal and listed in curated/mod-of-the-day.json in gachamod's
 // repository. Nothing shows while that file says "enabled": false. When it's on, Browse gets a small button beside
-// "Open GameBanana" for the pick of the current game, and Settings, Fun can hide it. Only people who can push to the
+// "Open GameBanana" for the pick of the current game, and Settings, Fun extras can hide it. Only people who can push to the
 // repository can change the picks; the app only reads the file (once every 12 hours, and not at all while hidden).
 // scripts/motd.mjs adds a pick. Owner: ONLINE area.
 import { useEffect, useState } from "react";
@@ -47,7 +47,7 @@ export function pickFor(feed: Feed | null, game: string): MotdPick | null {
   return feed.picks.filter((p) => p.game === game && p.date <= now && p.date >= recent).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null;
 }
 
-/** Whether the curated list is switched on (Settings, Fun shows its row only then). */
+/** Whether the curated list is switched on (Settings, Fun extras shows its row only then). */
 export function useMotdOn(): boolean {
   const [on, setOn] = useState(() => !!cached()?.feed.enabled);
   useEffect(() => { void motdFeed().then((f) => setOn(!!f?.enabled)); }, []);

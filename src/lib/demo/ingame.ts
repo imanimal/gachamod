@@ -92,7 +92,7 @@ const allowed = (game: string) => game === "zzz" || demoDb.settings.get("ui.test
 function testerOnly(game: string) {
   if (allowed(game) || groupsOf(game).length) return;
   const name = demoDb.games.find((g) => g.id === game)?.name ?? "this game";
-  fail(`Switching skins in game is a tester option in ${name}. Turn on Tester options in Settings, Feedback and data to try it`);
+  fail(`Switching skins in game is a tester option in ${name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it`);
 }
 
 export function registerIngameDemo() {
@@ -190,6 +190,8 @@ export function registerIngameDemo() {
       return g;
     },
     overlay_hide: async () => {},
+    // the demo has one window, so there is no other one to bring forward
+    overlay_open_app: async () => { fail("That page is in gachamod's own window, which the demo doesn't have"); },
     app_restart_admin: async () => { fail("The demo can't restart as administrator"); },
     overlay_pick: async ({ game, group, slot }) => {
       await demoWait(150);

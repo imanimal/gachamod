@@ -1,6 +1,8 @@
 // Settings (global), for changing one thing fast: one page at a time, picked from a list in groups on the left
 // (Paged.tsx), every setting in the global search (settingsSearch.ts), every change saved at once. A page, a panel on
 // one or a single setting is a route: go({ view: "settings", section: "mods" }), "storage" or "set-trash-days".
+// Page and panel names say what is in them ("About and updates", "Downloads and installing"): a panel holds one
+// kind of setting, and a new kind gets its own panel with its own name rather than a row under a vague heading.
 // Owner: SETTINGS/AI area.
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Badge, Button, Confirm, PageHeader, Panel, Select, Toggle } from "../../ui/kit";
@@ -17,14 +19,14 @@ import "./settings.css";
 import { AccountSection } from "./AccountSection";
 import { HotkeysSection } from "./HotkeysSection";
 import { TransferSection, UpdateRow } from "./SettingsTransfer";
-import { AppearanceSection, CustomThemesSection } from "./Appearance";
-import { AutomaticSection, CreatorsSection, ModsSection, StorageSection } from "./Sections";
+import { AppearanceSection, CustomThemesSection, GraphicsSection, LayoutSection } from "./Appearance";
+import { AdultSection, AutomaticSection, BrokenModsSection, CreatorsSection, InstallingSection, ModsSection, StorageSection } from "./Sections";
 import { AiSection } from "./AiSection";
 import { ExtensionsSection } from "../extensions/ExtensionsSection";
 import { PAGES, sectionOf } from "./settingsSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
-import { AdminRow, FeedbackSection } from "./Feedback";
+import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
 import { Installing } from "./Onboarding";
 import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
@@ -40,16 +42,16 @@ export function Settings() {
         actions={<Button icon="search" onClick={() => openPalette()} title="Every setting is in the search (Ctrl+K, or just start typing)">Find a setting</Button>} />
       <Paged name="settings" label="Settings pages" pages={PAGES} fallback={sectionOf}>
         {{
-          games: <><GamesSection /><XxmiSection /></>,
-          mods: <><ModsSection /><ModFoldersSection /><AutomaticSection /><StorageSection /></>,
+          games: <><GamesSection /><GameStartSection /><XxmiSection /></>,
+          mods: <><ModsSection /><AdultSection /><ModFoldersSection /><InstallingSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
           creators: <CreatorsSection />,
           hotkeys: <HotkeysSection />,
-          appearance: <><AppearanceSection /><CustomThemesSection /></>,
+          appearance: <><AppearanceSection /><LayoutSection /><CustomThemesSection /><GraphicsSection /></>,
           fun: <FunSection />,
           account: <><AccountSection /><IntegrationsSection /><AiSection /></>,
           extensions: <ExtensionsSection />,
-          feedback: <FeedbackSection />,
-          about: <><AboutSection /><TransferSection /></>,
+          feedback: <><FeedbackSection /><PrivacySection /><LogsSection /></>,
+          about: <><AboutSection /><UpdatesSection /><TransferSection /><RepairSection /></>,
         }}
       </Paged>
     </div>
@@ -77,14 +79,13 @@ function GamesSection() {
   const list = useGames();
   const [busy, detect] = useDetect(list);
   const setup = useSetup();
-  const current = useGame();
   // a quiet look when the page opens, so a game installed since shows up without pressing anything
   useEffect(() => { void recheck(); }, []);
   const can = list.filter(canInstallLoader);
   const xxmiGames = list.filter((g) => g.xxmi);
   const community = list.filter((g) => !g.xxmi);
   return (
-    <Panel title="Games" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
+    <Panel title="Games and their folders" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
       {setup.running ? <Installing compact /> : can.length > 1 && (
         <div className="set-note row">
           <span>{can.map((g) => g.short).join(", ")} have no mod loader yet.</span>
@@ -93,6 +94,23 @@ function GamesSection() {
         </div>
       )}
       <OnlyGameRow list={list} />
+      <div className="set-games">{xxmiGames.map((g) => <GameRow key={g.id} game={g} />)}</div>
+      {community.length > 0 && <>
+        <h3 className="sub-h" id="set-community">Community games</h3>
+        <p className="hint set-note" title="3DMigoto is the program that loads mods into the game. XXMI Launcher bundles one per game for the games above">
+          XXMI Launcher doesn't support these. Each needs its own 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.</p>
+        <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
+      </>}
+    </Panel>
+  );
+}
+
+/** How gachamod and the game start: as administrator (so keys reach games that run as one), and the current game's
+ *  launch options, which live in Tools. */
+function GameStartSection() {
+  const current = useGame();
+  return (
+    <Panel title="Administrator and launch options" icon="shield" id="game-start">
       <AdminRow id="set-admin" />
       {current && (
         <div className="set-rows">
@@ -101,13 +119,6 @@ function GamesSection() {
           </SetRow>
         </div>
       )}
-      <div className="set-games">{xxmiGames.map((g) => <GameRow key={g.id} game={g} />)}</div>
-      {community.length > 0 && <>
-        <h3 className="sub-h" id="set-community">Community games</h3>
-        <p className="hint set-note" title="3DMigoto is the program that loads mods into the game. XXMI Launcher bundles one per game for the games above">
-          XXMI Launcher doesn't support these. Each needs its own 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.</p>
-        <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
-      </>}
     </Panel>
   );
 }
@@ -344,7 +355,7 @@ function IntegrationsSection() {
     catch (e) { toast(errorText(e), true); }
   };
   return (
-    <Panel title="Links and files" icon="link" id="integrations">
+    <Panel title="1-click installs and .gachamod files" icon="link" id="integrations">
       <div className="set-rows">
         {list === null && <p className="hint">Checking…</p>}
         {list?.length === 0 && <p className="hint">Only available in the Windows app.</p>}
@@ -370,25 +381,50 @@ async function resetApp() {
   } catch (e) { toast(errorText(e), true); }
 }
 
+/** The data folder's path, for the panels that name it. */
+function useDataDir(): string | null {
+  const [dir, setDir] = useState<string | null>(null);
+  useEffect(() => { about.dataDir().then(setDir).catch(() => {}); }, []);
+  return dir;
+}
+
 function AboutSection() {
   const [version, setVersion] = useState("");
-  const [asking, setAsking] = useState(false);
-  const [dir, setDir] = useState<string | null>(null);
-  const [setup, setSetup] = useState(false);
-  useEffect(() => {
-    app.info().then((i) => setVersion(i.version)).catch(() => {});
-    about.dataDir().then(setDir).catch(() => {});
-    about.setupAvailable().then(setSetup).catch(() => {});
-  }, []);
+  const dir = useDataDir();
+  useEffect(() => { app.info().then((i) => setVersion(i.version)).catch(() => {}); }, []);
   return (
-    <Panel title="About" icon="info" id="about">
+    <Panel title="About gachamod" icon="info" id="about">
       <div className="set-kv">
         <span className="muted">Version</span><span>gachamod {version}</span>
         <span className="muted">Data folder</span>
         <span>{dir ? <button type="button" className="set-folder-p mono" onClick={() => shell.openPath(dir).catch((e) => toast(errorText(e), true))} title="Open it">{dir}</button> : "…"}</span>
       </div>
-      <UpdateRow />
       <div className="set-rows set-update">
+        <div className="set-row">
+          <span><b>Tip jar</b><span className="hint">gachamod is free and has no ads. If it saves you some time, a tip on Ko-fi helps keep it going</span></span>
+          <Button size="sm" icon="coffee" onClick={openKofi} title="Opens ko-fi.com/aanimal in your browser">Tip on Ko-fi</Button>
+        </div>
+      </div>
+      <p className="hint set-note">Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.
+        Fonts: Manrope, Rubik, Anton and JetBrains Mono, under the SIL Open Font License.</p>
+    </Panel>
+  );
+}
+
+/** gachamod's own updates: Check now, the Automatic switch, and the new version when there is one. */
+function UpdatesSection() {
+  return <Panel title="gachamod updates" icon="update" id="updates"><UpdateRow /></Panel>;
+}
+
+/** What puts gachamod right or takes it away: setup's Repair and Uninstall, and starting over. */
+function RepairSection() {
+  const [asking, setAsking] = useState(false);
+  const [setup, setSetup] = useState(false);
+  const dir = useDataDir();
+  useEffect(() => { about.setupAvailable().then(setSetup).catch(() => {}); }, []);
+  return (
+    <Panel title="Repair, reset or uninstall" icon="tool" id="repair">
+      <div className="set-rows">
         {setup && (
           <div className="set-row">
             <span><b>Repair or uninstall</b><span className="hint">Opens gachamod setup in this theme. Repair puts gachamod's files and shortcuts back and keeps your mods and settings</span></span>
@@ -399,13 +435,7 @@ function AboutSection() {
           <span><b>Reset gachamod</b><span className="hint">Starts over as if just installed. Your mods stay in their Mods folders, and the old settings, profiles and library go to a backup in the data folder</span></span>
           <Button size="sm" variant="ghost" icon="undo" onClick={() => setAsking(true)} title="Asks first, then restarts gachamod">Reset</Button>
         </div>
-        <div className="set-row">
-          <span><b>Tip jar</b><span className="hint">gachamod is free and has no ads. If it saves you some time, a tip on Ko-fi helps keep it going</span></span>
-          <Button size="sm" icon="coffee" onClick={openKofi} title="Opens ko-fi.com/aanimal in your browser">Tip on Ko-fi</Button>
-        </div>
       </div>
-      <p className="hint set-note">Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.
-        Fonts: Manrope, Rubik, Anton and JetBrains Mono, under the SIL Open Font License.</p>
       {asking && (
         <Confirm title="Reset gachamod?" yes="Reset and restart" danger onClose={() => setAsking(false)} onYes={resetApp}>
           <p>gachamod restarts with nothing set up: no settings, profiles, tags, favourites or GameBanana sign-in.</p>

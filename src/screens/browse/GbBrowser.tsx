@@ -356,7 +356,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
           <Empty icon="browse" title={f.followed && !subIds.length ? "You don't follow anyone yet" : search ? `Nothing found for "${search}"` : "No mods here"}
             actions={chips.length || (nsfw === "hide" && filteredOut > 0) ? <>
               {chips.length > 0 && <Button icon="x" onClick={clearAll}>Clear filters</Button>}
-              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title="Settings, Mods" onClick={() => go({ view: "settings", section: "set-nsfw" })}>Mods for adults</Button>}
+              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title="Settings, Mods and downloads" onClick={() => go({ view: "settings", section: "set-nsfw" })}>Mods for adults</Button>}
             </> : undefined}>{emptyText}</Empty>
         ) : (
           <div className="cards gb-grid" aria-busy={waiting}>

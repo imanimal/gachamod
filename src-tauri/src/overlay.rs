@@ -140,6 +140,20 @@ pub fn watch_pad<R: Runtime>(app: AppHandle<R>) {
 #[tauri::command]
 pub fn overlay_game(st: tauri::State<'_, Showing>) -> Option<String> { st.0.lock().ok().and_then(|s| s.clone()) }
 
+/// The app's own window listens for this to show what the menu handed over.
+const GO: &str = "app-go";
+
+/// A page the menu doesn't have (Settings, Tools) or a job for the AI helper: gachamod's own window comes to the
+/// front with it. The menu loses the keyboard to that window and closes.
+#[tauri::command]
+pub fn overlay_open_app(app: AppHandle, game: String, route: Option<serde_json::Value>, ai: Option<serde_json::Value>) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+    let _ = app.emit_to("main", GO, serde_json::json!({ "game": game, "route": route, "ai": ai }));
+}
+
 /// Close the menu and hand the keys back to the game.
 #[tauri::command]
 pub async fn overlay_hide(app: AppHandle, game: Option<String>) -> Result<()> {

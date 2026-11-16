@@ -19,15 +19,15 @@ import { installDemo } from "./lib/demo";
 import { installTips } from "./lib/keys";
 import { installTelemetry } from "./lib/telemetry";
 import { installRenderWatch } from "./lib/renderWatch";
+import { isMenuWindow } from "./lib/tauri";
 
 installDemo();
 installTips();
 
 // dev only: #kit shows every kit component in each theme (src/dev/KitShowcase.tsx)
 // the skin menu shown over a running game is its own small window (src-tauri overlay.rs); #overlay shows it in a browser
-const tauriWindow = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__?.metadata?.currentWindow?.label;
 if (import.meta.env.DEV && location.hash === "#kit") void import("./dev/KitShowcase").then((m) => m.mount(document.getElementById("root")!));
-else if (tauriWindow === "overlay" || location.hash === "#overlay") {
+else if (isMenuWindow()) {
   installTelemetry("overlay");
   installRenderWatch("overlay");
   void import("./screens/ingame/Overlay").then((m) => createRoot(document.getElementById("root")!).render(<StrictMode><m.Overlay /></StrictMode>));

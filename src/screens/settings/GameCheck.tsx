@@ -1,4 +1,4 @@
-// Check this game (Help menu, Settings > Feedback and data): a player walks through switching skins while playing, one
+// Check this game (Help menu, Settings > Feedback, privacy and logs): a player walks through switching skins while playing, one
 // step at a time, and sends what worked to the developer. gachamod reads what it can by itself (the setup, whether the
 // game saved a pick, whether gachamod opened the menu) and asks about the rest. gacha-core gamecheck.rs,
 // docs/testing.md. Owner: SETTINGS/AI area.

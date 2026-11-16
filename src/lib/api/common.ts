@@ -1,6 +1,8 @@
 // Skeleton commands every area uses. Owner: skeleton.
 import { call, listen } from "../tauri";
 import { EVENTS, type GameId } from "./types";
+import type { AiTask } from "../ai";
+import type { Route } from "../store";
 
 /** A message for a toast from the backend. `open`: the mod it is about (an install), which the toast offers to open. */
 export interface ToastEvent {
@@ -19,7 +21,12 @@ export const app = {
   onOpenFile: (cb: (p: { path: string }) => void) => listen<{ path: string }>(EVENTS.openFile, cb),
   /** `open`: the mod the toast is about (an install), so it can offer to open it. */
   onToast: (cb: (p: ToastEvent) => void) => listen<ToastEvent>(EVENTS.toast, cb),
+  /** The menu over a game handed something to the app's own window (skinMenu.openInApp), which is in front now. */
+  onGo: (cb: (p: GoEvent) => void) => listen<GoEvent>(EVENTS.go, cb),
 };
+
+/** What the menu over a game hands to the app's own window: a page to show, or a job for the AI helper. */
+export interface GoEvent { game: GameId; route?: Route | null; ai?: AiTask | null }
 
 /** Small string settings kept in the app's database. Keys are dotted: "ui.nsfw", "zzz.oneSkin". */
 export const settings = {

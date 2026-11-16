@@ -75,7 +75,9 @@ export function installGamepad(opts: {
     else if (repeat && now >= next) { held.set(name, now + 110); fn(); }
   };
   const scroll = (amount: number) => {
-    let el = document.querySelector<HTMLElement>(".lightbox, .drawer-b, .dialog-b, .app .view");
+    // the layer on top scrolls (a mod's page, a window), else the screen. The menu over a game has lists of its own
+    const layers = document.querySelectorAll<HTMLElement>(".lightbox, .drawer-b, .dialog-b, .ov-detail");
+    let el = layers[layers.length - 1] ?? document.querySelector<HTMLElement>(".app .view, .ov-scroll");
     // a screen of pages (Settings, Tools) scrolls the page showing, and turns to the next one at its end
     if (el?.matches(".app .view")) el = el.querySelector<HTMLElement>("[data-scroller]") ?? el;
     if (el?.dispatchEvent(new CustomEvent("padscroll", { detail: amount, bubbles: true, cancelable: true }))) el.scrollBy({ top: amount });

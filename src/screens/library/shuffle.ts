@@ -1,6 +1,6 @@
 // Shuffle outfits: for every character with two or more mods, turn one of them on at random and the others off, as
 // one change with Undo. Runs from a button (Mods, Characters, search) or on its own: each time you press Play, or at
-// the first Play of the day (Settings, Mods). Mods hidden as for adults stay out of it. Owner: LIBRARY area.
+// the first Play of the day (Settings, Mods and downloads). Mods hidden as for adults stay out of it. Owner: LIBRARY area.
 import { library, type GameId, type ModEntry } from "../../lib/api";
 import { nsfwPref, pref } from "../../lib/prefs";
 import { toast } from "../../ui/toast";

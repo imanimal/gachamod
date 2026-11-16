@@ -1,7 +1,7 @@
 /* Paged screens (Paged.tsx): Settings and Tools. The pages listed on the left in groups, one page on the right that
    slides like a scroll when it changes. Colours are theme tokens only. Owner: SETTINGS/AI area. */
 .view > .page.pg-screen { height: 100%; min-height: 0; padding-bottom: 0; }
-.pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 14rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 1.2rem; }
+.pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 1.2rem; }
 
 .pg-nav { min-height: 0; display: flex; flex-direction: column; gap: .9rem; padding: .2rem 0 1.4rem; overflow: hidden auto; scrollbar-width: thin; }
 .pg-g { display: flex; flex-direction: column; gap: 2px; }
@@ -9,7 +9,8 @@
 .pg-nav-i { display: flex; align-items: center; gap: .6rem; padding: .42rem .7rem; border-radius: var(--radius-sm); color: var(--text-2);
   text-align: left; font-size: .93em; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .pg-nav-i .i { width: 1.05rem; height: 1.05rem; flex: none; opacity: .8; }
-.pg-nav-i > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a page's name says what is on it, so a long one takes a second line instead of losing its end */
+.pg-nav-i > span { min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
 .pg-nav-i:hover { background: var(--hover); color: var(--text); }
 .pg-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
 
@@ -53,6 +54,7 @@
   .pg-g { display: contents; }
   .pg-group { display: none; }
   .pg-nav-i { flex: none; }
+  .pg-nav-i > span { white-space: nowrap; }
   /* the row scrolls and clips, so the focus ring sits inside the item */
   .pg-nav-i:focus-visible, html.kbd .pg-nav-i:focus { outline-offset: -2px; }
 }

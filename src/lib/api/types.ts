@@ -150,4 +150,5 @@ export const EVENTS = {
   toast: "toast",
   packProgress: "pack-progress",
   gbAccount: "gb-account",
+  go: "app-go",
 } as const;

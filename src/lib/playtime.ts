@@ -1,5 +1,5 @@
 // Time spent in each game, counted on this PC from when gachamod sees it start until it closes, for the year card
-// in Settings, Fun. Kept in the app's settings by year and game, in seconds. Owner: SETTINGS/AI area.
+// in Settings, Fun extras. Kept in the app's settings by year and game, in seconds. Owner: SETTINGS/AI area.
 import { jsonPref } from "./prefs";
 
 type Years = Record<string, Record<string, number>>;

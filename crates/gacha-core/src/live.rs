@@ -38,7 +38,7 @@ pub fn allowed(db: &Db, game: &str) -> bool {
 fn tester_only(db: &Db, game: &str) -> Result<()> {
     if allowed(db, game) || !load(db, game).groups.is_empty() { return Ok(()); }
     let name = crate::games::def(game).map_or("this game", |g| g.name);
-    Err(Error::Invalid(format!("Switching skins in game is a tester option in {name}. Turn on Tester options in Settings, Feedback and data to try it")))
+    Err(Error::Invalid(format!("Switching skins in game is a tester option in {name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it")))
 }
 
 /// The folder under Mods that holds live.ini. The library scan skips it.

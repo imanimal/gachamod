@@ -14,7 +14,7 @@ const API11: &str = "https://gamebanana.com/apiv11";
 const API13: &str = "https://gamebanana.com/apiv13";
 pub const LOGIN_URL: &str = "https://gamebanana.com/members/account/login";
 /// What a request says when GameBanana no longer accepts the session.
-pub const SIGNED_OUT: &str = "You're signed out of GameBanana. Sign in again in Settings, Account";
+pub const SIGNED_OUT: &str = "You're signed out of GameBanana. Sign in again in Settings, GameBanana account";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

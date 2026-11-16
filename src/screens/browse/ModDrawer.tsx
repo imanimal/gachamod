@@ -189,7 +189,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             {installed.length > 0 && (target?.id === here.id
               ? <>
                 <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
-                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "Turn it on. Settings, Mods decides whether new mods start on"}>
+                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "Turn it on. Settings, Mods and downloads decides whether new mods start on"}>
                   <Toggle size="sm" checked={installed[0]!.enabled} onChange={(v) => void setOn(here.id, [installed[0]!], v)} label={installed[0]!.enabled ? "On" : "Off"} />
                 </span>
               </>
@@ -402,7 +402,7 @@ function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameSta
   );
 }
 
-/** Like on GameBanana, shown while signed in (Settings > Account). */
+/** Like on GameBanana, shown while signed in (Settings, Account, links and AI). */
 function LikeButton({ id, name }: { id: number; name: string }) {
   const acc = useAccount();
   const liked = useLiked(id);

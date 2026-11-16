@@ -1,4 +1,4 @@
-// Settings > Fun: chill mode, the pity counter, seasonal touches, the year card and (while animal has it on) mod of
+// Settings > Fun extras: chill mode, the pity counter, seasonal touches, the year card and (while animal has it on) mod of
 // the day. Everything here is off until turned on, except the mod of the day button. Owner: SETTINGS/AI area.
 import { useEffect, useState } from "react";
 import { library, type ModEntry } from "../../lib/api";
@@ -18,7 +18,7 @@ export function FunSection() {
   const motdOn = useMotdOn();
   const [year, setYear] = useState(false);
   return (
-    <Panel title="Fun" icon="sparkle" id="fun">
+    <Panel title="Fun extras" icon="sparkle" id="fun">
       <div className="set-rows">
         <SetRow id="set-chill" label="Chill mode" hint="The app's own words in lower case. Mod names, descriptions and anything people wrote stay as written">
           <Segmented<"off" | "on"> size="sm" label="Chill mode" value={chill ? "on" : "off"}

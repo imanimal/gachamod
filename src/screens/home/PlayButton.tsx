@@ -99,7 +99,7 @@ export function PlayButton({ big = false }: { big?: boolean }) {
         {canInstallLoader(game)
           ? <Button className="play-btn play-setup" variant="primary" size="lg" icon="install" busy={setup.running}
               title={`Installs XXMI Launcher and ${game.short}'s mod loader`} onClick={() => void installLoaders([game.id])}>Set up</Button>
-          : <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={`Find or pick ${game.name}'s folders in Settings, Games`}
+          : <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={`Find or pick ${game.name}'s folders in Settings, Games and mod loaders`}
               onClick={() => go({ view: "settings", section: "games" })}>Set up</Button>}
       </div>
     );

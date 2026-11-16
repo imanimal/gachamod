@@ -1,5 +1,5 @@
 // Settings export and import (a JSON file to move gachamod to another PC), and gachamod's own updates for the
-// About section. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
+// About and updates page. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
 import { useEffect, useState } from "react";
 import { oxford } from "../../lib/notes";
 import { Button, Checkbox, Confirm, Panel, Progress, Toggle, formatBytes, plural } from "../../ui/kit";
@@ -87,7 +87,7 @@ export function TransferSection() {
   };
 
   return (
-    <Panel title="Back up and move" icon="export" id="transfer">
+    <Panel title="Back up or move your settings" icon="export" id="transfer">
       <p className="hint set-note">One file with your settings and each game's folders, theme and launch options, to set up gachamod on another PC or keep a copy.
         Folders that don't exist on the other PC are skipped.</p>
       <div className="row">
@@ -127,7 +127,7 @@ function ImportPlan({ plan }: { plan: ImportSummary }) {
   );
 }
 
-// ── updates (About section) ──
+// ── updates (the "gachamod updates" panel on About and updates) ──
 
 export function UpdateRow() {
   const auto = appUpdateCheckPref.use();
@@ -173,10 +173,10 @@ export function UpdateRow() {
   return (
     <div className="set-rows set-update">
       <div className="set-row">
-        <span><b>Updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "gachamod doesn't look for new versions by itself"}</span></span>
+        <span><b>Check for updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "gachamod doesn't look for new versions by itself"}</span></span>
         <span className="set-admin">
           <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
-          <span title="gachamod looks for a new version at start and every 6 hours. The same switch is under Mods, Automatic">
+          <span title="gachamod looks for a new version at start and every 6 hours. The same switch is in Mods and downloads, under Automatic updates and scans">
             <Toggle checked={auto} label="Automatic" onChange={(v) => void appUpdateCheckPref.set(v, v ? "Updating gachamod automatically" : "Stopped updating gachamod automatically")} />
           </span>
         </span>

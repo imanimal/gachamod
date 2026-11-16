@@ -412,7 +412,7 @@ the mod card and a line in Tools. Turning off a live skin the game doesn't show 
 what the character wears instead (`not_showing`).
 
 Zenless Zone Zero is the game this was checked in (`live::CHECKED`). In other games new groups, Every character and the
-drawn menu are a tester option (setting `ui.tester`, Settings > Feedback and data); groups a game already has keep working.
+drawn menu are a tester option (setting `ui.tester`, Settings > Feedback, privacy and logs); groups a game already has keep working.
 
 The panel has one switch, "Pick skins with F7 while you play" (`<game>.liveAll`, `live::set_all` and `auto_add`). On:
 every mod that has a character, has an ini and isn't a sub-mod goes live, and new ones join after a scan. Off: every
@@ -469,6 +469,25 @@ focuses it). A pick goes through `overlay_pick` (the same `live::pick` and key c
 game forward, and the window hides when it loses focus. Esc, the menu key and B close it. Closing the main window ends
 the app: the menu window is made again whenever its key is pressed, and would otherwise keep the app running with no
 window to close.
+
+The menu has three tabs (Tab, Shift+Tab or the bumpers switch):
+
+- My mods: the characters and their skins, as above.
+- Browse: the app's own GameBanana browser (`browse/GbBrowser.tsx`), not a copy of it. Every sort, High quality, the
+  Filters button (type, category, creators you follow, mods you have, mods for adults, saved filters), the character
+  row, and more mods as the list scrolls. A card opens the mod's page (`browse/ModDrawer.tsx`: pictures, files with
+  Install, description, comments), and a creator's name opens their page. Before 2026-11-15 this tab was a list of its
+  own: one page of 30 mods, two sorts and no filters.
+- Downloads: the app's Downloads screen. The tab's name carries the number running or waiting.
+
+How the app's parts run in this window: it has a page history of its own (`lib/store.ts`; `isMenuWindow` keeps it
+from changing the game and page the app opens on). A tab is a view (`library`, `browse`, `downloads`), a mod's page
+is a numeric `modId`, a creator's page is `user`. `go({ view: "library", modId })` (a card's Installed tag, a toast's
+Open) shows that mod's details in My mods. A character's name shows their skins in My mods, or their mods in Browse
+when they have none. Any other page (Settings, Tools) and the AI helper open in gachamod's own window
+(`overlay_open_app`, event `app-go`), which comes to the front, so the menu closes. The button next to Close does the
+same for the page showing. The menu also shows the backend's messages ("Installed X") with Open; turning a new mod on
+stays with the app's own window (`library/afterInstall.ts`), so it isn't done twice.
 
 The bottom row holds the menu's own settings, kept as app settings:
 
@@ -608,6 +627,9 @@ helper, the app's logic driven from a small program on the real library):
    F10 within a few seconds.
 6. The menu window over ZZZ: the game shows through at 85% and 70%, the cursor comes back where it was after a pick with
    Close after picking off, and the game keeps its own cursor after a pick that closes the menu.
+7. The Browse and Downloads tabs over a game (checked in a browser with the demo data only): the list loads more as
+   it scrolls, Install from a card and from a mod's page, the mod showing under My mods once it is installed, and a
+   page handed to gachamod's own window (the Mods for adults button on an empty list) bringing that window forward.
 
 Known limits: the game also sees the keys and buttons pressed in the drawn menu. A pick from the app or the menu window
 brings the game forward first and takes most of a second. XXMI Launcher writes `check_foreground_window` into d3dx.ini at

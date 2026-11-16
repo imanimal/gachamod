@@ -5,8 +5,8 @@ holds and how to turn it off.
 
 | What | When | Off switch |
 | --- | --- | --- |
-| Usage counts | Every 5 minutes and when the app quits | Settings, Feedback and data, Usage counts |
-| Crash reports | Same, for crash files not sent yet | Settings, Feedback and data, Crash reports |
+| Usage counts | Every 5 minutes and when the app quits | Settings, Feedback, privacy and logs, Usage counts |
+| Crash reports | Same, for crash files not sent yet | Settings, Feedback, privacy and logs, Crash reports |
 | Feedback | When the player presses Send | Only sent by hand |
 | Game checks | When the player sends the results of Check this game | Only sent by hand |
 
@@ -88,7 +88,7 @@ lists the answers (docs/testing.md has one).
 
 ## Logs
 
-`<data folder>/logs/gachamod.log` (Settings, Feedback and data, Open logs folder) gets:
+`<data folder>/logs/gachamod.log` (Settings, Feedback, privacy and logs, Open logs folder) gets:
 
 - the starts and quits;
 - crashes;

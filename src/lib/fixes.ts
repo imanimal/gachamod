@@ -83,7 +83,7 @@ onApp((e) => {
 });
 
 /** Off mutes the broken-mod warnings: mod cards, a mod's details and the Problems filter in Mods stop showing them,
- *  and Tools > Fixes folds its list away. The Mute button in Tools > Fixes and Settings > Automatic share it. */
+ *  and Tools > Fixes folds its list away. The Mute button in Tools > Fixes and Settings > Mods a game update broke share it. */
 export const fixWarningsPref = pref<boolean>("fixes.warn", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
 /** Health of every installed mod of a game, keyed by mod id. Updates when a scan or fix finishes. Empty while the

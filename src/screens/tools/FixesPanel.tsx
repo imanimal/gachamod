@@ -157,7 +157,7 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
   );
 }
 
-/** New fixer tools for the game on GameBanana, until dismissed. Off with Settings > Automatic > Look for new mod fixers. */
+/** New fixer tools for the game on GameBanana, until dismissed. Off with Settings > Mods a game update broke > Look for new mod fixers. */
 function NewFixers({ game }: { game: GameId }) {
   const on = fixesAutoUpdatePref.use();
   const seen = seenPref.use();

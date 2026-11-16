@@ -5,6 +5,10 @@ import { describeCall, track } from "./activity";
 
 export const inTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** This window is the menu shown over a running game (src-tauri overlay.rs), or its demo at #overlay in a browser. */
+export const isMenuWindow = (): boolean => typeof window !== "undefined" && (window.location.hash === "#overlay"
+  || (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__?.metadata?.currentWindow?.label === "overlay");
+
 type Handler = (args: Record<string, unknown>) => unknown | Promise<unknown>;
 const demo: Record<string, Handler> = {};
 

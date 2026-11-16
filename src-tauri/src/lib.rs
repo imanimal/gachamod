@@ -324,6 +324,7 @@ pub fn run() {
             overlay::overlay_game,
             overlay::overlay_hide,
             overlay::overlay_pick,
+            overlay::overlay_open_app,
             commands::modtools::hash_lookup,
             commands::modtools::pack_plan,
             commands::modtools::pack_export,

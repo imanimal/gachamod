@@ -79,7 +79,7 @@ pub async fn settings_import_undo(st: State<'_, AppState>, backup: String) -> Re
 // Tauri's updater reads latest.json from the newest GitHub release (tauri.conf.json: plugins > updater) and only
 // accepts an installer signed with the release key. With automatic updates on (the default), gachamod looks at start
 // and every 6 hours, downloads a newer version in the background and installs it when gachamod closes. The toast
-// and Settings, About offer to restart now instead. On Windows the installer runs with a small progress window.
+// and Settings, About and updates offer to restart now instead. On Windows the installer runs with a small progress window.
 
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
 

@@ -2,6 +2,8 @@
 import { call } from "../tauri";
 import type { ModBackup, ModSkip } from "./modtools";
 import type { GameId } from "./types";
+import type { AiTask } from "../ai";
+import type { Route } from "../store";
 
 export interface LiveMod { modId: string; slot: number; name: string; enabled: boolean; preview: string | null }
 /** One character's live mods. `active` is the slot showing; 0 is none of them (the game's own look). */
@@ -48,4 +50,7 @@ export const skinMenu = {
   hide: (game: GameId) => call<void>("overlay_hide", { game }),
   /** `close`: a skin that shows at once closes the menu and leaves the game in front. */
   pick: (game: GameId, group: number, slot: number, close = false) => call<Picked>("overlay_pick", { game, group, slot, close }),
+  /** Show a page the menu doesn't have (Settings, Tools), or start a job for the AI helper, in gachamod's own
+   *  window. That window comes to the front, so the menu closes. */
+  openInApp: (game: GameId, route: Route | null, ai: AiTask | null = null) => call<void>("overlay_open_app", { game, route, ai }),
 };

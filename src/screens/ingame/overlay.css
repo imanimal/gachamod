@@ -5,6 +5,10 @@
 /* important: index.html paints the first frame per theme (the ZZZ dark theme black), and those rules outrank a class */
 html.ov-window, html.ov-window body { background: transparent !important; }
 html.ov-window.ov-demo { background: #3b4048 !important; }
+/* no title bar here: a mod's page, a window and the lightbox cover the whole menu */
+html.ov-window { --title-h: 0px; }
+/* messages sit above the row of settings along the bottom */
+html.ov-window .toasts { bottom: 3.4rem; }
 .ov { display: flex; flex-direction: column; height: 100vh; background: color-mix(in srgb, var(--bg) var(--ov-cover, 85%), transparent); color: var(--text);
   border: 1px solid var(--line-2); animation: ov-open .18s ease-out both; }
 .ov-top { display: flex; align-items: center; gap: .6rem; padding: .6rem .7rem; border-bottom: 1px solid var(--line); }
@@ -64,6 +68,12 @@ html.ov-window.ov-demo { background: #3b4048 !important; }
 .ov-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; background: var(--bg); transition: opacity .12s; }
 .ov-cell:hover .ov-more, .ov-cell:focus-within .ov-more { opacity: 1; }
 
+/* Browse and Downloads: the app's own screens (GbBrowser, CreatorPage, Downloads), scrolling inside the menu */
+.ov-page { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; animation: ov-slide .2s ease-out both; }
+.ov-page > .page { min-height: 0; }
+/* search, sort and filters stay in reach while the mods scroll under them. Solid, so cards don't show through */
+.ov-page .gbb-bar { position: sticky; top: 0; z-index: 3; margin: -1rem -1.2rem 0; padding: .7rem 1.2rem .6rem; background: var(--bg); border-bottom: 1px solid var(--line); }
+
 /* one mod in full, over the right side */
 .ov-detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(26rem, 62%); overflow-y: auto; background: var(--bg); border-left: 1px solid var(--line-2);
   display: flex; flex-direction: column; animation: ov-sheet .2s ease-out both; }
@@ -76,7 +86,7 @@ html.ov-window.ov-demo { background: #3b4048 !important; }
 .ov-detail-who { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
 .ov-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
 .ov-notes { white-space: pre-wrap; color: var(--text-2); }
-.ov-detail-a { display: flex; gap: .5rem; margin-top: .3rem; }
+.ov-detail-a { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .3rem; }
 
 /* along the bottom: what just happened (or the keys), and the menu's own settings */
 .ov-foot { display: flex; align-items: center; gap: .6rem 1.2rem; flex-wrap: wrap; padding: .45rem .8rem; border-top: 1px solid var(--line); font-size: .82em; }
@@ -92,7 +102,7 @@ html.ov-window.ov-demo { background: #3b4048 !important; }
 @keyframes ov-sheet { from { opacity: 0; transform: translateX(24px); } }
 @keyframes ov-pop { from { opacity: 0; transform: scale(.6); } }
 @media (prefers-reduced-motion: reduce) {
-  .ov, .ov-who, .ov-pane, .ov-cell, .ov-detail, .ov-check { animation: none; }
+  .ov, .ov-who, .ov-pane, .ov-page, .ov-cell, .ov-detail, .ov-check { animation: none; }
   .ov-pic img { transition: none; }
 }
 @media (max-width: 640px) {

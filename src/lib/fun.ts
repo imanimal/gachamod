@@ -1,4 +1,4 @@
-// The extras in Settings, Fun, all off until turned on: chill mode (the app's own words in lower case; names,
+// The extras in Settings, Fun extras, all off until turned on: chill mode (the app's own words in lower case; names,
 // descriptions and anything people wrote stay as written), the pity counter in Browse and seasonal touches. Also
 // the Konami code (keyboard or controller), which reveals a hidden theme. Owner: SETTINGS/AI area.
 import { pref } from "./prefs";

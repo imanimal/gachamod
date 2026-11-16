@@ -25,7 +25,7 @@ export async function welcome(list: GameState[] = allGames()) {
   const ready = list.filter((g) => g.modsDir && g.shown);
   if (ready.length) {
     toast(`Found ${listNames(ready)}. gachamod sends its developer anonymous usage counts and crash reports`, false,
-      { label: "Turn those off", run: () => go({ view: "settings", section: "feedback" }) });
+      { label: "Turn those off", run: () => go({ view: "settings", section: "privacy" }) });
   }
   const more = list.filter(canInstallLoader);
   if (more.length) {
@@ -113,11 +113,11 @@ export function SetupPage({ looking }: { looking: boolean }) {
 
       <p className="hint setup-more">
         Mods already in a folder XXMI doesn't know, or a game XXMI doesn't support, like Punishing: Gray Raven?{" "}
-        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title="Settings, Games: every game with its folders">Settings, Games</button> has those.
+        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title="Settings, Games and mod loaders: every game with its folders">Settings, Games and mod loaders</button> has those.
       </p>
       <p className="hint setup-more">
         gachamod sends its developer anonymous usage counts and crash reports.{" "}
-        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "feedback" })} title="Opens Settings, Feedback and data">Turn them off</button> any time.
+        <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "privacy" })} title="Opens Settings, Feedback, privacy and logs">Turn them off</button> any time.
       </p>
     </div>
   );

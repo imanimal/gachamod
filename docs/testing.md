@@ -93,7 +93,7 @@ These have only run against the demo and unit tests (a stand-in .bat fixer).
   still does after a restart.
 - The menu over the game: picking a skin keeps the menu open and the keyboard comes back to it once the keys have
   gone to the game. Clicking into the game still closes it. Browse installs a mod while the game runs.
-- Settings, Games, Uninstall mod loader for one game, then Install again: the Mods folder and d3dx_user.ini are where
+- Settings, Games and mod loaders, Uninstall mod loader for one game, then Install again: the Mods folder and d3dx_user.ini are where
   they were and XXMI Launcher shows the loader as not installed in between.
 - Uninstall XXMI Launcher: the launcher, loaders and shortcuts are in the Recycle Bin, the Mods folders are still in
   the XXMI folder, and the setup page offers to install again.

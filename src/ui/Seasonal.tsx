@@ -1,4 +1,4 @@
-// Seasonal touches (Settings, Fun; off by default): a few snowflakes in late December, hearts on Valentine's Day,
+// Seasonal touches (Settings, Fun extras; off by default): a few snowflakes in late December, hearts on Valentine's Day,
 // drifting behind every window. Nothing shows the rest of the year or with Animations off. Owner: SETTINGS/AI area.
 import { useMemo, type CSSProperties } from "react";
 import { season, seasonalPref } from "../lib/fun";

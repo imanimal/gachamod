@@ -205,7 +205,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
             options={[{ value: "grid", label: "", icon: "grid", title: "Grid" }, { value: "list", label: "", icon: "list", title: "List" }]} />
           <IconButton icon="refresh" className={scanning ? "lib-scanning" : undefined} disabled={scanning} onClick={() => void rescan()}
             label={scanning ? "Reading the Mods folder" : "Rescan: read the Mods folder again for changes made outside gachamod, then check every mod for updates on GameBanana. Opening this page only reads the folder"} />
-          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
+          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods and downloads)"
             onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
         </>}>
         {flagChips.length + kindRow.length + charRow.length > 0 && <CharRow count={flagChips.length + kindRow.length + charRow.length} deps={[flagChips.length, kindRow.length, charRow.length, character, kind, flag]}>
@@ -245,7 +245,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           <Empty icon="search" title="Nothing matches"
             actions={<>
               {filtersOn && <Button onClick={clearFilters}>Clear filters</Button>}
-              {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title="Settings, Mods">Mods for adults</Button>}
+              {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title="Settings, Mods and downloads">Mods for adults</Button>}
               {search.trim() && <Button variant="ghost" icon="search" onClick={() => openPalette(search.trim())} title="Search pages, settings, GameBanana and the rest (Ctrl+K)">Search everywhere</Button>}
             </>}>
             {nsfw === "hide" && mods.some((m) => m.nsfw) ? "Mods for adults are hidden." : "Try another search or filter."}

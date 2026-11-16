@@ -34,10 +34,10 @@ export function HotkeysSection() {
   const on = vals.on !== "0";
 
   return (
-    <Panel title="In-game hotkeys" icon="keyboard" id="hotkeys">
+    <Panel title="In-game profile hotkeys" icon="keyboard" id="hotkeys">
       <div className="set-rows">
         <div className="set-row">
-          <span><b>In-game hotkeys</b><span className="hint">Switch profile while a game runs, then reload mods. Give a profile its key in the profile's editor</span></span>
+          <span><b>Switch profiles with hotkeys</b><span className="hint">A key switches profile while a game runs, then reloads mods. Give a profile its key in the profile's editor</span></span>
           <Toggle checked={on} onChange={(v) => void set("on", v ? "1" : "0")} />
         </div>
       </div>

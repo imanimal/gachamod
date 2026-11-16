@@ -156,7 +156,7 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
 - Asking (UI, `screens/library/overlap.ts`): turning one mod on from its switch, its details or its menu while its
   character has another mod on opens a small menu by the switch: "Turn off Coca Cola", "Keep both on", "Make it a
   sub-mod of Coca Cola". Closing it leaves the mod off. `"<game>.oneSkin"` "auto" turns the other off without asking,
-  "0" keeps both; "ask" (default, and the old "1") asks. Settings, Mods: "Another skin already on" per game. Bulk
+  "0" keeps both; "ask" (default, and the old "1") asks. Settings, Mods and downloads: "Another skin already on" per game. Bulk
   turn-ons, profiles and hotkeys don't ask (the last one of each character wins, as before).
 - Sub-mods: `Sidecar.parent` (an id; `ModEntry.parent`) marks an add-on that goes with another mod (a hair recolour
   for one outfit). Set through update_meta `parent` ("" unlinks); a sub-mod's parent stands in when picked as a parent,
@@ -521,7 +521,7 @@ modId, name?, note? }] }`). `node scripts/motd.mjs <link> <game> [date] [note]` 
 feature; commit and push to publish. Only people who can push to the repository can change it, so the app needs no
 sign-in or machine check. The app reads the file at most every 12 hours. While `enabled` is false nothing shows;
 when true, Browse's header gets a gift button for the current game's pick (today's, or the latest within three
-days), and Settings, Fun gets a switch to hide it (which also stops the reads).
+days), and Settings, Fun extras gets a switch to hide it (which also stops the reads).
 
 - One component, `GbBrowser { game, embedded?, onExpand?, character? }`, is the Browse page, the Home section
   (fixed height, Expand keeps the filters because they live in the per-game store) and the character page list
@@ -659,10 +659,10 @@ UI:
     (`xxmi_install`, gacha-core `xxmi_setup.rs`; progress on "xxmi-setup"). No game found: "Look again". The page
     looks again every 10 seconds and on focus, and `watchSetup` keeps looking (focus, every 30 s) while a shown game
     has no Mods folder. Settings and Extensions stay reachable.
-  - Everywhere a Mods folder is missing (Settings, Games, the Play button's Set up, a failed download and its toast),
+  - Everywhere a Mods folder is missing (Settings, Games and mod loaders, the Play button's Set up, a failed download and its toast),
     the first button installs the loader or looks again (`getReady`), and picking a folder by hand comes second
     (`pickModsFolder`).
-  - Uninstalling (`xxmi_uninstall`, `xxmi_setup::uninstall`): Settings, Games has "Uninstall mod loader" per XXMI game
+  - Uninstalling (`xxmi_uninstall`, `xxmi_setup::uninstall`): Settings, Games and mod loaders has "Uninstall mod loader" per XXMI game
     and "Uninstall XXMI Launcher" (asks first). Files go to the Recycle Bin (`recycle.rs`); each Mods folder and
     d3dx_user.ini stay. One loader also comes out of XXMI's config (enabled importers, deployed version) so XXMI
     sees it as gone; all of them also takes the shortcuts that point into the XXMI folder. It refuses while XXMI
@@ -680,7 +680,7 @@ UI:
   makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
   WebView2 won't start a second window in the same folder with other flags. Starting `gachamod.exe --disable-gpu`
   saves it off first; a copy already running saves it and restarts.
-- Rendering log ("render.log", default on; Settings, Feedback and data, and under Hardware acceleration in
+- Rendering log ("render.log", default on; Settings, Feedback, privacy and logs, and under Hardware acceleration in
   Appearance). `gacha-core render_log.rs` keeps the files in `<data folder>/logs/rendering`, `src-tauri render.rs`
   feeds it and `lib/renderWatch.ts` reports from the page. It logs window focus, moves, size and scale, screens
   changing, sleep gaps, WebView2 processes exiting (`ProcessFailed`), the page's frames stopping or slowing, long
@@ -692,25 +692,25 @@ UI:
   when there is one. WebView2 only writes that file when gachamod starts with `--browser-log`, which adds
   `--enable-logging --v=0` to every window's flags and makes WebView2 open a console window. Feedback with logs
   attached sends the newest incident too.
-- New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
+- New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and downloads, and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
   rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
   more skins and isn't switched in game yet, the toast offers "Switch in game" (live switching).
-- One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
+- One-game mode (Settings, Games and mod loaders, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
 - Logs, crash reports, usage counts and feedback (`logs.rs`, `telemetry.rs`, `commands/report.rs`,
   `lib/telemetry.ts`; docs/telemetry.md has every event). The log and crash files live in `<data folder>/logs`.
   Usage counts and crash reports go to PostHog when they're on (both are on by default, with switches in Settings,
-  Feedback and data, and a line in onboarding). Feedback is sent from a form opened from Settings, the title bar's
+  Feedback, privacy and logs, and a line in onboarding). Feedback is sent from a form opened from Settings, the title bar's
   Help menu, the search ("Send feedback") and a screen that hit an error.
-- Running as administrator: Settings, Games has "Restart as administrator" and an "Always" switch (Windows'
+- Running as administrator: Settings, Games and mod loaders has "Restart as administrator" and an "Always" switch (Windows'
   RUNASADMIN flag for gachamod.exe under HKCU AppCompatFlags\Layers, which the installer also sets when the player
   says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
   (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
-- Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and
-  data, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
+- Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback,
+  privacy and logs, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
   what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
   the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
 - `npm run installer` builds the installer and gachamod setup with build-machine folders written as `~`
@@ -720,7 +720,7 @@ UI:
   installer signed with the key in `%USERPROFILE%\.tauri\gachamod.key` (its public half is in tauri.conf.json, plugins
   > updater). With "app.updateCheck" on (default), it checks 12 s after start and every 6 hours, downloads a newer
   version quietly and toasts "gachamod X is ready" with Restart now; at quit (`RunEvent::Exit`) it runs the installer
-  without reopening gachamod. Settings, About shows the state (`app_update_status`) with Check now and Update now or
+  without reopening gachamod. Settings, About and updates shows the state (`app_update_status`) with Check now and Update now or
   Restart to update. The NSIS installer runs passive (a small progress window), per user, no administrator.
 - `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
   builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
@@ -776,10 +776,19 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 ### Settings
 
 - `Settings.tsx` (view "settings"): pages listed on the left in groups (`Paged.tsx`, shared with Tools). A page
-  holds the panels that belong together, so the list stays short: Games and mods has "games" (games, xxmi), "mods"
-  (mods, mod-folders, automatic, storage), "creators" and "hotkeys"; Look has "appearance" (appearance, themes) and "fun"; App
-  has "account" (listed as Connections: account, integrations, ai), "extensions", "feedback" and "about" (about,
-  transfer). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`. A panel on a page has no fill
+  holds the panels that belong together, so the list stays short. Page ids, with their panel ids: Games and mods has
+  "games" (games, game-start, xxmi), "mods" (mods, adult, mod-folders, installing, automatic, broken-mods, storage),
+  "creators" and "hotkeys"; Look has "appearance" (appearance, layout, themes, graphics) and "fun"; App has "account"
+  (account, integrations, ai), "extensions", "feedback" (feedback, privacy, logs) and "about" (about, updates,
+  transfer, repair). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`.
+- Names say what is inside. A page is named for its contents, not its category: "Games and mod loaders", "Mods and
+  downloads", "In-game profile hotkeys", "Account, links and AI", "Feedback, privacy and logs", "About and updates"
+  (updates were hard to find under a page called About). A panel holds one kind of setting under a heading that
+  names it: "Downloads and installing", "Automatic updates and scans", "Mods a game update broke", "Trash and removed
+  mods", "Hardware acceleration and rendering log", "gachamod updates", "Repair, reset or uninstall". A setting that
+  fits no panel gets a new panel, not a row under a vague heading. A long page name wraps to a second line in the
+  list. Each page also has a hover tip listing what is on it. The ids stay short and stable; only the names change.
+- A panel on a page has no fill
   or theme frame, only a thin outline in the theme's line colour, so a short page isn't a card floating over an
   empty screen. New Eridu blurs its background lettering behind these panels (`themes/zzz-screens.css`).
   Scrolling past the end of a page slides the next one up into view like one long scroll
@@ -792,10 +801,12 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   `go({ view: "settings", section })` with a page id, a panel id (`storage`, `themes`) or a row id
   (`set-trash-days`, `set-onscreen` ...), which opens its page, scrolls to the panel or row and flashes it. A page
   that renders nothing is left out of the list.
-- A setting sits where people look for it, and some show twice. Mods folders (`mod-folders`, on the Mods page)
-  lists each game's Mods folder with Detect again, Change and Install mod loader or Find it; the same folders are
-  under Games. Run as administrator is under Games and In-game hotkeys (one shared state in `Feedback.tsx`).
-  Automatic updates has its switch in About next to Check now as well as under Automatic. Games has a Launch
+- A setting sits where people look for it, and some show twice. Mods folders (`mod-folders`, on the Mods and
+  downloads page) lists each game's Mods folder with Detect again, Change and Install mod loader or Find it; the same
+  folders are under Games and their folders. Run as administrator is under Administrator and launch options (on
+  Games and mod loaders) and under In-game profile hotkeys (one shared state in `Feedback.tsx`). Automatic updates
+  has its switch under gachamod updates next to Check now as well as under Automatic updates and scans. The
+  rendering log is under Log files and next to Hardware acceleration. Administrator and launch options has a Launch
   options row that opens Tools, Launch.
 - `lib/places.ts` gives a message that names a setting or a place a button that opens it. Toasts without a button
   of their own get it by their words, backend messages included ("has no Mods folder yet" gets "Mods folders",
@@ -807,29 +818,35 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   3DMigoto loader (a link to it), and games without a GameBanana character category say so once.
 - Appearance: theme per game with previews, light or dark for every theme at once ("Game's own" keeps each game's
   look: Teyvat and Talos-II light, the rest dark; or all dark, all light, follow the system; pref "gm.schemeMode"),
-  with a per-theme choice under "Game's own", accent, layout (density, sidebar side, nav style, corners), text
-  size, animations. Custom themes: list, apply, delete with Undo, import/export as JSON, and
+  with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); layout (density, sidebar
+  side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
+  hardware acceleration with a copy of the rendering log row ("Hardware acceleration and rendering log"). Custom
+  themes: list, apply, delete with Undo, import/export as JSON, and
   "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
-- Automatic: one switch each, all prefs in `automatic.ts` that other areas read: `appUpdateCheckPref`
+- What gachamod does by itself has one switch each, all prefs in `automatic.ts` that other areas read. They sit in
+  three panels of Mods and downloads: "Automatic updates and scans" (app updates, mod updates, rescans), "Downloads
+  and installing" (archives, every mod in an archive, slow downloads, on-screen toggles for new mods) and "Mods a
+  game update broke" (new fixers, the warnings). The prefs: `appUpdateCheckPref`
   ("app.updateCheck", shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
-- Storage: `trashDaysPref` ("trash.days", 0 to 3650, default 0; 0 deletes files at once, the record stays in
+- Trash and removed mods: `trashDaysPref` ("trash.days", 0 to 3650, default 0; 0 deletes files at once, the record stays in
   Mods, Trash). Lowering it asks first when files would go now (that can't be undone). `trashPhrase()` finishes a
   sentence about it for LIBRARY's texts ("stay on your PC for 14 days").
 - Creators: followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the
   creator's page, an x to remove (setCreatorFlag, with Undo).
 - AI helper: off / most useful (default) / everything, the chatbot, and the jobs as buttons.
-- About has "Reset gachamod" (asks first). `app_reset` leaves a note in the data folder, the window clears its own
+- About and updates: "About gachamod" (version, data folder, tip jar), "gachamod updates", "Back up or move your
+  settings" (export and import) and "Repair, reset or uninstall", which has "Reset gachamod" (asks first). `app_reset` leaves a note in the data folder, the window clears its own
   storage and `app_relaunch` restarts. At the next start, before the database opens, `reset::finish` deletes what
   can be fetched again (downloads, staging, caches, fixers, the GameBanana sign-in), keeps logs and backups, and
   moves everything else (the database, trash, extensions) to `backups/before-reset-<time>/`. Mods folders, games
   and XXMI Launcher are outside the data folder.
-- Mods also has "Shuffle outfits" (`screens/library/shuffle.ts`, pref "mods.shuffle": off, each Play, once a day at
+- "Turning mods on and reloading the game" also has "Shuffle outfits" (`screens/library/shuffle.ts`, pref "mods.shuffle": off, each Play, once a day at
   the first Play): every character with two or more mods gets one of them on at random and the others off, as one
   change with Undo. Mods hidden as for adults stay out. Also a dice button on Mods and "Shuffle outfits" in search.
-- Fun (`FunSection.tsx`, `lib/fun.ts`), all off by default:
+- Fun extras (`FunSection.tsx`, `lib/fun.ts`), all off by default:
   - Chill mode ("fun.chill", html[data-chill], `styles/fun.css`): the app's own words in lower case. Content keeps
     its case (mod, character, creator and profile names, descriptions, comments, tags, paths, fields); a line that
     mixes both stays as written. Toasts and tips are lowercased whole.
@@ -857,6 +874,11 @@ The "ingame" panel sets up which characters switch skins without a reload and ho
 (docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
 window label `overlay`), or a plainer menu the game draws itself (`crates/gacha-core/src/live/menu.rs`), which is also
 what opens in exclusive fullscreen. The panel says which one is better and why.
+
+The window over the game has three tabs: My mods (characters and their skins), Browse and Downloads. Browse and
+Downloads are the app's own `GbBrowser`, `ModDrawer`, `CreatorPage` and `Downloads`, running on that window's own
+page history. A change to those shows in the menu too, so check both. Pages the menu doesn't have open in the main
+window (`skinMenu.openInApp`, event `app-go`, handled in `App.tsx`).
 
 ### The AI helper
 

@@ -30,10 +30,17 @@ export function viewLabel(view: View, game?: GameId | null): string {
   return view === "characters" ? charNoun(game) : VIEW_INFO[view].label;
 }
 
+/** Settings' pages and panels (settings/settingsSearch.ts has the same names) and Tools' pages, by route section. */
 const SECTIONS: Record<string, string> = {
-  games: "Games", xxmi: "XXMI Launcher", appearance: "Appearance", themes: "Custom themes", mods: "Mods", automatic: "Automatic",
-  storage: "Storage", creators: "Creators", integrations: "Links and files", transfer: "Back up and move", about: "About",
-  account: "GameBanana account", hotkeys: "In-game hotkeys", ai: "AI helper", launch: "Launch options", fixes: "Mod fixers", ingame: "In-game menu",
+  games: "Games and mod loaders", "game-start": "Administrator and launch options", xxmi: "XXMI Launcher",
+  mods: "Mods and downloads", adult: "Mods for adults", "mod-folders": "Mods folders", installing: "Downloads and installing",
+  automatic: "Automatic updates and scans", "broken-mods": "Mods a game update broke", storage: "Trash and removed mods",
+  creators: "Creators", hotkeys: "In-game profile hotkeys",
+  appearance: "Appearance", layout: "Layout, text size and animations", themes: "Custom themes", graphics: "Hardware acceleration and rendering log",
+  fun: "Fun extras", account: "GameBanana account", integrations: "1-click installs and .gachamod files", ai: "AI helper",
+  feedback: "Feedback, privacy and logs", privacy: "Usage counts and crash reports", logs: "Log files",
+  about: "About and updates", updates: "gachamod updates", transfer: "Back up or move your settings", repair: "Repair, reset or uninstall",
+  launch: "Launch options", fixes: "Mod fixers", ingame: "In-game menu",
   history: "History", dev: "Dev tools", extensions: "Extensions",
 };
 /** "set-trash-days" (one setting in Settings) reads "Trash days". */

@@ -1,26 +1,46 @@
 // The menu shown over a running game (src-tauri overlay.rs): its own window, opened with the menu key or by pressing
-// both sticks of a controller. Characters down the left with their pictures and a search above them, the picked
-// character's skins and other mods on the right, any mod's details, and GameBanana to get more. Picking a skin shows
-// it in the game, and the menu closes or stays open by its "Close after picking" setting along the bottom. A mod that doesn't switch in game turns on alone (the character's other mods go off); Shift+click,
-// Shift+Enter or "Turn on with others" in its right-click menu keeps the others on. In a browser, #overlay shows it
-// with the demo data. Owner: INGAME area.
+// both sticks of a controller. It has three tabs.
+// My mods: characters down the left with their pictures and a search above them, the picked character's skins and
+// other mods on the right, and any mod's details. Picking a skin shows it in the game, and the menu closes or stays
+// open by its "Close after picking" setting along the bottom. A mod that doesn't switch in game turns on alone (the
+// character's other mods go off); Shift+click, Shift+Enter or "Turn on with others" in its right-click menu keeps
+// the others on.
+// Browse: the app's own GameBanana browser (browse/GbBrowser.tsx), whole: every sort and filter, the character row,
+// more mods as the list scrolls, a mod's page with its files, and creators' pages.
+// Downloads: the app's Downloads screen.
+// The window has pages of its own (lib/store.ts), so the app's parts work here as they are: a tab is a view, a mod's
+// page is a route. A page only the app has (Settings, Tools) opens in gachamod's own window.
+// In a browser, #overlay shows it with the demo data. Owner: INGAME area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { errorText, fileUrl, library, skinMenu, type GameId, type LiveGroup, type ModEntry } from "../../lib/api";
-import { imageAt, isAbort, listMods, queueLatest, useCharacterList, type GbCard } from "../../lib/gamebanana";
+import { app as appApi, errorText, fileUrl, library, skinMenu, type GameId, type GameState, type LiveGroup, type ModEntry } from "../../lib/api";
 import { installGamepad, moveFocus } from "../../lib/gamepad";
+import { installUndoKeys } from "../../lib/history";
+import "../../lib/places";
 import { pref, useNsfw } from "../../lib/prefs";
-import { refreshGames, reloadKeyOf, useGames } from "../../lib/store";
+import { back, consumeRoute, currentGame, currentRoute, go, onApp, refreshGames, reloadKeyOf, replaceRoute, setGame, useBadges, useGameId, useGames, useRoute, type Route, type View } from "../../lib/store";
 import { held, listen } from "../../lib/tauri";
 import { applyGameTheme } from "../../lib/theme";
 import { ContextMenuHost, menuForFocus, menuHandler, menuIsOpen, type MenuEntry } from "../../ui/ContextMenu";
+import { ErrorBoundary } from "../../ui/ErrorBoundary";
 import { Icon } from "../../ui/Icon";
-import { Badge, Button, Checkbox, IconButton, SearchField, Segmented, Skeleton, Waiting, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Checkbox, IconButton, SearchField, Segmented, Waiting, formatBytes, plural, timeAgo } from "../../ui/kit";
 import { LazyImg } from "../../ui/LazyImg";
 import { Portrait } from "../../ui/Portrait";
+import { Toasts, toast } from "../../ui/toast";
+import { installLatest } from "../browse/actions";
+import { CreatorPage } from "../browse/CreatorPage";
+import { GbBrowser } from "../browse/GbBrowser";
+import { OnlineOverlays } from "../browse/OnlineOverlays";
+import { openGbMod, openWithFilters } from "../browse/state";
+import { Downloads } from "../downloads/Downloads";
 import { isNewSkin, markShown, newSkinTip, reloadLive, useLive } from "./data";
 import "./overlay.css";
 
-type Tab = "mine" | "browse";
+type Tab = "mine" | "browse" | "downloads";
+const TABS: Tab[] = ["mine", "browse", "downloads"];
+const VIEW_OF: Record<Tab, View> = { mine: "library", browse: "browse", downloads: "downloads" };
+/** The tab a page shows in, or null for a page only the app's own window has. */
+const tabOf = (r: Route): Tab | null => (r.view === "library" ? "mine" : r.view === "browse" ? "browse" : r.view === "downloads" ? "downloads" : null);
 /** Mods with no character sit under this name, last in the list. */
 const OTHER = "Other mods";
 
@@ -41,9 +61,10 @@ function touch(game: GameId, character: string) {
 }
 
 export function Overlay() {
-  const [game, setGame] = useState<GameId | null>(null);
+  const [game, setMenuGame] = useState<GameId | null>(null);
   const [opened, setOpened] = useState(0);
   const games = useGames();
+  const current = useGameId();
   const state = games.find((g) => g.id === game) ?? null;
 
   useEffect(() => {
@@ -51,13 +72,34 @@ export function Overlay() {
     document.documentElement.classList.add("ov-window");
     if (!("__TAURI_INTERNALS__" in window)) document.documentElement.classList.add("ov-demo");
     void refreshGames();
-    void skinMenu.game().then((g) => { if (g) setGame(g); });
-    return held(listen<{ game: GameId }>("overlay-open", (p) => { setGame(p.game); void reloadLive(p.game); setOpened((n) => n + 1); }));
+    void skinMenu.game().then((g) => { if (g) setMenuGame(g); });
+    const offs = [
+      held(listen<{ game: GameId }>("overlay-open", (p) => { setMenuGame(p.game); void reloadLive(p.game); setOpened((n) => n + 1); })),
+      // what the backend says ("Installed X for Y"). The app's own window turns a new mod on (library/afterInstall.ts);
+      // here the message shows with the way to the mod
+      held(appApi.onToast((p) => {
+        const o = p.open;
+        toast(p.text, !!p.bad, o && o.game === currentGame()?.id ? { label: "Open", run: () => go({ view: "library", modId: o.modId }) } : undefined);
+      })),
+      installUndoKeys(),
+    ];
+    return () => offs.forEach((f) => f());
   }, []);
   useEffect(() => { applyGameTheme(state); }, [state?.id, state?.theme, state?.accent]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the browser, a mod's page and Downloads read the app-wide current game: here it is the game the menu is open for
+  useEffect(() => { if (game && current !== game && games.some((g) => g.id === game)) setGame(game); }, [game, current, games]);
+  // the AI helper is in the app's own window
+  useEffect(() => onApp((e) => { if (e.type === "ai" && game) skinMenu.openInApp(game, null, e.task).catch((err) => toast(errorText(err), true)); }), [game]);
 
   if (!game) return <div className="ov"><div className="ov-wait"><Waiting what="Finding the game this menu is for" /></div></div>;
-  return <Menu key={game} game={game} gbGameId={state?.gamebananaId ?? null} opened={opened} />;
+  return (
+    <>
+      <Menu key={game} game={game} state={state} opened={opened} />
+      {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
+      <ContextMenuHost />
+      <Toasts />
+    </>
+  );
 }
 
 /** One character in the list: the skins that switch in game (if any) and the rest of its mods. */
@@ -79,10 +121,17 @@ function useMods(game: GameId, opened: number): [ModEntry[] | null, () => Promis
   return [mods, load];
 }
 
-function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | null; opened: number }) {
+function Menu({ game, state, opened }: { game: GameId; state: GameState | null; opened: number }) {
   const info = useLive(game);
   const [mods, reloadMods] = useMods(game, opened);
-  const [tab, setTab] = useState<Tab>("mine");
+  const route = useRoute();
+  const tab = tabOf(route) ?? "mine";
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  /** How many downloads are running or waiting, or failed when none are, for the tab's name (OnlineOverlays counts). */
+  const dl = useBadges().downloads;
+  const downloading = dl?.tone === "run" ? dl.count ?? 0 : 0;
+  const failed = dl?.tone === "bad" ? dl.count ?? 0 : 0;
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -91,11 +140,19 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
   const [hint, setHint] = useState<string | null>(null);
   const closeAfter = closePref.use();
   const cover = coverPref.use();
-  const [detail, setDetail] = useState<{ mod: ModEntry } | { card: GbCard } | null>(null);
+  const [detail, setDetail] = useState<{ mod: ModEntry } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const close = useCallback(() => void skinMenu.hide(game), [game]);
   const detailRef = useRef(detail);
   detailRef.current = detail;
+  const setTab = useCallback((t: Tab) => { setDetail(null); go({ view: VIEW_OF[t] }); }, []);
+  /** Esc, B and the Back button: out of a mod's details, back from a creator's page to the mods, else close the menu. */
+  const leave = useCallback(() => {
+    const r = currentRoute();
+    if (detailRef.current) setDetail(null);
+    else if (r.view === "browse" && r.user) { if (!back()) go({ view: "browse" }); }
+    else close();
+  }, [close]);
 
   const everyone = useMemo<Who[]>(() => {
     if (!info || !mods) return [];
@@ -120,22 +177,49 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
 
   const words = q.trim().toLowerCase();
   const shown = useMemo(() => {
-    if (tab !== "mine" || !words) return everyone;
+    if (!words) return everyone;
     const hit = (s: string) => s.toLowerCase().includes(words);
     return everyone.filter((w) => hit(w.name) || w.mods.some((m) => hit(m.name)) || w.group?.mods.some((m) => hit(m.name)));
-  }, [everyone, words, tab]);
+  }, [everyone, words]);
   const who = shown.find((w) => w.name === sel) ?? shown[0] ?? null;
   const loading = info === null || mods === null;
 
-  // each time it opens: no search or details left over, on the character played last, on the skin that is showing
+  // each time it opens: My mods, no search or details left over, on the character played last, on the skin that is showing
   useEffect(() => {
     setQ("");
     setNote(null);
     setHint(null);
     setDetail(null);
-    setTab("mine");
     setSel(null);
+    go({ view: "library" });
   }, [opened]);
+
+  // Pages the app's parts ask for (a card's Installed tag, a character's name, a toast's button). A mod of the
+  // library opens its details here. A character opens their skins, or their mods on GameBanana when there are none.
+  // A page only the app has opens in gachamod's own window.
+  useEffect(() => {
+    if (route.view === "library" && typeof route.modId === "string") {
+      if (loading) return;
+      const id = route.modId;
+      const m = mods.find((x) => x.id === id);
+      const w = m && everyone.find((x) => x.mods.some((y) => y.id === id) || x.group?.mods.some((y) => y.modId === id));
+      if (m) { setQ(""); setSel(w?.name ?? null); setDetail({ mod: m }); }
+      consumeRoute(["modId"]);
+      return;
+    }
+    if (route.view === "characters") {
+      if (loading) return;
+      const name = route.character;
+      const w = name ? everyone.find((x) => x.name.toLowerCase() === name.toLowerCase()) : null;
+      if (w) { setQ(""); setDetail(null); setSel(w.name); replaceRoute({ view: "library" }); }
+      else if (name) { openWithFilters(game, { character: name }); replaceRoute({ view: "browse" }); }
+      else replaceRoute({ view: "library" });
+      return;
+    }
+    if (tabOf(route)) return;
+    skinMenu.openInApp(game, route).catch((e) => toast(errorText(e), true));
+    if (!back()) replaceRoute({ view: "library" });
+  }, [route, loading, mods, everyone, game]);
   useEffect(() => {
     if (loading) return;
     const t = window.setTimeout(() => (root.current?.querySelector<HTMLElement>(".ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-tile, .ov-who"))?.focus(), 80);
@@ -143,31 +227,48 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
   }, [opened, loading]);
 
   useEffect(() => {
-    const search = () => root.current?.querySelector<HTMLInputElement>(".ov-find input")?.focus();
-    const back = () => { if (detailRef.current) setDetail(null); else close(); };
-    const flip = () => setTab((t) => (t === "mine" ? "browse" : "mine"));
+    // a mod's page, a window or a popover that is open (they close themselves on Esc)
+    const layer = () => !!document.querySelector(".lightbox, .overlay, .popover");
+    /** The search of the tab showing: the characters' in My mods, GameBanana's in Browse. */
+    const search = () => {
+      const field = [...(root.current?.querySelectorAll<HTMLInputElement>('input[type="search"]') ?? [])].find((el) => el.offsetParent !== null);
+      field?.focus();
+      return !!field;
+    };
+    const turn = (d: 1 | -1) => setTab(TABS[(TABS.indexOf(tabRef.current) + d + TABS.length) % TABS.length]!);
     const details = () => (document.activeElement?.closest(".ov-cell")?.querySelector<HTMLElement>(".ov-more") ?? null)?.click();
     const onKey = (e: KeyboardEvent) => {
       // a right-click menu that is open takes the keys
       if (menuIsOpen()) return;
-      const typing = e.target instanceof HTMLInputElement;
-      if (e.key === "Escape") { if (!(typing && (e.target as HTMLInputElement).value)) back(); return; }
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+      const open = layer();
+      if (e.key === "Escape") { if (!open && !(typing && (e.target as HTMLInputElement).value)) leave(); return; }
+      // a key something handled already: a card's I (install), a row of characters' arrows
+      if (e.defaultPrevented) return;
+      if (e.altKey && !e.ctrlKey && e.key === "ArrowLeft" && !typing) { e.preventDefault(); back(); return; }
       const dir: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
       const d = dir[e.key];
-      if (d && !(typing && d[0] !== 0)) { e.preventDefault(); moveFocus(d[0], d[1]); return; }
-      if (typing || e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key === "Tab") { e.preventDefault(); flip(); return; }
-      if (e.key === "i" || e.key === "I") { e.preventDefault(); details(); return; }
+      if (d && !e.altKey && !(typing && d[0] !== 0)) { e.preventDefault(); moveFocus(d[0], d[1]); return; }
+      if (typing || open || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key === "Tab") { e.preventDefault(); turn(e.shiftKey ? -1 : 1); return; }
+      if ((e.key === "i" || e.key === "I") && tabRef.current === "mine") { e.preventDefault(); details(); return; }
       // "/" and plain typing go to the search field
       if (e.key === "/" || (e.key.length === 1 && e.key !== " ")) {
-        if (e.key === "/") e.preventDefault();
-        search();
+        if (search() && e.key === "/") e.preventDefault();
       }
     };
+    // the mouse's back button: out of what is open, never out of the menu
+    const onMouse = (e: MouseEvent) => {
+      if (e.button !== 3) return;
+      e.preventDefault();
+      if (layer()) (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      else if (detailRef.current || currentRoute().user) leave();
+    };
     window.addEventListener("keydown", onKey);
-    const offPad = installGamepad({ nextView: flip, play: () => {}, menu: menuForFocus, back, palette: search });
-    return () => { window.removeEventListener("keydown", onKey); offPad(); };
-  }, [game, close]);
+    window.addEventListener("mouseup", onMouse);
+    const offPad = installGamepad({ nextView: turn, play: () => {}, menu: menuForFocus, back: leave, palette: search });
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("mouseup", onMouse); offPad(); };
+  }, [game, leave, setTab]);
 
   const say = (text: string, bad = false) => setNote({ text, bad });
 
@@ -236,16 +337,6 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
     { label: "Details", icon: "info", keys: "I", onClick: () => setDetail({ mod: m }) },
   ];
 
-  const install = async (c: GbCard) => {
-    if (busy) return;
-    setBusy(`gb-${c.id}`);
-    setNote(null);
-    try {
-      const item = await queueLatest(game, c.id);
-      say(item ? `Downloading ${c.name}. It is listed under My mods once it is installed.` : `${c.name} has no file gachamod can install.`, !item);
-    } catch (e) { say(errorText(e), true); } finally { setBusy(null); }
-  };
-
   const modOf = (id: string) => mods?.find((m) => m.id === id) ?? null;
   /** Right-click menu of a live skin. */
   const skinMenuOf = (w: Who, slot: number, full: ModEntry | null): MenuEntry[] => [
@@ -261,17 +352,29 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
   const toSkins = () => window.setTimeout(() =>
     (root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile, .ov-rail .ov-who"))?.focus(), 0);
   const tipFor = (character: string) => (on: boolean) => setHint(on ? newSkinTip(character) : null);
-  const footText = hint ?? note?.text ?? `Arrows or the D-pad move, Enter or A picks, Shift+click or Shift+Enter turns a mod on next to the others, right-click or the menu button shows more, I shows details, Tab or the bumpers switch to ${tab === "mine" ? "Browse" : "My mods"}, Esc or ${key} closes.`;
+  const tabs = "Tab or the bumpers switch between My mods, Browse and Downloads";
+  const keys = tab === "mine"
+    ? `Arrows or the D-pad move, Enter or A picks, Shift+click or Shift+Enter turns a mod on next to the others, right-click or the menu button shows more, I shows details, ${tabs}, Esc or ${key} closes.`
+    : tab === "browse"
+      ? `Click a mod for its page with its files, I or X installs the one in focus, right-click or the menu button shows more, typing searches, ${tabs}, Esc or ${key} ${route.user ? "goes back to the mods" : "closes"}.`
+      : `${tabs}, Esc or ${key} closes.`;
+  const footText = hint ?? note?.text ?? keys;
 
   return (
     <div className="ov" ref={root} key={opened} style={{ "--ov-cover": `${cover}%` } as React.CSSProperties}>
       <header className="ov-top">
-        <Segmented size="sm" label="What to show" value={tab} onChange={(t) => { setTab(t); setDetail(null); }}
+        <Segmented size="sm" label="What to show" value={tab} onChange={setTab}
           options={[
             { value: "mine", label: "My mods", icon: "mods", title: "Your characters, their skins and their other mods (Tab switches)" },
-            { value: "browse", label: "Browse", icon: "browse", title: "Find more on GameBanana (Tab switches)" },
+            { value: "browse", label: "Browse", icon: "browse", title: "Every mod for this game on GameBanana, with every sort and filter (Tab switches)" },
+            { value: "downloads", label: downloading ? `Downloads (${downloading})` : failed ? `Downloads (${failed} failed)` : "Downloads", icon: "downloads",
+              title: downloading ? `${plural(downloading, "download")} running or waiting (Tab switches)`
+                : failed ? `${plural(failed, "download")} failed. Retry is on this tab (Tab switches)` : "What is downloading and what was installed (Tab switches)" },
           ]} />
-        {tab === "browse" ? <SearchField className="ov-find" value={q} onChange={setQ} placeholder="Search GameBanana" /> : <span className="grow" />}
+        {tab === "browse" && route.user !== undefined && <Button size="sm" variant="ghost" icon="left" onClick={leave} title="Back to the mods (Esc)">Back</Button>}
+        <span className="grow" />
+        <IconButton icon="expand" label="Open this page in gachamod's own window" title="Open this page in gachamod's own window. The menu closes"
+          onClick={() => { skinMenu.openInApp(game, route).catch((e) => toast(errorText(e), true)); }} />
         <IconButton icon="x" label="Close" title={`Close (Esc or ${key})`} onClick={close} />
       </header>
 
@@ -299,7 +402,7 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
               )}
             </div>
             {who && (
-              <main className="ov-pane" key={who.name}>
+              <main className="ov-pane ov-scroll" key={who.name}>
                 <div className="ov-hero">
                   {who.name === OTHER ? <span className="ov-who-i big"><Icon name="mods" /></span> : <Portrait game={game} name={who.name} size={64} />}
                   <div className="ov-hero-t">
@@ -343,17 +446,23 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
               </main>
             )}
           </>)
+        ) : tab === "browse" ? (
+          // the app's own browser and creator pages, scrolling inside the menu
+          <div className="ov-page ov-scroll" key={route.user ?? "mods"}>
+            {!state ? <div className="ov-wait"><Waiting what="Reading your games" /></div>
+              : !state.gamebananaId ? <p className="muted ov-empty">This game has no page on GameBanana.</p>
+              : route.user ? <CreatorPage key={route.user} id={route.user} game={state} />
+              : <div className="page gb-browse"><GbBrowser game={game} /></div>}
+          </div>
         ) : (
-          <BrowsePane game={game} gbGameId={gbGameId} q={q} busy={busy} onOpen={(card) => setDetail({ card })} />
+          <div className="ov-page ov-scroll"><Downloads /></div>
         )}
 
-        {detail && (
+        {detail && tab === "mine" && (
           <aside className="ov-detail" aria-label="Details">
             <IconButton icon="x" label="Back" title="Back (Esc)" className="ov-detail-x" onClick={() => setDetail(null)} />
-            {"mod" in detail
-              ? <ModDetail game={game} m={detail.mod} group={everyone.find((w) => w.group?.mods.some((x) => x.modId === detail.mod.id)) ?? null} busy={!!busy}
-                  onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} />
-              : <CardDetail game={game} c={detail.card} busy={busy === `gb-${detail.card.id}`} have={!!mods?.some((m) => m.source?.modId === detail.card.id)} onInstall={() => void install(detail.card)} />}
+            <ModDetail game={game} m={detail.mod} group={everyone.find((w) => w.group?.mods.some((x) => x.modId === detail.mod.id)) ?? null} busy={!!busy}
+              onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} />
           </aside>
         )}
       </div>
@@ -371,7 +480,6 @@ function Menu({ game, gbGameId, opened }: { game: GameId; gbGameId: number | nul
           ]} />
         </div>
       </footer>
-      <ContextMenuHost />
     </div>
   );
 }
@@ -413,7 +521,10 @@ function ModDetail({ game, m, group, busy, onShow, onTurn }: {
         <div className="ov-detail-who">
           {m.character && <><Portrait game={game} name={m.character} size={22} /><span>{m.character}</span></>}
           {showing ? <Badge tone="ok" icon="check">Showing</Badge> : m.enabled ? <Badge tone="ok">On</Badge> : <Badge>Off</Badge>}
-          {m.updateAvailable && <Badge tone="accent" title="GameBanana has a newer file. Get it in gachamod, under My Mods">Update</Badge>}
+          {m.updateAvailable && (m.source?.modId
+            ? <Badge tone="accent" icon="update" title="GameBanana has a newer file. Click to update. Its options, tags and on/off state stay"
+                onClick={() => void installLatest(game, m.source!.modId, m.name, m.id)}>Update</Badge>
+            : <Badge tone="accent">Update</Badge>)}
           {m.hasKeys && <Badge title="It has keys that change parts of it while you play">Toggles</Badge>}
         </div>
         <p className="muted">{facts.join(", ")}</p>
@@ -425,103 +536,11 @@ function ModDetail({ game, m, group, busy, onShow, onTurn }: {
                 title={showing ? "This is the skin showing now" : "Shows it in the game now"}>{showing ? "Showing" : "Show in game"}</Button>
             : <Button variant="primary" icon={m.enabled ? "block" : "check"} disabled={busy} onClick={() => onTurn(!m.enabled)}
                 title={`The game shows the change after it reloads its mods (${reloadKeyOf(game)})`}>{m.enabled ? "Turn off" : "Turn on"}</Button>}
+          {!!m.source?.modId && <Button icon="browse" onClick={() => openGbMod(m.source!.modId)}
+            title="Its page on GameBanana: pictures, description, files and comments">GameBanana page</Button>}
         </div>
       </div>
     </>
   );
 }
 
-function CardDetail({ game, c, busy, have, onInstall }: { game: GameId; c: GbCard; busy: boolean; have: boolean; onInstall: () => void }) {
-  const nsfw = useNsfw();
-  const src = imageAt(c.image, 530);
-  const facts = [c.submitter && `By ${c.submitter.name}`, plural(c.likes, "like"), c.downloads !== null && plural(c.downloads, "download"), c.updated ? `Updated ${timeAgo(c.updated)}` : null].filter(Boolean);
-  return (
-    <>
-      <div className={`ov-detail-pic${c.nsfw && nsfw !== "show" ? " blur" : ""}`}>{src ? <img src={src} alt="" draggable={false} /> : <Icon name="mods" />}</div>
-      <div className="ov-detail-t">
-        <h1>{c.name}</h1>
-        <div className="ov-detail-who">
-          {c.character && <span>{c.character}</span>}
-          {c.category && !c.character && <span>{c.category.name}</span>}
-          {have && <Badge tone="ok" icon="check">Installed</Badge>}
-        </div>
-        <p className="muted">{facts.join(", ")}</p>
-        <div className="ov-detail-a">
-          <Button variant="primary" icon="downloads" busy={busy} onClick={onInstall}
-            title={`Downloads its newest file and installs it. The game shows it after it reloads its mods (${reloadKeyOf(game)})`}>{have ? "Install again" : "Install"}</Button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-/** GameBanana inside the menu: the game's mods, one character's when picked, or a search. */
-function BrowsePane({ game, gbGameId, q, busy, onOpen }: { game: GameId; gbGameId: number | null; q: string; busy: string | null; onOpen: (c: GbCard) => void }) {
-  const nsfw = useNsfw();
-  const cats = useCharacterList(game);
-  const [cat, setCat] = useState<number | null>(null);
-  const [sort, setSort] = useState<"popular" | "newest">("popular");
-  const [cards, setCards] = useState<GbCard[] | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  const [slow, setSlow] = useState(q);
-  useEffect(() => { const t = window.setTimeout(() => setSlow(q), 350); return () => window.clearTimeout(t); }, [q]);
-  const search = slow.trim();
-
-  useEffect(() => {
-    if (!gbGameId) return;
-    const stop = new AbortController();
-    setCards(null);
-    setFailed(null);
-    listMods({ gbGameId, page: 1, perPage: 30, sort: search ? "relevance" : sort, categoryId: search ? null : cat, search: search || undefined, signal: stop.signal })
-      .then((r) => setCards(r.items))
-      .catch((e) => { if (!isAbort(e)) { setCards([]); setFailed(errorText(e)); } });
-    return () => stop.abort();
-  }, [gbGameId, cat, sort, search]);
-
-  const list = (cards ?? []).filter((c) => !(c.nsfw && nsfw === "hide"));
-  if (!gbGameId) return <p className="muted ov-empty">This game has no page on GameBanana.</p>;
-  return (
-    <>
-      <nav className="ov-rail" aria-label="Characters on GameBanana">
-        <button type="button" className={`ov-who${cat === null ? " on" : ""}`} aria-current={cat === null} onClick={() => setCat(null)} title="Mods for every character">
-          <span className="ov-who-i"><Icon name="browse" /></span>
-          <span className="ov-who-t"><span className="ov-who-n">Everything</span></span>
-        </button>
-        {cats.map((c, i) => (
-          <button key={c.id} type="button" className={`ov-who${cat === c.id ? " on" : ""}`} style={{ "--i": Math.min(i, 14) } as React.CSSProperties}
-            aria-current={cat === c.id} onClick={() => setCat(c.id)} title={`Mods for ${c.name}`}>
-            <Portrait game={game} name={c.name} icon={c.icon} size={38} />
-            <span className="ov-who-t"><span className="ov-who-n">{c.name}</span></span>
-          </button>
-        ))}
-      </nav>
-      <main className="ov-pane" key={`${cat}-${sort}-${search}`}>
-        <div className="ov-hero slim">
-          <div className="ov-hero-t">
-            <h1>{search ? `"${search}" on GameBanana` : cat === null ? "On GameBanana" : cats.find((c) => c.id === cat)?.name ?? "On GameBanana"}</h1>
-          </div>
-          {!search && (
-            <Segmented size="sm" label="Order" value={sort} onChange={setSort}
-              options={[{ value: "popular", label: "Popular", title: "The most liked and viewed first" }, { value: "newest", label: "Newest", title: "The latest uploads first" }]} />
-          )}
-        </div>
-        {cards === null ? <div className="ov-wait"><Waiting what={search ? `Searching GameBanana for "${search}"` : "Getting mods from GameBanana"} /></div>
-          : failed ? <p className="ov-empty bad">{failed}</p>
-          : !list.length ? <p className="muted ov-empty">{search ? "GameBanana found nothing for that." : "Nothing here yet."}</p>
-          : (
-            <div className="ov-grid">
-              {list.map((c, i) => (
-                <div key={c.id} className="ov-cell" style={{ "--i": Math.min(i, 16) } as React.CSSProperties}>
-                  <button type="button" className={`ov-tile${busy === `gb-${c.id}` ? " busy" : ""}`} onClick={() => onOpen(c)} title={`${c.name}${c.submitter ? ` by ${c.submitter.name}` : ""}. Click for details and Install`}>
-                    <span className={`ov-pic${c.nsfw && nsfw !== "show" ? " blur" : ""}`}>{imageAt(c.image, 220) ? <LazyImg src={imageAt(c.image, 220)!} alt="" draggable={false} /> : <Icon name="mods" />}</span>
-                    <span className="ov-label"><span className="ov-t">{c.name}</span><span className="ov-likes" title={plural(c.likes, "like")}><Icon name="star" />{c.likes}</span></span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        {cards === null && <div className="ov-grid" aria-hidden="true">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} h="8rem" />)}</div>}
-      </main>
-    </>
-  );
-}

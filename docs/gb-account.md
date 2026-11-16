@@ -28,7 +28,7 @@ Caveats, in order of weight:
 
 ## The flow
 
-1. User clicks "Sign in to GameBanana" (Settings > Account, or any subscribe/follow button while signed out).
+1. User clicks "Sign in to GameBanana" (Settings > Account, links and AI > GameBanana account, or any subscribe/follow button while signed out).
 2. A command opens a separate window, label `gb-login`, pointing at `https://gamebanana.com/members/account/login`.
    Not an iframe: that page sends `x-frame-options: DENY`. A top-level window is fine.
 3. The user signs in on GameBanana's page. Username and password, or the email-code tab. If GameBanana asks for a

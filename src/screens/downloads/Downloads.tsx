@@ -177,12 +177,12 @@ export function Downloads() {
     <div className="page dl-page">
       <PageHeader title="Downloads" icon="downloads" sub={sub}
         actions={<>
-          <span title="A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods"><EnableNewSwitch size="sm" label="Turn on new mods" /></span>
+          <span title="A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods and downloads"><EnableNewSwitch size="sm" label="Turn on new mods" /></span>
           {game && <span title="Show the downloads of every game, grouped by game"><Toggle size="sm" checked={all} onChange={setAll} label="All games" /></span>}
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title="Install .zip, .7z or .rar files from this PC (or drop them on the window)">Install from files</Button>
           <Button variant="ghost" icon="trash" disabled={!done.length} title={all ? "Clear every finished download" : `Clear ${game?.short ?? "this game"}'s finished downloads`}
             onClick={clearFinished}>Clear finished</Button>
-          <IconButton icon="settings" label="Download settings (Settings, Automatic)" onClick={() => go({ view: "settings", section: "set-archives" })} />
+          <IconButton icon="settings" label="Download settings (Settings, Downloads and installing)" onClick={() => go({ view: "settings", section: "set-archives" })} />
         </>} />
       {mine.length === 0 ? (
         <Empty icon="downloads" title={elsewhere ? `Nothing downloading for ${game?.short ?? "this game"}` : "Nothing downloading"}

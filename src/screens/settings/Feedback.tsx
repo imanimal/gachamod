@@ -1,5 +1,5 @@
-// Feedback to the developer, the usage counts and crash reports switches, the log folder, and starting as
-// administrator. The form opens from Settings, the search ("Send feedback") and a screen that hit an error.
+// Settings, "Feedback, privacy and logs": feedback to the developer, the usage counts and crash reports switches, the
+// log folder. Also the row for starting as administrator. The form opens from Settings, the search ("Send feedback") and a screen that hit an error.
 // Owner: SETTINGS/AI area.
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { Button, Checkbox, Dialog, Panel, Segmented, TextField, Toggle } from "../../ui/kit";
@@ -67,15 +67,22 @@ function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => vo
 
 // ── settings ──
 
-/** Settings, "Feedback and data": the form, what gets sent and the log folder. */
+// The three panels of Settings, "Feedback, privacy and logs": the form and testing, what gets sent, and the log files.
+
+/** What gets sent and where the logs are, read once and shared by the panels that show it. */
+let reportNow: ReportState | null = null;
+let reportAsked = false;
+const reportSubs = new Set<() => void>();
+const setReport = (s: ReportState) => { reportNow = s; reportSubs.forEach((f) => f()); };
+function useReport(): ReportState | null {
+  useEffect(() => { if (!reportAsked) { reportAsked = true; report.state().then(setReport).catch(() => { reportAsked = false; }); } }, []);
+  return useSyncExternalStore((f) => { reportSubs.add(f); return () => { reportSubs.delete(f); }; }, () => reportNow);
+}
+
+/** Feedback and testing: the form, Check this game and the tester options. */
 export function FeedbackSection() {
-  const [st, setSt] = useState<ReportState | null>(null);
-  useEffect(() => { report.state().then(setSt).catch(() => {}); }, []);
-  const set = (p: { usage?: boolean; crashes?: boolean }) => {
-    report.set(p).then(setSt).catch((e) => toast(errorText(e), true));
-  };
   return (
-    <Panel title="Feedback and data" icon="help" id="feedback">
+    <Panel title="Feedback and testing" icon="help" id="feedback">
       <div className="set-rows">
         <SetRow id="set-feedback" label="Send feedback" hint="Tell the developer about a problem or an idea. It goes straight from here, no account needed">
           <Button size="sm" icon="help" onClick={() => openFeedback()} data-t="feedback-open" title="Opens a short form">Send feedback</Button>
@@ -84,6 +91,20 @@ export function FeedbackSection() {
           <Button size="sm" icon="check" onClick={openGameCheck} data-t="gamecheck-open" title="Checks the game picked in the sidebar">Check this game</Button>
         </SetRow>
         <TesterRow />
+      </div>
+    </Panel>
+  );
+}
+
+/** Usage counts and crash reports: what gachamod sends by itself, each with a switch. */
+export function PrivacySection() {
+  const st = useReport();
+  const set = (p: { usage?: boolean; crashes?: boolean }) => {
+    report.set(p).then(setReport).catch((e) => toast(errorText(e), true));
+  };
+  return (
+    <Panel title="Usage counts and crash reports" icon="eye" id="privacy">
+      <div className="set-rows">
         <SetRow id="set-usage" label="Usage counts" hint="Sends anonymous counts of which screens and buttons get used, so the developer knows what to work on. No mod names, file paths or account details"
           tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. docs/telemetry.md in gachamod's source lists every one">
           <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
@@ -91,6 +112,17 @@ export function FeedbackSection() {
         <SetRow id="set-crashes" label="Crash reports" hint="When gachamod crashes, sends what went wrong and the end of its log, with your user folder's name taken out">
           <Toggle checked={st?.crashes ?? true} disabled={!st} onChange={(v) => set({ crashes: v })} />
         </SetRow>
+      </div>
+    </Panel>
+  );
+}
+
+/** Log files: gachamod.log's folder and the rendering log. Both stay on this PC. */
+export function LogsSection() {
+  const st = useReport();
+  return (
+    <Panel title="Log files" icon="file" id="logs">
+      <div className="set-rows">
         <SetRow id="set-logs" label="Logs" hint="gachamod.log lists what the app did and the errors it hit. Crash files sit next to it">
           <Button size="sm" icon="folder" disabled={!st?.logsDir} title={st?.logsDir ?? undefined}
             onClick={() => { if (st?.logsDir) shell.openPath(st.logsDir).catch((e) => toast(errorText(e), true)); }}>Open logs folder</Button>
@@ -105,7 +137,7 @@ const RENDER_TIP = "Each problem gets an incident file with your graphics card, 
   + "Attach gachamod's logs when you send feedback to include the newest one. "
   + "If the window is black, press Win+R and open %APPDATA%\app.gachamod.desktop\logs\rendering";
 
-/** Settings, under Feedback and data and Appearance: the rendering log and its folder. Both copies share the setting.
+/** Settings, under Log files and under Appearance (with Hardware acceleration): the rendering log and its folder. Both copies share the setting.
  *  `id` goes on one copy, the one a route scrolls to. */
 export function RenderLogRow({ id }: { id?: string }) {
   const on = renderLogPref.use();
@@ -140,7 +172,7 @@ const ADMIN_TIP = "Zenless Zone Zero and some other games run as administrator, 
   + "As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. "
   + "Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way";
 
-// the row shows on two pages (Games, In-game hotkeys), so its state is shared and both copies agree
+// the row shows on two pages (Games and mod loaders, In-game profile hotkeys), so its state is shared and both copies agree
 let adminNow: AdminState | null = null;
 let adminAsked = false;
 const adminSubs = new Set<() => void>();
@@ -150,7 +182,7 @@ function useAdmin(): AdminState | null {
   return useSyncExternalStore((f) => { adminSubs.add(f); return () => { adminSubs.delete(f); }; }, () => adminNow);
 }
 
-/** Settings, under Games and In-game hotkeys: start as administrator every time, or once now. `id` goes on one copy,
+/** Settings, under Administrator and launch options and In-game profile hotkeys: start as administrator every time, or once now. `id` goes on one copy,
  *  the one a route scrolls to. */
 export function AdminRow({ id }: { id?: string }) {
   const st = useAdmin();

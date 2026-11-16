@@ -4,6 +4,7 @@
 import type { AiTask } from "./ai";
 import { useSyncExternalStore } from "react";
 import { games as gamesApi, type GameId, type GameState } from "./api";
+import { isMenuWindow } from "./tauri";
 
 type Sub = () => void;
 function store<T>(initial: T) {
@@ -22,6 +23,10 @@ const gameList = store<GameState[]>([]);
 const LAST_GAME = "gm.game";
 const ONLY_GAME = "gm.onlyGame";
 const readKey = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+/** The menu over a running game is a window with pages of its own (screens/ingame/Overlay.tsx). Where it goes isn't
+ *  kept: the app opens on the game and page its own window was on. */
+const MENU = isMenuWindow();
+const keep = (k: string, v: string) => { if (MENU) return; try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
 /** One-game mode: the game the app opens on and the only one the everyday UI offers. */
 const only = store<GameId | null>(readKey(ONLY_GAME) as GameId | null);
 const current = store<GameId | null>((only.get() ?? readKey(LAST_GAME)) as GameId | null);
@@ -74,7 +79,7 @@ export function useDailyGames(): GameState[] {
 
 function writeGame(id: GameId) {
   current.set(id);
-  try { localStorage.setItem(LAST_GAME, id); } catch { /* storage unavailable */ }
+  keep(LAST_GAME, id);
 }
 
 /** Switch games. It is a step in the page history, so Back returns to the game you came from. The view stays; its
@@ -149,6 +154,7 @@ interface Entry { game: GameId | null; route: Route; scroll?: number }
 
 const LAST_VIEW = "gm.view";
 const firstRoute = (): Route => {
+  if (MENU) return { view: "library" };
   try { const v = localStorage.getItem(LAST_VIEW) as View | null; if (v && (VIEWS.includes(v) || v === "extensions")) return { view: v }; } catch { /* storage unavailable */ }
   return { view: "home" };
 };
@@ -171,7 +177,7 @@ function show() {
   if (e.game && e.game !== current.get()) writeGame(e.game);
   route.set(e.route);
   nav.set({ back: at > 0, forward: at < entries.length - 1, n: nav.get().n + 1 });
-  try { localStorage.setItem(LAST_VIEW, e.route.view); } catch { /* storage unavailable */ }
+  keep(LAST_VIEW, e.route.view);
 }
 
 function push(e: Entry) {
@@ -208,7 +214,7 @@ export function replaceRoute(to: Route) {
   if (e && sameRoute(e.route, r)) return;
   if (e) e.route = r; else entries.push({ game: current.get(), route: r });
   route.set(r);
-  try { localStorage.setItem(LAST_VIEW, r.view); } catch { /* storage unavailable */ }
+  keep(LAST_VIEW, r.view);
 }
 
 /** Set some fields of the current page in place (`undefined` clears one). */

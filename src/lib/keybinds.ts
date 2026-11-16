@@ -31,7 +31,7 @@ export interface DescKeys {
   anchor: string | null;
 }
 
-/** New installs get "keys only while the character is on screen" (Settings > Automatic). Off unless turned on. */
+/** New installs get "keys only while the character is on screen" (Settings > Downloads and installing). Off unless turned on. */
 export const onScreenOnInstallPref = pref<boolean>("keys.onScreenOnInstall", false,
   (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 

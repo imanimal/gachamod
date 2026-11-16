@@ -11,7 +11,7 @@
 //!   (chrome_debug.log, written when gachamod starts with --browser-log). incident-<time>.png, when there is one, is
 //!   what WebView2 says the page looked like then. The newest 20 stay.
 //!
-//! Setting "render.log" (default on; Settings, Feedback and data) turns it off. Nothing here leaves the computer
+//! Setting "render.log" (default on; Settings, Feedback, privacy and logs) turns it off. Nothing here leaves the computer
 //! unless the player attaches logs to feedback (telemetry.rs, scrubbed first).
 
 use std::collections::{HashMap, VecDeque};

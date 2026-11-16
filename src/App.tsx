@@ -102,7 +102,7 @@ export function App() {
   // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
   useEffect(() => installSmoothScroll(), []);
 
-  // Settings, Fun: chill mode, and the Konami code, which reveals a hidden theme (lib/fun.ts)
+  // Settings, Fun extras: chill mode, and the Konami code, which reveals a hidden theme (lib/fun.ts)
   const chill = chillPref.use();
   useEffect(() => { if (chill) document.documentElement.dataset.chill = ""; else delete document.documentElement.dataset.chill; }, [chill]);
   useEffect(() => {
@@ -145,6 +145,12 @@ export function App() {
           return;
         }
         toast(p.text, !!p.bad, o ? { label: "Open", run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
+      })),
+      // the menu over a game handed a page or an AI job to this window, which is in front now (overlay.rs)
+      held(appApi.onGo((p) => {
+        if (currentGame()?.id !== p.game && allGames().some((g) => g.id === p.game)) setGame(p.game);
+        if (p.route) go(p.route);
+        if (p.ai) emitApp({ type: "ai", task: p.ai });
       })),
       // a newer gachamod downloaded in the background (commands/app.rs)
       held(appUpdate.onReady((p) => {

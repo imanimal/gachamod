@@ -1,4 +1,5 @@
-// Settings sections: Mods, Automatic, Storage and Creators. Owner: SETTINGS/AI area.
+// The panels of Settings, Mods and downloads (turning mods on, mods for adults, downloads and installing, automatic
+// updates and scans, mods a game update broke, the trash) and Creators. Owner: SETTINGS/AI area.
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
@@ -52,17 +53,12 @@ export function EnableNewSwitch({ size, label }: { size?: "sm"; label?: string }
 
 export function ModsSection() {
   const shown = useGames().filter((g) => g.shown);
-  const nsfw = useNsfw();
   return (
-    <Panel title="Mods" icon="mods" id="mods">
+    <Panel title="Turning mods on and reloading the game" icon="mods" id="mods">
       <div className="set-rows">
         <SetRow id="set-enable-new" label="Turn on new mods" hint="A mod you install turns on right away, and its character's other skin turns off"
           tip="Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was">
           <EnableNewSwitch />
-        </SetRow>
-        <SetRow id="set-nsfw" label="Mods for adults" hint="Previews marked NSFW on GameBanana or by you">
-          <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
-            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
         </SetRow>
         <ShuffleRow />
       </div>
@@ -75,6 +71,21 @@ export function ModsSection() {
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
         </div>
       )}
+    </Panel>
+  );
+}
+
+/** Hide, blur or show mods marked for adults, everywhere in the app. */
+export function AdultSection() {
+  const nsfw = useNsfw();
+  return (
+    <Panel title="Mods for adults" icon="eye" id="adult">
+      <div className="set-rows">
+        <SetRow id="set-nsfw" label="Mods marked for adults" hint="Marked NSFW on GameBanana or by you. Hide leaves them out, Blur blurs their pictures until opened">
+          <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
+            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
+        </SetRow>
+      </div>
     </Panel>
   );
 }
@@ -107,21 +118,12 @@ function Switch({ p, on, off }: { p: BoolPref; on: string; off: string }) {
   return <Toggle checked={v} onChange={(nv) => void p.set(nv, nv ? on : off)} />;
 }
 
-export function AutomaticSection() {
+/** What happens to a download and to the mod it installs. */
+export function InstallingSection() {
   const keep = keepArchivesPref.use();
   return (
-    <Panel title="Automatic" icon="refresh" id="automatic">
+    <Panel title="Downloads and installing" icon="downloads" id="installing">
       <div className="set-rows">
-        <SetRow id="set-app-updates" label="Update gachamod automatically" hint="New versions download in the background and install when you close gachamod"
-          tip="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now in About">
-          <Switch p={appUpdateCheckPref} on="Updating gachamod automatically" off="Stopped updating gachamod automatically" />
-        </SetRow>
-        <SetRow id="set-mod-updates" label="Check mods for updates" hint="When you open Mods, and every 30 minutes">
-          <Switch p={modUpdateCheckPref} on="Checking mods for updates" off="Stopped checking mods for updates" />
-        </SetRow>
-        <SetRow id="set-rescan" label="Rescan mods when Mods opens" hint="Finds mods you added to the folder by hand">
-          <Switch p={autoRescanPref} on="Rescanning mods on its own" off="Stopped rescanning mods on its own" />
-        </SetRow>
         <SetRow id="set-archives" label="Delete downloaded archives" hint="The .zip or .7z goes once the mod is installed">
           <Toggle checked={!keep} onChange={(v) => void keepArchivesPref.set(!v, v ? "Deleting archives after installs" : "Keeping archives after installs")} />
         </SetRow>
@@ -133,17 +135,47 @@ export function AutomaticSection() {
           tip="GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one">
           <Switch p={otherServersPref} on="Slow downloads move to another server" off="Downloads stay on the server GameBanana picks" />
         </SetRow>
-        <SetRow id="set-fix-updates" label="Look for new mod fixers" tip="When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded"
-          hint="For mods a game update broke">
-          <Switch p={fixesAutoUpdatePref} on="Looking for new mod fixers" off="Stopped looking for new mod fixers" />
-        </SetRow>
-        <SetRow id="set-fix-warn" label="Warn about mods a game update broke" hint="On mod cards, in a mod's details and in Tools > Fixes"
-          tip="Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods">
-          <Switch p={fixWarningsPref} on="Showing the broken mod warnings" off="Muted the broken mod warnings" />
-        </SetRow>
         <SetRow id="set-onscreen" label="Toggles only while on screen, for new mods"
           tip="A mod's toggles stop working when its character isn't on screen, so two mods can share a key">
           <Switch p={onScreenOnInstallPref} on="New mods get toggles only while on screen" off="New mods keep their toggles as they are" />
+        </SetRow>
+      </div>
+    </Panel>
+  );
+}
+
+/** The checks gachamod runs by itself. Each has a switch. */
+export function AutomaticSection() {
+  return (
+    <Panel title="Automatic updates and scans" icon="refresh" id="automatic">
+      <div className="set-rows">
+        <SetRow id="set-app-updates" label="Update gachamod automatically" hint="New versions download in the background and install when you close gachamod"
+          tip="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now in About and updates">
+          <Switch p={appUpdateCheckPref} on="Updating gachamod automatically" off="Stopped updating gachamod automatically" />
+        </SetRow>
+        <SetRow id="set-mod-updates" label="Check mods for updates" hint="When you open Mods, and every 30 minutes">
+          <Switch p={modUpdateCheckPref} on="Checking mods for updates" off="Stopped checking mods for updates" />
+        </SetRow>
+        <SetRow id="set-rescan" label="Rescan mods when Mods opens" hint="Finds mods you added to the folder by hand">
+          <Switch p={autoRescanPref} on="Rescanning mods on its own" off="Stopped rescanning mods on its own" />
+        </SetRow>
+      </div>
+    </Panel>
+  );
+}
+
+/** Fixers and warnings for mods a game update broke. Tools > Fixes shows the same two. */
+export function BrokenModsSection() {
+  return (
+    <Panel title="Mods a game update broke" icon="wand" id="broken-mods">
+      <div className="set-rows">
+        <SetRow id="set-fix-updates" label="Look for new mod fixers" tip="When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded"
+          hint="Fixer tools that people post on GameBanana after a game update">
+          <Switch p={fixesAutoUpdatePref} on="Looking for new mod fixers" off="Stopped looking for new mod fixers" />
+        </SetRow>
+        <SetRow id="set-fix-warn" label="Warn about broken mods" hint="On mod cards, in a mod's details and in Tools > Fixes"
+          tip="Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods">
+          <Switch p={fixWarningsPref} on="Showing the broken mod warnings" off="Muted the broken mod warnings" />
         </SetRow>
       </div>
     </Panel>
@@ -172,7 +204,7 @@ export function StorageSection() {
   };
 
   return (
-    <Panel title="Storage" icon="archive" id="storage">
+    <Panel title="Trash and removed mods" icon="archive" id="storage">
       <div className="set-rows">
         <SetRow id="set-trash-days" label="Keep removed mods' files"
           hint={days

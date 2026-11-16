@@ -27,7 +27,7 @@ export function InGamePanel({ game }: { game: GameId }) {
           option: turn it on to try it here, then send what you find with Help, Check this game.
         </p>
         <Toggle checked={false} onChange={(v) => void setTester(v)} label="Tester options"
-          hint="The same switch is in Settings, Feedback and data. It turns this on in every game" />
+          hint="The same switch is in Settings, Feedback, privacy and logs. It turns this on in every game" />
       </Panel>
     );
   }

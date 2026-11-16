@@ -135,7 +135,7 @@ writeFileSync(body, `${notes}
 
 Download \`gachamod-setup.exe\` and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway.
 
-Every installer here gets the same gachamod, and it manages all your games. The \`gachamod-setup-<game>.exe\` files wear that game's theme and start with only that game in the sidebar. Settings, Games, One-game mode turns that off. \`gachamod-setup.exe\` shows every game from the start.
+Every installer here gets the same gachamod, and it manages all your games. The \`gachamod-setup-<game>.exe\` files wear that game's theme and start with only that game in the sidebar. Settings, Games and mod loaders, One-game mode turns that off. \`gachamod-setup.exe\` shows every game from the start.
 
 Already have gachamod? It updates by itself: the new version downloads in the background and installs when you close gachamod. \`${update}\` is the file it downloads.
 `);

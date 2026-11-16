@@ -61,7 +61,7 @@ export function switchEntries(cur: GameState | null, daily: GameState[], shown: 
   return [
     { header: "Switch game" },
     ...(daily.length > 1 ? daily : []).map((g) => ({ label: g.name, img: gameIconNow(g.id), checked: g.id === cur?.id, onClick: () => setGame(g.id) })),
-    rest.length > 0 && { label: "Other games", icon: "swap", title: "One-game mode keeps these out of the way. Turn it off in Settings, Games", items: rest.map((g) => ({ label: g.name, img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
+    rest.length > 0 && { label: "Other games", icon: "swap", title: "One-game mode keeps these out of the way. Turn it off in Settings, Games and mod loaders", items: rest.map((g) => ({ label: g.name, img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
   ];
 }
 
