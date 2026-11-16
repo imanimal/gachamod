@@ -104,7 +104,8 @@ These have only run against the demo and unit tests (a stand-in .bat fixer).
 
 Players on 0.1.1-beta.3 with more than one monitor saw the main window go black after switching to another window
 (and on one PC whenever it had focus); it only drew while the mouse moved over it. It doesn't happen on a single
-monitor. Every window now starts with WebView2's occlusion check off (docs/spec.md). Check, on such a PC:
+monitor. Every window now starts with WebView2's occlusion check off, and its page draws a frame by itself every
+second and after each focus change (docs/spec.md). Check, on such a PC:
 
 - Switch to another window on the same monitor and on the other one, open a window over gachamod, and alt-tab back:
   the window keeps drawing each time.
@@ -116,6 +117,9 @@ monitor. Every window now starts with WebView2's occlusion check off (docs/spec.
 - After a blackout, `logs/rendering` holds an incident file. Check whether the screen read was black while WebView2's
   own picture (`incident-*.png`) wasn't: that points at Windows or the driver showing the window, not at the page.
   The rendering log's probe (WebView2's picture, the page's answer) has only run in unit tests and a normal start.
+- The page's own redraws (`lib/redraw.ts`) and `recover` in `render.rs` (WebView2's view resized, then hidden and
+  shown) have not run on a PC that blacks out. The incident file's last lines say which step brought the picture
+  back, and the same summary arrives as a `render` crash report.
 - Starting gachamod with `--browser-log` writes `%LOCALAPPDATA%\app.gachamod.desktop\EBWebView\chrome_debug.log` and
   opens a console window while it runs. A normal start opens no console window.
 

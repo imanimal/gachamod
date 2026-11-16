@@ -12,7 +12,8 @@
 //!   what WebView2 says the page looked like then. The newest 20 stay.
 //!
 //! Setting "render.log" (default on; Settings, Feedback and data) turns it off. Nothing here leaves the computer
-//! unless the player attaches logs to feedback (telemetry.rs, scrubbed first).
+//! unless the player attaches logs to feedback, or crash reports are on: then a summary of each incident goes out
+//! with them (`report`). telemetry.rs scrubs both.
 
 use std::collections::{HashMap, VecDeque};
 use std::io::Write;
@@ -29,6 +30,9 @@ static SYSTEM: Mutex<System> = Mutex::new(System { base: String::new(), sections
 static WEBVIEW: Mutex<WebviewPaths> = Mutex::new(WebviewPaths { data: None, reports: None });
 static LAST: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
 static WRITTEN: AtomicUsize = AtomicUsize::new(0);
+/// Incident summaries queued for the developer in this run (`report`).
+static REPORTED: AtomicUsize = AtomicUsize::new(0);
+const REPORTS_PER_RUN: usize = 5;
 
 const LOG: &str = "rendering.log";
 const OLD: &str = "rendering.old.log";
@@ -205,6 +209,19 @@ pub fn incident(kind: &str, title: &str, what: &str, check: &str, picture: Optio
     event(format!("Incident: {title}. Written to {name}.txt"));
     crate::logs::warn(format!("Rendering problem: {title}. Details in {}", file.display()));
     Some(file)
+}
+
+/// Queue a summary of an incident as a crash report of kind "render" (logs::save_crash). telemetry.rs sends it with
+/// the others while crash reports are on, scrubbed: what happened, the window then, `note` (what brought the picture
+/// back), system.txt and the last events. Five a run at most.
+pub fn report(title: &str, what: &str, check: &str, note: &str) {
+    if REPORTED.fetch_add(1, Ordering::Relaxed) >= REPORTS_PER_RUN { return; }
+    let recent: String = RECENT.lock().map(|r| r.iter().cloned().collect()).unwrap_or_default();
+    let stack = format!("{}\n\n{}\n{}\n\n{}\n\nLast events:\n{}", what.trim_end(), check.trim_end(), note.trim(), cut_at(&system_text(), 6000), tail_of(&recent, 5000));
+    crate::logs::save_crash(&crate::logs::Crash {
+        kind: "render".into(), message: title.to_string(), at: String::new(), stack: stack.replace("\r\n", "\n"),
+        version: env!("CARGO_PKG_VERSION").into(), time: chrono::Utc::now().to_rfc3339(),
+    });
 }
 
 /// Add a line to an incident file written earlier ("drew again after 12 s").
@@ -537,9 +554,9 @@ mod win {
         unsafe { IsHungAppWindow(hwnd as _) != 0 }
     }
 
-    /// Read the screen where the window's inside is, in a grid of 48 by 30 points. Only while the window is in
-    /// front, shown, not minimized and the screen is awake (input in the last 50 seconds): anything else covering it
-    /// or a screen turned off would read as black.
+    /// Read the screen where the window's inside is, in a grid of 48 by 30 points. Only while the window is shown,
+    /// not minimized, with no other window over it, and the screen is awake (input in the last 50 seconds): a window
+    /// covering it or a screen turned off would read as black. It need not have focus.
     pub fn screen_check(hwnd: isize) -> Option<ScreenCheck> {
         use windows_sys::Win32::Foundation::{POINT, RECT};
         use windows_sys::Win32::Graphics::Gdi::{
@@ -547,7 +564,7 @@ mod win {
             SelectObject, SetStretchBltMode, StretchBlt, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, COLORONCOLOR, DIB_RGB_COLORS, MONITORINFO,
             MONITOR_DEFAULTTONEAREST, SRCCOPY,
         };
-        use windows_sys::Win32::UI::WindowsAndMessaging::{GetClientRect, GetForegroundWindow, IsIconic, IsWindowVisible};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetClientRect, GetForegroundWindow, IsChild, IsIconic, IsWindowVisible, WindowFromPoint};
         const W: i32 = 48;
         const H: i32 = 30;
         if idle() > Duration::from_secs(50) { return None; }
@@ -555,7 +572,8 @@ mod win {
         // SAFETY: GDI objects made here are selected out and deleted before returning; the bitmap's bits are read
         // only while it exists, and it holds W*H 32-bit pixels.
         unsafe {
-            if GetForegroundWindow() != h || IsWindowVisible(h) == 0 || IsIconic(h) != 0 { return None; }
+            // no window in front at all: the lock screen or another desktop is showing
+            if GetForegroundWindow().is_null() || IsWindowVisible(h) == 0 || IsIconic(h) != 0 { return None; }
             let mut rc: RECT = std::mem::zeroed();
             if GetClientRect(h, &mut rc) == 0 { return None; }
             let mut tl = POINT { x: 0, y: 0 };
@@ -571,6 +589,11 @@ mod win {
             let y1 = (tl.y + rc.bottom - 4).min(m.bottom);
             let (w, hgt) = (x1 - x0, y1 - y0);
             if w < 100 || hgt < 100 { return None; }
+            // another window over any of it would be read instead: each point of a 5 by 4 grid must be the window's own
+            for i in 0..20 {
+                let at = WindowFromPoint(POINT { x: x0 + w * (2 * (i % 5) + 1) / 10, y: y0 + hgt * (2 * (i / 5) + 1) / 8 });
+                if at != h && IsChild(h, at) == 0 { return None; }
+            }
             let screen = GetDC(std::ptr::null_mut());
             if screen.is_null() { return None; }
             let mem = CreateCompatibleDC(screen);

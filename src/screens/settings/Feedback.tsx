@@ -88,7 +88,7 @@ export function FeedbackSection() {
           tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. docs/telemetry.md in gachamod's source lists every one">
           <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
         </SetRow>
-        <SetRow id="set-crashes" label="Crash reports" hint="When gachamod crashes, sends what went wrong and the end of its log, with your user folder's name taken out">
+        <SetRow id="set-crashes" label="Crash reports" hint="When gachamod crashes or its window goes black, sends what went wrong and the end of its log, with your user folder's name taken out">
           <Toggle checked={st?.crashes ?? true} disabled={!st} onChange={(v) => set({ crashes: v })} />
         </SetRow>
         <SetRow id="set-logs" label="Logs" hint="gachamod.log lists what the app did and the errors it hit. Crash files sit next to it">
@@ -114,7 +114,7 @@ export function RenderLogRow({ id }: { id?: string }) {
   const n = st?.incidents ?? 0;
   return (
     <SetRow id={id} label="Rendering log" tip={RENDER_TIP}
-      hint={`Notes when the window goes black, stops drawing or the graphics process restarts. Stays on this PC${n ? `. ${n} problem${n === 1 ? "" : "s"} noted so far` : ""}`}>
+      hint={`Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary${n ? `. ${n} problem${n === 1 ? "" : "s"} noted so far` : ""}`}>
       <span className="set-admin">
         <Button size="sm" icon="folder" disabled={!st?.dir} title={st?.dir ?? undefined}
           onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>Open folder</Button>

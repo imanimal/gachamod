@@ -675,6 +675,11 @@ UI:
 - Every window's WebView2 starts with `CalculateNativeWinOcclusion` disabled (`browser_flags` in
   `src-tauri/src/lib.rs`): with more than one monitor, WebView2 could decide the window was covered and stop drawing
   it, so it stayed black until the mouse moved over it.
+- Every window's page keeps itself drawn (`lib/redraw.ts`): on some PCs the window was left black after another
+  window took focus, until the page drew a frame. The page draws one frame a second while it is on screen and every
+  frame for 2 s after focus, size or screen changes; `render.rs` asks for the same on the window's own focus, screen
+  and scale events. A frame is a change nobody can see: a corner pixel, and for those 2 s a sheet over the window,
+  both black at under 2%.
 - Hardware acceleration (Settings, Appearance; "app.gpu", default on). Off adds `--disable-gpu
   --disable-gpu-compositing`, from the next start (the toast has Restart). `src-tauri/src/lib.rs` reads it before it
   makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
@@ -684,13 +689,17 @@ UI:
   Appearance). `gacha-core render_log.rs` keeps the files in `<data folder>/logs/rendering`, `src-tauri render.rs`
   feeds it and `lib/renderWatch.ts` reports from the page. It logs window focus, moves, size and scale, screens
   changing, sleep gaps, WebView2 processes exiting (`ProcessFailed`), the page's frames stopping or slowing, long
-  stalls and lost WebGL contexts. Every 2 s it reads the screen where the main window is (only while it's in front
-  and the PC was used in the last 50 s) and calls two black reads in a row a blackout. Each problem writes
+  stalls and lost WebGL contexts. Every 2 s it reads the screen where the main window is (only while no other window
+  covers it and the PC was used in the last 50 s). The first black read asks the page for frames; a second in a row
+  is a blackout. If WebView2's own picture of the page isn't black then, `recover` makes WebView2's view a pixel
+  shorter and back, then hides and shows it, reads the screen after each, and notes which brought the picture back.
+  Each problem writes
   `incident-<time>.txt`: the window from every side (Windows, the screen, WebView2's own picture of the page saved as
   `.png`, the page's frame counter), `system.txt` (cards, drivers, screens, GPU scheduling, MPO), the last 400 events,
   graphics driver and WebView2 crash entries from the Windows event log, and the end of WebView2's `chrome_debug.log`
   when there is one. WebView2 only writes that file when gachamod starts with `--browser-log`, which adds
-  `--enable-logging --v=0` to every window's flags and makes WebView2 open a console window. Feedback with logs
+  `--enable-logging --v=0` to every window's flags and makes WebView2 open a console window. While crash reports are
+  on, a summary of each incident goes to the developer as a `render` crash report (docs/telemetry.md). Feedback with logs
   attached sends the newest incident too.
 - New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
