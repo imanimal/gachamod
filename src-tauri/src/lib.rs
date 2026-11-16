@@ -46,18 +46,22 @@ fn fit_to_screen(w: &tauri::WebviewWindow) {
 }
 
 /// Browser flags as this run started with them: hardware acceleration (setting "app.gpu", Settings > Appearance) and
-/// WebView2's own log for the rendering log (setting "render.log"). The windows that share the app's WebView2 folder
-/// (the main window, the menu over a game) must all start with the same flags, so a change counts from the next start.
+/// WebView2's own log (`--browser-log`). The windows that share the app's WebView2 folder (the main window, the menu
+/// over a game) must all start with the same flags, so a change counts from the next start.
 #[derive(Clone, Copy)]
 pub struct Flags { pub gpu: bool, pub log: bool }
 
 impl Flags {
-    pub fn of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Flags { app.try_state::<Flags>().map_or(Flags { gpu: true, log: true }, |f| *f) }
+    pub fn of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Flags { app.try_state::<Flags>().map_or(Flags { gpu: true, log: false }, |f| *f) }
 }
 
 /// Start gachamod with this to turn hardware acceleration off, for a window that draws black and can't reach
 /// Settings. A copy already running saves it and starts again.
 const NO_GPU_ARG: &str = "--disable-gpu";
+
+/// Start gachamod with this and WebView2 writes its own log, chrome_debug.log, in its folder. WebView2 opens a
+/// console window for it, so it is never on otherwise.
+const BROWSER_LOG_ARG: &str = "--browser-log";
 
 /// Hardware acceleration is on unless "app.gpu" is "0". `turn_off` saves it off first.
 fn gpu_setting(db: &gacha_core::db::Shared, turn_off: bool) -> bool {
@@ -72,7 +76,7 @@ fn gpu_setting(db: &gacha_core::db::Shared, turn_off: bool) -> bool {
 /// WebView2 flags for every window. Passing any replaces wry's own, so those are repeated. WebView2 stops drawing a
 /// window it thinks other windows cover, and with more than one monitor it can get that wrong and leave the window
 /// black until the mouse moves over it, so that check is off. With hardware acceleration off, it also draws without
-/// the graphics card. With the rendering log on, WebView2 writes chrome_debug.log in its folder (render.rs).
+/// the graphics card. `log` (`--browser-log`) has WebView2 write chrome_debug.log in its folder.
 pub fn browser_args(gpu: bool, log: bool) -> String {
     let mut a = String::from("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion");
     if !gpu { a.push_str(" --disable-gpu --disable-gpu-compositing"); }
@@ -165,8 +169,8 @@ pub fn run() {
             // SYSTEM: the window opens once hardware acceleration is known, before anything else can open one
             let gpu = gpu_setting(&state.db, std::env::args().any(|a| a == NO_GPU_ARG));
             // SYSTEM: the rendering log (render.rs) watches the windows from the moment they open
-            let log = render::setting(&state.db);
-            gacha_core::render_log::init(&logs_dir, log);
+            gacha_core::render_log::init(&logs_dir, render::setting(&state.db));
+            let log = std::env::args().any(|a| a == BROWSER_LOG_ARG);
             app.manage(state);
             app.manage(Flags { gpu, log });
             let main = main_window(app, Flags { gpu, log })?;
@@ -427,4 +431,18 @@ pub fn run() {
                 commands::app::install_on_quit(app);
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::browser_args;
+
+    #[test]
+    fn webview2_logs_only_when_asked() {
+        assert!(!browser_args(true, false).contains("--enable-logging"));
+        assert!(!browser_args(false, false).contains("--enable-logging"));
+        assert!(browser_args(true, true).contains("--enable-logging"));
+        assert!(browser_args(false, false).contains("--disable-gpu"));
+        assert!(!browser_args(true, false).contains("--disable-gpu"));
+    }
 }

@@ -8,8 +8,8 @@
 //!   written at each start. WebView2's version and folders are added once the window is up.
 //! - incident-<time>.txt for each problem: what happened, a check of the window at that moment, system.txt, the last
 //!   events, recent graphics driver entries from the Windows event log and the end of WebView2's own log
-//!   (chrome_debug.log). incident-<time>.png, when there is one, is what WebView2 says the page looked like then. The
-//!   newest 20 stay.
+//!   (chrome_debug.log, written when gachamod starts with --browser-log). incident-<time>.png, when there is one, is
+//!   what WebView2 says the page looked like then. The newest 20 stay.
 //!
 //! Setting "render.log" (default on; Settings, Feedback and data) turns it off. Nothing here leaves the computer
 //! unless the player attaches logs to feedback (telemetry.rs, scrubbed first).
@@ -130,12 +130,15 @@ fn chromium_log() -> Option<PathBuf> {
     [data.join("EBWebView").join("chrome_debug.log"), data.join("chrome_debug.log")].into_iter().find(|p| p.is_file())
 }
 
-/// The end of WebView2's own log, at most `max` bytes, cut at a line.
+/// The end of WebView2's own log, at most `max` bytes, cut at a line. It says when the file was last written, since
+/// one from an earlier start stays in the folder.
 fn chromium_tail(max: usize) -> String {
-    let Some(p) = chromium_log() else { return "No chrome_debug.log in WebView2's folder (it is written while the rendering log is on, from the next start)".into() };
+    let Some(p) = chromium_log() else { return "No chrome_debug.log in WebView2's folder (WebView2 writes it when gachamod starts with --browser-log)".into() };
     let Ok(bytes) = std::fs::read(&p) else { return format!("{} couldn't be read", p.display()) };
+    let written = std::fs::metadata(&p).and_then(|m| m.modified()).ok()
+        .map(|t| chrono::DateTime::<chrono::Local>::from(t).format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_else(|| "at an unknown time".into());
     let text = String::from_utf8_lossy(&bytes);
-    tail_of(&text, max)
+    format!("Last written {written}\n{}", tail_of(&text, max))
 }
 
 /// WebView2 crash dumps, newest first.

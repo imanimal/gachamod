@@ -116,6 +116,8 @@ monitor. Every window now starts with WebView2's occlusion check off (docs/spec.
 - After a blackout, `logs/rendering` holds an incident file. Check whether the screen read was black while WebView2's
   own picture (`incident-*.png`) wasn't: that points at Windows or the driver showing the window, not at the page.
   The rendering log's probe (WebView2's picture, the page's answer) has only run in unit tests and a normal start.
+- Starting gachamod with `--browser-log` writes `%LOCALAPPDATA%\app.gachamod.desktop\EBWebView\chrome_debug.log` and
+  opens a console window while it runs. A normal start opens no console window.
 
 ### Still to check: installing XXMI from the app
 

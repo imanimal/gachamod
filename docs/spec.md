@@ -689,8 +689,9 @@ UI:
   `incident-<time>.txt`: the window from every side (Windows, the screen, WebView2's own picture of the page saved as
   `.png`, the page's frame counter), `system.txt` (cards, drivers, screens, GPU scheduling, MPO), the last 400 events,
   graphics driver and WebView2 crash entries from the Windows event log, and the end of WebView2's `chrome_debug.log`
-  (the log adds `--enable-logging --v=0` to every window's flags). Feedback with logs attached sends the newest
-  incident too.
+  when there is one. WebView2 only writes that file when gachamod starts with `--browser-log`, which adds
+  `--enable-logging --v=0` to every window's flags and makes WebView2 open a console window. Feedback with logs
+  attached sends the newest incident too.
 - New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
   rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
