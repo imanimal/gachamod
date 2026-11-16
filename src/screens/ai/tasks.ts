@@ -12,6 +12,7 @@ import { record } from "../../lib/history";
 import { allGames, currentGame, emitApp, go } from "../../lib/store";
 import { plural } from "../../ui/kit";
 import { keysChanged, recordBackups } from "../../ui/KeyEditor";
+import { ReplyError } from "./reply";
 import { buildThemeTask } from "./themeTask";
 
 // ── what a task gives the helper ──
@@ -30,11 +31,16 @@ export interface Preview {
   links: Array<{ label: string; hint?: string; run: () => void }>;
   /** Make the change. Resolves to lines saying what changed (shown after, so nothing happens silently). */
   apply?: () => Promise<string[]>;
+  /** Set when the answer stops partway, saying how to get the rest. What's there can be applied, and the chatbot's
+   *  next answer can be pasted after it. */
+  cut?: string;
 }
 export interface Built {
   prompt: string;
   /** What the prompt contains, in plain words, shown before copying. */
   shares: string[];
+  /** How to take the answer out of the pasted reply, when it isn't one json block (parseReply). */
+  parse?: (text: string) => unknown;
   read: (reply: unknown) => Preview;
 }
 export interface TaskInput { goal: string; text: string }
@@ -49,25 +55,9 @@ export interface TaskDef {
   build: (t: AiTask, input: TaskInput) => Promise<Built>;
 }
 
-export class ReplyError extends Error {}
+export { CutOff, ReplyError, parseReply } from "./reply";
 
 // ── reading replies ──
-
-/** The JSON in a reply: the ```json block, else the outermost {...}. */
-export function parseReply(text: string): unknown {
-  const t = text.trim();
-  if (!t) throw new ReplyError("Paste the chatbot's answer first.");
-  const fence = /```(?:json|JSON)?\s*\n?([\s\S]*?)```/.exec(t);
-  let body = fence?.[1]?.trim();
-  if (!body) {
-    const a = t.indexOf("{"), b = t.lastIndexOf("}");
-    if (a < 0 || b <= a) throw new ReplyError("There's no JSON in that answer. Copy the chatbot's whole reply, including the code box.");
-    body = t.slice(a, b + 1);
-  }
-  try { return JSON.parse(body); } catch {
-    throw new ReplyError("The code box isn't valid JSON (it may be cut off). Ask the chatbot to send the whole block again.");
-  }
-}
 
 type Obj = Record<string, unknown>;
 function obj(v: unknown, where: string, keys: string[]): Obj {
@@ -451,7 +441,7 @@ export const TASKS: Record<string, TaskDef> = {
   recommend: recommendTask,
   theme: {
     title: () => "Make a theme with your chatbot",
-    text: { label: "Describe the look", placeholder: "Dark navy with gold, sharp corners, compact lists, sidebar on the right", required: true },
+    text: { label: "Describe the look", placeholder: "Enter text here...", required: true },
     build: (t, input) => buildThemeTask(t, input),
   },
 };

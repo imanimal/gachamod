@@ -10,6 +10,7 @@ import {
   setScheme, setSchemeMode, setThemePick, subscribeTheme, themeAttrs, themePick, useTheme, validateCustomTheme,
   type CustomTheme, type LayoutPrefs, type Scheme, type SchemeChoice, type SchemeMode,
 } from "../../lib/theme";
+import { anatomyText } from "../../lib/theme-anatomy";
 import { SIZES, getTextSize, setTextSize } from "../../lib/zoom";
 import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle } from "../../ui/kit";
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
@@ -386,13 +387,22 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
           <span className="field-l">Theme</span>
           <textarea value={text} rows={12} spellCheck={false} onChange={(e) => onText(e.target.value)}
             onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; setText(editable(t)); setTextErr(null); }} />
-          {textErr ? <span className="hint ctheme-err">{textErr}</span> : <span className="hint">"tokens" takes any name below, "css" takes extra CSS for anything tokens can't say</span>}
+          {textErr ? <span className="hint ctheme-err">{textErr}</span> : <span className="hint">"tokens" takes any name below, "css" holds the stylesheet</span>}
+        </label>
+        <label className="field mono">
+          <span className="field-l">Stylesheet</span>
+          <textarea value={t.css ?? ""} rows={14} spellCheck={false} onChange={(e) => patch({ css: e.target.value })} />
+          <span className="hint">Plain rules like .btn {"{ }"} apply only while this theme is on and win over its base. :root is the window, for your own variables</span>
         </label>
         <details>
           <summary>Tokens you can set</summary>
           <dl className="ctheme-tokens">
             {Object.entries(THEME_TOKENS).map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v.meaning}</dd></div>)}
           </dl>
+        </details>
+        <details>
+          <summary>Parts you can style</summary>
+          <pre className="ctheme-parts selectable">{anatomyText()}</pre>
         </details>
       </details>
       {(note?.length || problems.length) ? (

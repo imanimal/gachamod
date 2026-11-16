@@ -10,7 +10,7 @@ import { onApp } from "../../lib/store";
 import { Badge, Button, Chip, Dialog, TextField } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Icon } from "../../ui/Icon";
-import { ReplyError, TASKS, parseReply, type Built, type Preview } from "./tasks";
+import { CutOff, ReplyError, TASKS, parseReply, type Built, type Preview } from "./tasks";
 import "./ai.css";
 
 export function AiHost() {
@@ -80,10 +80,10 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     return () => { live = false; window.clearTimeout(t); };
   }, [def, task, goal, text]);
 
-  const read = useMemo((): { preview?: Preview; error?: string } => {
+  const read = useMemo((): { preview?: Preview; error?: string; cut?: boolean } => {
     if (!reply.trim() || !built) return {};
-    try { return { preview: built.read(parseReply(reply)) }; }
-    catch (e) { return { error: e instanceof ReplyError ? e.message : errorText(e) }; }
+    try { const preview = built.read((built.parse ?? parseReply)(reply)); return { preview, cut: !!preview.cut }; }
+    catch (e) { return { error: e instanceof ReplyError ? e.message : errorText(e), cut: e instanceof CutOff }; }
   }, [reply, built]);
 
   const send = async (open: boolean) => {
@@ -99,8 +99,15 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     window.setTimeout(() => replyBox.current?.querySelector("textarea")?.focus(), 60);
   };
 
+  // an answer that was cut off gets the next one after it (closing its open code block first)
   const pasteReply = async () => {
-    try { setReply(await navigator.clipboard.readText()); } catch { toast("Couldn't read the clipboard. Paste with Ctrl+V", true); }
+    let add: string;
+    try { add = await navigator.clipboard.readText(); } catch { toast("Couldn't read the clipboard. Paste with Ctrl+V", true); return; }
+    setReply((r) => {
+      if (!read.cut || !r.trim() || r.includes(add.trim())) return add;
+      const open = (r.match(/^\s*```/gm) ?? []).length % 2 === 1;
+      return `${r.trimEnd()}${open ? "\n```" : ""}\n\n${add}`;
+    });
   };
 
   const apply = async () => {
@@ -175,9 +182,11 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
 
       <section className={`ai-step${sent || reply ? "" : " dim"}`} ref={replyBox}>
         <h3 className="ai-step-h"><span className="ai-n">2</span>Paste the answer</h3>
-        <TextField value={reply} onChange={setReply} multiline rows={4} mono placeholder="The chatbot's whole reply, with its json code box" />
+        <TextField value={reply} onChange={setReply} multiline rows={4} mono placeholder="The chatbot's whole reply, with its code blocks" />
         <div className="row">
-          <Button size="sm" icon="paste" onClick={() => void pasteReply()} title="Paste the chatbot's answer from the clipboard">Paste</Button>
+          {read.cut
+            ? <Button size="sm" icon="paste" onClick={() => void pasteReply()} title="Adds the chatbot's next answer after this one">Paste the rest</Button>
+            : <Button size="sm" icon="paste" onClick={() => void pasteReply()} title="Paste the chatbot's answer from the clipboard">Paste</Button>}
           {reply && <Button size="sm" variant="ghost" icon="x" onClick={() => setReply("")}>Clear</Button>}
         </div>
         {read.error && <p className="ai-err" role="alert">{read.error}</p>}
@@ -203,6 +212,7 @@ function PreviewView({ p }: { p: Preview }) {
   return (
     <section className="ai-step ai-preview">
       <h3 className="ai-step-h"><span className="ai-n">3</span>{p.summary}</h3>
+      {p.cut && <div className="note t-warn" role="status"><Icon name="warn" /><span>{p.cut}</span></div>}
       {p.text.length > 0 && <div className="ai-text selectable">{p.text.map((t, i) => <p key={i}>{t}</p>)}</div>}
       {p.rows.length > 0 && (
         <div className="ai-rows">
@@ -229,7 +239,7 @@ function PreviewView({ p }: { p: Preview }) {
       )}
       {p.skipped.length > 0 && (
         <details className="ai-skipped">
-          <summary><Badge tone="warn">{p.skipped.length} skipped</Badge> {p.skipped.length === 1 ? "A part of the answer that doesn't match your mods" : "Parts of the answer that don't match your mods"}. Click to see them</summary>
+          <summary><Badge tone="warn">{p.skipped.length} skipped</Badge> {p.skipped.length === 1 ? "A part of the answer that can't be used" : "Parts of the answer that can't be used"}. Click to see them</summary>
           <ul>{p.skipped.map((s, i) => <li key={i}>{s}</li>)}</ul>
         </details>
       )}

@@ -95,6 +95,8 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .ctheme-tokens > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: .8rem; }
 .ctheme-tokens dt { font-family: var(--font-mono); color: var(--text-2); }
 .ctheme-tokens dd { margin: 0; color: var(--text-3); }
+.ctheme-parts { margin: .45rem 0 0; max-height: 20rem; overflow: auto; padding: .7rem; border-radius: var(--radius-sm);
+  background: var(--bg-2); border: 1px solid var(--line); font-family: var(--font-mono); font-size: .8em; white-space: pre-wrap; word-break: break-word; }
 .ctheme-err { color: var(--bad); }
 .ctheme-probs { margin: 0; padding-left: 1.1rem; font-size: .86em; color: var(--warn); display: grid; gap: .15rem; }
 .ctheme-ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }

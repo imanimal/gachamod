@@ -830,8 +830,8 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); layout (density, sidebar
   side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
   hardware acceleration with a copy of the rendering log row ("Hardware acceleration and rendering log"). Custom
-  themes: list, apply, delete with Undo, import/export as JSON, and
-  "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
+  themes: list, apply, delete with Undo, import/export as JSON, an editor with a stylesheet box and the list of parts
+  it can style, and "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
 - What gachamod does by itself has one switch each, all prefs in `automatic.ts` that other areas read. They sit in
   three panels of Mods and downloads: "Automatic updates and scans" (app updates, mod updates, rescans), "Downloads
   and installing" (archives, every mod in an archive, slow downloads, on-screen toggles for new mods) and "Mods a
@@ -911,8 +911,10 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
   mods; an answer and optional changes), "keys-offscreen" (the mods' key sections; the answer names the sections
   that draw the character and is applied through `modKeys.onScreen` with Undo; its `note` says it takes a strong
   chatbot), "recommend" (`detail` from lib/recommend.ts; ideas open as Browse
-  searches or GameBanana pages), "theme" (a description; the answer is validated with `validateCustomTheme` and
-  saved as a custom theme with Undo).
+  searches or GameBanana pages), "theme" (a description; the prompt carries the tokens, how a game theme is built
+  and the map of the window's parts, and asks for a stylesheet at that depth in a css block after the json one. An
+  answer cut off partway applies up to its last whole rule, and the next answer can be pasted after it ("Paste the
+  rest"). The answer is validated with `validateCustomTheme` and saved as a custom theme with Undo).
 - Visibility (`aiShowPref`, "ai.show"): "off" hides every AI element (buttons, menu items, search entries, the
   first-run card, the helper itself); "useful" (default) shows entry points that save real work; "all" adds
   extras. Every entry point checks `aiShown("useful" | "extra")`.
@@ -935,6 +937,10 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
 - Every theme works fully light and fully dark. A theme whose own look mixes the two (Talos-II's charcoal stage on
   light sheets) gets `html[data-full]` when Appearance asks for all light or all dark, and draws one material
   throughout. Teyvat at night turns its cream sheets to navy (`themes/gi-night.css`).
+- Custom themes: a base theme, token values, a layout and up to 160,000 characters of CSS, as much as a game theme
+  uses. `scopeCss` reads the CSS with the browser's parser and puts every rule under `:root[data-custom]`, so plain
+  `.btn { }` rules apply only while that theme is on and win over its base. `lib/theme-anatomy.ts` is the map of
+  parts a theme can style, used by the chatbot prompt and the editor; its test checks every class in it still exists.
 
 ## Extensions (EXTENSIONS)
 

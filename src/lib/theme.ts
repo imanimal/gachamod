@@ -279,7 +279,8 @@ export const THEME_TOKENS: Record<string, { kind: TokenKind; meaning: string }> 
   "--ease": { kind: "ease", meaning: "normal easing, like cubic-bezier(.2, .8, .2, 1)" },
 };
 
-export const CUSTOM_CSS_MAX = 24_000;
+/** Room for a stylesheet as full as a game theme's (those run 60 to 100 KB). */
+export const CUSTOM_CSS_MAX = 160_000;
 /** The user's custom themes. Pick one for a game with setThemePick(game, theme.id). */
 export const customThemesPref = jsonPref<CustomTheme[]>("ui.customThemes", []);
 let customCache: CustomTheme[] | null = null;
@@ -418,6 +419,61 @@ export function validateCustomTheme(input: unknown): { theme: CustomTheme | null
   return { theme: { id, name, base: baseInfo.id, scheme, tokens, layout, ...(css ? { css } : {}), ...(pkg ? { pkg } : {}) }, problems };
 }
 
+// ── scoping a custom theme's CSS ──
+
+/** Attributes that only the root element carries, so a selector starting with one means the root. */
+const ROOT_ATTR = /^\[data-(?:theme|scheme|custom|motion|density|sidebar|nav|corners|buttons|game|accent|full)(?![\w-])/;
+
+/** Split a selector list at its top-level commas (not inside (), [] or quotes). */
+function splitSelectors(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0, quote = "", start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (quote) { if (c === "\\") i++; else if (c === quote) quote = ""; continue; }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === "(" || c === "[") depth++;
+    else if (c === ")" || c === "]") depth--;
+    else if (c === "," && depth === 0) { out.push(s.slice(start, i)); start = i + 1; }
+  }
+  out.push(s.slice(start));
+  return out.map((x) => x.trim()).filter(Boolean);
+}
+
+/** One selector made to need the custom theme: `.btn` gives `:root:root[data-custom] .btn`,
+    `:root[data-scheme="light"] .x` gives `:root:root[data-custom][data-scheme="light"] .x`, `[data-motion="reduced"] *`
+    gives `:root:root[data-custom][data-motion="reduced"] *`. The doubled :root outweighs the base theme's rules for
+    the same part and base.css's root rules (corners, density). */
+function scopeSelector(sel: string): string {
+  const root = /^(?:(?::root|html)(?![\w-])|&)+/.exec(sel);
+  if (root) return `:root:root[data-custom]${sel.slice(root[0].length)}`;
+  if (ROOT_ATTR.test(sel)) return `:root:root[data-custom]${sel}`;
+  return `:root:root[data-custom] ${sel}`;
+}
+
+let scoped = { from: "", to: "" };
+/** A custom theme's CSS with every rule scoped to it, so `.btn { ... }` applies only while that theme is on and beats
+    the base theme's own rules. Rules inside @media, @supports, @container and @layer are scoped too (nested rules
+    follow their parent); @keyframes, @font-face and @property stay as written. The browser's own parser reads it, so
+    what the page would drop is dropped here too. Without a parser (tests) the text comes back as it was. */
+export function scopeCss(css: string): string {
+  if (!css.trim() || typeof CSSStyleSheet === "undefined") return css;
+  if (scoped.from === css) return scoped.to;
+  let sheet: CSSStyleSheet;
+  try { sheet = new CSSStyleSheet(); sheet.replaceSync(css); } catch { return css; }
+  const walk = (rules: CSSRuleList) => {
+    for (const r of Array.from(rules)) {
+      if (r instanceof CSSStyleRule) r.selectorText = splitSelectors(r.selectorText).map(scopeSelector).join(", ");
+      // @media, @supports, @container, @layer, @starting-style; @scope's rules are relative to its own root
+      else if (r instanceof CSSGroupingRule && r.constructor.name !== "CSSScopeRule") walk(r.cssRules);
+    }
+  };
+  walk(sheet.cssRules);
+  const out = Array.from(sheet.cssRules, (r) => r.cssText).join("\n");
+  scoped = { from: css, to: out };
+  return out;
+}
+
 const STYLE_ID = "gm-custom-theme";
 /** Put a custom theme's tokens and CSS into the page and set its layout; null takes them out. Returns the CSS used. */
 function injectCustom(theme: CustomTheme | null): string {
@@ -430,7 +486,7 @@ function injectCustom(theme: CustomTheme | null): string {
     return "";
   }
   const decl = Object.entries(theme.tokens).map(([k, v]) => `  ${k}: ${v};`).join("\n");
-  const css = `:root:root[data-custom="${theme.id}"] {\n${decl}\n}\n${theme.css ?? ""}`;
+  const css = `:root:root[data-custom="${theme.id}"] {\n${decl}\n}\n${scopeCss(theme.css ?? "")}`;
   if (!el) { el = document.createElement("style"); el.id = STYLE_ID; }
   el.textContent = css;
   document.head.appendChild(el); // last in <head>, after the theme files
