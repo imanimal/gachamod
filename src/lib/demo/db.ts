@@ -4,7 +4,7 @@ import type { Character, GameState, ModEntry, Profile } from "../api";
 
 const game = (g: Partial<GameState> & Pick<GameState, "id" | "name" | "short" | "importer" | "gamebananaId" | "accent">): GameState => ({
   xxmi: g.importer !== "3DMigoto", gbCharacterCategory: null, theme: "default", installed: false, gameDir: null, importerDir: null, modsDir: null,
-  viaXxmi: false, importerVersion: null, importerLatest: null, shown: false, running: false, modCount: 0, enabledCount: 0, ...g,
+  viaXxmi: false, importerVersion: null, importerLatest: null, shown: false, running: false, modCount: 0, enabledCount: 0, reloadKey: "F10", ...g,
 });
 
 const xx = (code: string) => `C:\\Users\\Player\\AppData\\Roaming\\XXMI Launcher\\${code}`;

@@ -136,7 +136,8 @@
   .field input, .select select { border-radius: 999px; }
   .field :is(input, textarea):hover:not(:disabled), .select select:hover { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px #999; }
   .field :is(input, textarea):focus, .select select:focus { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 2px var(--acc); }
-  .select select { font-weight: 800; font-style: italic; }
+  /* the shorthand above drops the kit's room for the arrow; italic letters lean right, so a little more */
+  .select select { font-weight: 800; font-style: italic; padding-right: 2.3rem; }
   .select .i { color: #fff; stroke-width: 3; }
   .hint { color: var(--text-3); font-weight: 500; }
 

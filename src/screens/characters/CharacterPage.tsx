@@ -2,7 +2,7 @@
 // and two tabs: Installed (their mods, in the shared mod grid) and Online (GameBanana, only this character). The
 // route holds it: { view: "characters", character, tab?: "online", modId? }. Back returns to the roster where it was
 // scrolled. O marks the character as owned or not. Owner: LIBRARY area.
-import { rowKeys, useSideScroll } from "../browse/sideScroll";
+import { reveal, rowKeys, useSideScroll } from "../browse/sideScroll";
 import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
 import { errorText, type GameId, type ModEntry } from "../../lib/api";
 import { characterTabs, useExtensions } from "../../lib/extensions";
@@ -11,6 +11,7 @@ import { closeRoute, patchRoute, replaceRoute, useGame, useRoute } from "../../l
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { Button, Empty, IconButton, Tabs } from "../../ui/kit";
 import { Portrait } from "../../ui/Portrait";
+import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { toast } from "../../ui/toast";
 import { GbBrowser } from "../browse/GbBrowser";
 import { ExtensionFrame, NeedsNote } from "../extensions/ExtensionFrame";
@@ -76,11 +77,13 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
   }, []);
 
   // the strip scrolls sideways with the mouse wheel, like the other rows of chips
-  useSideScroll(stripRef, [strip.length]);
+  const [stripAll, toggleStripAll] = useRowOpen("character.strip");
+  const stripEdges = useSideScroll(stripRef, [strip.length, stripAll]);
 
   // keep the current one in view in the strip
   useEffect(() => {
-    stripRef.current?.querySelector<HTMLElement>(".pchip.on")?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const row = stripRef.current, on = row?.querySelector<HTMLElement>(".pchip.on");
+    if (row && on) reveal(row, on, "center");
   }, [name, strip.length]);
 
   const defaultOutfit = async () => {
@@ -120,7 +123,8 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
       </header>
 
       {strip.length > 1 && (
-        <div ref={stripRef} className="pchips char-strip" role="list" aria-label={many} onKeyDown={(e) => rowKeys(e, ".pchip")}>
+        <div className={`char-strip-wrap${stripAll ? " is-all" : ""}`}>
+        <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many} onKeyDown={(e) => rowKeys(e, ".pchip")}>
           {strip.map((x) => (
             <button key={x.name} type="button" role="listitem" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
               aria-current={same(x.name, name) ? "page" : undefined} onClick={() => hop(x)}
@@ -130,6 +134,8 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
               {x.mods.length > 0 && <span className="pchip-n">{x.mods.length}</span>}
             </button>
           ))}
+        </div>
+        <ShowAll open={stripAll} onToggle={toggleStripAll} fits={!stripEdges.left && !stripEdges.right} label={`Show every ${one.toLowerCase()} (${strip.length})`} />
         </div>
       )}
 

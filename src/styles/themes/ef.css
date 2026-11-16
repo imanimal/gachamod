@@ -175,7 +175,7 @@
   .field input, .select select { border-radius: 999px; }
   .field :is(input, textarea):hover:not(:disabled), .select select:hover { box-shadow: 0 0 0 1px var(--ink); }
   .field :is(input, textarea):focus, .select select:focus { box-shadow: 0 0 0 1.5px var(--ink), 0 0 0 4px var(--acc); }
-  .select select { font-weight: 600; }
+  .select select { font-weight: 600; padding-right: 2.2rem; }
   .select select option { background: #fff; color: var(--pill-ink); }
   .field input::placeholder, .field textarea::placeholder { color: #767676; }
   .select .i { color: var(--pill-ink); stroke-width: 2.6; }

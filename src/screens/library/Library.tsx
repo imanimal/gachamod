@@ -16,7 +16,8 @@ import { Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchF
 import { toast } from "../../ui/toast";
 import { shuffleOutfits } from "./shuffle";
 import { useBackendRoster } from "../characters/roster";
-import { rowKeys, useSideScroll } from "../browse/sideScroll";
+import { reveal, rowKeys, useSideScroll } from "../browse/sideScroll";
+import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { Archive } from "./Archive";
 import { useMods } from "./data";
 import { LIB_KINDS, libKind, type LibKind } from "./kinds";
@@ -207,7 +208,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods)"
             onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
         </>}>
-        {flagChips.length + kindRow.length + charRow.length > 0 && <CharRow deps={[flagChips.length, kindRow.length, charRow.length, character, kind, flag]}>
+        {flagChips.length + kindRow.length + charRow.length > 0 && <CharRow count={flagChips.length + kindRow.length + charRow.length} deps={[flagChips.length, kindRow.length, charRow.length, character, kind, flag]}>
           {flagChips.map((f) => (
             <Chip key={f.id} className="char-chip flag-chip" icon={f.icon} count={counts[f.id]} on={flag === f.id}
               title={flag === f.id ? `${f.title}. Click again for every mod` : f.title}
@@ -256,23 +257,23 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
 
 /** The row of type and character chips. It scrolls sideways with the mouse wheel, the arrow buttons (shown when it
  *  doesn't fit) and the arrow keys, and keeps the picked chip in view. */
-function CharRow({ deps, children }: { deps: unknown[]; children: ReactNode }) {
+function CharRow({ deps, count, children }: { deps: unknown[]; count: number; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
-  const { left, right, page } = useSideScroll(ref, deps);
+  const [all, toggleAll] = useRowOpen("library.chips");
+  const { left, right, page } = useSideScroll(ref, [...deps, all]);
   useEffect(() => {
     const el = ref.current, on = el?.querySelector<HTMLElement>(".chip.on");
-    if (!el || !on) return;
-    const box = el.getBoundingClientRect(), r = on.getBoundingClientRect();
-    if (r.left < box.left || r.right > box.right) el.scrollBy({ left: r.left - box.left - (box.width - r.width) / 2, behavior: "smooth" });
+    if (el && on) reveal(el, on, "center");
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   const arrows = left || right;
   return (
-    <div className="library-chars-wrap">
+    <div className={`library-chars-wrap${all ? " is-all" : ""}`}>
       {arrows && <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />}
-      <div ref={ref} className="library-chars" role="toolbar" aria-label="Types and characters" onKeyDown={(e) => rowKeys(e, ".chip")}>
+      <div ref={ref} className={`library-chars${all ? " is-all" : ""}`} role="toolbar" aria-label="Types and characters" onKeyDown={(e) => rowKeys(e, ".chip")}>
         {children}
       </div>
       {arrows && <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />}
+      <ShowAll open={all} onToggle={toggleAll} fits={!arrows} label={`Show every type and character (${count})`} />
     </div>
   );
 }

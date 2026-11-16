@@ -16,7 +16,7 @@ type View =
   | { k: "start" }
   | { k: "uninstall" }
   | { k: "work"; job: Job }
-  | { k: "done"; job: Job; dir?: string; dataGone?: boolean }
+  | { k: "done"; job: Job; dir?: string; dataGone?: boolean; version?: string }
   | { k: "error"; job: Job; message: string };
 
 const JOB_TITLE: Record<Job, string> = { install: "Installing gachamod", update: "Updating gachamod", repair: "Repairing gachamod", uninstall: "Uninstalling gachamod" };
@@ -30,8 +30,24 @@ function cmp(a: string, b: string): number {
   const p = (v: string) => v.replace(/^v/, "").split("-")[0]!.split(".").map((n) => parseInt(n, 10) || 0);
   const x = p(a), y = p(b);
   for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] ?? 0) - (y[i] ?? 0); if (d) return Math.sign(d); }
-  return 0;
+  // same numbers: a release beats its betas (0.1.1 over 0.1.1-beta.3), then beta.3 beats beta.2
+  const pre = (v: string) => v.replace(/^v/, "").split("-").slice(1).join("-");
+  const pa = pre(a), pb = pre(b);
+  if (pa === pb) return 0;
+  if (!pa || !pb) return pa ? -1 : 1;
+  return Math.sign(pa.localeCompare(pb, undefined, { numeric: true }));
 }
+
+/** The newest version on GitHub, looked up when setup opens over an installed copy. */
+type Latest = { k: "off" } | { k: "checking" } | { k: "ok"; version: string } | { k: "failed"; message: string };
+
+/** This setup carries an installer newer than the installed copy (or there's no copy). */
+const carriesNewer = (info: SetupInfo) => info.payload && (!info.installed?.version || cmp(info.version, info.installed.version) > 0);
+/** An update downloads from GitHub unless the installer inside this setup is the newer one. */
+const fromGitHub = (job: Job, info: SetupInfo) => job === "update" && !carriesNewer(info);
+/** The newest version on GitHub when it's newer than the installed copy. */
+const newerOnline = (latest: Latest, info: SetupInfo) =>
+  latest.k === "ok" && info.installed?.version && cmp(latest.version, info.installed.version) > 0 ? latest.version : null;
 
 
 export function Setup() {
@@ -50,6 +66,7 @@ export function Setup() {
   const [deleteData, setDeleteData] = useState(false);
   const [dataSize, setDataSize] = useState<number | null>(null);
   const [pick, setPick] = useState<{ theme?: string; scheme?: Scheme }>({});
+  const [latest, setLatest] = useState<Latest>({ k: "off" });
 
   useEffect(() => {
     api.info().then((i) => {
@@ -59,6 +76,16 @@ export function Setup() {
       requestAnimationFrame(() => void api.win("show"));
     }).catch((e) => { setFailed(String(e)); void api.win("show"); });
   }, []);
+
+  // over an installed copy, look on GitHub for a newer version than this setup has, so a copy of gachamod that
+  // won't open can still be updated from here
+  const checkLatest = useCallback(() => {
+    setLatest({ k: "checking" });
+    api.latest().then((version) => setLatest({ k: "ok", version })).catch((e) => setLatest({ k: "failed", message: String(e) }));
+  }, []);
+  useEffect(() => {
+    if (info?.installed && (info.mode === "install" || info.mode === "maintain") && !carriesNewer(info)) checkLatest();
+  }, [info, checkLatest]);
   useEffect(() => { if (info) applyLook(info.look, pick); }, [info, pick]);
 
   // the current step, and the ones before it as done
@@ -78,10 +105,13 @@ export function Setup() {
     setView({ k: "work", job }); setStep(null); setDone([]); setSince(Date.now()); setOpen(false);
     try {
       let out: string | undefined;
-      if (job === "install" || job === "update") out = await api.install({ dir, desktop, admin });
+      const online = fromGitHub(job, info);
+      if (online) out = await api.update();
+      else if (job === "install" || job === "update") out = await api.install({ dir, desktop, admin });
       else if (job === "repair") out = await api.repair();
       else await api.uninstall(deleteData);
-      setView({ k: "done", job, dir: out || info.installed?.dir, dataGone: job === "uninstall" && deleteData });
+      const version = job === "update" ? (online ? newerOnline(latest, info) ?? undefined : info.version) : undefined;
+      setView({ k: "done", job, dir: out || info.installed?.dir, dataGone: job === "uninstall" && deleteData, version });
       if ((job === "install" || job === "update") && openAfter) {
         await api.openApp(out).catch(() => undefined);
         setTimeout(() => void api.win("close"), 1400);
@@ -89,7 +119,7 @@ export function Setup() {
     } catch (e) {
       setView({ k: "error", job, message: String(e) });
     }
-  }, [info, dir, desktop, admin, deleteData, openAfter]);
+  }, [info, dir, desktop, admin, deleteData, openAfter, latest]);
 
   // a repair started from Windows (--repair) begins at once
   const started = useRef(false);
@@ -135,18 +165,18 @@ export function Setup() {
         ) : view.k === "work" ? (
           <Working job={view.job} step={step} done={done} since={since} info={info} />
         ) : view.k === "done" ? (
-          <Done view={view} info={info} openAfter={openAfter} close={close} />
+          <Done view={view} openAfter={openAfter} close={close} />
         ) : view.k === "error" ? (
           <Failed view={view} info={info} retry={() => void run(view.job)} close={close} />
         ) : view.k === "uninstall" ? (
           <Uninstall info={info} deleteData={deleteData} setDeleteData={setDeleteData} dataSize={dataSize}
             go={() => void run("uninstall")} repair={() => void run("repair")} cancel={info.mode === "uninstall" ? close : () => setView({ k: "start" })} />
         ) : info.mode === "install" ? (
-          <Install info={info} open={open} setOpen={setOpen} go={(job) => void run(job)} uninstall={() => setView({ k: "uninstall" })}
+          <Install info={info} latest={latest} checkLatest={checkLatest} open={open} setOpen={setOpen} go={(job) => void run(job)} uninstall={() => setView({ k: "uninstall" })}
             dir={dir} setDir={setDir} desktop={desktop} setDesktop={setDesktop} admin={admin} setAdmin={setAdmin}
             openAfter={openAfter} setOpenAfter={setOpenAfter} pick={pick} setPick={setPick} />
         ) : (
-          <Maintain info={info} repair={() => void run("repair")} uninstall={() => setView({ k: "uninstall" })} />
+          <Maintain info={info} latest={latest} checkLatest={checkLatest} update={() => void run("update")} repair={() => void run("repair")} uninstall={() => setView({ k: "uninstall" })} />
         )}
       </main>
     </div>
@@ -172,7 +202,7 @@ function Hero({ title, sub, icon }: { title: string; sub?: ReactNode; icon?: Ico
 }
 
 function Install(p: {
-  info: SetupInfo; open: boolean; setOpen: (v: boolean) => void; go: (job: Job) => void; uninstall: () => void;
+  info: SetupInfo; latest: Latest; checkLatest: () => void; open: boolean; setOpen: (v: boolean) => void; go: (job: Job) => void; uninstall: () => void;
   dir: string | null; setDir: (v: string | null) => void; desktop: boolean; setDesktop: (v: boolean) => void;
   admin: boolean; setAdmin: (v: boolean) => void; openAfter: boolean; setOpenAfter: (v: boolean) => void;
   pick: { theme?: string; scheme?: Scheme }; setPick: (v: { theme?: string; scheme?: Scheme }) => void;
@@ -181,17 +211,22 @@ function Install(p: {
   const inst = info.installed;
   const c = inst?.version ? cmp(info.version, inst.version) : 1;
   const game = info.look.game;
-  // already there, same version or newer: open it, or repair or uninstall it
+  // already there, same version or newer: update it from GitHub when there's a newer one, open it, or repair or
+  // uninstall it
   if (inst && inst.ok && c <= 0) {
+    const newer = newerOnline(p.latest, info);
     return (
       <Panel>
         <Hero title="gachamod" sub={c === 0 ? `Version ${inst.version} is installed.` : `A newer version, ${inst.version}, is installed. This setup has ${info.version}.`} />
         <p className="setup-p" title={inst.dir}>It's in {inst.dir}.</p>
         <div className="setup-actions">
-          <Button variant="primary" size="lg" icon="play" autoFocus onClick={() => void api.openApp(inst.dir).then(() => api.win("close"))}>Open gachamod</Button>
+          {newer && <UpdateButton version={newer} go={() => p.go("update")} />}
+          <Button variant={newer ? undefined : "primary"} size={newer ? undefined : "lg"} icon="play" autoFocus={!newer}
+            onClick={() => void api.openApp(inst.dir).then(() => api.win("close"))}>Open gachamod</Button>
           <Button icon="refresh" onClick={() => p.go("repair")} title="Put gachamod's files, shortcuts and Windows settings back. Your mods and settings stay">Repair</Button>
           <Button variant="ghost" icon="trash" onClick={p.uninstall}>Uninstall</Button>
         </div>
+        <LatestNote latest={p.latest} retry={p.checkLatest} />
       </Panel>
     );
   }
@@ -226,7 +261,7 @@ function Install(p: {
           )}
           <Toggle checked={p.desktop} onChange={p.setDesktop} label="Desktop shortcut" />
           <Toggle checked={p.admin} onChange={p.setAdmin} label="Start gachamod as administrator"
-            hint="Lets its hotkeys and its menu work in games that run as administrator, like Zenless Zone Zero, and reload their mods without you pressing F10. Windows asks for permission each time it starts." />
+            hint="Lets it switch skins in games that run as administrator, like Zenless Zone Zero, without you pressing F10. Windows asks for permission each time it starts." />
           <Toggle checked={p.openAfter} onChange={p.setOpenAfter} label={`Open gachamod when it's ${update ? "updated" : "installed"}`} />
           <div className="setup-row setup-look" title="Only changes how setup looks">
             <Select label="Setup's look" value={themeNow} options={themes.map((t) => ({ value: t.id, label: t.name }))} onChange={(v) => p.setPick({ ...p.pick, theme: v })} />
@@ -252,7 +287,8 @@ function Install(p: {
   );
 }
 
-function Maintain({ info, repair, uninstall }: { info: SetupInfo; repair: () => void; uninstall: () => void }) {
+function Maintain({ info, latest, checkLatest, update, repair, uninstall }:
+  { info: SetupInfo; latest: Latest; checkLatest: () => void; update: () => void; repair: () => void; uninstall: () => void }) {
   const inst = info.installed;
   if (!inst) {
     return (
@@ -264,9 +300,14 @@ function Maintain({ info, repair, uninstall }: { info: SetupInfo; repair: () => 
       </Panel>
     );
   }
+  const newer = newerOnline(latest, info);
+  const sub = !inst.version ? undefined
+    : newer ? `Version ${inst.version} is installed. ${newer} is out.`
+    : latest.k === "ok" ? `Version ${inst.version}, the newest.`
+    : `Version ${inst.version}`;
   return (
     <Panel>
-      <Hero title="gachamod" sub={inst.version ? `Version ${inst.version}` : undefined} />
+      <Hero title="gachamod" sub={sub} />
       <p className="setup-p" title={inst.dir}>
         {inst.ok ? `It's in ${inst.dir}.` : `gachamod.exe is missing from ${inst.dir}. Repair puts it back.`}
       </p>
@@ -281,10 +322,32 @@ function Maintain({ info, repair, uninstall }: { info: SetupInfo; repair: () => 
         </Card>
       </div>
       <div className="setup-actions">
+        {newer && <UpdateButton version={newer} go={update} />}
         <Button icon="play" disabled={!inst.ok} onClick={() => void api.openApp(inst.dir).then(() => api.win("close"))}>Open gachamod</Button>
       </div>
+      <LatestNote latest={latest} retry={checkLatest} />
     </Panel>
   );
+}
+
+function UpdateButton({ version, go }: { version: string; go: () => void }) {
+  return (
+    <Button variant="primary" size="lg" icon="update" autoFocus onClick={go}
+      title="Download the newest gachamod from GitHub and install it over this copy. Your mods and settings stay">Update to {version}</Button>
+  );
+}
+
+/** What the look on GitHub is doing, while it isn't done or when it failed. */
+function LatestNote({ latest, retry }: { latest: Latest; retry: () => void }) {
+  if (latest.k === "checking") return <p className="setup-note"><Spinner /> Looking on GitHub for a newer version</p>;
+  if (latest.k === "failed") {
+    return (
+      <p className="setup-note" title={latest.message}>
+        Couldn't look on GitHub for a newer version. <Button size="sm" variant="ghost" icon="refresh" onClick={retry}>Try again</Button>
+      </p>
+    );
+  }
+  return null;
 }
 
 function Uninstall({ info, deleteData, setDeleteData, dataSize, go, repair, cancel }: {
@@ -325,6 +388,7 @@ function plan(job: Job, info: SetupInfo): string[] {
     const own = info.payload && (!info.installed?.version || cmp(info.version, info.installed.version) >= 0);
     return [...(own ? ["unpack"] : ["download", "verify"]), ...close, "copy"];
   }
+  if (fromGitHub(job, info)) return ["download", "verify", ...close, "copy"];
   return ["unpack", ...close, "copy"];
 }
 
@@ -366,7 +430,7 @@ function Working({ job, step, done, since, info }: { job: Job; step: Step | null
   );
 }
 
-function Done({ view, info, openAfter, close }: { view: Extract<View, { k: "done" }>; info: SetupInfo; openAfter: boolean; close: () => void }) {
+function Done({ view, openAfter, close }: { view: Extract<View, { k: "done" }>; openAfter: boolean; close: () => void }) {
   const { job } = view;
   if (job === "uninstall") {
     return (
@@ -378,7 +442,7 @@ function Done({ view, info, openAfter, close }: { view: Extract<View, { k: "done
     );
   }
   const opening = (job === "install" || job === "update") && openAfter;
-  const title = job === "install" ? "gachamod is installed" : job === "update" ? `gachamod is updated to ${info.version}` : "gachamod is repaired";
+  const title = job === "install" ? "gachamod is installed" : job === "update" ? (view.version ? `gachamod is updated to ${view.version}` : "gachamod is updated") : "gachamod is repaired";
   return (
     <Panel>
       <Hero title={title} icon="check" sub={opening ? "Opening it now." : undefined} />
@@ -399,10 +463,10 @@ function Failed({ view, info, retry, close }: { view: Extract<View, { k: "error"
       <Hero title={`Couldn't ${what} gachamod`} icon="warn" sub={view.message} />
       <div className="setup-actions">
         <Button variant="primary" icon="refresh" autoFocus onClick={retry}>Try again</Button>
-        {info.payload && view.job !== "uninstall" && (
+        {info.payload && view.job !== "uninstall" && !fromGitHub(view.job, info) && (
           <Button icon="package" onClick={() => void api.plainInstaller()} title="Windows' plain installer window, which asks each question itself">Use the plain installer</Button>
         )}
-        {!info.payload && view.job === "repair" && (
+        {(view.job === "repair" ? !info.payload : fromGitHub(view.job, info)) && (
           <Button icon="external" onClick={() => void api.openPage(`${info.homepage}/releases/latest`)} title="The latest release on GitHub">Download the installer</Button>
         )}
         <Button variant="ghost" onClick={close}>Close</Button>

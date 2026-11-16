@@ -1,9 +1,8 @@
 // Demo handlers for logs, crash reports, usage counts, feedback and administrator (lib/api/report.ts). Nothing leaves
 // the browser. Owner: SYSTEM area.
-import type { MenuInfo } from "../api";
+import type { LiveInfo } from "../api";
 import { call, registerDemo } from "../tauri";
 import { demoDb, demoWait } from "./db";
-import { demoPickedAt } from "./ingame";
 
 export function registerReportDemo() {
   const on = (k: string) => demoDb.settings.get(k) !== "0";
@@ -28,17 +27,31 @@ export function registerReportDemo() {
     game_check_setup: async ({ game }) => {
       const g = demoDb.games.find((x) => x.id === game);
       if (!g) throw { kind: "invalid", message: `gachamod doesn't know the game ${String(game)}` };
-      const info = await call<MenuInfo>("menu_info", { game });
+      const info = await call<LiveInfo>("live_info", { game });
       const running = await call<boolean>("game_running", { game });
       return {
         game: g.id, name: g.name, importer: g.importer, viaXxmi: g.viaXxmi, loaderVersion: g.importerVersion ?? null, xxmiVersion: g.viaXxmi ? "0.9.3" : null,
         windowMode: g.viaXxmi ? "borderless" : null, running, gameAdmin: running ? g.id === "zzz" : null, appAdmin: false,
-        foregroundCheck: "1", reloadKey: "no_modifiers VK_F10",
+        foregroundCheck: "1", reloadKey: "no_modifiers VK_F10", liveGroups: info.groups.length,
         menuStyle: info.menu.style, menuKey: info.menu.key, menuPad: info.menu.pad,
       };
     },
-    // the player "presses the menu key" three seconds into the step; a pick in the demo's menu counts too
-    game_check_menu: ({ since }) => (demoPickedAt > Number(since) ? "picked" : Date.now() - Number(since) > 3000 ? "window" : null),
+    // the game "saves" a pick about five seconds after the check first asks for it, as the loader does
+    game_check_saved: async ({ game, group }) => {
+      const key = `${String(game)}/${String(group)}`;
+      const first = asked.get(key) ?? Date.now();
+      asked.set(key, first);
+      const info = await call<LiveInfo>("live_info", { game });
+      const active = info.groups.find((x) => x.group === Number(group))?.active ?? null;
+      const now = Date.now();
+      if (now - first < 5000) return { value: active === null ? null : 0, savedAt: now - 60_000 };
+      asked.delete(key);
+      return { value: active, savedAt: now };
+    },
+    // the player "presses the menu key" three seconds into the step
+    game_check_menu: ({ since }) => (Date.now() - Number(since) > 3000 ? "window" : null),
     game_check_send: async () => { await demoWait(700); },
   });
 }
+
+const asked = new Map<string, number>();

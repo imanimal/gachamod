@@ -33,6 +33,8 @@ export interface GameState {
   running: boolean;
   modCount: number;
   enabledCount: number;
+  /** The key that reloads mods in the game (d3dx.ini reload_config), like "F10". */
+  reloadKey: string;
 }
 
 export interface ModSource {

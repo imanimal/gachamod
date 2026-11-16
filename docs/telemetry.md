@@ -73,12 +73,12 @@ feedback, it goes only by hand and with usage counts off.
 | `game`, `importer`, `via_xxmi`, `loader_version`, `xxmi_version`, `window_mode` | The game and how its mods load |
 | `game_running`, `game_admin` | Whether the game ran, and as administrator |
 | `foreground_check`, `reload_key` | d3dx.ini's `check_foreground_window` and `reload_config` |
-| `menu_style`, `menu_key`, `menu_pad` | How the menu while playing was set up (`window` or `off`) |
-| `menu_opened`, `menu_pick_changed`, `pad_opened` | The player's answers: `yes`, `no`, `skip`; for the controller also `no controller` |
-| `menu_heard` | What gachamod saw when the key was pressed: `window` (it opened the menu), `fullscreen` (exclusive fullscreen, so it couldn't), `picked` or `none` |
-| `pad_heard` | gachamod saw both sticks pressed and opened the menu |
-| `menu_pick_seen` | A pick from the menu reached gachamod |
-| `check_version` | 2. Goes up when the steps change (1 tested live switching, since removed) |
+| `live_groups`, `menu_style`, `menu_key`, `menu_pad` | How skin switching was set up |
+| `pick_changed`, `menu_opened`, `menu_pick_changed`, `reload_kept`, `pad_opened` | The player's answers: `yes`, `no`, `skip`; for the menu also `window`, `drawn` or `nothing`; for the controller also `no controller` |
+| `pick_sent`, `pick_reload`, `pick_saved` | gachamod pressed the keys for the pick, the mod needed a reload, the game saved the pick (`yes`, `no`, `not seen`) |
+| `menu_heard`, `pad_heard` | gachamod opened the menu itself: `window`, `drawn` or `none` |
+| `menu_pick_read` | gachamod read the menu's pick back from d3dx_user.ini |
+| `check_version` | 1. Goes up when the steps change |
 | `notes`, `contact` | What the player wrote |
 | `log`, `loader_log` | When attached: the end of gachamod.log and of the loader's d3d11_log.txt, scrubbed like crashes |
 

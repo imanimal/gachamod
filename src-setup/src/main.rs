@@ -62,7 +62,7 @@ fn main() {
 
     // no WebView2 (some older Windows 10 PCs): NSIS's plain windows, which also install WebView2
     if tauri::webview_version().is_err() {
-        std::process::exit(plain_windows(payload.as_ref(), dir.as_deref(), &temp));
+        std::process::exit(plain_windows(payload.as_ref(), dir.as_deref(), &temp, cli.uninstall));
     }
 
     let look = if mode == "install" { look::for_install(cli.theme.as_deref()) } else { look::for_maintenance(cli.theme.as_deref()) };
@@ -132,8 +132,9 @@ fn pass_to_uninstaller(cli: &cli::Cli) -> i32 {
     code
 }
 
-/// Without WebView2: NSIS's own installer or uninstaller windows, or the download page for a repair.
-fn plain_windows(payload: Option<&payload::Payload>, dir: Option<&Path>, temp: &Path) -> i32 {
+/// Without WebView2: NSIS's own installer or uninstaller windows. Anything else (Windows' Modify button, a repair)
+/// opens the latest release, whose setup has the newest installer inside, which also installs WebView2.
+fn plain_windows(payload: Option<&payload::Payload>, dir: Option<&Path>, temp: &Path, uninstall: bool) -> i32 {
     if let Some(p) = payload {
         let exe = temp.join(format!("gachamod_{}_setup.exe", p.meta.version));
         let code = p.extract(&exe).and_then(|_| Command::new(&exe).status()).map(|s| s.code().unwrap_or(2)).unwrap_or(2);
@@ -141,7 +142,7 @@ fn plain_windows(payload: Option<&payload::Payload>, dir: Option<&Path>, temp: &
         return code;
     }
     let _ = std::fs::remove_dir_all(temp);
-    if let Some(un) = dir.map(|d| d.join("uninstall.exe")).filter(|u| u.exists()) {
+    if let Some(un) = dir.map(|d| d.join("uninstall.exe")).filter(|u| uninstall && u.exists()) {
         return Command::new(un).status().map(|s| s.code().unwrap_or(2)).unwrap_or(2);
     }
     sys::open_url(&format!("{}/releases/latest", jobs::HOMEPAGE));
@@ -157,7 +158,7 @@ fn run(s: Setup) {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(s)
-        .invoke_handler(tauri::generate_handler![info, data_size, install, repair, uninstall, stop, open_app, open_page, plain_installer])
+        .invoke_handler(tauri::generate_handler![info, data_size, install, repair, update, latest, uninstall, stop, open_app, open_page, plain_installer])
         .setup(move |app| {
             let init = format!("window.__GM_SETUP__ = {};", json!({ "look": look }));
             let w = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("setup.html".into()))
@@ -280,6 +281,19 @@ async fn repair(app: AppHandle, s: State<'_, Setup>) -> Result<String, String> {
     let dir = jobs::repair(app, s.payload.clone(), s.temp.clone(), dir).await?;
     Ok(dir.display().to_string())
 }
+
+/// Download the newest gachamod from GitHub and install it over the copy there.
+#[tauri::command]
+async fn update(app: AppHandle, s: State<'_, Setup>) -> Result<String, String> {
+    let _busy = Busy::start(&s.busy)?;
+    let dir = s.dir.clone().ok_or("gachamod isn't installed.")?;
+    let dir = jobs::update(app, s.temp.clone(), dir).await?;
+    Ok(dir.display().to_string())
+}
+
+/// The newest version on GitHub.
+#[tauri::command]
+async fn latest() -> Result<String, String> { jobs::latest_version().await }
 
 #[tauri::command]
 async fn uninstall(app: AppHandle, s: State<'_, Setup>, delete_data: bool) -> Result<(), String> {

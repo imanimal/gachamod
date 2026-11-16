@@ -181,19 +181,18 @@ fn toggles_with_one_skin_rule() {
     assert!(ch.notes.is_empty(), "{:?}", ch.notes);
     assert!(list_rows(&d).iter().filter(|m| m.character.as_deref() == Some("Ellen Joe") && m.enabled).count() == 1);
 
-    // a bulk turn-on of two Ellen skins keeps the last one on
-    let ch = set_enabled(&d, "zzz", &[maid.clone(), bunny.clone()], true).unwrap();
+    // a bulk turn-on of two Ellen skins turns both on: the rule only turns off the ones not asked for
+    set_enabled(&d, "zzz", &[maid.clone(), bunny.clone()], true).unwrap();
     let rows = list_rows(&d);
     assert!(rows.iter().find(|m| m.id == bunny).unwrap().enabled);
-    assert!(!rows.iter().find(|m| m.id == maid).unwrap().enabled);
+    assert!(rows.iter().find(|m| m.id == maid).unwrap().enabled);
     assert!(!rows.iter().find(|m| m.id == off_hoodie).unwrap().enabled);
-    assert!(ch.notes.iter().any(|n| n.contains("kept Bunny on")), "{:?}", ch.notes);
 
-    // with the rule off, two skins can be on
+    // with the rule off, turning one more on keeps the others
     d.set_setting("zzz.oneSkin", "0").unwrap();
-    set_enabled(&d, "zzz", &[maid.clone()], true).unwrap();
+    set_enabled(&d, "zzz", &[off_hoodie.clone()], true).unwrap();
     let rows = list_rows(&d);
-    assert_eq!(rows.iter().filter(|m| m.character.as_deref() == Some("Ellen Joe") && m.enabled).count(), 2);
+    assert_eq!(rows.iter().filter(|m| m.character.as_deref() == Some("Ellen Joe") && m.enabled).count(), 3);
     // the disk agrees with the rows
     for m in rows { assert_eq!(m.enabled, !rel_disabled(&m.rel_path)); assert!(Path::new(&m.path).is_dir(), "{}", m.path); }
 }
@@ -762,6 +761,35 @@ fn every_character_joins_and_new_mods_follow() {
     assert_eq!(crate::live::set_all(&d, "zzz", true).unwrap().changed, vec![anby]);
 }
 
+/// Switching in game is on by default in Zenless Zone Zero: the first start turns it on, also where an older version
+/// turned it off. After that only the player's switch turns it off, and off takes every character out.
+#[test]
+fn switching_in_game_starts_on_and_only_the_switch_turns_it_off() {
+    let t = Tree::new("starton");
+    for rel in ["Ellen Joe/Maid", "Ellen Joe/DISABLED Bunny"] {
+        let d = t.mods.join(rel);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("mod.ini"), "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n").unwrap();
+    }
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let maid = by_name(&list, "Maid").id.clone();
+    let d = db.lock().unwrap();
+    // what 0.1.1-beta.3 left behind
+    d.set_setting("zzz.liveAll", "0").unwrap();
+    crate::live::on_start(&d);
+    let info = crate::live::info(&d, "zzz").unwrap();
+    assert!(info.all && info.groups.len() == 1 && info.groups[0].mods.len() == 2);
+    // the switch turned off: no character switches, and the skin that showed stays on
+    crate::live::set_all(&d, "zzz", false).unwrap();
+    let info = crate::live::info(&d, "zzz").unwrap();
+    assert!(!info.all && info.groups.is_empty());
+    assert!(get(&d, "zzz", &maid).unwrap().enabled);
+    // and the next start leaves it off
+    crate::live::on_start(&d);
+    assert!(!crate::live::info(&d, "zzz").unwrap().all);
+}
+
 /// The game runs as administrator (or wouldn't come to the front): a pick the app couldn't key in waits in live.ini
 /// for the game's next load, and what the game saves before it took it doesn't undo the pick in the app.
 #[test]
@@ -895,35 +923,145 @@ fn a_new_group_asks_for_its_pick() {
     crate::launch::TEST_RUNNING.with(|r| r.set(false));
 }
 
+/// A pick made in the game's own menu reaches the library when the game saves, and turning off the skin the library
+/// showed before says what the game wears. A pick the keys can't bring in says each time that it waits for a reload,
+/// and its group says so until the game takes it.
 #[test]
-fn live_groups_from_an_older_version_come_out_at_start() {
-    let t = Tree::new("retire");
-    let ini = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
-    for rel in ["Ellen Joe/Maid Ellen", "Ellen Joe/DISABLED Bunny"] {
-        let d = t.mods.join(rel);
-        fs::create_dir_all(&d).unwrap();
-        fs::write(d.join("mod.ini"), ini).unwrap();
+fn the_library_follows_picks_made_in_the_game() {
+    let t = Tree::new("follow");
+    for rel in ["Ellen Joe/Maid", "Ellen Joe/Bunny"] {
+        let d = t.add(rel);
+        fs::write(d.join("mod.ini"), "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n").unwrap();
+    }
+    let db = t.db();
+    scan(&db, "zzz").unwrap();
+    crate::live::set_all(&db.lock().unwrap(), "zzz", true).unwrap();
+    let user = t.root.join("ZZMI").join("d3dx_user.ini");
+    let group = || crate::live::info(&db.lock().unwrap(), "zzz").unwrap().groups.remove(0);
+    let g = group();
+    let id_of = |slot: u32| g.mods.iter().find(|m| m.slot == slot).unwrap().mod_id.clone();
+    let name_of = |slot: u32| g.mods.iter().find(|m| m.slot == slot).unwrap().name.clone();
+    assert_eq!(g.active, 1);
+    crate::launch::TEST_RUNNING.with(|r| r.set(true));
+
+    // the player picks the second skin in the game's menu, and the game saves it
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    fs::write(&user, "[Constants]\n$\\gachamod\\live\\g1 = 2\n").unwrap();
+    assert!(crate::live::follow_game(&db.lock().unwrap(), "zzz"), "news for the windows");
+    assert!(!crate::live::follow_game(&db.lock().unwrap(), "zzz"), "only once");
+    let rows = list(&db.lock().unwrap(), "zzz").unwrap();
+    assert!(rows.iter().any(|m| m.id == id_of(2) && m.enabled), "{:?} {:?}", rows.iter().map(|m| (&m.id, &m.name, m.enabled, m.standby)).collect::<Vec<_>>(), g.mods);
+    assert!(rows.iter().any(|m| m.id == id_of(1) && m.standby && !m.enabled));
+
+    // turning off the one the library showed before does nothing, and says what shows
+    let c = set_enabled(&db.lock().unwrap(), "zzz", &[id_of(1)], false).unwrap();
+    assert_eq!(c.notes, vec![format!("{} isn't showing. Ellen Joe wears {} in the game", name_of(1), name_of(2))]);
+    assert_eq!(group().active, 2);
+
+    // the keys don't reach the game: every pick says it waits, and the group waits until the game takes it
+    for slot in [1, 0] {
+        crate::live::pick(&db.lock().unwrap(), "zzz", 1, slot).unwrap();
+        let notes = crate::live::flush_sends(&db);
+        assert!(notes.len() == 1 && notes[0].starts_with("Ellen Joe's skin changes"), "{notes:?}");
+        assert!(group().waiting);
+    }
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    fs::write(&user, "[Constants]\n$\\gachamod\\live\\g1 = 0\n$\\gachamod\\live\\asked = 2\n").unwrap();
+    assert!(crate::live::follow_game(&db.lock().unwrap(), "zzz"));
+    let g = group();
+    assert!(!g.waiting && g.active == 0);
+    crate::launch::TEST_RUNNING.with(|r| r.set(false));
+}
+
+#[test]
+fn switching_in_game_is_a_tester_option_outside_zenless() {
+    let db = Db::memory().unwrap();
+    let e = crate::live::add(&db, "gi", &["x".to_string()]).unwrap_err();
+    assert!(e.to_string().contains("Tester options"), "{e}");
+    assert!(crate::live::set_all(&db, "gi", true).is_err());
+    assert!(crate::live::set_all(&db, "gi", false).is_ok());
+    assert!(crate::live::allowed(&db, "zzz"));
+    assert!(!crate::live::allowed(&db, "gi"));
+    db.set_setting("ui.tester", "1").unwrap();
+    assert!(crate::live::allowed(&db, "gi"));
+}
+
+#[test]
+fn mods_that_change_other_parts_stay_on() {
+    let t = Tree::new("parts");
+    let body = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
+    let hair = "[TextureOverrideHair]\nhash = 2233ccdd\nps-t0 = ResourcePink\n";
+    for (rel, ini) in [("Ellen Joe/Maid", body), ("Ellen Joe/DISABLED Bunny", body), ("Ellen Joe/DISABLED Pink Hair", hair)] {
+        fs::write(t.add(rel).join("mod.ini"), ini).unwrap();
     }
     let db = t.db();
     let list = scan(&db, "zzz").unwrap();
-    let (maid, bunny) = (by_name(&list, "Maid Ellen").id.clone(), by_name(&list, "Bunny").id.clone());
+    let (maid, bunny, pink) = (by_name(&list, "Maid").id.clone(), by_name(&list, "Bunny").id.clone(), by_name(&list, "Pink Hair").id.clone());
+    let d = db.lock().unwrap();
+    let on = |id: &str| get(&d, "zzz", id).unwrap().enabled;
+
+    // the hair changes other parts than the outfit, so the outfit stays on
+    assert_eq!(overlapping(&d, "zzz", &[pink.clone()], &[maid.clone()]).unwrap(), Vec::<String>::new());
+    set_enabled(&d, "zzz", &[pink.clone()], true).unwrap();
+    assert!(on(&pink) && on(&maid));
+
+    // another outfit changes the same body: the old one goes off, the hair stays
+    assert_eq!(overlapping(&d, "zzz", &[bunny.clone()], &[maid.clone(), pink.clone()]).unwrap(), vec![maid.clone()]);
+    set_enabled(&d, "zzz", &[bunny.clone()], true).unwrap();
+    assert!(on(&bunny) && !on(&maid) && on(&pink));
+}
+
+#[test]
+fn shift_on_a_live_skin_shows_it_next_to_the_one_showing() {
+    let t = Tree::new("release");
+    let ini = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
+    for rel in ["Ellen Joe/Maid", "Ellen Joe/DISABLED Bunny"] { fs::write(t.add(rel).join("mod.ini"), ini).unwrap(); }
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let (maid, bunny) = (by_name(&list, "Maid").id.clone(), by_name(&list, "Bunny").id.clone());
     let d = db.lock().unwrap();
     crate::live::add(&d, "zzz", &[maid.clone(), bunny.clone()]).unwrap();
-    d.set_setting("zzz.liveAll", "1").unwrap();
-    d.set_setting("zzz.liveMenu", "game").unwrap();
-    let maid_ini = Path::new(&get(&d, "zzz", &maid).unwrap().path).join("mod.ini");
-    assert!(fs::read_to_string(&maid_ini).unwrap().contains("; gachamod:begin"));
+    assert!(get(&d, "zzz", &bunny).unwrap().standby);
 
-    crate::live::on_start(&d);
-    // the one showing stays on as a plain mod, the other goes off, and the inis are as they were
-    let row = |id: &str| get(&d, "zzz", id).unwrap();
-    assert!(row(&maid).enabled && !row(&maid).standby);
-    assert!(!row(&bunny).enabled && !row(&bunny).standby && rel_disabled(&row(&bunny).rel_path));
-    assert_eq!(fs::read_to_string(&maid_ini).unwrap(), ini);
-    assert!(crate::live::groups_by_mod(&d, "zzz").is_empty());
-    assert!(!t.mods.join(crate::live::DIR).exists());
-    assert!(!crate::live::all_on(&d, "zzz"));
-    assert_eq!(crate::live::menu_settings(&d, "zzz").style, "window");
-    // the menu's key is held for the game without any live group
-    assert!(crate::live::menu_keys(&d).iter().any(|(g, s)| g == "zzz" && s.key == "F7"));
+    // "keep the others on" for Bunny: it leaves the group and goes on beside Maid, which keeps showing
+    let ch = set_enabled_with(&d, "zzz", &[bunny.clone()], true, Some(false)).unwrap();
+    let (m, b) = (get(&d, "zzz", &maid).unwrap(), get(&d, "zzz", &bunny).unwrap());
+    assert!(m.enabled && !m.standby && b.enabled && !b.standby, "{:?}", ch.notes);
+    assert!(ch.changed.iter().any(|e| e.id == bunny && e.enabled));
+    assert_eq!(ch.notes, vec!["Bunny is on next to Maid. It doesn't switch in game any more, so the game shows it after it reloads its mods".to_string()]);
+    let groups = crate::live::info(&d, "zzz").unwrap().groups;
+    assert!(groups.iter().all(|g| g.mods.iter().all(|x| x.mod_id != bunny)));
+    assert!(!fs::read_to_string(Path::new(&b.path).join("mod.ini")).unwrap().contains("gachamod"));
+}
+
+#[test]
+fn picks_made_in_the_game_are_saved_right_away() {
+    let t = Tree::new("fastsave");
+    let d3dx = t.root.join("ZZMI").join("d3dx.ini");
+    let original = "[System]\r\n; how often\r\nsettings_auto_save_interval = 60\r\n\r\n[Rendering]\r\ntexture_hash = 0\r\n";
+    fs::write(&d3dx, original).unwrap();
+    for rel in ["Ellen Joe/Maid", "Ellen Joe/Bunny"] {
+        fs::write(t.add(rel).join("mod.ini"), "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n").unwrap();
+    }
+    let db = t.db();
+    scan(&db, "zzz").unwrap();
+    let d = db.lock().unwrap();
+    let interval = || crate::gamecheck::d3dx_value(&fs::read_to_string(&d3dx).unwrap(), "settings_auto_save_interval").unwrap();
+
+    // no live characters: the loader's own value stays
+    crate::live::menu_sync(&d, "zzz");
+    assert_eq!(interval(), "60");
+
+    crate::live::set_all(&d, "zzz", true).unwrap();
+    crate::live::menu_sync(&d, "zzz");
+    assert_eq!(interval(), "1");
+    assert_eq!(fs::read_to_string(t.root.join("ZZMI").join("d3dx.ini.gachamod.bak")).unwrap(), original);
+    assert!(fs::read_to_string(&d3dx).unwrap().contains("\r\n[Rendering]\r\ntexture_hash = 0"));
+
+    // turned off: the value it had goes back
+    let mut m = crate::live::menu_settings(&d, "zzz");
+    m.fast_save = false;
+    crate::live::set_menu(&d, "zzz", &m).unwrap();
+    assert_eq!(interval(), "60");
+    assert_eq!(fs::read_to_string(&d3dx).unwrap(), original);
 }

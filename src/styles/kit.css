@@ -125,6 +125,8 @@
 .seg-lg .seg-o { height: 2.35rem; padding: 0 1.1rem; }
 .tabs { display: flex; gap: .2rem; border-bottom: 1px solid var(--line); overflow: auto hidden; scrollbar-width: none; }
 .tab { position: relative; display: inline-flex; align-items: center; gap: .45rem; flex: none; padding: .65rem .9rem; color: var(--text-3); font-weight: 600; white-space: nowrap; transition: color var(--dur) var(--ease); }
+/* the tab row scrolls and clips, so the focus ring sits inside the tab */
+.tab:focus-visible, html.kbd .tab:focus { outline-offset: -2px; }
 .tab::after { content: ""; position: absolute; left: .55rem; right: .55rem; bottom: 0; height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); transform: scaleX(0); transition: transform var(--dur) var(--ease); }
 .tab:hover { color: var(--text-2); }
 .tab.on { color: var(--text); }
@@ -381,8 +383,10 @@ button.list-row:hover, .list-row.click:hover { background: var(--hover); cursor:
 .portraits > .portrait.on { outline: none; box-shadow: inset 0 0 0 2px var(--accent), var(--shadow); }
 .portrait.dim .portrait-img > img { filter: grayscale(.9); opacity: .55; }
 
-.pchips { display: flex; gap: .55rem; overflow-x: auto; padding: .2rem .1rem .45rem; scroll-snap-type: x proximity; scrollbar-width: thin; }
-.pchip { position: relative; display: flex; flex-direction: column; align-items: center; gap: .3rem; flex: none; width: 4.3rem; scroll-snap-align: start; color: var(--text-3); font-size: .78em; font-weight: 600; }
+/* sideways rows (pchips, gallery-strip, strip) keep 5px of padding for rings and the 4px focus ring, with margins
+   that leave them where they were. No scroll snapping: it fights the wheel's glide (lib/smoothScroll) */
+.pchips { display: flex; gap: .55rem; overflow-x: auto; padding: 5px 5px .45rem; margin: calc(.2rem - 5px) calc(.1rem - 5px) 0; scrollbar-width: thin; }
+.pchip { position: relative; display: flex; flex-direction: column; align-items: center; gap: .3rem; flex: none; width: 4.3rem; color: var(--text-3); font-size: .78em; font-weight: 600; }
 .pchip-img { position: relative; width: 3rem; height: 3rem; border-radius: 50%; overflow: hidden; background: var(--img-bg); box-shadow: inset 0 0 0 1px var(--line-2);
   transition: box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease-spring); }
 .pchip-img > img { width: 100%; height: 100%; object-fit: cover; }
@@ -399,7 +403,7 @@ button.list-row:hover, .list-row.click:hover { background: var(--hover); cursor:
 .gallery-main { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--radius); background: var(--img-bg); box-shadow: inset 0 0 0 1px var(--line); }
 .gallery-main > img { width: 100%; height: 100%; object-fit: contain; }
 button.gallery-main { cursor: zoom-in; }
-.gallery-strip { display: flex; gap: .5rem; overflow-x: auto; padding: .15rem .1rem .35rem; scrollbar-width: thin; }
+.gallery-strip { display: flex; gap: .5rem; overflow-x: auto; padding: 6px 6px .35rem; margin: calc(.15rem - 6px) calc(.1rem - 6px) 0; scrollbar-width: thin; }
 .gallery-th { flex: none; width: 5.5rem; aspect-ratio: 16 / 10; overflow: hidden; border-radius: var(--radius-sm); background: var(--img-bg); opacity: .6; box-shadow: inset 0 0 0 1px var(--line);
   transition: opacity var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .gallery-th > img { width: 100%; height: 100%; object-fit: cover; }
@@ -413,8 +417,8 @@ button.gallery-main { cursor: zoom-in; }
 .lightbox-x { top: 1rem; right: 1rem; width: 2.6rem; height: 2.6rem; }
 .lightbox-n { position: absolute; bottom: 1.1rem; left: 50%; transform: translateX(-50%); padding: .3rem .8rem; border-radius: 99px; background: rgb(255 255 255 / .1); color: #fff; font-size: .85em; font-variant-numeric: tabular-nums; }
 
-.strip { display: flex; gap: .9rem; overflow-x: auto; padding: .2rem .1rem .6rem; scroll-snap-type: x proximity; scrollbar-width: thin; }
-.strip > * { flex: 0 0 var(--strip-w, 15rem); scroll-snap-align: start; }
+.strip { display: flex; gap: .9rem; overflow-x: auto; padding: 5px 5px .6rem; margin: calc(.2rem - 5px) calc(.1rem - 5px) 0; scrollbar-width: thin; }
+.strip > * { flex: 0 0 var(--strip-w, 15rem); }
 .sec-h { display: flex; align-items: center; gap: .6rem; color: var(--text-2); font-size: .9em; font-weight: 650; }
 .sec-h::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 :where(.note) { --tone: var(--info); }
@@ -473,8 +477,15 @@ button.gallery-main { cursor: zoom-in; }
 
 /* a sticky page header while the page is scrolled (PageHeader): just the controls, rows of chips on one line */
 .page-h.is-stuck .page-h-sub, .page-h.is-stuck .page-h-ghost { display: none; }
-.page-h.is-stuck .page-h-more > * { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-.page-h.is-stuck .page-h-more > * > * { flex: none; }
+/* a row that scrolls sideways (browse/sideScroll.ts) never moves up or down, and the browser never shifts it to keep
+   something in place when items change size: it rests where the wheel or arrows put it */
+[data-side-scroll] { overflow-y: hidden; overflow-anchor: none; }
+/* a sideways row laid out in full (ui/ShowAll.tsx) wraps onto more lines; a scrolled page header keeps it on one */
+[data-side-scroll].is-all { flex-wrap: wrap; overflow: visible; }
+.page-h.is-stuck [data-side-scroll].is-all { flex-wrap: nowrap; overflow: auto hidden; }
+.page-h.is-stuck .show-all { display: none; }
+.page-h.is-stuck .page-h-more > :not(:has([data-side-scroll])) { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px; margin: -5px; }
+.page-h.is-stuck .page-h-more > :not(:has([data-side-scroll])) > * { flex: none; }
 /* the title bar already names the page, so a scrolled header keeps only its controls, on one row where they fit */
 .page-h.is-stuck:has(.page-h-a, .page-h-more) .page-h-t { display: none; }
 .page-h.is-stuck .page-h-row { align-items: center; }

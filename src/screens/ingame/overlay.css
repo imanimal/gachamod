@@ -1,16 +1,26 @@
 /* The menu shown over a running game (Overlay.tsx): characters down the left, the picked one's mods on the right, a
    details sheet over the right side. Motion is short fades and slides, off with "reduce motion". Owner: INGAME area. */
-.ov { display: flex; flex-direction: column; height: 100vh; background: var(--bg); color: var(--text); border: 1px solid var(--line-2);
-  animation: ov-open .18s ease-out both; }
+/* the window is see-through (overlay.rs): the page under the menu is clear, and the menu covers the game as much as its
+   Background setting says (--ov-cover). Tiles and the details sheet stay solid so they read over any scene. */
+/* important: index.html paints the first frame per theme (the ZZZ dark theme black), and those rules outrank a class */
+html.ov-window, html.ov-window body { background: transparent !important; }
+html.ov-window.ov-demo { background: #3b4048 !important; }
+.ov { display: flex; flex-direction: column; height: 100vh; background: color-mix(in srgb, var(--bg) var(--ov-cover, 85%), transparent); color: var(--text);
+  border: 1px solid var(--line-2); animation: ov-open .18s ease-out both; }
 .ov-top { display: flex; align-items: center; gap: .6rem; padding: .6rem .7rem; border-bottom: 1px solid var(--line); }
 .ov-top .search { flex: 1; min-width: 0; }
+.ov-top .grow { flex: 1; }
 .ov-body { position: relative; flex: 1; min-height: 0; display: flex; }
 .ov-wait { flex: 1; display: grid; place-items: center; padding: 2rem; }
 .ov-empty { flex: 1; margin: 2rem 1.2rem; }
 .ov-empty.bad { color: var(--bad); }
 
-/* the characters */
+/* the characters, with a search above them */
+.ov-side { flex: none; width: 15.5rem; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.ov-side > .search { flex: none; margin: .5rem .5rem 0; }
+.ov-none { margin: .8rem .7rem; }
 .ov-rail { flex: none; width: 15.5rem; overflow-y: auto; padding: .5rem; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.ov-side > .ov-rail { flex: 1; width: auto; min-height: 0; border-right: 0; }
 .ov-who { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .35rem .5rem; border: 0; border-radius: var(--radius); background: none;
   color: var(--text-2); font: inherit; text-align: left; cursor: pointer; transition: background-color .12s, color .12s;
   animation: ov-rise .22s ease-out both; animation-delay: calc(var(--i, 0) * 14ms); }
@@ -48,6 +58,8 @@
 .ov-label { display: flex; align-items: center; gap: .35rem; padding: .4rem .55rem; font-size: .9em; }
 .ov-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-check { flex: none; display: grid; place-items: center; color: var(--accent-ink); animation: ov-pop .16s ease-out both; }
+.ov-new { flex: none; padding: 0 .35rem; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-size: .8em; font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line-2); }
 .ov-likes { flex: none; display: inline-flex; align-items: center; gap: .2rem; color: var(--text-3); font-size: .9em; font-variant-numeric: tabular-nums; }
 .ov-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; background: var(--bg); transition: opacity .12s; }
 .ov-cell:hover .ov-more, .ov-cell:focus-within .ov-more { opacity: 1; }
@@ -66,9 +78,13 @@
 .ov-notes { white-space: pre-wrap; color: var(--text-2); }
 .ov-detail-a { display: flex; gap: .5rem; margin-top: .3rem; }
 
-.ov-foot { padding: .45rem .8rem; border-top: 1px solid var(--line); color: var(--text-3); font-size: .82em; }
-.ov-foot.said { color: var(--text); }
-.ov-foot.bad { color: var(--bad); }
+/* along the bottom: what just happened (or the keys), and the menu's own settings */
+.ov-foot { display: flex; align-items: center; gap: .6rem 1.2rem; flex-wrap: wrap; padding: .45rem .8rem; border-top: 1px solid var(--line); font-size: .82em; }
+.ov-say { flex: 1 1 20rem; min-width: 0; color: var(--text-3); }
+.ov-say.said { color: var(--text); }
+.ov-say.bad { color: var(--bad); }
+.ov-quick { flex: none; display: flex; align-items: center; gap: .5rem; margin-left: auto; }
+.ov-quick-l { color: var(--text-2); margin-left: .6rem; }
 
 @keyframes ov-open { from { opacity: 0; transform: translateX(-10px); } }
 @keyframes ov-rise { from { opacity: 0; transform: translateY(6px); } }
@@ -82,4 +98,7 @@
 @media (max-width: 640px) {
   .ov-rail { width: 4rem; }
   .ov-who-t, .ov-who-c { display: none; }
+  /* the search needs room, so the characters keep a narrow column with their names */
+  .ov-side { width: 11rem; }
+  .ov-side .ov-who-t { display: flex; }
 }

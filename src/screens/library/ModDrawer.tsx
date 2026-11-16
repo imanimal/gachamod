@@ -4,7 +4,6 @@
 // Owner: LIBRARY area.
 import { Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { dialogs, errorText, library, type GameId, type ModEntry } from "../../lib/api";
-import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import { fixLabel, stopWaiting, triedNote, useFixerBusy, useModHealth } from "../../lib/fixes";
 import { gbToolId } from "../../lib/gamebanana";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
@@ -18,6 +17,7 @@ import { KeyEditor } from "../../ui/KeyEditor";
 import { CharLink, CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { record } from "../../lib/history";
+import { InGameOptions } from "../ingame/InGameOptions";
 import { ModInsides } from "../modtools/ModInsides";
 import { characterNames } from "../characters/roster";
 import {
@@ -56,7 +56,6 @@ const NSFW_OPTIONS: Array<{ value: NsfwMode; label: string; title: string }> = [
 export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: ModEntry; mods: ModEntry[]; onClose: () => void }) {
   const nsfw = useNsfw();
   const health = useModHealth(game).get(mod.id);
-  const aiShow = useAiShow();
   const [name, setName] = useState(mod.name);
   const [character, setChar] = useState(mod.character ?? "");
   const [notes, setNotes] = useState(mod.notes ?? "");
@@ -85,7 +84,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
     const sec = drawerSectionFor(mod.id);
     if (!sec) return;
     if (sec === "model") { setModel(true); clearDrawerSection(); return; }
-    const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts" }[sec];
+    const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts", ingame: ".mi-ingame" }[sec];
     let tries = 0;
     const find = () => {
       const el = document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
@@ -116,7 +115,8 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
   const fixerBusy = useFixerBusy();
   return (
     <Drawer className="mod-drawer" title={mod.name} onClose={onClose}
-      actions={<Toggle checked={mod.enabled} onChange={(v) => void setOn(game, [mod], v, mods)} label={mod.enabled ? "On" : "Off"} />}
+      actions={<Toggle checked={mod.enabled} onChange={(v, shift) => void setOn(game, [mod], v, mods, undefined, shift)} label={mod.enabled ? "On" : "Off"}
+        title={mod.enabled || !mod.character ? undefined : `Shift+click keeps ${mod.character}'s other mods on too`} />}
       footer={<>
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
           title={`Its files ${trashPhrase()}. A short record stays in Mods, Trash so you can download it again`}>Move to trash</Button>
@@ -183,7 +183,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
           <span className="hint" title="Add-ons that go with this mod. They turn off with it and come back when it is turned on">Sub-mods</span>
           {subs.map((s) => (
             <span key={s.id} className="mod-drawer-sub">
-              <Toggle size="sm" checked={s.enabled} onChange={(v) => void setOn(game, [s], v, mods)} label={<span className="sr-only">{s.enabled ? `${s.name} is on` : `${s.name} is off`}</span>} />
+              <Toggle size="sm" checked={s.enabled} onChange={(v, shift) => void setOn(game, [s], v, mods, undefined, shift)} label={<span className="sr-only">{s.enabled ? `${s.name} is on` : `${s.name} is off`}</span>} />
               <button type="button" className="link-btn" onClick={() => openDetails(s)} title={`Open ${s.name}`}>{s.name}</button>
             </span>
           ))}
@@ -221,10 +221,6 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
               {(health.tried || health.needsAuthor) && !mod.source && (
                 <Button size="sm" icon="search" onClick={() => go({ view: "browse", search: mod.name })}
                   title="Search GameBanana for a newer version of this mod">Search GameBanana</Button>
-              )}
-              {health.status === "unfixable" && aiShown("useful", aiShow) && (
-                <Button size="sm" icon="ai" onClick={() => askAi({ kind: "fix-mod", game, modIds: [mod.id], detail: health.reasons.join("\n") })}
-                  title="Your chatbot looks at what broke and suggests a fix">Ask the AI helper</Button>
               )}
               <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title="Open the mod fixers in Tools">Mod fixers</Button>
             </span>
@@ -276,6 +272,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
       <section id="mod-keys" className="mod-drawer-sec">
         <ModParts game={game} mod={mod} />
         <KeyEditor game={game} modId={mod.id} />
+        <InGameOptions game={game} modId={mod.id} />
         <ModInsides mod={mod} />
       </section>
 

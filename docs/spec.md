@@ -591,8 +591,8 @@ Rust:
 - `games.rs` detect: XXMI first (xxmi::status: for each importer in the config with a game_folder or an existing
   importer folder, save game_dir, importer_dir = `<root>/<importer_folder>`, via_xxmi = true), then for games still
   without a game folder: HoYoPlay gamedata.dat under %APPDATA%\Cognosphere\HYP, KRLauncher kr_starter_game.json,
-  GRYPHLINK registry and folders, Steam library folders (libraryfolders.vdf) by steam_app, and the MuiCache /
-  FeatureUsage registry scans (research 1a). A community game (xxmi false) gets an importer folder only from the
+  GRYPHLINK registry and folders, Steam library folders (libraryfolders.vdf) by steam_app (the game may sit one
+  folder below the app's install folder), and the MuiCache / FeatureUsage registry scans (research 1a). A community game (xxmi false) gets an importer folder only from the
   user. Never overwrite a folder the user picked unless it no longer exists (store a `user_set` flag in game_paths
   through `migrate` with an ALTER TABLE guarded by has_column). `list` fills importer_version/latest from XXMI's
   config, `running` from launch::running, and counts from the `mods` table (`SELECT data FROM mods WHERE game=?`,
@@ -606,7 +606,11 @@ Rust:
   configure_game on), resource_tier; plus Migoto block, where enforce_rendering is XXMI only) and gachamod's own
   `"<game>.launch"` setting otherwise. set_config writes them back (xxmi::set_importer_config; XXMI must be closed:
   Error::Conflict "Close XXMI Launcher first, it saves its settings when it closes"). launch: via XXMI (vanilla false)
-  or the exe directly (vanilla true, or no XXMI); then a background watcher (spawned thread) polls processes every 3
+  or the exe directly (vanilla true, or no XXMI). The Steam copy of ZZZ (`STEAM_ONLY`, a game folder under
+  `steamapps`) only starts from Steam: a direct start runs `steam.exe -silent -applaunch <app> <args>`, and the first
+  start through XXMI while its Game Launch is "DIRECT" sets it to "STEAM" (xxmi::launch_through_steam; an XXMI
+  without `configure_platform_launch_options` is too old and the toast says to open it once so it updates). Then a
+  background watcher (spawned thread) polls processes every 3
   s for up to 10 minutes and emits game-state through a callback the command passes (add a `on_state` parameter
   pattern in the command, emitting events::GAME_STATE). running: process list via `tasklist /FO CSV /NH` (no extra
   crates) or the Toolhelp API through `windows-sys` if you add it; must take under 150 ms.
@@ -668,9 +672,18 @@ UI:
     looks faintly selected until opened, the first Browse card's Install button and the drawer's Install button get
     a faint outline until the first install, and Downloads looks faintly selected while a download runs until
     opened. Settings, Appearance, First-start hints turns them off ("hints.on"). There is no tour.
+- Every window's WebView2 starts with `CalculateNativeWinOcclusion` disabled (`browser_flags` in
+  `src-tauri/src/lib.rs`): with more than one monitor, WebView2 could decide the window was covered and stop drawing
+  it, so it stayed black until the mouse moved over it.
+- Hardware acceleration (Settings, Appearance; "app.gpu", default on). Off adds `--disable-gpu
+  --disable-gpu-compositing`, from the next start (the toast has Restart). `src-tauri/src/lib.rs` reads it before it
+  makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
+  WebView2 won't start a second window in the same folder with other flags. Starting `gachamod.exe --disable-gpu`
+  saves it off first; a copy already running saves it and restarts.
 - New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
-  rule and one quiet Undo step. The first time it says so with "Keep new mods off".
+  rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
+  more skins and isn't switched in game yet, the toast offers "Switch in game" (live switching).
 - One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
@@ -685,10 +698,9 @@ UI:
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
   (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
 - Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and
-  data, and the search): three steps through the menu over the game while playing, each answered Yes, No or Skip,
-  next to what gachamod saw by itself (it heard the menu key, the game was in exclusive fullscreen, a pick came from
-  the menu). The answers and the game's setup go to PostHog as one `game check` event (`check_version` 2).
-  docs/testing.md is the tester's side.
+  data, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
+  what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
+  the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
 - `npm run installer` builds the installer and gachamod setup with build-machine folders written as `~`
   (scripts/build-installer.mjs).
 - gachamod's own updates (`src-tauri/src/commands/app.rs`, Tauri's updater plugin; `app_update.rs` keeps version
@@ -718,7 +730,11 @@ UI:
   - Install: one button, with Options for the folder, desktop shortcut, starting as administrator, opening when done
     and setup's own look. The choices go to HKCU\Software\gachamod (`adminAsked`, `admin`, `desktopShortcut`), which
     `hooks.nsh` reads instead of asking. An older install shows Update; the same or newer shows Open, Repair and
-    Uninstall.
+    Uninstall. Versions compare with their beta part, so the beta.3 setup over beta.2 is an update.
+  - Over an installed copy, when setup carries nothing newer (the `setup.exe` next to gachamod, or an old download),
+    it asks GitHub for the newest version (`latest`, from `latest.json`, 10 second limit) and shows "Update to X" when
+    it's newer. `update` downloads that installer like Repair does, so a copy of gachamod that won't open can still be
+    updated. While it looks, a line says so; if GitHub can't be reached, a line says that with Try again.
   - The installer puts `setup.exe` next to gachamod and points the uninstall entry at it (`UninstallString`
     `setup.exe --uninstall`, `ModifyPath` for Repair or Uninstall, `QuietUninstallString` stays NSIS's). Settings,
     About has Open setup when it's there. Run from the install folder it copies itself to `%TEMP%` first so the folder
@@ -727,14 +743,17 @@ UI:
     `latest.json` installer and checks its signature with the updater key. Uninstall runs `uninstall.exe /S _?=<dir>`,
     then removes setup.exe and the empty folder; "Also delete gachamod's data" moves the data folders to the Recycle
     Bin and clears HKCU\Software\gachamod.
-  - Without WebView2 it falls back to the plain NSIS installer or uninstaller.
+  - Without WebView2 the download falls back to the plain NSIS installer (which installs WebView2, and offers to
+    replace an older copy itself) and `--uninstall` to NSIS's uninstaller. Windows' Modify button opens the latest
+    release page, whose setup carries the newest installer.
   - It's built with `--profile setup` (Cargo.toml: size over speed), about 6 MB instead of 13. `npm run setup` runs it
     from source against `npm run dev`; the page alone is http://localhost:1420/setup.html, with `?mode=`, `?theme=`,
-    `?installed=<version>`, `?running=1` and `?fail=1` for the demo.
+    `?installed=<version>`, `?latest=<version>`, `?offline=1`, `?running=1` and `?fail=1` for the demo.
   - Checked on one PC: install, repair over the same version, uninstall from the window and with `/S`, closing a
     running gachamod, the desktop shortcut choice, temp cleanup, and the theme from the file name and from look.json.
     Not checked yet: a PC without WebView2, an update from 0.1.0 through the app's updater, repair when the download
-    is older than the installed copy (the GitHub download), and a theme from the page that linked the download.
+    is older than the installed copy (the GitHub download), Update to X from `setup.exe` (also a GitHub download), and
+    a theme from the page that linked the download.
 - Demo handlers for every SYSTEM command.
 
 ## Settings, Tools and the AI helper (SETTINGS/AI)
@@ -822,10 +841,10 @@ together. A panel that renders nothing (IMM when it isn't installed) is left out
 setting XXMI Launcher owns (the backend's lock message says "in XXMI Launcher" or "Only XXMI Launcher") shows an
 "Open XXMI Launcher" button next to it. "Start with" is hidden for community games.
 
-The "ingame" page (Menu while playing) turns the menu over the game on or off and sets its key and the controller
-shortcut (docs/ingame.md, section 11; `src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`, window label
-`overlay`). Picking a skin there turns it on and the character's other mods off, the menu closes and the game reloads
-its mods. It needs the game borderless or windowed.
+The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
+(docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
+window label `overlay`), or a plainer menu the game draws itself (`crates/gacha-core/src/live/menu.rs`), which is also
+what opens in exclusive fullscreen. The panel says which one is better and why.
 
 ### The AI helper
 
@@ -837,20 +856,25 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
 - Every prompt asks for one ```json block in a fixed shape. `screens/ai/tasks.ts` reads it strictly: a reply that
   isn't that shape is refused with a plain reason; single entries that don't fit (an unknown mod number, a character
   the game doesn't have) are left out and listed. The window shows every change (before and after) before Apply.
-- Before copying, the window lists what the prompt shares ("Names, folder names, characters, tags and adult flags of
-  12 mods"); "See the prompt" shows all of it. File contents are never sent.
+- Before copying, the window lists what the prompt shares ("Names, folder names, characters and tags of 12 mods");
+  "See the prompt" shows all of it. File contents are never sent.
+- Adult mods (`aiHideAdultPref`, on by default; `hideFromAi`: marked for adults or explicit words in the name, folder
+  or tags) are left out of mod lists without a word. Nothing in a prompt or the helper window says whether a mod is
+  for adults: it doesn't matter for these jobs, and chatbots refuse a whole request over it. The toggles task still sends their ini outlines, without
+  the mod's name, and swaps explicit words in file, section and key names for "Alt" (`neutralName`), mapping the
+  answer back. A request where every mod is left out stops with a note and a button to the setting.
 - Tasks (`AiTask.kind`): "mods" (goals: tidy names, set characters, add tags, or free text; applies
   through `library.updateMeta` with one Undo step and then lists what changed), "custom" (free text plus the picked
-  mods; an answer and optional changes), "keys-offscreen" and "fix-mod" (the mods' key sections or found problems
-  plus `detail`; the answer is exact edits and steps, shown with a button to the mod's folder; nothing is written
-  because there is no ini write call yet), "recommend" (`detail` from lib/recommend.ts; ideas open as Browse
+  mods; an answer and optional changes), "keys-offscreen" (the mods' key sections; the answer names the sections
+  that draw the character and is applied through `modKeys.onScreen` with Undo; its `note` says it takes a strong
+  chatbot), "recommend" (`detail` from lib/recommend.ts; ideas open as Browse
   searches or GameBanana pages), "theme" (a description; the answer is validated with `validateCustomTheme` and
   saved as a custom theme with Undo).
 - Visibility (`aiShowPref`, "ai.show"): "off" hides every AI element (buttons, menu items, search entries, the
   first-run card, the helper itself); "useful" (default) shows entry points that save real work; "all" adds
   extras. Every entry point checks `aiShown("useful" | "extra")`.
 - First-run card: once, 10 seconds into the first start after setup ("onboarded" already set), a small card (not a modal) bottom
-  right with four things the helper does, chatbots to pick (apps found on this PC first, from
+  right with what the helper does, chatbots to pick (apps found on this PC first, from
   `ai_chatbots_installed`, which only checks known folders under %LOCALAPPDATA%), "No thanks" (hides it for good,
   "ai.intro") and "Turn AI off". It never mentions subscriptions.
 

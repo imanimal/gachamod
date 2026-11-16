@@ -9,7 +9,11 @@
 /* types (UI, Tools and fixes ...) then characters, in one row that scrolls sideways (Library.tsx CharRow) */
 .library-chars-wrap { display: flex; align-items: center; gap: .25rem; width: 100%; min-width: 0; }
 .library-chars-wrap > .ibtn:disabled { opacity: .25; }
-.library-chars { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding: .2rem .15rem; scrollbar-width: none; scroll-padding-inline: 2rem; }
+/* laid out in full (ui/ShowAll.tsx): the buttons stay by the first line */
+.page-h:not(.is-stuck) .library-chars-wrap.is-all { align-items: flex-start; }
+.page-h:not(.is-stuck) .library-chars-wrap.is-all > .ibtn { margin-top: .2rem; }
+/* 5px of padding is room for a chip's ring and the 4px focus ring at either end; the margin keeps the header's height */
+.library-chars { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding: 5px; margin-block: calc(.2rem - 5px); scrollbar-width: none; scroll-padding-inline: 2rem; }
 .library-chars::-webkit-scrollbar { display: none; }
 .library-chars .char-chip { flex: none; }
 .library-chars-sep { flex: none; align-self: stretch; width: 1px; margin: .3rem .2rem; background: var(--line); }

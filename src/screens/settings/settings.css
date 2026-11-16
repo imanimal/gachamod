@@ -117,8 +117,8 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .feedback .seg { align-self: flex-start; }
 .set-admin { display: flex; align-items: center; gap: .9rem; flex-shrink: 0; }
 /* Check this game */
-.check { display: flex; flex-direction: column; gap: .9rem; }
-.check p { margin: 0; }
+.check-game { display: flex; flex-direction: column; gap: .9rem; }
+.check-game p { margin: 0; }
 .check-at { margin-bottom: -.3rem !important; }
 .check-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem 1.2rem; margin: 0; }
 .check-facts > div { display: contents; }
@@ -133,4 +133,4 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .check-seen { display: flex; align-items: flex-start; gap: .5rem; color: var(--text-2); }
 .check-seen > .i { flex: none; margin-top: .15em; }
 .check-seen.ok > .i { color: var(--accent-ink); }
-.check .waiting { padding: 0; }
+.check-game .waiting { padding: 0; }

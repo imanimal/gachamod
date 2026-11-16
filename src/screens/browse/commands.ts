@@ -14,8 +14,8 @@ export function registerBrowseCommands(game: GameState | null): () => void {
       const q = query.trim();
       if (!q || !game) return [];
       return [{
-        id: "browse-search", title: `Search GameBanana for "${q}"`, section: "Actions", icon: "browse",
-        keywords: `${q} gamebanana online browse find download mods skins`, hint: game.short, priority: 2,
+        id: "browse-search", title: `Search GameBanana for "${q}"`, section: "Online", icon: "browse",
+        keywords: `${q} gamebanana online browse find download mods skins`, hint: game.short, fallback: true,
         run: () => go({ view: "browse", search: q }),
       }];
     }),

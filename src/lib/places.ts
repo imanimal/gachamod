@@ -18,6 +18,8 @@ const PLACES: Array<[RegExp, ToastAction]> = [
   [/no Mods folder/i, { label: "Mods folders", run: settings("mod-folders") }],
   [/game folder (isn't set|is gone)|game folder again in Settings|loader folder in Settings|yet\. Settings, Games|isn't set up|Set up a game first/i,
     { label: "Game folders", run: settings("games") }],
+  [/Hide adult mods from the chatbot/i, { label: "AI helper settings", run: settings("set-ai-adult") }],
+  [/Tester options in Settings/i, { label: "Tester options", run: settings("feedback") }],
   [/Settings, Appearance/i, { label: "Appearance", run: settings("appearance") }],
   [/import it in Settings, Custom themes/i, { label: "Custom themes", run: settings("themes") }],
 ];

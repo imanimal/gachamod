@@ -59,6 +59,13 @@ pub async fn game_check_setup(st: State<'_, AppState>, game: String) -> Result<g
     blocking(move || gamecheck::setup(&*lock(&db)?, &game)).await
 }
 
+/// What the game last saved for a live group, and when.
+#[tauri::command]
+pub async fn game_check_saved(st: State<'_, AppState>, game: String, group: u32) -> Result<gamecheck::SavedPick> {
+    let db = st.db.clone();
+    blocking(move || gamecheck::saved_pick(&*lock(&db)?, &game, group)).await
+}
+
 /// How gachamod opened the skin menu for the game since `since` (ms since 1970), if it did.
 #[tauri::command]
 pub fn game_check_menu(game: String, since: u64) -> Option<String> { gamecheck::menu_opened(&game, since) }

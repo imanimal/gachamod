@@ -195,7 +195,7 @@
   .field :is(input, textarea):hover:not(:disabled), .select select:hover { box-shadow: inset 0 0 0 1px var(--text-3); }
   .field :is(input, textarea):focus, .select select:focus { box-shadow: inset 0 0 0 1.5px var(--text); }
   /* a select is the value well from the settings rows: pale, with a solid caret */
-  .select select { border-radius: var(--cut-sm); background: var(--row-hi); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12); }
+  .select select { border-radius: var(--cut-sm); background: var(--row-hi); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12); padding-right: 2.1rem; }
   .select select:hover { box-shadow: inset 0 0 0 1px rgb(0 0 0 / .4); background: #fff; }
   .select select:focus { box-shadow: inset 0 0 0 1.5px var(--orange); }
   .select select option { background: #edefef; color: #111113; }

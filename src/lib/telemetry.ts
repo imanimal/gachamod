@@ -16,7 +16,7 @@ const logLines: Array<{ level: "info" | "warn" | "error"; text: string }> = [];
 const inputs = new Set<string>();
 const errors = new Set<string>();
 /** Commands that are part of this, or read so often that counting them says nothing. */
-const UNCOUNTED = new Set(["telemetry_events", "log_write", "report_ui_error", "settings_get", "report_state", "admin_state", "game_check_menu"]);
+const UNCOUNTED = new Set(["telemetry_events", "log_write", "report_ui_error", "settings_get", "report_state", "admin_state", "game_check_saved", "game_check_menu"]);
 
 const plain = (s: string) => s.replace(/[^A-Za-z0-9 _.-]/g, "").slice(0, 60);
 

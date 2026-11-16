@@ -166,6 +166,21 @@ pub fn launch(custom_root: Option<&str>, importer: &str) -> Result<()> {
     crate::launch::shell_start(&exe, &format!("--nogui --xxmi {importer}"), &bin)
 }
 
+/// XXMI starts `code`'s game by running its exe (its Game Launch setting is "Direct", the default).
+pub fn starts_exe(custom_root: Option<&str>, code: &str) -> bool {
+    importer_config(custom_root, code).is_ok_and(|c| matches!(c["Importer"]["game_launch"].as_str(), None | Some("DIRECT")))
+}
+
+/// Set XXMI's Game Launch for `code` to Steam, for a game whose Steam copy only starts from Steam. An XXMI from
+/// before it could start games through Steam has no Steam launch options in its config.
+pub fn launch_through_steam(custom_root: Option<&str>, code: &str) -> Result<()> {
+    let cur = importer_config(custom_root, code)?;
+    if cur["Importer"].get("configure_platform_launch_options").is_none() {
+        return Err(Error::NotSetUp("This XXMI Launcher can't start Steam games. Open XXMI Launcher once so it updates, then try again".into()));
+    }
+    set_importer_config(custom_root, code, &serde_json::json!({ "Importer": { "game_launch": "STEAM" } }))
+}
+
 /// Read `Importers.<code>` as JSON (both Importer and Migoto blocks).
 pub fn importer_config(custom_root: Option<&str>, code: &str) -> Result<Value> {
     let root = require_root(custom_root)?;

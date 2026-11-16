@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, settings, shell } from "../../lib/api";
 import { CHATBOTS, aiIntroPref, aiShowPref, chatbotLink, chatbotOf, chatbotPref, chatbotTip, installedChatbots, useAiShow, type AiTask, type ChatbotId } from "../../lib/ai";
+import { placeFor } from "../../lib/places";
 import { onApp } from "../../lib/store";
 import { Badge, Button, Chip, Dialog, TextField } from "../../ui/kit";
 import { toast } from "../../ui/toast";
@@ -158,8 +159,9 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
         <div className="ai-bot-row">
           <span className="field-l">Your chatbot</span>
           <BotPicker value={bot} onPick={(id) => void chatbotPref.set(id)} />
+          {def.note && <span className="hint">{def.note}</span>}
         </div>
-        {buildErr ? <p className="ai-err" role="alert">{buildErr}</p> : built && (
+        {buildErr ? <BuildError text={buildErr} onGo={onClose} /> : built && (
           <div className="ai-shares">
             <span className="hint">Shared when you paste the prompt:</span>
             <ul>{built.shares.map((s) => <li key={s}>{s}</li>)}</ul>
@@ -183,6 +185,17 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
 
       {p && <PreviewView p={p} />}
     </Dialog>
+  );
+}
+
+/** Why the prompt can't be made, with a button when it names a setting (lib/places.ts). */
+function BuildError({ text, onGo }: { text: string; onGo: () => void }) {
+  const place = placeFor(text);
+  return (
+    <div className="ai-err" role="alert">
+      <p>{text}</p>
+      {place && <Button size="sm" onClick={() => { onGo(); place.run(); }}>{place.label}</Button>}
+    </div>
   );
 }
 
@@ -214,7 +227,6 @@ function PreviewView({ p }: { p: Preview }) {
           {p.links.map((l, i) => <Button key={i} size="sm" icon={l.label.startsWith("Open") ? "folder" : "browse"} onClick={l.run} title={l.hint}>{l.label}</Button>)}
         </div>
       )}
-      {p.noApply && <p className="hint">{p.noApply}</p>}
       {p.skipped.length > 0 && (
         <details className="ai-skipped">
           <summary><Badge tone="warn">{p.skipped.length} skipped</Badge> {p.skipped.length === 1 ? "A part of the answer that doesn't match your mods" : "Parts of the answer that don't match your mods"}. Click to see them</summary>
@@ -258,7 +270,6 @@ function AiIntro() {
       <ul>
         <li>Make a theme from "navy and gold, sharp corners"</li>
         <li>Tidy 200 messy mod names at once</li>
-        <li>Work out a fix for a mod a game update broke</li>
         <li>Make a mod's toggles work only while its character is on screen</li>
       </ul>
       <span className="field-l">Which one do you use?</span>

@@ -1,6 +1,6 @@
 // Installed mods as a grid or list, used by Mods and by each character's page. Click opens the details; Ctrl+click,
 // Shift+click and Shift+arrows select; a bar at the bottom acts on the selection. Keys: arrows move, Enter opens,
-// Space turns on or off, Ctrl+Space selects, Ctrl+A selects all, F2 renames, Delete moves to the trash, Esc clears
+// Space turns on or off (Shift+Space or Shift+click on the switch keeps the character's other mods on), Ctrl+Space selects, Ctrl+A selects all, F2 renames, Delete moves to the trash, Esc clears
 // the selection. On a controller, X (or the right stick pressed in) opens the focused mod's menu, which can select
 // too. Every change records Undo. Owner: LIBRARY area.
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
@@ -75,17 +75,19 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
 
   // ── actions ──
 
-  const toggle = useCallback(async (list: ModEntry[], on: boolean) => {
+  /** `keep`: the character's other mods stay on, without asking (Shift). */
+  const toggle = useCallback(async (list: ModEntry[], on: boolean, keep = false) => {
     const prior = allRef.current;
     const ids = list.filter((m) => m.enabled !== on).map((m) => m.id);
     if (!ids.length) return;
-    // one mod on while its character has another on: ask first (overlap.ts)
+    // mods on while their character has others on: ask first (overlap.ts), unless Shift said to keep them
     let turnOffOthers: boolean | undefined;
-    if (on && ids.length === 1) {
-      const mod = list.find((m) => m.id === ids[0])!;
-      const c = await askOverlap(game, mod, prior, anchorFor(mod.id));
+    if (on && keep) turnOffOthers = false;
+    else if (on) {
+      const going = list.filter((m) => ids.includes(m.id));
+      const c = await askOverlap(game, going, prior, anchorFor(going[0]!.id));
       if (!c) return;
-      if (c.parent && !(await setParent(game, mod, c.parent, prior))) return;
+      if (c.parent && going.length === 1 && !(await setParent(game, going[0]!, c.parent, prior))) return;
       turnOffOthers = c.turnOffOthers;
     }
     const want = new Set(ids);
@@ -140,7 +142,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
   }, [game]);
 
   const onMenu = useCallback((m: ModEntry, el: HTMLElement) => openMenu(el, itemsFor(m)), [itemsFor]);
-  const onToggleCard = useCallback((m: ModEntry, on: boolean) => void toggle([m], on), [toggle]);
+  const onToggleCard = useCallback((m: ModEntry, on: boolean, keep: boolean) => void toggle([m], on, keep), [toggle]);
   const onUpdate = useCallback((m: ModEntry) => void getUpdate(game, m), [game]);
 
   const onContextMenu = (e: MouseEvent<HTMLDivElement>) => {
@@ -176,7 +178,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     else if (k === "Home") move(0);
     else if (k === "End") move(items.length - 1);
     else if (k === " " && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flip(m.id); }
-    else if (k === " ") { e.preventDefault(); void toggle(selected.has(m.id) && picked.length > 1 ? picked : [m], !m.enabled); }
+    else if (k === " ") { e.preventDefault(); void toggle(selected.has(m.id) && picked.length > 1 ? picked : [m], !m.enabled, e.shiftKey); }
     else if (k === "F2") { e.preventDefault(); askLib({ kind: "rename", game, mod: m }); }
     else if (k === "Delete") { e.preventDefault(); void trash(selected.has(m.id) ? picked : [m]); }
     else if (k.toLowerCase() === "a" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setSelected(new Set(shown.map((x) => x.id))); }

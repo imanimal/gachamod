@@ -44,6 +44,54 @@ fn fit_to_screen(w: &tauri::WebviewWindow) {
     if size.width > area.width || size.height > area.height { let _ = w.maximize(); }
 }
 
+/// Hardware acceleration as this run started with it (setting "app.gpu", Settings > Appearance). The windows that
+/// share the app's WebView2 folder (the main window, the menu over a game) must all start with the same browser
+/// flags, so a change counts from the next start.
+pub struct Gpu(pub bool);
+
+/// Start gachamod with this to turn hardware acceleration off, for a window that draws black and can't reach
+/// Settings. A copy already running saves it and starts again.
+const NO_GPU_ARG: &str = "--disable-gpu";
+
+/// Hardware acceleration is on unless "app.gpu" is "0". `turn_off` saves it off first.
+fn gpu_setting(db: &gacha_core::db::Shared, turn_off: bool) -> bool {
+    let Ok(d) = db.lock() else { return !turn_off };
+    if turn_off {
+        let _ = d.set_setting("app.gpu", "0");
+        gacha_core::logs::info("Hardware acceleration turned off by --disable-gpu");
+    }
+    d.setting("app.gpu").ok().flatten().as_deref() != Some("0")
+}
+
+/// WebView2 flags for every window. Passing any replaces wry's own, so those are repeated. WebView2 stops drawing a
+/// window it thinks other windows cover, and with more than one monitor it can get that wrong and leave the window
+/// black until the mouse moves over it, so that check is off. With hardware acceleration off, it also draws without
+/// the graphics card.
+pub fn browser_flags<'a, R: tauri::Runtime, M: Manager<R>>(b: tauri::WebviewWindowBuilder<'a, R, M>, gpu: bool) -> tauri::WebviewWindowBuilder<'a, R, M> {
+    const FLAGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
+    if gpu { b.additional_browser_args(FLAGS) } else { b.additional_browser_args(&format!("{FLAGS} --disable-gpu --disable-gpu-compositing")) }
+}
+
+/// The main window (tauri.conf.json, "create": false), made here so its browser flags can follow the setting.
+fn main_window(app: &tauri::App, gpu: bool) -> tauri::Result<tauri::WebviewWindow> {
+    let Some(conf) = app.config().app.windows.iter().find(|w| w.label == "main").cloned() else {
+        return Err(tauri::Error::WindowNotFound);
+    };
+    let mut tries = 0;
+    loop {
+        match browser_flags(tauri::WebviewWindowBuilder::from_config(app.handle(), &conf)?, gpu).build() {
+            Ok(w) => return Ok(w),
+            // right after Restart, the closing copy's WebView2 may still run with the other setting for a moment
+            Err(e) if tries < 4 && app.get_webview_window("main").is_none() => {
+                tries += 1;
+                gacha_core::logs::warn(format!("The window didn't open ({e}), trying again"));
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 /// What the app was started with, for the UI to pick up once it is listening.
 #[tauri::command]
 fn startup_opened(st: tauri::State<'_, Pending>) -> Vec<Opened> { std::mem::take(&mut *st.0.lock().unwrap()) }
@@ -62,6 +110,12 @@ pub fn run() {
     tauri::Builder::default()
         // a second start (a gachamod:// link, a double-clicked .gachamod) hands its arguments here and exits
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // SYSTEM: gachamod.exe --disable-gpu while it runs: saved, and gachamod starts again without it
+            if argv.iter().any(|a| a == NO_GPU_ARG) && app.try_state::<Gpu>().is_some_and(|g| g.0) {
+                if let Some(st) = app.try_state::<state::AppState>() { gpu_setting(&st.db, true); }
+                gacha_core::logs::quitting();
+                app.restart();
+            }
             if let Some(w) = app.get_webview_window("main") { let _ = w.unminimize(); let _ = w.show(); let _ = w.set_focus(); }
             hand_to_ui(app, opened_from_args(argv));
         }))
@@ -79,7 +133,6 @@ pub fn run() {
             std::thread::spawn(move || responder.respond(commands::extensions::serve(&app, &req)));
         })
         .setup(|app| {
-            if let Some(w) = app.get_webview_window("main") { fit_to_screen(&w); }
             // GACHAMOD_DATA moves the app's own data (database, trash, downloads) elsewhere: a portable copy or a test run.
             let data_dir = match std::env::var_os("GACHAMOD_DATA") {
                 Some(d) if !d.is_empty() => std::path::PathBuf::from(d),
@@ -97,24 +150,34 @@ pub fn run() {
             }
             gacha_core::devtools::accept_hand_offs(&app.config().identifier);
             let state = state::AppState::new(data_dir)?;
+            // SYSTEM: the window opens once hardware acceleration is known, before anything else can open one
+            let gpu = gpu_setting(&state.db, std::env::args().any(|a| a == NO_GPU_ARG));
             app.manage(state);
+            app.manage(Gpu(gpu));
+            fit_to_screen(&main_window(app, gpu)?);
             *app.state::<Pending>().0.lock().unwrap() = opened_from_args(std::env::args());
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
             if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
-            // INGAME: live groups an older version made come out (that rewrites mod inis: off the main thread)
+            // INGAME: live.ini says who holds the menu key for this run (its pictures may be drawn again: off the
+            // main thread)
             let live_db = app.state::<state::AppState>().db.clone();
             std::thread::spawn(move || { if let Ok(d) = live_db.lock() { gacha_core::live::on_start(&d); } });
             // SYSTEM: game start/stop events and automatic F10 reloads; links and .gachamod files nobody else holds
             let handle = app.handle().clone();
             let notes = app.handle().clone();
+            let follow = app.handle().clone();
             gacha_core::devtools::watch(app.state::<state::AppState>().db.clone(), move |g, r| {
                 let _ = handle.emit(events::GAME_STATE, serde_json::json!({ "game": g, "running": r }));
-                // INGAME: a game that runs as administrator keeps the menu key from gachamod
+                // INGAME: a game that runs as administrator decides who holds the menu key
                 if r { if let Ok(d) = handle.state::<state::AppState>().db.lock() { gacha_core::live::note_elevation(&d, g); } }
                 hotkeys::on_game_state(&handle, r);
                 overlay::on_game_state(&handle);
-            }, move |_, text| { let _ = notes.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false })); });
+            }, move |_, text| { let _ = notes.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false })); }, move |g| {
+                // INGAME: the game saved its values: picks made in its own menu show in the app's windows too
+                let moved = follow.state::<state::AppState>().db.lock().is_ok_and(|d| gacha_core::live::follow_game(&d, g));
+                if moved { let _ = follow.emit(events::LIBRARY_CHANGED, serde_json::json!({ "game": g })); }
+            });
             // INGAME: both sticks pressed in opens the skin menu. The menu window is made again whenever its key is
             // pressed, so closing the main window ends the app rather than leave it running with no window to close
             overlay::watch_pad(app.handle().clone());
@@ -156,6 +219,7 @@ pub fn run() {
             commands::library::mod_set_part,
             commands::library::mods_merge,
             commands::library::mods_set_enabled,
+            commands::library::mods_overlapping,
             commands::library::mod_update_meta,
             commands::library::mod_move,
             commands::library::mods_remove,
@@ -210,9 +274,12 @@ pub fn run() {
             commands::modtools::fixers_run_all,
             commands::modtools::fixers_stop_waiting,
             commands::modtools::mod_mesh,
-            commands::ingame::menu_info,
-            commands::ingame::menu_set,
-            commands::ingame::menu_key_users,
+            commands::ingame::live_info,
+            commands::ingame::live_add,
+            commands::ingame::live_remove,
+            commands::ingame::live_pick,
+            commands::ingame::live_menu_set,
+            commands::ingame::live_set_all,
             commands::ingame::app_restart_admin,
             // ── SYSTEM: logs, crash reports, usage counts, feedback, administrator ──
             commands::report::report_state,
@@ -224,6 +291,7 @@ pub fn run() {
             commands::report::admin_state,
             commands::report::admin_set_always,
             commands::report::game_check_setup,
+            commands::report::game_check_saved,
             commands::report::game_check_menu,
             commands::report::game_check_send,
             overlay::overlay_game,

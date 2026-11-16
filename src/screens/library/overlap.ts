@@ -1,11 +1,13 @@
-// Turning one mod on while its character already has another mod on: most skins don't go together, some do (a hair
-// recolour with an outfit). A small menu by the switch asks which: turn the other off, keep both, or make the new one
-// a sub-mod of the other so the question never comes back. The "<game>.oneSkin" setting can answer for good
+// Turning one mod on while its character already has another mod on that changes the same parts (a hash both
+// override, checked by the backend): most skins don't go together, some do. Mods that change other parts (a hair
+// recolour next to an outfit) turn on without a question. A small menu by the switch asks which: turn the other off,
+// keep both, or make the new one a sub-mod of the other so the question never comes back. The "<game>.oneSkin" setting can answer for good
 // ("auto" turns the other off, "0" keeps both; anything else asks), and the menu's last entry sets it to "0".
 // Owner: LIBRARY area.
-import { settings, type GameId, type ModEntry } from "../../lib/api";
+import { library, settings, type GameId, type ModEntry } from "../../lib/api";
 import { record } from "../../lib/history";
 import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { liveCharacterOf } from "../ingame/data";
 
 /** The user's answer. `turnOffOthers` goes to library.setEnabled; `parent` makes the mod a sub-mod of that one. */
 export interface OnChoice { turnOffOthers?: boolean; parent?: string }
@@ -48,16 +50,34 @@ async function stopAsking(game: GameId) {
   });
 }
 
-/** Ask before turning `mod` on when its character has another mod on. Resolves {} when there's nothing to ask, the
- *  answer when there was, or null when the menu closed without one (leave the mod off). */
-export async function askOverlap(game: GameId, mod: ModEntry, all: ModEntry[], at?: Element | null): Promise<OnChoice | null> {
-  const others = overlapping(mod, all);
+/** The mods on for the same characters as `going` that aren't part of their families, for turning several on at once. */
+export function overlappingAll(going: ModEntry[], all: ModEntry[]): ModEntry[] {
+  const roots = new Set(going.map(rootOf));
+  const seen = new Set<string>();
+  return going.flatMap((m) => overlapping(m, all)).filter((o) => !roots.has(rootOf(o)) && !seen.has(o.id) && !!seen.add(o.id));
+}
+
+/** Ask before turning mods on when their character has other mods on. Resolves {} when there's nothing to ask, the
+ *  answer when there was, or null when the menu closed without one (leave them off). Live skins switch instead, so
+ *  they never ask. Shift+click on a switch skips this and keeps the others on. */
+export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all: ModEntry[], at?: Element | null): Promise<OnChoice | null> {
+  const going = (Array.isArray(mods) ? mods : [mods]).filter((m) => !liveCharacterOf(game, m.id));
+  if (!going.length) return {};
+  const near = overlappingAll(going, all).filter((o) => !liveCharacterOf(game, o.id));
+  if (!near.length) return {};
+  // of the character's other mods, only the ones that change the same parts count
+  const same = await library.overlapping(game, going.map((m) => m.id), near.map((m) => m.id)).catch(() => near.map((m) => m.id));
+  const others = near.filter((o) => same.includes(o.id));
   if (!others.length) return {};
   const rule = await settings.get(`${game}.oneSkin`).catch(() => null);
   if (rule === "auto") return { turnOffOthers: true };
   if (rule === "0") return { turnOffOthers: false };
 
-  const who = mod.character ?? all.find((m) => m.id === mod.parent)?.character ?? "";
+  const mod = going[0]!;
+  const many = going.length > 1;
+  const whoOf = (m: ModEntry) => m.character ?? all.find((x) => x.id === m.parent)?.character ?? "";
+  const names = [...new Set(going.map(whoOf).filter(Boolean))];
+  const who = names.length === 1 ? names[0]! : "their characters";
   const one = others.length === 1 ? others[0]! : null;
   const hasSubs = all.some((m) => m.parent === mod.id);
   const anchor = (at && at !== document.body && shown(at) ? at : null)
@@ -69,11 +89,11 @@ export async function askOverlap(game: GameId, mod: ModEntry, all: ModEntry[], a
     const items: MenuEntry[] = [
       { header: one ? `Another ${who} mod is on` : `${others.length} other ${who} mods are on` },
       { label: one ? `Turn off ${one.name}` : `Turn off the other ${others.length}`, icon: "power",
-        title: `Only ${mod.name} stays on for ${who}`, onClick: () => pick({ turnOffOthers: true }) },
+        title: many ? `Only the ${going.length} you picked stay on for ${who}` : `Only ${mod.name} stays on for ${who}`, onClick: () => pick({ turnOffOthers: true }) },
       { label: one ? "Keep both on" : "Keep them all on", icon: "layers",
-        title: "For mods that go together, like a hair recolour and an outfit. If they change the same parts, the Conflict tag shows which one wins",
+        title: "For mods that go together, like a hair recolour and an outfit. Shift+click on a switch does this without asking. If they change the same parts, the Conflict tag shows which one wins",
         onClick: () => pick({ turnOffOthers: false }) },
-      one && !hasSubs && { label: `Make it a sub-mod of ${one.name}`, icon: "link",
+      one && !many && !hasSubs && { label: `Make it a sub-mod of ${one.name}`, icon: "link",
         title: `For an add-on that goes with ${one.name}. It turns off with ${one.name}, comes back with it, and this question won't come up for the two again`,
         onClick: () => pick({ turnOffOthers: false, parent: rootOf(one) }) },
       "-",

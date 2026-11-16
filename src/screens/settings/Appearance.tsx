@@ -17,6 +17,8 @@ import { SetRow } from "./parts";
 import { hiddenThemePref } from "../../lib/fun";
 import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
 import { hintsOnPref } from "../../shell/hints";
+import { about, errorText } from "../../lib/api";
+import { pref } from "../../lib/prefs";
 
 const SCHEME_OPTIONS: Array<{ value: SchemeChoice; label: string; icon?: "moon" | "sun" }> = [
   { value: "dark", label: "Dark", icon: "moon" }, { value: "light", label: "Light", icon: "sun" }, { value: "system", label: "System" },
@@ -96,9 +98,26 @@ export function AppearanceSection() {
         <SetRow id="set-hints" label="First-start hints" hint="Right after setup, Browse, Install and Downloads look faintly selected until you've used them once">
           <HintsSwitch />
         </SetRow>
+        <SetRow id="set-gpu" label="Hardware acceleration" hint="Draws gachamod with the graphics card. Turn it off if the window goes black or flickers. Counts from the next start"
+          tip="When the window is too broken to reach this, start gachamod.exe with --disable-gpu to turn it off">
+          <GpuSwitch />
+        </SetRow>
       </div>
     </Panel>
   );
+}
+
+/** Hardware acceleration (src-tauri lib.rs reads "app.gpu" before the window opens). */
+const gpuPref = pref<boolean>("app.gpu", true, (r) => (r === "0" ? false : r === "1" ? true : undefined), (v) => (v ? "1" : "0"));
+
+function GpuSwitch() {
+  const on = gpuPref.use();
+  const change = async (v: boolean) => {
+    try { await gpuPref.set(v); } catch (e) { toast(errorText(e), true); return; }
+    toast(`Hardware acceleration turns ${v ? "on" : "off"} when gachamod restarts`, false,
+      { label: "Restart", run: () => void about.relaunch().catch((e) => toast(errorText(e), true)) });
+  };
+  return <Toggle checked={on} label="Hardware acceleration" onChange={(v) => void change(v)} />;
 }
 
 function HintsSwitch() {

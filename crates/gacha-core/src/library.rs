@@ -824,12 +824,39 @@ pub fn set_enabled_with(db: &Db, game: &str, ids: &[String], on: bool, turn_off_
         Some(v) => v,
         None => db.setting(&format!("{game}.oneSkin"))?.map(|v| v != "0").unwrap_or(true),
     };
+    // "keep the others on" for a live skin while its character shows another: it leaves in-game switching, since a
+    // live character shows one skin at a time
+    let (released, mut notes) = if on && turn_off_others == Some(false) { crate::live::release(db, game, ids)? } else { (Vec::new(), Vec::new()) };
     let rows = list(db, game)?;
-    let (targets, flags, notes) = with_family(&rows, ids, on);
+    let (targets, flags, family) = with_family(&rows, ids, on);
+    notes.extend(family);
     let mut change = route(db, game, &targets, one_skin)?;
+    for id in &released {
+        if !change.changed.iter().any(|e| &e.id == id) { if let Ok(e) = get(db, game, id) { change.changed.push(e); } }
+    }
     for (id, flag) in flags { let _ = set_off_with_parent(db, game, &id, flag); }
     change.notes.splice(0..0, notes);
     Ok(change)
+}
+
+/// The parts a mod changes: the hashes of its inis' sections that do something (`ini::quick_facts`).
+fn parts_of(m: &ModEntry) -> HashSet<String> {
+    ini::quick_facts(Path::new(&m.path)).active.iter()
+        .map(|h| h.trim().trim_start_matches("0x").to_ascii_lowercase()).filter(|h| !h.is_empty()).collect()
+}
+
+/// Two mods change the same parts of the game (a hash both override), so having both on is a real overlap. A mod
+/// whose parts can't be read counts as overlapping, as it did when only the character was compared.
+pub(crate) fn share_parts(a: &ModEntry, b: &ModEntry) -> bool {
+    let (pa, pb) = (parts_of(a), parts_of(b));
+    pa.is_empty() || pb.is_empty() || !pa.is_disjoint(&pb)
+}
+
+/// Of `others`, the mods that change the same parts as any of `ids` (the UI asks before turning a mod on only about
+/// these).
+pub fn overlapping(db: &Db, game: &str, ids: &[String], others: &[String]) -> Result<Vec<String>> {
+    let going: Vec<ModEntry> = ids.iter().filter_map(|i| get(db, game, i).ok()).collect();
+    Ok(others.iter().filter(|o| get(db, game, o).is_ok_and(|o| going.iter().any(|g| share_parts(g, &o)))).cloned().collect())
 }
 
 /// The mods a switch reaches through sub-mod links, the `off_with_parent` marks to write afterwards, and notes.
@@ -903,9 +930,11 @@ fn route(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
         // a live skin that shows now turns off the character's other skins that aren't live
         let shown: Vec<String> = sw.changed.iter().filter(|e| e.enabled).filter_map(|e| e.character.clone()).collect();
         let listed: HashSet<&str> = targets.iter().map(|(i, _)| i.as_str()).collect();
+        let shown_rows: Vec<&ModEntry> = sw.changed.iter().filter(|e| e.enabled).collect();
         let offs: Vec<(String, bool)> = list(db, game)?.into_iter()
             .filter(|o| o.loaded() && !live.contains_key(&o.id) && !listed.contains(o.id.as_str())
-                && o.character.as_deref().is_some_and(|oc| shown.iter().any(|c| c.eq_ignore_ascii_case(oc))))
+                && o.character.as_deref().is_some_and(|oc| shown.iter().any(|c| c.eq_ignore_ascii_case(oc)))
+                && shown_rows.iter().any(|s| s.character.as_deref().is_some_and(|c| o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(c))) && share_parts(s, o)))
             .map(|o| (o.id, false)).collect();
         if !offs.is_empty() {
             // the swap the player asked for: no note, the cards show it
@@ -930,34 +959,11 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
         return Err(Error::Invalid("Those mods aren't in the library anymore. Rescan to refresh the list".into()));
     }
 
-    // one skin per character in a bulk turn-on: the last one of each character wins
-    let mut skip: HashSet<&str> = HashSet::new();
-    if one_skin {
-        let mut last: HashMap<String, &str> = HashMap::new();
-        for (id, on) in targets {
-            if !on { continue; }
-            if let Some(c) = rows.get(id).and_then(|e| e.character.as_deref()) { last.insert(c.to_lowercase(), id); }
-        }
-        for (id, on) in targets {
-            if !on { continue; }
-            let Some(e) = rows.get(id) else { continue };
-            let Some(c) = e.character.as_deref() else { continue };
-            if let Some(&winner) = last.get(&c.to_lowercase()) {
-                if winner != id.as_str() && !e.enabled && rows.get(winner).is_none_or(|w| w.root() != e.root()) {
-                    skip.insert(id);
-                    if let Some(w) = rows.get(winner) {
-                        let n = format!("One skin per character: kept {} on for {c}", w.name);
-                        if !change.notes.contains(&n) { change.notes.push(n); }
-                    }
-                }
-            }
-        }
-    }
-
+    // every mod asked for goes on, several of one character included: the rule only turns off the ones not asked for
     let mut seen: HashSet<&str> = HashSet::new();
     let mut turned_on: Vec<String> = Vec::new();
     for (id, on) in targets {
-        if skip.contains(id.as_str()) || !seen.insert(id.as_str()) { continue; }
+        if !seen.insert(id.as_str()) { continue; }
         let Some(e) = rows.get_mut(id) else { continue };
         if *on { turned_on.push(id.clone()); }
         match toggle_one(db, &cx, e, *on, &mut change.notes) {
@@ -974,9 +980,12 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
             if live.contains_key(id) { continue; }
             let Some(c) = rows.get(id).filter(|e| e.enabled).and_then(|e| e.character.clone()) else { continue };
             let root = rows.get(id).map(|e| e.root().to_string()).unwrap_or_default();
-            change.changed.extend(crate::live::hide_group(db, game, &c));
+            let Some(turned) = rows.get(id).cloned() else { continue };
+            change.changed.extend(crate::live::hide_group(db, game, &c, &turned));
+            // only mods that change the same parts go off: a hair recolour stays on next to an outfit
             let others: Vec<String> = rows.values()
                 .filter(|o| o.enabled && o.id != *id && o.root() != root && !listed.contains(o.id.as_str()) && !live.contains_key(&o.id) && o.character.as_deref().is_some_and(|oc| oc.eq_ignore_ascii_case(&c)))
+                .filter(|o| share_parts(&turned, o))
                 .map(|o| o.id.clone()).collect();
             for oid in others {
                 let Some(o) = rows.get_mut(&oid) else { continue };

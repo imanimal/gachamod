@@ -38,6 +38,8 @@ export function useGame(): GameState | null {
 }
 export const currentGame = (): GameState | null => gameList.get().find((g) => g.id === current.get()) ?? null;
 export const allGames = (): GameState[] => gameList.get();
+/** The key that reloads mods in a game (its d3dx.ini reload_config), F10 until the list loads. */
+export const reloadKeyOf = (id: GameId | string): string => gameList.get().find((g) => g.id === id)?.reloadKey || "F10";
 
 // ── one-game mode ──
 
@@ -287,8 +289,9 @@ export type AppEvent =
   | { type: "export-pack"; game: GameId; scope: "game" | "all" }
   | { type: "open-gb-link"; url: string }
   | { type: "library-refresh"; game: GameId }
-  /** Open the command palette, optionally with text in it. */
-  | { type: "palette"; text?: string }
+  /** Open the command palette, optionally with text in it. `typed`: a key typed with nothing focused, added to
+   *  the text when the palette is already open (keys typed in a quick burst arrive before it has focus). */
+  | { type: "palette"; text?: string; typed?: boolean }
   /** Open the AI helper (lib/ai.ts askAi). */
   | { type: "ai"; task: AiTask };
 

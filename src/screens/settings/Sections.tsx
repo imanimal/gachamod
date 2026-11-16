@@ -70,7 +70,7 @@ export function ModsSection() {
         <div className="set-pergame" id="set-pergame">
           <div className="set-pergame-h"><span />
             <span title="What happens when you turn on a mod and its character already has another one on. Sub-mods never count">Another skin already on</span>
-            <span title="Presses F10 for you when you switch back to the game after a change. F10 makes 3DMigoto load the mods again">Reload in game</span>
+            <span title="Presses the game's reload key for you when you switch back to it after a change, so 3DMigoto loads the mods again. The key is F10 unless the game's d3dx.ini sets another">Reload in game</span>
           </div>
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
         </div>

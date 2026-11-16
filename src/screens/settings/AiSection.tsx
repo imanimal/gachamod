@@ -21,7 +21,7 @@ export function AiSection() {
   return (
     <Panel title="AI helper" icon="ai" id="ai">
       <div className="set-rows">
-        <SetRow id="set-ai-show" label="Show AI buttons" hint={show === "off" ? "No AI button, menu item or hint anywhere" : show === "useful" ? "Only where it saves real work, like fixing toggles or renaming many mods" : "Also small extras, like mod ideas"}>
+        <SetRow id="set-ai-show" label="Show AI buttons" hint={show === "off" ? "No AI button, menu item or hint anywhere" : show === "useful" ? "Only where it saves work, like fixing toggles or renaming many mods" : "Also small extras, like mod ideas"}>
           <Segmented<AiShow> value={show} onChange={(v) => void aiShowPref.set(v, `AI buttons: ${AI_SHOW_LABEL[v].toLowerCase()}`)} label="Show AI buttons"
             options={(["off", "useful", "all"] as AiShow[]).map((v) => ({ value: v, label: AI_SHOW_LABEL[v] }))} />
         </SetRow>
@@ -41,9 +41,9 @@ export function AiSection() {
           </div>
         )}
         {show !== "off" && (
-          <SetRow id="set-ai-adult" label="Hide adult mod names from the chatbot"
-            hint={hideAdult ? "Mods marked for adults, or with explicit words in their names, are sent as \"(hidden)\". The prompt says why, so the chatbot still helps with the rest" : "Every name is sent as it is. Some chatbots refuse requests that have explicit words in them"}>
-            <Toggle checked={hideAdult} onChange={(v) => void aiHideAdultPref.set(v, v ? "Adult mod names hidden from the chatbot" : "Adult mod names sent to the chatbot")} label="Hide adult mod names from the chatbot" />
+          <SetRow id="set-ai-adult" label="Hide adult mods from the chatbot"
+            hint={hideAdult ? "Adult mods are left out of prompts and explicit words in ini names are swapped out. Chatbots often refuse a whole request over one of them" : "Every mod and name is sent as it is. Chatbots often refuse requests with explicit words in them"}>
+            <Toggle checked={hideAdult} onChange={(v) => void aiHideAdultPref.set(v, v ? "Adult mods hidden from the chatbot" : "Adult mods sent to the chatbot")} label="Hide adult mods from the chatbot" />
           </SetRow>
         )}
         {show !== "off" && (

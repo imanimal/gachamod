@@ -537,10 +537,31 @@ static BACKED_UP: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(|| Mutex::ne
 
 fn user_ini_path(importer_dir: &Path) -> PathBuf { importer_dir.join("d3dx_user.ini") }
 
-/// The namespace 3DMigoto gives a mod folder: `mods\<rel lowercased, backslashes>`.
-fn mod_namespace(mod_rel: &str) -> String {
+/// Each importer folder's Mods folder as 3DMigoto names it in d3dx_user.ini: its path from the importer folder,
+/// lowercased ("mods" in the usual layout). `games::importer_dir` notes it; "mods" until then.
+static MODS_NAMES: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn norm_dir(p: &Path) -> String { p.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase() }
+
+/// Note where a game's Mods folder is, so saved values use the name 3DMigoto gives it. A Mods folder outside the
+/// importer folder keeps "mods" (3DMigoto loads the folders d3dx.ini includes, which sit beside it).
+pub(crate) fn note_mods_dir(importer_dir: &Path, mods_dir: &Path) {
+    let (imp, mods) = (norm_dir(importer_dir), norm_dir(mods_dir));
+    let name = mods.strip_prefix(&format!("{imp}\\")).filter(|r| !r.is_empty()).unwrap_or("mods").to_string();
+    if let Ok(mut m) = MODS_NAMES.lock() { m.insert(imp, name); }
+}
+
+/// The Mods folder's name under an importer folder, as noted (`note_mods_dir`).
+fn mods_name(importer_dir: &Path) -> Option<String> {
+    MODS_NAMES.lock().ok().and_then(|m| m.get(&norm_dir(importer_dir)).cloned())
+}
+
+/// The namespace 3DMigoto gives a mod folder: `<Mods folder>\<rel>`, lowercased with backslashes (`mods\<rel>` in
+/// the usual layout).
+fn mod_namespace(importer_dir: &Path, mod_rel: &str) -> String {
+    let mods = mods_name(importer_dir).unwrap_or_else(|| "mods".into());
     let rel = mod_rel.replace('/', "\\");
-    format!("mods\\{}", rel.trim_matches('\\').to_lowercase())
+    format!("{mods}\\{}", rel.trim_matches('\\').to_lowercase())
 }
 
 struct UserIni { bom: bool, lines: Vec<String>, nl: &'static str }
@@ -652,8 +673,8 @@ fn exists_ci(base: &Path, rel: &str) -> bool {
 /// The saved values in d3dx_user.ini for the mod folder at `mod_rel` (path from Mods, forward slashes, as it is now).
 pub fn user_vars(importer_dir: &Path, mod_rel: &str) -> Result<Vec<VarValue>> {
     let Some(ini) = UserIni::read(&user_ini_path(importer_dir))? else { return Ok(Vec::new()) };
-    let prefix = format!("{}\\", mod_namespace(mod_rel));
-    let mod_dir = importer_dir.join("Mods").join(mod_rel);
+    let prefix = format!("{}\\", mod_namespace(importer_dir, mod_rel));
+    let mod_dir = importer_dir.join(mods_name(importer_dir).as_deref().unwrap_or("Mods")).join(mod_rel);
     let mod_exists = mod_dir.is_dir();
     let mut out = Vec::new();
     for line in &ini.lines {
@@ -676,7 +697,7 @@ pub fn set_user_vars(importer_dir: &Path, mod_rel: &str, values: &[VarValue]) ->
     let _guard = USER_INI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = user_ini_path(importer_dir);
     let mut ini = UserIni::read(&path)?.unwrap_or_else(UserIni::empty);
-    let ns = mod_namespace(mod_rel);
+    let ns = mod_namespace(importer_dir, mod_rel);
     let mut wanted: BTreeMap<String, String> = BTreeMap::new();
     for v in values {
         let ini_rel = v.ini.replace('/', "\\").trim_matches('\\').to_lowercase();
@@ -727,9 +748,9 @@ pub(crate) fn set_user_value(importer_dir: &Path, name: &str, value: &str) -> Re
 
 /// Move saved values from one mod path to another (a mod folder was renamed or moved), so they survive.
 pub fn move_user_vars(importer_dir: &Path, from_rel: &str, to_rel: &str) -> Result<()> {
-    let from = format!("{}\\", mod_namespace(from_rel));
-    let to = format!("{}\\", mod_namespace(to_rel));
-    if from == to || from == "mods\\\\" { return Ok(()); }
+    let from = format!("{}\\", mod_namespace(importer_dir, from_rel));
+    let to = format!("{}\\", mod_namespace(importer_dir, to_rel));
+    if from == to || from_rel.trim_matches(['/', '\\']).is_empty() { return Ok(()); }
     let _guard = USER_INI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = user_ini_path(importer_dir);
     let Some(mut ini) = UserIni::read(&path)? else { return Ok(()) };
@@ -1865,6 +1886,19 @@ hash = 11111111"));
         set_user_vars(&imp, "A", &[VarValue { ini: "a.ini".into(), var: "$Hat".into(), value: "2".into() }]).unwrap();
         assert_eq!(fs::read_to_string(imp.join("d3dx_user.ini")).unwrap(), "[Constants]\r\n$\\mods\\a\\a.ini\\hat = 2\r\n");
         assert!(user_vars(&imp, "B").unwrap().is_empty());
+        fs::remove_dir_all(&imp).unwrap();
+    }
+
+    #[test]
+    fn saved_values_follow_a_mods_folder_with_another_name() {
+        let imp = temp("modsname");
+        note_mods_dir(&imp, &imp.join("Mods_Custom"));
+        set_user_vars(&imp, "A", &[VarValue { ini: "a.ini".into(), var: "hat".into(), value: "2".into() }]).unwrap();
+        assert_eq!(fs::read_to_string(imp.join("d3dx_user.ini")).unwrap(), "[Constants]\r\n$\\mods_custom\\a\\a.ini\\hat = 2\r\n");
+        assert_eq!(user_vars(&imp, "A").unwrap()[0].value, "2");
+        // a Mods folder somewhere else keeps the usual name
+        note_mods_dir(&imp, Path::new("D:\\Elsewhere\\Mods"));
+        assert_eq!(mod_namespace(&imp, "A"), "mods\\a");
         fs::remove_dir_all(&imp).unwrap();
     }
 

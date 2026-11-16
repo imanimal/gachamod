@@ -11,11 +11,9 @@
 //! `; gachamod:added` before an added line) so taking a mod out again removes exactly what was added. Files are read
 //! byte for byte (each byte one char), so text in any encoding comes back unchanged.
 //!
-//! Live groups are retired. gachamod no longer makes them: `on_start` takes out the groups an older version made
-//! (each character keeps the skin it showed, the others turn off), and the code below stays so that works. What is
-//! still in use is the menu's settings (`menu_settings`, `menu_keys`, `menu_info`): the menu over the game
-//! (src-tauri overlay.rs) turns mods on and off and the game reloads, with no gating and no menu drawn by the game.
-//! Owner: INGAME area.
+//! The player picks a skin in one of two menus (the game's setting "<game>.liveMenu"): gachamod's own window over
+//! the game ("window", src-tauri overlay.rs), or a plainer menu the game draws itself ("game", menu.rs), which is
+//! also what opens when the game holds the screen in exclusive fullscreen. Owner: INGAME area.
 
 mod menu;
 
@@ -27,6 +25,21 @@ use crate::model::{ModChange, ModEntry};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+
+/// Games where switching in game has been checked with the real game. In the others it is a tester option
+/// ("ui.tester"): new groups and the drawn menu need it on, and groups a tester made keep working when it goes off.
+pub const CHECKED: &[&str] = &["zzz"];
+
+/// Whether new live groups and the drawn menu can be set up for this game.
+pub fn allowed(db: &Db, game: &str) -> bool {
+    CHECKED.contains(&game) || db.setting("ui.tester").ok().flatten().as_deref() == Some("1")
+}
+
+fn tester_only(db: &Db, game: &str) -> Result<()> {
+    if allowed(db, game) || !load(db, game).groups.is_empty() { return Ok(()); }
+    let name = crate::games::def(game).map_or("this game", |g| g.name);
+    Err(Error::Invalid(format!("Switching skins in game is a tester option in {name}. Turn on Tester options in Settings, Feedback and data to try it")))
+}
 
 /// The folder under Mods that holds live.ini. The library scan skips it.
 pub const DIR: &str = "gachamod live";
@@ -92,7 +105,11 @@ pub struct LiveMod { pub mod_id: String, pub slot: u32, pub name: String, pub en
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct LiveGroup { pub group: u32, pub character: String, pub active: u32, pub mods: Vec<LiveMod> }
+pub struct LiveGroup {
+    pub group: u32, pub character: String, pub active: u32, pub mods: Vec<LiveMod>,
+    /// The app's pick couldn't be keyed in, so the game shows it at its next reload.
+    pub waiting: bool,
+}
 
 /// A character with two or more mods that aren't all live yet.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -103,21 +120,28 @@ pub struct LiveReady { pub character: String, pub mods: Vec<LiveMod> }
 #[serde(rename_all = "camelCase")]
 pub struct LiveInfo {
     pub groups: Vec<LiveGroup>, pub ready: Vec<LiveReady>, pub running: bool, pub menu: MenuSettings,
-    /// Every mod that has a character switches in game, and new ones join by themselves ("<game>.liveAll").
+    /// The panel's one switch: every mod that has a character switches in game, and new ones join by themselves
+    /// ("<game>.liveAll"). On by default in the checked games (`on_start`).
     pub all: bool,
     /// The game runs as administrator and gachamod doesn't, so gachamod's keys never reach it: the game's own menu
     /// is the one that opens, and the player presses F10 after a change.
     pub blocked: bool,
+    /// New groups and the drawn menu can be set up here: a checked game, or tester options are on (`allowed`).
+    pub allowed: bool,
 }
 
-/// How the menu opens while playing. `style`: "window" (gachamod's menu over the game) or "off". `key` is written
-/// like a hotkey ("F7", "Ctrl+Alt+M"). `pad`: pressing both sticks in opens it too.
+/// How the skin menu opens while playing. `style`: "window" (gachamod's menu over the game; the game draws its own
+/// when it is in exclusive fullscreen) or "game" (always the one the game draws). `key` is written like a
+/// hotkey ("F7", "Ctrl+Alt+M"). `pad`: pressing both sticks in opens it too. `fast_save`: the game saves its values
+/// every second, so a pick made in its own menu shows in the app at once (`fast_saves`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct MenuSettings { pub style: String, pub key: String, pub pad: bool }
+pub struct MenuSettings { pub style: String, pub key: String, pub pad: bool, #[serde(default = "yes")] pub fast_save: bool }
+
+fn yes() -> bool { true }
 
 impl Default for MenuSettings {
-    fn default() -> Self { MenuSettings { style: "window".into(), key: MENU_KEY.into(), pad: true } }
+    fn default() -> Self { MenuSettings { style: "window".into(), key: MENU_KEY.into(), pad: true, fast_save: true } }
 }
 
 /// F6 and F12 are the loaders' own keys, F10 reloads.
@@ -460,26 +484,27 @@ pub fn note_elevation(db: &Db, game: &str) {
     menu_sync(db, game);
 }
 
-/// gachamod started: live groups an older version made come out, "every character" goes off, and a menu that the
-/// game drew opens over the game instead.
+/// gachamod started: switching in game is on in the checked games unless the player turned it off, and live.ini of
+/// every game says who holds the menu key for this run (gachamod may run with other rights than last time), before a
+/// game loads it.
 pub fn on_start(db: &Db) {
-    for g in crate::games::GAMES {
-        if let Err(e) = retire(db, g.id) { crate::logs::warn(format!("Couldn't take {}'s mods out of switching in game: {e}", g.id)); }
+    for g in CHECKED {
+        if let Err(e) = start_on(db, g) { crate::logs::warn(format!("Couldn't turn on switching skins in game for {g}: {e}")); }
     }
+    for g in crate::games::GAMES { menu_sync(db, g.id); }
 }
 
-fn retire(db: &Db, game: &str) -> Result<()> {
-    if all_on(db, game) { db.set_setting(&format!("{game}.liveAll"), "0")?; }
-    if db.setting(&format!("{game}.liveMenu"))?.as_deref() == Some("game") { db.set_setting(&format!("{game}.liveMenu"), "window")?; }
-    let store = load(db, game);
-    if store.groups.is_empty() {
-        // a live.ini (or the drawn menu's pictures) left behind: writing no groups deletes them
-        if crate::games::mods_dir(db, game).is_ok_and(|d| d.join(DIR).is_dir()) { write_live_ini(db, game, &store)?; }
-        return Ok(());
+/// Once per game, the first time this version starts: switching in game goes on, also where it was off. It is on by
+/// default, and the one release that took live characters apart (0.1.1-beta.3) turned it off without asking. After
+/// this only the player's switch turns it off.
+fn start_on(db: &Db, game: &str) -> Result<()> {
+    let done = format!("{game}.liveAllSet");
+    if db.setting(&done)?.is_some() { return Ok(()); }
+    if !all_on(db, game) {
+        let c = set_all(db, game, true)?;
+        if !c.changed.is_empty() { crate::logs::info(format!("{game}: {} mods switch in game again", c.changed.len())); }
     }
-    let ids: Vec<String> = store.groups.iter().flat_map(|g| g.slots.iter().map(|s| s.mod_id.clone())).collect();
-    let out = remove(db, game, &ids)?;
-    crate::logs::info(format!("{game}: {} mods no longer switch in game; they turn on and off like any other mod", out.changed.len()));
+    db.set_setting(&done, "1")?;
     Ok(())
 }
 
@@ -592,19 +617,22 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
 
 pub fn menu_settings(db: &Db, game: &str) -> MenuSettings {
     let get = |k: &str| db.setting(&format!("{game}.{k}")).ok().flatten();
-    let style = if get("liveMenu").as_deref() == Some("off") { "off" } else { "window" };
+    // "off" was a third choice once; the panel's one switch turns the menu off now, with everything else
+    let style = if get("liveMenu").as_deref() == Some("game") { "game" } else { "window" };
     let key = get("liveMenuKey").and_then(|k| crate::hotkeys::normalize_menu(&k).ok()).unwrap_or_else(|| MENU_KEY.into());
-    MenuSettings { style: style.into(), key, pad: get("liveMenuPad").as_deref() != Some("0") }
+    MenuSettings { style: style.into(), key, pad: get("liveMenuPad").as_deref() != Some("0"), fast_save: get("liveFastSave").as_deref() != Some("0") }
 }
 
-/// Turn the menu on or off, or change its key.
+/// Change how the menu opens. The game reloads once to pick it up.
 pub fn set_menu(db: &Db, game: &str, set: &MenuSettings) -> Result<MenuSettings> {
-    if !["window", "off"].contains(&set.style.as_str()) { return Err(Error::Invalid("The menu is either on or off".into())); }
+    if !["window", "game"].contains(&set.style.as_str()) { return Err(Error::Invalid("Pick Over the game or Inside the game".into())); }
+    if set.style == "game" && menu_settings(db, game).style != "game" { tester_only(db, game)?; }
     let key = crate::hotkeys::normalize_menu(&set.key)?;
     if crate::hotkeys::combos(db).unwrap_or_default().contains(&key) { return Err(Error::Invalid(format!("{key} already switches a profile. Pick another key"))); }
     db.set_setting(&format!("{game}.liveMenu"), &set.style)?;
     db.set_setting(&format!("{game}.liveMenuKey"), &key)?;
     db.set_setting(&format!("{game}.liveMenuPad"), if set.pad { "1" } else { "0" })?;
+    db.set_setting(&format!("{game}.liveFastSave"), if set.fast_save { "1" } else { "0" })?;
     menu_sync(db, game);
     Ok(menu_settings(db, game))
 }
@@ -612,35 +640,46 @@ pub fn set_menu(db: &Db, game: &str, set: &MenuSettings) -> Result<MenuSettings>
 /// Bring live.ini and the menu's pictures up to date (after a scan: a mod was renamed, got another preview, or the
 /// app was updated). The game reloads when something changed.
 pub(crate) fn menu_sync(db: &Db, game: &str) {
+    fast_saves(db, game);
     let store = load_synced(db, game);
     if store.groups.is_empty() { return; }
     if write_live_ini(db, game, &store).unwrap_or(false) { crate::devtools::mark_changed(game); }
 }
 
-/// The games whose menu is on, with the key each one uses, for the app's hotkeys (held only while a game runs).
+/// The loaders save the game's values (a pick made in its own menu among them) a minute after one changed, so the
+/// app would show that pick a minute late. While a game has live characters and `fast_save` is on, d3dx.ini's
+/// `settings_auto_save_interval` is 1 instead: the game saves within a second of a change (and only then). The
+/// value it had goes back when that ends. The game reads it at its next load. d3dx.ini gets a backup first.
+pub(crate) fn fast_saves(db: &Db, game: &str) {
+    const FAST: &str = "1";
+    let Ok(imp) = crate::games::importer_dir(db, game) else { return };
+    let path = imp.join("d3dx.ini");
+    let Ok(text) = std::fs::read_to_string(&path) else { return };
+    // an older loader without the setting
+    let Some(now) = crate::gamecheck::d3dx_value(&text, "settings_auto_save_interval") else { return };
+    let now = now.trim().to_string();
+    let was_key = format!("{game}.saveIntervalWas");
+    let was = db.setting(&was_key).ok().flatten();
+    let want = if !load(db, game).groups.is_empty() && menu_settings(db, game).fast_save {
+        if now != FAST && was.as_deref() != Some(now.as_str()) { let _ = db.set_setting(&was_key, &now); }
+        FAST.to_string()
+    } else {
+        match was {
+            Some(w) if now == FAST => { let _ = db.clear_setting(&was_key); w }
+            _ => return,
+        }
+    };
+    if now == want { return; }
+    let out = crate::launch::ini_set(&text, "System", "settings_auto_save_interval", &want);
+    let bak = imp.join("d3dx.ini.gachamod.bak");
+    if !bak.exists() && std::fs::copy(&path, &bak).is_err() { return; }
+    let _ = crate::xxmi::write_atomic(&path, out.as_bytes());
+}
+
+/// The games whose menu the app opens (style "window") with the key each one uses, for the app's hotkeys.
 pub fn menu_keys(db: &Db) -> Vec<(String, MenuSettings)> {
-    crate::games::GAMES.iter().map(|g| (g.id.to_string(), menu_settings(db, g.id)))
-        .filter(|(g, s)| s.style == "window" && reaches(db, g)).collect()
-}
-
-/// The menu's settings for a game, whether the game runs, and whether gachamod's keys reach it.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct MenuInfo {
-    pub menu: MenuSettings,
-    pub running: bool,
-    /// The game runs as administrator and gachamod doesn't, so the menu key never reaches gachamod and the game
-    /// doesn't reload by itself.
-    pub blocked: bool,
-    /// gachamod presses F10 for the game when it comes back to the front after a change (not blocked, and the
-    /// setting "<game>.autoReload" isn't off).
-    pub reloads: bool,
-}
-
-pub fn menu_info(db: &Db, game: &str) -> MenuInfo {
-    let blocked = !reaches(db, game);
-    let auto = db.setting(&format!("{game}.autoReload")).ok().flatten().as_deref() != Some("0");
-    MenuInfo { menu: menu_settings(db, game), running: crate::launch::running(game), blocked, reloads: auto && !blocked }
+    crate::games::GAMES.iter().filter(|g| !load(db, g.id).groups.is_empty())
+        .map(|g| (g.id.to_string(), menu_settings(db, g.id))).filter(|(g, s)| s.style == "window" && reaches(db, g)).collect()
 }
 
 /// With the game closed, the saved value is what it loads next time (it wins over live.ini's default).
@@ -650,6 +689,19 @@ fn save_active(db: &Db, game: &str, g: &GroupRec) {
 }
 
 // ── the API ──
+
+/// The game has characters that switch in game (the watcher then follows what the game saves).
+pub fn has_groups(db: &Db, game: &str) -> bool { !load(db, game).groups.is_empty() }
+
+/// The game saved its values (`devtools::watch` saw d3dx_user.ini change while it runs): read back picks made in its
+/// own menu, and picks that waited for a reload and got there. True when the app's windows have something to show.
+pub fn follow_game(db: &Db, game: &str) -> bool {
+    let before = load(db, game);
+    if before.groups.is_empty() { return false; }
+    let after = load_synced(db, game);
+    after.waiting != before.waiting
+        || after.groups.iter().any(|g| before.groups.iter().any(|b| b.n == g.n && b.active != g.active))
+}
 
 /// Mod id -> live group, for the library (live mods of one group don't conflict and stay on together).
 pub fn groups_by_mod(db: &Db, game: &str) -> HashMap<String, u32> {
@@ -686,10 +738,11 @@ fn load_synced(db: &Db, game: &str) -> Store {
     let mut keep = store.waiting.clone();
     keep.extend(sends(|q| q.iter().filter(|(g, ..)| g == game).map(|s| s.1).collect::<Vec<_>>()));
     let fresh = saved_since_sent(game, &imp);
+    let mut read_back = HashSet::new();
     for g in store.groups.iter_mut().filter(|g| !keep.contains(&g.n)) {
         let saved = crate::ini::user_value(&imp, &var_name(g.n)).and_then(|v| v.parse::<f64>().ok()).map(|v| v.max(0.0) as u32);
         if fresh {
-            if let Some(v) = saved.filter(|v| *v != g.active) { g.active = v; moved = true; }
+            if let Some(v) = saved.filter(|v| *v != g.active) { g.active = v; moved = true; read_back.insert(g.n); }
         } else if !running && saved != Some(g.active) {
             // the game closed before it saved the app's last pick: the app's is the newer one, and the game loads
             // it next time
@@ -697,6 +750,8 @@ fn load_synced(db: &Db, game: &str) -> Store {
         }
     }
     if moved { let _ = save(db, game, &store); }
+    // the library's rows show what the game picked, not what the app picked last
+    if !read_back.is_empty() { sync_rows(db, game, &store, &read_back); }
     store
 }
 
@@ -778,6 +833,7 @@ pub fn info(db: &Db, game: &str) -> Result<LiveInfo> {
     let groups = store.groups.iter().map(|g| LiveGroup {
         group: g.n, character: g.character.clone(), active: g.active,
         mods: g.slots.iter().map(|s| live_mod(by_id.get(s.mod_id.as_str()).copied(), &s.mod_id, s.slot)).collect(),
+        waiting: running && store.waiting.contains(&g.n),
     }).collect();
     let mut by_char: HashMap<String, (String, Vec<&ModEntry>)> = HashMap::new();
     for m in &mods {
@@ -790,12 +846,12 @@ pub fn info(db: &Db, game: &str) -> Result<LiveInfo> {
         .map(|(c, l)| LiveReady { character: c, mods: l.into_iter().filter(|m| !live.contains(m.id.as_str())).map(|m| live_mod(Some(m), &m.id, 0)).collect() })
         .collect();
     ready.sort_by(|a, b| a.character.to_lowercase().cmp(&b.character.to_lowercase()));
-    Ok(LiveInfo { groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game) })
+    Ok(LiveInfo { groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game) })
 }
 
 /// Make mods live: each joins its character's group (made when missing). Mods that are off get turned on, since
 /// every live mod has to be loaded; the one that was on stays the one showing. Takes a reload to start working.
-pub fn add(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> { add_some(db, game, ids, true) }
+pub fn add(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> { tester_only(db, game)?; add_some(db, game, ids, true) }
 
 /// `strict`: nothing could be added and something was refused is an error (the player asked for these mods). Not
 /// strict is for "every character", where mods that can't be gated are just left as they are.
@@ -882,11 +938,16 @@ fn candidates(db: &Db, game: &str, store: &Store) -> Vec<String> {
         .map(|m| m.id).collect()
 }
 
-/// Turn "every character" on or off. On makes every mod with a character live now (also the ones taken out by hand
-/// before); off only stops new mods from joining.
+/// Turn switching skins in game on or off for the whole game: the panel's one switch. On makes every mod with a
+/// character live now (also the ones taken out by hand before). Off takes every character out, and each keeps the
+/// skin it shows.
 pub fn set_all(db: &Db, game: &str, on: bool) -> Result<LiveChange> {
+    if on { tester_only(db, game)?; }
     db.set_setting(&format!("{game}.liveAll"), if on { "1" } else { "0" })?;
-    if !on { return Ok(LiveChange::default()); }
+    if !on {
+        let ids: Vec<String> = load_synced(db, game).groups.iter().flat_map(|g| g.slots.iter().map(|s| s.mod_id.clone())).collect();
+        return if ids.is_empty() { Ok(LiveChange::default()) } else { remove(db, game, &ids) };
+    }
     let mut store = load_synced(db, game);
     if !store.out.is_empty() {
         store.out.clear();
@@ -913,7 +974,28 @@ pub(crate) fn settle(db: &Db, game: &str) -> bool {
 
 /// Stop switching mods live: their gates come out. The one showing stays on; the others are turned off, so the
 /// character doesn't wear two skins at once.
-pub fn remove(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> {
+pub fn remove(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> { remove_with(db, game, ids, false) }
+
+/// Shift on a live skin that isn't the one showing: it stops switching in game and goes on next to the skin its
+/// character shows. The ids it took out, and a note for each.
+pub(crate) fn release(db: &Db, game: &str, ids: &[String]) -> Result<(Vec<String>, Vec<String>)> {
+    let store = load_synced(db, game);
+    let (mut out, mut notes) = (Vec::new(), Vec::new());
+    for id in ids {
+        let Some(g) = store.groups.iter().find(|g| g.slots.iter().any(|s| &s.mod_id == id)) else { continue };
+        let slot = g.slots.iter().find(|s| &s.mod_id == id).map_or(0, |s| s.slot);
+        if g.active == 0 || g.active == slot { continue; }
+        let name_of = |id: &str| crate::library::get(db, game, id).map(|m| m.name).unwrap_or_else(|_| "the skin showing".into());
+        let shown = g.slots.iter().find(|s| s.slot == g.active).map(|s| name_of(&s.mod_id)).unwrap_or_default();
+        notes.push(format!("{} is on next to {shown}. It doesn't switch in game any more, so the game shows it after it reloads its mods", name_of(id)));
+        out.push(id.clone());
+    }
+    if !out.is_empty() { remove_with(db, game, &out, true)?; }
+    Ok((out, notes))
+}
+
+/// `keep_on`: the mods stay on as plain mods (`release`), instead of going off unless they were the one showing.
+fn remove_with(db: &Db, game: &str, ids: &[String], keep_on: bool) -> Result<LiveChange> {
     let mods = crate::library::list(db, game)?;
     let by_id: HashMap<&str, &ModEntry> = mods.iter().map(|m| (m.id.as_str(), m)).collect();
     let mut store = load_synced(db, game);
@@ -928,7 +1010,7 @@ pub fn remove(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> {
                 if let Some(b) = write_edits(db, game, m, &edits, &format!("Before {} stopped switching in game", m.name)).map_err(Error::Invalid)? {
                     out.backups.push(b);
                 }
-                if m.loaded() && g.active != s.slot { out.turned_off.push(m.id.clone()); }
+                if !keep_on && m.loaded() && g.active != s.slot { out.turned_off.push(m.id.clone()); }
             }
             if g.active == s.slot { g.active = 0; }
             out.changed.push(s.mod_id.clone());
@@ -959,13 +1041,18 @@ pub fn remove(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> {
 pub(crate) fn switch(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<ModChange> {
     let mut store = load_synced(db, game);
     let mut want: HashMap<u32, u32> = HashMap::new();
+    let mut change = ModChange::default();
+    let mut asked = HashSet::new();
     for (id, on) in targets {
         let Some(g) = store.groups.iter().find(|g| g.slots.iter().any(|s| &s.mod_id == id)) else { continue };
         let slot = g.slots.iter().find(|s| &s.mod_id == id).map_or(0, |s| s.slot);
         let now = want.get(&g.n).copied().unwrap_or(g.active);
-        if *on { want.insert(g.n, slot); } else if now == slot { want.insert(g.n, 0); }
+        asked.insert(g.n);
+        if *on { want.insert(g.n, slot); } else if now == slot { want.insert(g.n, 0); } else if targets.len() == 1 {
+            // turning off a skin the game doesn't show: it showed another since (picked in its own menu)
+            change.notes.push(not_showing(db, game, g, id));
+        }
     }
-    let mut change = ModChange::default();
     let mut touched = HashSet::new();
     let mut folders_on = Vec::new();
     let live_now = crate::launch::running(game);
@@ -982,7 +1069,11 @@ pub(crate) fn switch(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<
         g.active = slot;
         touched.insert(g.n);
     }
-    if touched.is_empty() { return Ok(change); }
+    if touched.is_empty() {
+        // the library's rows may be behind what the game picked: bring them in line
+        change.changed = sync_rows(db, game, &store, &asked);
+        return Ok(change);
+    }
     save(db, game, &store)?;
     write_live_ini(db, game, &store)?;
     let running = crate::launch::running(game);
@@ -995,15 +1086,26 @@ pub(crate) fn switch(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<
         change.notes.extend(c.notes);
         if running && !c.changed.is_empty() { change.notes.push("It shows after the game reloads".into()); }
     }
-    change.changed = sync_rows(db, game, &store, &touched);
+    change.changed = sync_rows(db, game, &store, &asked);
     Ok(change)
 }
 
+/// "Coca Cola isn't showing. Ellen Joe wears Bunny in the game".
+fn not_showing(db: &Db, game: &str, g: &GroupRec, id: &str) -> String {
+    let name_of = |id: &str| crate::library::get(db, game, id).map(|m| m.name).unwrap_or_else(|_| "That mod".into());
+    let wears = g.slots.iter().find(|s| s.slot == g.active).map_or_else(|| "the game's own look".to_string(), |s| name_of(&s.mod_id));
+    format!("{} isn't showing. {} wears {wears} in the game", name_of(id), g.character)
+}
+
 /// A mod of `character` that isn't live was turned on (library one-skin rule): the character's live group shows
-/// none of its mods from then on, so the character doesn't wear two skins. The live skin rows that went off.
-pub(crate) fn hide_group(db: &Db, game: &str, character: &str) -> Vec<ModEntry> {
+/// none of its mods from then on, so the character doesn't wear two skins, unless `with` changes other parts than the
+/// skin showing. The live skin rows that went off.
+pub(crate) fn hide_group(db: &Db, game: &str, character: &str, with: &ModEntry) -> Vec<ModEntry> {
     let mut store = load_synced(db, game);
     let Some(g) = store.groups.iter_mut().find(|g| g.character.eq_ignore_ascii_case(character) && g.active != 0) else { return Vec::new() };
+    // a mod that changes other parts (a hair recolour next to an outfit) leaves the skin showing
+    let shown = g.slots.iter().find(|s| s.slot == g.active).and_then(|s| crate::library::get(db, game, &s.mod_id).ok());
+    if shown.is_some_and(|s| !crate::library::share_parts(&s, with)) { return Vec::new(); }
     g.active = 0;
     let n = g.n;
     if save(db, game, &store).is_err() { return Vec::new(); }
@@ -1133,10 +1235,30 @@ pub fn flush_sends(db: &crate::db::Shared) -> Vec<String> {
     let mut notes = Vec::new();
     for (game, groups) in &missed {
         defer(&d, game, groups);
-        if crate::launch::running(game) { notes.extend(crate::devtools::f10_note(&d, game)); }
+        if !crate::launch::running(game) { continue; }
+        // the first time in a run the longer line (with why), after that a short one each time
+        match crate::devtools::f10_note(&d, game) {
+            Some(n) => notes.push(n),
+            None => notes.push(waiting_line(&d, game, groups)),
+        }
     }
     done();
     notes
+}
+
+/// "Ellen Joe's skin changes after the game reloads its mods. Press F10 in the game".
+fn waiting_line(db: &Db, game: &str, groups: &[u32]) -> String {
+    let store = load(db, game);
+    let names: Vec<&str> = store.groups.iter().filter(|g| groups.contains(&g.n)).map(|g| g.character.as_str()).collect();
+    let who = match names.as_slice() {
+        [] => "The skin".to_string(),
+        [one] => format!("{one}'s skin"),
+        [first, rest @ ..] => format!("{first}'s skin and {} more", rest.len()),
+    };
+    let key = crate::devtools::key_name(game);
+    let manual = crate::devtools::keys_blocked(game) || db.setting(&format!("{game}.autoReload")).ok().flatten().as_deref() == Some("0");
+    if manual { format!("{who} changes after the game reloads its mods. Press {key} in the game") }
+    else { format!("{who} changes when you go back to the game. gachamod presses {key} there to reload its mods") }
 }
 
 /// Picks the game didn't get: live.ini asks for them at its next load. With the game closed they go into its saved
@@ -1299,7 +1421,7 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
         let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true);
         // the app's own key can open the game's menu, and the game binds no key of its own for it
         assert!(t.contains("if $cg == 0 && $cv == 1\r\n  run = CommandListMenuToggle\r\nendif\r\n$cg = 0\r\n") && !t.contains("[KeyMenuOpen]"));
-        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false }, &menu::Layout::new(1080), true);
+        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false, fast_save: true }, &menu::Layout::new(1080), true);
         assert!(direct.contains("[KeyMenuOpen]\r\nkey = ctrl alt no_shift no_windows M\r\nrun = CommandListMenuToggle"));
         let off = live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true);
         // a game that runs as administrator while the app doesn't: the app's key can't work, so the game binds it

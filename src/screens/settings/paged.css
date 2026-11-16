@@ -53,4 +53,6 @@
   .pg-g { display: contents; }
   .pg-group { display: none; }
   .pg-nav-i { flex: none; }
+  /* the row scrolls and clips, so the focus ring sits inside the item */
+  .pg-nav-i:focus-visible, html.kbd .pg-nav-i:focus { outline-offset: -2px; }
 }

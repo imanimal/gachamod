@@ -51,7 +51,10 @@
 .char-owned.on { color: var(--accent-ink); }
 .char-hero-nav { display: flex; gap: .3rem; align-self: flex-start; }
 
-.char-strip { margin-bottom: .9rem; }
+.char-strip-wrap { display: flex; align-items: center; gap: .25rem; margin-bottom: .9rem; }
+.char-strip-wrap > .char-strip { flex: 1; min-width: 0; }
+.char-strip-wrap.is-all { align-items: flex-start; }
+.char-strip-wrap.is-all > .ibtn { margin-top: .9rem; }
 .char-strip .pchip-img .portrait { width: 100% !important; height: 100% !important; border-radius: 50%; }
 
 @media (max-width: 40rem) {

@@ -3,11 +3,12 @@
 import { memo, type KeyboardEvent, type MouseEvent } from "react";
 import type { GameId, ModEntry } from "../../lib/api";
 import type { ModHealth } from "../../lib/fixes";
-import { go } from "../../lib/store";
+import { go, reloadKeyOf } from "../../lib/store";
 import { kindName, libKind } from "./kinds";
 import { Badge, IconButton, Toggle, formatBytes } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
+import { useLiveCharacter, useLiveWaiting } from "../ingame/data";
 import { openDetails, setFavourite } from "./actions";
 import { Preview, type NsfwMode } from "./Preview";
 
@@ -24,7 +25,8 @@ export interface ModCardProps {
   /** The character's portrait, shown when the mod has no picture of its own. */
   portrait?: string | null;
   onOpen: (mod: ModEntry, e: MouseEvent) => void;
-  onToggle: (mod: ModEntry, on: boolean) => void;
+  /** `keep`: Shift was held, so the character's other mods stay on. */
+  onToggle: (mod: ModEntry, on: boolean, keep: boolean) => void;
   onMenu: (mod: ModEntry, anchor: HTMLElement) => void;
   onUpdate: (mod: ModEntry) => void;
   /** The card's hover tip, when the page gives its switch another meaning (a profile's page). */
@@ -47,6 +49,8 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
   const cls = ["card", "mod-card", row && "is-row", selected && "sel", !mod.enabled && "is-off"].filter(Boolean).join(" ");
   const broken = health && (health.status === "broken" || health.status === "unfixable");
   const by = mod.source?.submitter;
+  const live = useLiveCharacter(game, mod.id);
+  const waiting = useLiveWaiting(game, mod.id);
   return (
     <div className={cls} data-pad-x data-mod={mod.id}>
       <button type="button" className="mod-card-hit" data-idx={index} aria-pressed={selected}
@@ -90,9 +94,15 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
         {mod.parent && parentName && <Badge tone="muted" icon="link" onClick={() => openDetails({ id: mod.parent! })}
           title={`A sub-mod of ${parentName}: it turns off with it and never counts as another skin. Click to open ${parentName}`}>Sub-mod</Badge>}
         {mod.hasKeys && <Badge tone="muted" icon="key" onClick={() => openDetails(mod, "keys")} title="Has toggles or options. Click to see them">Toggles</Badge>}
+        {live && !waiting && <Badge tone="muted" icon="swap" onClick={() => openDetails(mod, "ingame")}
+          title={`Turning it on switches ${live}'s skin in game at once, without ${reloadKeyOf(game)}. Click for its in-game options`}>Live</Badge>}
+        {live && waiting && <Badge tone="warn" icon="swap" onClick={() => openDetails(mod, "ingame")}
+          title={`gachamod couldn't key this pick into the game, so ${live} wears it after the game reloads its mods (${reloadKeyOf(game)}). Click for its in-game options`}>Next reload</Badge>}
       </span>
       <span className="mod-card-foot">
-        <Toggle size="sm" checked={mod.enabled} onChange={(v) => onToggle(mod, v)} label={<span className="sr-only">{mod.enabled ? "On" : "Off"}</span>} />
+        <Toggle size="sm" checked={mod.enabled} onChange={(v, shift) => onToggle(mod, v, shift)} label={<span className="sr-only">{mod.enabled ? "On" : "Off"}</span>}
+          title={mod.enabled ? "Turn off (Space)" : live ? `Turn on (Space). It replaces ${live}'s skin in game. Shift+click or Shift+Space shows it next to that skin instead, and it stops switching in game`
+            : mod.character ? `Turn on (Space). Shift+click or Shift+Space keeps ${mod.character}'s other mods on too` : "Turn on (Space)"} />
         <IconButton icon="more" size="sm" label="More actions (right-click, or X on a controller)" className="mod-card-more" data-pad-x-target
           onClick={(e) => onMenu(mod, e.currentTarget)} />
       </span>

@@ -21,6 +21,8 @@ export interface Command {
   where?: string;
   /** Higher shows first among equal matches. */
   priority?: number;
+  /** Shown after everything else that matches, whatever its score ("Search GameBanana for ..."). */
+  fallback?: boolean;
   run: () => void;
 }
 
@@ -33,7 +35,7 @@ export function registerCommands(id: string, src: CommandSource): () => void {
   sources.set(id, src);
   return () => { if (sources.get(id) === src) sources.delete(id); };
 }
-export const commandSources = () => [...sources.values()];
+export const commandSources = () => [...sources.entries()];
 
 // ── matching ──
 

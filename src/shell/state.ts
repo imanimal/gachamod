@@ -68,8 +68,8 @@ export const toggleHelp = () => help.set(!help.get());
 
 // ── the command palette ──
 
-/** Open the command palette, optionally with text typed in it. */
-export const openPalette = (text?: string) => emitApp({ type: "palette", text });
+/** Open the command palette, optionally with text typed in it. `typed` adds the text when it is already open. */
+export const openPalette = (text?: string, typed?: boolean) => emitApp({ type: "palette", text, typed });
 
 // ── drawing a little attention to the search box ──
 

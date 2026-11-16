@@ -26,6 +26,8 @@ import { openGbMod, openGbTool, useLibIndex } from "./state";
 import { useQueue } from "./useQueue";
 import { setOn } from "../library/actions";
 import { pityOpened } from "../../lib/fun";
+import { reveal, rowKeys, useSideScroll } from "./sideScroll";
+import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { LazyImg } from "../../ui/LazyImg";
 import { hintClass, useHint } from "../../shell/hints";
 
@@ -253,6 +255,14 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
   mod: GbMod; blurred: boolean; shown: number; setShown: (i: number) => void; onOpen: (i: number) => void; onReveal: () => void;
 }) {
   const [broken, setBroken] = useState<Set<number>>(new Set());
+  // the thumbnails scroll sideways with the wheel and follow the picture shown
+  const thumbs = useRef<HTMLDivElement>(null);
+  const [all, toggleAll] = useRowOpen("drawer.pictures");
+  const edges = useSideScroll(thumbs, [mod.id, mod.images.length, all]);
+  useEffect(() => {
+    const row = thumbs.current, on = row?.querySelector(".gb-thumb.on");
+    if (row && on) reveal(row, on);
+  }, [shown, mod.id]);
   const img = mod.images[shown];
   if (!img) return <div className="gb-gallery gb-gallery-empty"><Icon name="image" /><span>No pictures</span></div>;
   return (
@@ -265,13 +275,16 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
         {blurred && <span className="gb-nsfw-cover"><span className="gb-nsfw-badge is-inline">18+</span><span className="gb-nsfw-show on-img">Show pictures</span></span>}
       </button>
       {mod.images.length > 1 && (
-        <div className="gb-gallery-thumbs" role="listbox" aria-label="Pictures">
+        <div className={`gb-gallery-thumbs-wrap${all ? " is-all" : ""}`}>
+        <div ref={thumbs} className={`gb-gallery-thumbs${all ? " is-all" : ""}`} role="listbox" aria-label="Pictures" onKeyDown={(e) => rowKeys(e, ".gb-thumb")}>
           {mod.images.map((m, i) => (
             <button key={`${m.full}-${i}`} type="button" role="option" aria-selected={i === shown} className={`gb-thumb${i === shown ? " on" : ""}`}
               title={m.caption ?? `Picture ${i + 1}`} onClick={() => setShown(i)}>
               <LazyImg src={imageAt(m, 100)} alt="" decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
             </button>
           ))}
+        </div>
+        <ShowAll open={all} onToggle={toggleAll} fits={!edges.left && !edges.right} label={`Show all ${mod.images.length} pictures`} />
         </div>
       )}
     </div>

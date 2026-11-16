@@ -1,10 +1,10 @@
-// Running as administrator: the button on the F10 note, and the one place that restarts gachamod as administrator.
+// Running as administrator: the button on the reload key note, and the one place that restarts gachamod as administrator.
 // Owner: SYSTEM area.
 import { admin, errorText } from "./api";
 import { toast, toastHelper } from "../ui/toast";
 
 /** devtools::f10_note's line for a game that runs as administrator. */
-const isAdminNote = (text: string) => text.startsWith("Press F10 in the game") && text.includes("administrator");
+const isAdminNote = (text: string) => /^Press \S+ in the game to load changes/.test(text) && text.includes("administrator");
 
 /** Close gachamod and open it again as administrator (Windows asks first). */
 export function restartAsAdmin() {

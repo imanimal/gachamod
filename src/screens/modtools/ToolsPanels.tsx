@@ -270,7 +270,7 @@ export function KeyClashesPanel() {
             ))}
           </ul>
           {aiShown("useful") && game && (
-            <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of these mods draws the character, then apply its answer"
+            <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of these mods draws the character, then apply its answer. Takes a strong chatbot, like Claude Opus 5.5"
               onClick={() => askAi({ kind: "keys-offscreen", game, modIds: skipped.slice(0, 8).map((s) => s.modId) })}>Ask the AI helper</Button>
           )}
         </div>

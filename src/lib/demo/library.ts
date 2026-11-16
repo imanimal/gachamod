@@ -278,24 +278,10 @@ export function setFolders(game: string, ids: string[], on: boolean, oneSkin: bo
   const byId = new Map(list.map((m) => [m.id, m]));
   if (ids.length && !ids.some((id) => byId.has(id))) throw err("Those mods aren't in the library anymore. Rescan to refresh the list");
   const change: ModChange = { changed: [], removed: [], notes: [] };
-  const skip = new Set<string>();
-  if (on && oneSkin) {
-    const last = new Map<string, string>();
-    for (const id of ids) { const c = byId.get(id)?.character; if (c) last.set(c.toLowerCase(), id); }
-    for (const id of ids) {
-      const m = byId.get(id);
-      const winner = m?.character ? last.get(m.character.toLowerCase()) : undefined;
-      if (m && winner && winner !== id && !m.enabled && rootOf(byId.get(winner)!) !== rootOf(m)) {
-        skip.add(id);
-        const note = `One skin per character: kept ${byId.get(winner)?.name} on for ${m.character}`;
-        if (!change.notes.includes(note)) change.notes.push(note);
-      }
-    }
-  }
   const turnedOn: string[] = [];
   for (const id of new Set(ids)) {
     const m = byId.get(id);
-    if (!m || skip.has(id)) continue;
+    if (!m) continue;
     if (on) turnedOn.push(id);
     if (toggle(game, m, on)) change.changed.push({ ...m });
   }
@@ -435,6 +421,7 @@ export function registerLibraryDemo() {
       change.notes.unshift(...fam.notes);
       return change;
     },
+    mods_overlapping: async ({ others }) => { await demoWait(60); return (others as string[]) ?? []; },
     mod_update_meta: ({ game, id, patch }) => {
       const m = findMod(String(game), String(id));
       const p = (patch ?? {}) as MetaPatch;

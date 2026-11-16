@@ -189,8 +189,13 @@ pub fn mods_dir(db: &Db, id: &str) -> Result<PathBuf> {
 /// The importer folder (d3dx.ini, d3dx_user.ini, Mods, ShaderFixes). Falls back to the Mods folder's parent.
 pub fn importer_dir(db: &Db, id: &str) -> Result<PathBuf> {
     let p = paths(db, id)?;
-    if let Some(i) = p.importer_dir { return Ok(PathBuf::from(i)); }
-    p.mods_dir.and_then(|m| PathBuf::from(m).parent().map(|x| x.to_path_buf())).ok_or_else(|| not_set_up(id, "model importer folder"))
+    let imp = match (&p.importer_dir, &p.mods_dir) {
+        (Some(i), _) => PathBuf::from(i),
+        (None, m) => m.as_ref().and_then(|m| PathBuf::from(m).parent().map(|x| x.to_path_buf())).ok_or_else(|| not_set_up(id, "model importer folder"))?,
+    };
+    // saved mod options in d3dx_user.ini are named after the Mods folder's path from here
+    if let Some(m) = &p.mods_dir { crate::ini::note_mods_dir(&imp, std::path::Path::new(m)); }
+    Ok(imp)
 }
 
 /// The game's own install folder.
@@ -228,6 +233,7 @@ pub fn list(db: &Db) -> Result<Vec<GameState>> {
             importer_latest: imp.and_then(|i| i.latest_version.clone()),
             running: running.contains(&g.id),
             mod_count, enabled_count,
+            reload_key: crate::devtools::reload_key(db, g.id).name,
             game_dir: p.game_dir, importer_dir: p.importer_dir, mods_dir: p.mods_dir, via_xxmi: p.via_xxmi,
             ..Default::default()
         });
@@ -275,9 +281,11 @@ pub fn discover(xxmi_root: Option<&str>) -> Vec<Found> {
         if matches!(g.id, "gi" | "hsr" | "zzz" | "hi3") { cands.extend(hoyoplay_paths()); cands.extend(default_dirs(g, &[r"C:\Program Files\HoYoPlay\games"])); }
         if g.id == "ww" { cands.extend(kuro_paths()); cands.extend(default_dirs(g, &[r"C:\Program Files\Wuthering Waves", r"C:\Wuthering Waves", r"D:\Wuthering Waves"])); }
         if g.id == "ef" { cands.extend(gryphlink_paths(g)); cands.extend(default_dirs(g, &[r"C:\Program Files\GRYPHLINK\games", r"D:\GRYPHLINK\games"])); }
-        if let Some(app) = g.steam_app { cands.extend(steam_app_dirs(app)); }
         for exe in g.exe_names { cands.extend(folders_from_value_names(&mui, exe)); }
-        let Some(dir) = cands.into_iter().find_map(|c| find_game_dir(g, &c)) else { continue };
+        // a Steam copy may keep the game a folder further down, beside the launcher Steam starts
+        let steam = g.steam_app.map(steam_app_dirs).unwrap_or_default();
+        let found = cands.into_iter().find_map(|c| find_game_dir(g, &c)).or_else(|| steam.iter().find_map(|c| find_game_dir_deep(g, c)));
+        let Some(dir) = found else { continue };
         match out.iter_mut().find(|f| f.game == g.id) {
             Some(f) => f.game_dir = Some(dir),
             None => out.push(Found { game: g.id, game_dir: Some(dir), importer_dir: None, via_xxmi: false }),
@@ -324,6 +332,13 @@ pub fn find_game_dir(g: &GameDef, dir: &Path) -> Option<PathBuf> {
         if p.is_dir() && ok(&p) { return Some(p); }
     }
     None
+}
+
+/// Like find_game_dir, and also one folder further down.
+pub fn find_game_dir_deep(g: &GameDef, dir: &Path) -> Option<PathBuf> {
+    find_game_dir(g, dir).or_else(|| {
+        std::fs::read_dir(dir).ok()?.flatten().take(40).map(|k| k.path()).filter(|p| p.is_dir()).find_map(|p| find_game_dir(g, &p))
+    })
 }
 
 fn default_dirs(g: &GameDef, bases: &[&str]) -> Vec<PathBuf> {
@@ -418,6 +433,12 @@ fn steam_root() -> Option<PathBuf> {
     p.exists().then_some(p)
 }
 
+/// The folder is in a Steam library (`...\steamapps\common\...`).
+pub fn in_steam_library(dir: &Path) -> bool { dir.to_string_lossy().to_lowercase().contains("steamapps") }
+
+/// steam.exe, when Steam is installed.
+pub fn steam_exe() -> Option<PathBuf> { steam_root().map(|r| r.join("steam.exe")).filter(|p| p.is_file()) }
+
 fn steam_app_dirs(app: u32) -> Vec<PathBuf> {
     let Some(root) = steam_root() else { return vec![] };
     let mut libs = vec![root.clone()];
@@ -448,6 +469,26 @@ fn gryphlink_paths(g: &GameDef) -> Vec<PathBuf> {
     }
     let _ = g;
     out
+}
+
+/// The GRYPHLINK launcher that installed Endfield in `game_dir` (`<launcher>\games\EndField Game`), or the one the
+/// registry or the usual folders name.
+pub fn gryphlink_launcher(game_dir: &Path) -> Option<PathBuf> {
+    let mut cands: Vec<PathBuf> = game_dir.parent().and_then(Path::parent).map(|p| p.join("Launcher.exe")).into_iter().collect();
+    #[cfg(windows)]
+    {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        if let Ok(k) = RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Software\GRYPHLINK\Launcher") {
+            for sub in k.enum_keys().flatten() {
+                if let Ok(p) = k.open_subkey(&sub).and_then(|s| s.get_value::<String, _>("install_path")) { cands.push(PathBuf::from(p).join("Launcher.exe")); }
+            }
+        }
+    }
+    for base in [r"C:\Program Files", r"C:\Program Files (x86)"] {
+        cands.push(Path::new(base).join("GRYPHLINK").join("Launcher.exe"));
+        cands.push(Path::new(base).join("Hypergryph Launcher").join("Launcher.exe"));
+    }
+    cands.into_iter().find(|p| p.is_file())
 }
 
 /// Value names from Windows' MuiCache and FeatureUsage keys: full exe paths of programs this user ran.
@@ -544,6 +585,14 @@ mod tests {
         std::fs::write(game.join("ZenlessZoneZero.exe"), b"").unwrap();
         assert_eq!(find_game_dir(zzz, &base), Some(game.clone()));
         assert_eq!(find_game_dir(zzz, &game), Some(game.clone()));
+        let steam = base.join("steamapps").join("common").join("ZenlessZoneZero");
+        let nested = steam.join("Games").join("ZenlessZoneZero Game");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("ZenlessZoneZero.exe"), b"").unwrap();
+        assert_eq!(find_game_dir(zzz, &steam), None);
+        assert_eq!(find_game_dir_deep(zzz, &steam), Some(nested.clone()));
+        assert!(in_steam_library(&nested));
+        assert!(!in_steam_library(&game));
 
         let db = Db::memory().unwrap();
         let importer = base.join("ZZMI");

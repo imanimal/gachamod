@@ -4,8 +4,8 @@
 // opens the chatbot (with the prompt already in the box where the site allows it), then reads the answer back when
 // pasted, checks it, shows what would change and applies it with Undo. Nothing is sent anywhere without the user
 // clicking. How much of this shows is the user's call: off (no AI element anywhere), useful (default: only entry
-// points that save real work) or all. Adult mods' names stay out of prompts unless the user turns that off: the
-// prompt says they're hidden and why, so the chatbot neither refuses the request nor renames what it can't see.
+// points that save real work) or all. Adult mods stay out of prompts unless the user turns that off, and nothing in
+// a prompt says a mod is for adults: chatbots refuse a whole request over one explicit name or label.
 // Owner: SETTINGS/AI area.
 import type { GameId } from "./api";
 import { call } from "./tauri";
@@ -39,14 +39,16 @@ export function hideFromAi(m: { name: string; folder?: string | null; tags?: str
   if (!aiHideAdultPref.get()) return false;
   return !!m.nsfw || ADULT_WORDS.test(m.name) || ADULT_WORDS.test(m.folder ?? "") || (m.tags ?? []).some((t) => ADULT_WORDS.test(t));
 }
-/** Tags that are fine to send. */
-export const safeTags = (tags: string[]) => tags.filter((t) => !ADULT_WORDS.test(t));
 
-/** What a prompt says about hidden names, so the chatbot doesn't refuse the request or guess at them. */
-export function hiddenNote(n: number): string {
-  if (!n) return "";
-  return `${n === 1 ? "One mod is" : `${n} mods are`} for adults, so ${n === 1 ? "its name and folder are" : "their names and folders are"} hidden on purpose and this request has nothing explicit in it. Treat ${n === 1 ? "it" : "them"} like the others, but don't rename ${n === 1 ? "it" : "them"}.`;
-}
+/** Explicit words inside ini file and section names ("BelleNudeBody"), matched anywhere since names run together. */
+const ADULT_PARTS = /(?<![a-z])r-?18(?!\d)|18\+|nsfw|nudity|nude|naked|lewd|hentai|porn|sex|explicit|topless|bottomless|futa|ahegao|lingerie|boob|breast|nipple|genital|uncensored/gi;
+/** A file or section name with explicit words swapped for "Alt" while hiding is on. */
+export const neutralName = (s: string) => (aiHideAdultPref.get() ? s.replace(ADULT_PARTS, "Alt") : s);
+
+/** Why a request can't be made when every mod in it stays out of prompts. Names the setting, so lib/places.ts adds
+ *  its button. */
+export const nothingToSendNote = (n: number) =>
+  `Nothing to send: "Hide adult mods from the chatbot" keeps ${n === 1 ? "this mod" : "these mods"} out of prompts.`;
 
 /** "done" once the first-run suggestion was answered or dismissed. */
 export const aiIntroPref = pref<string>("ai.intro", "", (r) => r, (v) => v);
@@ -103,9 +105,9 @@ export function installedChatbots(): Promise<ChatbotId[]> {
 /** What to ask for. Areas start one with askAi(); the AI host (screens/ai/AiHost.tsx) builds the prompt. */
 export interface AiTask {
   /** "theme": a theme from a description; "mods": mass edits to mods (rename, tags, characters, hide adult names);
-   *  "keys-offscreen": make these mods' keys work only while they are on screen; "fix-mod": help with a broken mod;
+   *  "keys-offscreen": make these mods' keys work only while they are on screen;
    *  "recommend": mod ideas from a library summary in `detail`; "custom": free text about these mods. */
-  kind: "theme" | "mods" | "keys-offscreen" | "fix-mod" | "recommend" | "custom" | (string & {});
+  kind: "theme" | "mods" | "keys-offscreen" | "recommend" | "custom" | (string & {});
   /** Shown as the helper's title ("Fix keys for 3 mods"). */
   title?: string;
   game?: GameId;

@@ -79,6 +79,8 @@ export const library = {
    *  keeps them on). Left out, the "<game>.oneSkin" setting decides. Sub-mods go with their parent either way. */
   setEnabled: (game: GameId, ids: string[], on: boolean, turnOffOthers?: boolean) =>
     call<ModChange>("mods_set_enabled", { game, ids, on, turnOffOthers: turnOffOthers ?? null }),
+  /** Of `others`, the mods that change the same parts as any of `ids` (a hash both override). */
+  overlapping: (game: GameId, ids: string[], others: string[]) => call<string[]>("mods_overlapping", { game, ids, others }),
   updateMeta: (game: GameId, id: string, patch: MetaPatch) => call<ModEntry>("mod_update_meta", { game, id, patch }),
   move: (game: GameId, id: string, group: string | null) => call<ModEntry>("mod_move", { game, id, group }),
   remove: (game: GameId, ids: string[]) => call<ModChange>("mods_remove", { game, ids }),

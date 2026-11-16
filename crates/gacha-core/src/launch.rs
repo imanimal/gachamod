@@ -295,8 +295,17 @@ pub fn ini_set(text: &str, section: &str, key: &str, value: &str) -> String {
 /// an admin prompt can keep the start waiting).
 #[derive(Debug, Clone)]
 pub enum Plan {
-    Xxmi { root: Option<String>, importer: &'static str },
+    /// `to_steam`: switch XXMI's Game Launch to Steam first (steam_only).
+    Xxmi { root: Option<String>, importer: &'static str, to_steam: bool },
     Direct { exe: PathBuf, args: String, dir: PathBuf, pre_launch: Option<(Hook, PathBuf)>, loader: Option<(PathBuf, PathBuf)> },
+}
+
+/// Games whose Steam copy refuses to start unless Steam starts it (it asks to be launched from Steam).
+const STEAM_ONLY: &[&str] = &["zzz"];
+
+/// The game's Steam app id when this copy is a Steam copy that only starts from Steam.
+fn steam_only(g: &GameDef, game_dir: &Path) -> Option<u32> {
+    g.steam_app.filter(|_| STEAM_ONLY.contains(&g.id) && games::in_steam_library(game_dir))
 }
 
 /// Start the game. `vanilla`: start without mods (direct exe, no injection).
@@ -308,7 +317,10 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
     let cfg = config(db, game)?;
     let paths = games::paths(db, game)?;
     if !vanilla && cfg.xxmi_available && cfg.via == "xxmi" {
-        return Ok(Plan::Xxmi { root: db.setting("xxmi.root")?.filter(|s| !s.is_empty()), importer: g.importer });
+        let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
+        let steam = paths.game_dir.as_deref().is_some_and(|d| steam_only(g, Path::new(d)).is_some());
+        let to_steam = steam && crate::xxmi::starts_exe(root.as_deref(), g.importer);
+        return Ok(Plan::Xxmi { root, importer: g.importer, to_steam });
     }
     let game_dir = paths.game_dir.map(PathBuf::from)
         .ok_or_else(|| Error::NotSetUp(format!("{}'s game folder isn't set. Pick it in Settings", g.name)))?;
@@ -331,13 +343,29 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
     let loader = if !vanilla && !g.xxmi {
         games::importer_dir(db, game).ok().and_then(|i| find_loader(&i).map(|l| (l, i)))
     } else { None };
+    // Endfield outside Steam only starts under its GRYPHLINK launcher (XXMI starts the launcher's Games.exe as its
+    // parent), so gachamod opens the launcher and the player presses Start there
+    let custom = cfg.custom_exe.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let steam = exe.to_string_lossy().to_lowercase().contains("steamapps");
+    let (exe, args) = match (game == "ef" && !custom && !steam).then(|| games::gryphlink_launcher(&game_dir)).flatten() {
+        Some(l) => (l, String::new()),
+        None => (exe, cfg.args.trim().to_string()),
+    };
+    // a Steam copy that only starts from Steam: Steam starts it, with the same arguments
+    let (exe, args) = match (!custom).then(|| steam_only(g, &game_dir)).flatten().zip(games::steam_exe()) {
+        Some((app, steam_exe)) => (steam_exe, format!("-silent -applaunch {app} {args}").trim_end().to_string()),
+        None => (exe, args),
+    };
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or(game_dir);
-    Ok(Plan::Direct { exe, args: cfg.args.trim().to_string(), dir, pre_launch, loader })
+    Ok(Plan::Direct { exe, args, dir, pre_launch, loader })
 }
 
 pub fn start(plan: Plan) -> Result<()> {
     match plan {
-        Plan::Xxmi { root, importer } => crate::xxmi::launch(root.as_deref(), importer),
+        Plan::Xxmi { root, importer, to_steam } => {
+            if to_steam { crate::xxmi::launch_through_steam(root.as_deref(), importer)?; }
+            crate::xxmi::launch(root.as_deref(), importer)
+        }
         Plan::Direct { exe, args, dir, pre_launch, loader } => {
             if let Some((hook, at)) = pre_launch { run_hook(&hook, &at)?; }
             if let Some((l, at)) = loader {
@@ -350,10 +378,29 @@ pub fn start(plan: Plan) -> Result<()> {
     }
 }
 
+/// The plan opens the game's own launcher instead of the game (Endfield outside Steam).
+fn opens_launcher(game: &str, plan: &Plan) -> bool {
+    game == "ef" && matches!(plan, Plan::Direct { exe, .. } if exe.file_name().is_some_and(|f| f.eq_ignore_ascii_case("Launcher.exe")))
+}
+
 /// What to tell the player as the game starts: a community game whose loader gachamod couldn't find starts alone,
-/// so its mods only show if the player started the loader.
+/// so its mods only show if the player started the loader; a start without mods while that loader still runs gets
+/// mods anyway; Endfield outside Steam opens its launcher instead of the game; a Steam copy that only starts from
+/// Steam makes XXMI start it through Steam.
 pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool) -> Option<String> {
     let g = games::def(game)?;
+    if opens_launcher(game, plan) {
+        return Some(format!("Opened the GRYPHLINK launcher. Press Start there: outside Steam, {} starts from its launcher", g.name));
+    }
+    if matches!(plan, Plan::Xxmi { to_steam: true, .. }) {
+        return Some(format!("The Steam copy of {} only starts from Steam, so XXMI Launcher now starts it through Steam. It may restart Steam once to set the game's launch options", g.name));
+    }
+    if vanilla && !g.xxmi {
+        let loader = games::importer_dir(db, game).ok().and_then(|i| find_loader(&i))?;
+        let name = loader.file_name()?.to_string_lossy().to_string();
+        let open = processes().iter().any(|p| name_matches(&p.name, &name));
+        return open.then(|| format!("{name} is still running, so it can load mods into {}. Close it to play without mods", g.name));
+    }
     if vanilla || g.xxmi || !matches!(plan, Plan::Direct { loader: None, .. }) { return None; }
     let dir = games::importer_dir(db, game).ok().map_or_else(|| "the mod loader's folder".to_string(), |d| d.display().to_string());
     Some(format!("Started {} without a mod loader. gachamod found no loader exe in {dir}, so start yours first if mods don't show", g.name))
@@ -485,6 +532,15 @@ mod tests {
     use super::*;
 
     fn p(pid: u32, name: &str) -> Proc { Proc { pid, name: name.into() } }
+
+    #[test]
+    fn only_zzz_steam_copies_start_from_steam() {
+        let zzz = games::def("zzz").unwrap();
+        let steam = Path::new(r"D:\SteamLibrary\steamapps\common\ZenlessZoneZero\ZenlessZoneZero Game");
+        assert_eq!(steam_only(zzz, steam), Some(4162040));
+        assert_eq!(steam_only(zzz, Path::new(r"C:\Program Files\HoYoPlay\games\ZenlessZoneZero Game")), None);
+        assert_eq!(steam_only(games::def("ww").unwrap(), Path::new(r"D:\SteamLibrary\steamapps\common\Wuthering Waves")), None);
+    }
 
     #[test]
     fn matches_process_names_any_case() {

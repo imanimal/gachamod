@@ -31,8 +31,9 @@ function write(game: GameId, list: SavedFilter[]) {
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 export const useSavedFilters = (game: GameId) => useSyncExternalStore(subscribe, () => read(game));
 
-/** A name from what the filters hold: "Ellen Joe, Outfits, High quality". */
-export function describe(f: BrowseFilters): string {
+/** A name from what the filters hold: "Ellen Joe, Outfits, High quality". `full` names the sort even when it's the
+ *  default one. */
+export function describe(f: BrowseFilters, full = false): string {
   const parts = [
     f.search && `"${f.search}"`,
     f.character ?? f.category?.name,
@@ -40,7 +41,7 @@ export function describe(f: BrowseFilters): string {
     f.hq && "High quality",
     f.followed && "Following",
     f.hideInstalled && "Not installed",
-    f.sort !== DEFAULTS.sort && f.sort !== "relevance" && sortLabel(f.sort),
+    (full || f.sort !== DEFAULTS.sort) && f.sort !== "relevance" && sortLabel(f.sort),
   ].filter(Boolean) as string[];
   return parts.join(", ") || sortLabel(f.sort);
 }

@@ -1,14 +1,15 @@
 //! Tools for mod makers and troubleshooting: 3DMigoto's log, the shader cache, frame analysis dumps, reloading mods
 //! in game. Owner: SYSTEM area (docs/spec.md, "Tools").
 //!
-//! Reloading: 3DMigoto has no way to be told from outside that files changed. It reloads on F10 (d3dx.ini
-//! `reload_config`) and only reads keys while the game window is in front, so gachamod presses F10 for the player:
-//! on request (`reload_in_game`), or by itself when the game comes back to the front after a change (`watch`).
+//! Reloading: 3DMigoto has no way to be told from outside that files changed. It reloads on its reload key (d3dx.ini
+//! `reload_config`, F10 as the loaders ship it) and only reads keys while the game window is in front, so gachamod
+//! presses that key for the player: on request (`reload_in_game`), or by itself when the game comes back to the front
+//! after a change (`watch`).
 
 use crate::db::{Db, Shared};
 use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -167,14 +168,35 @@ pub fn mark_changed(game: &str) {
     with_pending(|p| { p.insert(game.to_string()); });
 }
 
-/// Start the background watcher (called once from the app's setup): automatic reloads, and `on_state(game, running)`
-/// whenever a game starts or stops.
-pub fn watch(db: Shared, on_state: impl Fn(&str, bool) + Send + 'static, on_note: impl Fn(&str, String) + Send + 'static) {
+/// Automatic reloads stay rare: at most one every 10 seconds and three a minute for each game. A change made meanwhile
+/// waits and goes in with the next one, so a burst of changes is one reload, and nothing can make the app press the
+/// key over and over. `times`: when it last pressed it for the game.
+fn may_press(times: &mut Vec<Instant>, now: Instant) -> bool {
+    times.retain(|t| now.saturating_duration_since(*t) < Duration::from_secs(60));
+    times.len() < 3 && !times.last().is_some_and(|t| now.saturating_duration_since(*t) < Duration::from_secs(10))
+}
+
+/// Start the background watcher (called once from the app's setup): automatic reloads, `on_state(game, running)`
+/// whenever a game starts or stops, and `on_saved(game)` when a running game with live characters saves its values
+/// (picks made in its own menu are in them).
+pub fn watch(
+    db: Shared, on_state: impl Fn(&str, bool) + Send + 'static, on_note: impl Fn(&str, String) + Send + 'static,
+    on_saved: impl Fn(&str) + Send + 'static,
+) {
     let spawned = std::thread::Builder::new().name("gachamod-watch".into()).spawn(move || {
         let mut last_state = Instant::now() - Duration::from_secs(10);
         let mut was_running: Vec<&'static str> = Vec::new();
+        let mut saved_at: HashMap<&'static str, Option<std::time::SystemTime>> = HashMap::new();
+        let mut pressed: HashMap<String, Vec<Instant>> = HashMap::new();
+        // running games with live characters, and where each saves its values
+        let mut watched: Vec<(&'static str, PathBuf)> = Vec::new();
         loop {
             std::thread::sleep(Duration::from_millis(700));
+            // a save is news (a pick made in the game's own menu): the app shows it within a second
+            for (g, user) in &watched {
+                let at = std::fs::metadata(user).and_then(|m| m.modified()).ok();
+                if saved_at.insert(g, at).is_some_and(|before| before != at) { on_saved(g); }
+            }
             let pending: Vec<String> = with_pending(|p| p.iter().cloned().collect()).unwrap_or_default();
             let state_due = last_state.elapsed() >= Duration::from_secs(3);
             if pending.is_empty() && !state_due { continue; }
@@ -185,6 +207,11 @@ pub fn watch(db: Shared, on_state: impl Fn(&str, bool) + Send + 'static, on_note
                 for g in now.iter().filter(|g| !was_running.contains(g)) { on_state(g, true); }
                 for g in was_running.iter().filter(|g| !now.contains(g)) { on_state(g, false); }
                 was_running = now;
+                watched = was_running.iter().filter_map(|g| {
+                    let imp = db.lock().ok().and_then(|d| crate::live::has_groups(&d, g).then(|| crate::games::importer_dir(&d, g).ok()).flatten());
+                    imp.map(|i| (*g, i.join("d3dx_user.ini")))
+                }).collect();
+                saved_at.retain(|g, _| watched.iter().any(|(w, _)| w == g));
             }
             for game in pending {
                 let pids = crate::launch::game_pids(&procs, &game);
@@ -202,10 +229,14 @@ pub fn watch(db: Shared, on_state: impl Fn(&str, bool) + Send + 'static, on_note
                     continue;
                 }
                 if !win::foreground_in(&pids) { continue; }
-                // let the window settle after coming to the front, then press F10
+                let times = pressed.entry(game.clone()).or_default();
+                if !may_press(times, Instant::now()) { continue; }
+                let key = db.lock().ok().map(|d| reload_key(&d, &game)).unwrap_or_default();
+                // let the window settle after coming to the front, then press the reload key
                 std::thread::sleep(Duration::from_millis(300));
                 if win::foreground_in(&pids) {
-                    win::press_f10();
+                    win::press(key.code, &key.held);
+                    times.push(Instant::now());
                     with_pending(|p| { p.remove(&game); });
                 }
             }
@@ -257,14 +288,49 @@ pub fn keys_blocked(game: &str) -> bool {
 
 fn blocked_text(game: &str) -> String {
     let name = crate::games::def(game).map_or("The game", |g| g.name);
-    format!("{name} runs as administrator, so gachamod can't press keys in it. Press F10 in the game, or restart gachamod as administrator")
+    let key = key_name(game);
+    format!("{name} runs as administrator, so gachamod can't press keys in it. Press {key} in the game, or restart gachamod as administrator")
 }
 
-/// Games told this run that a change waits for F10.
+/// The key that makes 3DMigoto load mods again in a game, as `press` takes it, and its name ("F10", "Ctrl+F5").
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReloadKey { pub code: u32, pub held: Vec<u32>, pub name: String }
+
+impl Default for ReloadKey {
+    fn default() -> Self { ReloadKey { code: 0x79, held: Vec::new(), name: "F10".into() } }
+}
+
+/// Each game's reload key name, from the last time it was read (messages that have no database at hand use it).
+static KEY_NAMES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+/// The reload key in an importer folder's d3dx.ini: `reload_config`, or the older `reload_fixes`. F10, the key every
+/// loader ships with, when neither names a keyboard key.
+pub fn reload_key_in(importer: Option<&Path>) -> ReloadKey {
+    let text = importer.and_then(|i| std::fs::read(i.join("d3dx.ini")).ok()).map(|b| crate::ini::decode(&b));
+    text.and_then(|t| {
+        ["reload_config", "reload_fixes"].iter().find_map(|k| crate::gamecheck::d3dx_value(&t, k).and_then(|v| crate::keys::press_of(&v)))
+    })
+    .map(|(code, held, name)| ReloadKey { code, held, name })
+    .unwrap_or_default()
+}
+
+/// A game's reload key (`reload_key_in` for its importer folder).
+pub fn reload_key(db: &Db, game: &str) -> ReloadKey {
+    let key = reload_key_in(crate::games::importer_dir(db, game).ok().as_deref());
+    if let Ok(mut m) = KEY_NAMES.lock() { m.get_or_insert_with(HashMap::new).insert(game.to_string(), key.name.clone()); }
+    key
+}
+
+/// The name of a game's reload key as last read, F10 before that.
+pub fn key_name(game: &str) -> String {
+    KEY_NAMES.lock().ok().and_then(|m| m.as_ref().and_then(|m| m.get(game).cloned())).unwrap_or_else(|| "F10".into())
+}
+
+/// Games told this run that a change waits for the reload key.
 static TOLD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-/// The line that says a change waits for F10 in the game: once per game each time gachamod starts, and only when the
-/// app can't press F10 itself (the game runs as administrator, or automatic reloads are off).
+/// The line that says a change waits for the reload key in the game: once per game each time gachamod starts, and only
+/// when the app can't press it itself (the game runs as administrator, or automatic reloads are off).
 pub fn f10_note(db: &crate::db::Db, game: &str) -> Option<String> {
     let blocked = keys_blocked(game);
     if !blocked && db.setting(&format!("{game}.autoReload")).ok().flatten().as_deref() != Some("0") { return None; }
@@ -273,10 +339,11 @@ pub fn f10_note(db: &crate::db::Db, game: &str) -> Option<String> {
     told.push(game.to_string());
     drop(told);
     crate::telemetry::note(db, vec![crate::telemetry::UiEvent::new("f10 note", serde_json::json!({ "game": game, "blocked": blocked }))]);
-    if !blocked { return Some("Press F10 in the game to load changes".into()); }
+    let key = reload_key(db, game).name;
+    if !blocked { return Some(format!("Press {key} in the game to load changes")); }
     let name = crate::games::def(game).map_or("The game", |g| g.name);
     // the window's toast adds "Restart as administrator" to this line (src/lib/elevation.ts looks for its start)
-    Some(format!("Press F10 in the game to load changes. {name} runs as administrator, so gachamod can only send it keys as administrator too"))
+    Some(format!("Press {key} in the game to load changes. {name} runs as administrator, so gachamod can only send it keys as administrator too"))
 }
 
 /// Start gachamod again as administrator. Windows asks the player first, in front of `owner` (gachamod's window, 0
@@ -369,14 +436,21 @@ pub fn game_rect(game: &str) -> Option<(i32, i32, i32, i32)> {
     win::rect(win::main_window(&pids)?)
 }
 
+/// Where the mouse cursor is, in screen pixels.
+pub fn cursor() -> Option<(i32, i32)> { win::cursor() }
+
+/// Put the mouse cursor back at a spot and free it. A game in front keeps the cursor in the middle of its window and
+/// fenced in; the skin menu brings the game forward for a pick and then puts the cursor back where it was.
+pub fn put_cursor(at: (i32, i32)) { win::put_cursor(at.0, at.1) }
+
 /// Both sticks of a controller are pressed in (the shortcut that opens the skin menu).
 pub fn pad_sticks_down() -> bool { win::pad_sticks_down() }
 
-/// Bring the game window forward and press F10 (3DMigoto's reload_config) so changed mods load without a restart.
-pub fn reload_in_game(game: &str) -> Result<()> {
+/// Bring the game window forward and press its reload key (`reload_key`) so changed mods load without a restart.
+pub fn reload_in_game(game: &str, key: &ReloadKey) -> Result<()> {
     if keys_blocked(game) { return Err(Error::Invalid(blocked_text(game))); }
-    focus(game, "press F10")?;
-    win::press_f10();
+    focus(game, &format!("press {}", key.name))?;
+    win::press(key.code, &key.held);
     with_pending(|p| { p.remove(game); });
     Ok(())
 }
@@ -386,7 +460,7 @@ pub(crate) mod win {
     use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
     use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_F10, VK_MENU,
+        MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_MENU,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowTextLengthW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
@@ -439,11 +513,13 @@ pub(crate) mod win {
         unsafe { SendInput(inputs.len() as u32, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
     }
 
-    /// Press and release F10, held for a few frames so 3DMigoto's per-frame key check sees it.
-    pub fn press_f10() {
-        send(&[key(VK_F10, false)]);
+    /// Press and release a key with these modifiers held, for a few frames so 3DMigoto's per-frame key check sees it.
+    pub fn press(code: u32, held: &[u32]) {
+        let down: Vec<INPUT> = held.iter().chain([&code]).map(|c| key(*c as VIRTUAL_KEY, false)).collect();
+        send(&down);
         std::thread::sleep(std::time::Duration::from_millis(90));
-        send(&[key(VK_F10, true)]);
+        let up: Vec<INPUT> = [&code].into_iter().chain(held.iter().rev()).map(|c| key(*c as VIRTUAL_KEY, true)).collect();
+        send(&up);
     }
 
     /// Whether a process (None: this one) runs as administrator. One we aren't allowed to look at does.
@@ -527,6 +603,18 @@ pub(crate) mod win {
         // SAFETY: a window handle from EnumWindows and a live local.
         if unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(w, &mut r) } == 0 { return None; }
         Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+    }
+
+    pub fn cursor() -> Option<(i32, i32)> {
+        let mut p = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
+        // SAFETY: the out pointer is a live local.
+        (unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut p) } != 0).then_some((p.x, p.y))
+    }
+
+    pub fn put_cursor(x: i32, y: i32) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{ClipCursor, SetCursorPos};
+        // SAFETY: a null rectangle lets the cursor go anywhere again; plain screen coordinates.
+        unsafe { ClipCursor(std::ptr::null()); SetCursorPos(x, y); }
     }
 
     pub fn pad_sticks_down() -> bool {
@@ -657,8 +745,10 @@ pub(crate) mod win {
     pub fn wait_for_exit(_pid: u32, _ms: u32) {}
     pub fn exclusive_fullscreen() -> bool { false }
     pub fn rect(_w: Win) -> Option<(i32, i32, i32, i32)> { None }
+    pub fn cursor() -> Option<(i32, i32)> { None }
+    pub fn put_cursor(_x: i32, _y: i32) {}
     pub fn pad_sticks_down() -> bool { false }
-    pub fn press_f10() {}
+    pub fn press(_code: u32, _held: &[u32]) {}
     pub fn bring_forward(_w: Win) {}
 }
 
@@ -708,5 +798,30 @@ mod tests {
         mark_changed("zzz-test");
         assert!(with_pending(|p| p.contains("zzz-test")).unwrap());
         with_pending(|p| { p.remove("zzz-test"); });
+    }
+}
+
+#[cfg(test)]
+mod press_tests {
+    use super::may_press;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn automatic_reloads_are_spaced_and_capped() {
+        let start = Instant::now();
+        let at = |s: u64| start + Duration::from_secs(s);
+        let mut times = Vec::new();
+        assert!(may_press(&mut times, at(0)));
+        times.push(at(0));
+        // a second change right after waits for the next allowed press
+        assert!(!may_press(&mut times, at(3)));
+        assert!(may_press(&mut times, at(10)));
+        times.push(at(10));
+        assert!(may_press(&mut times, at(20)));
+        times.push(at(20));
+        // three in a minute: no more until the first is a minute old
+        assert!(!may_press(&mut times, at(40)));
+        assert!(!may_press(&mut times, at(59)));
+        assert!(may_press(&mut times, at(61)));
     }
 }

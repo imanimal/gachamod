@@ -347,7 +347,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
           : compact ? undefined : `Toggles do nothing while ${who} isn't on screen`}
         onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? "Its toggles already work only while on screen" : "Nothing to take out")} />
       {showAi && (
-        <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of the mod draws the character, then apply its answer here"
+        <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of the mod draws the character, then apply its answer here. Takes a strong chatbot, like Claude Opus 5.5"
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>Ask the AI helper</Button>
       )}
     </div>

@@ -38,19 +38,37 @@ function canScroll(el: Element, axis: "x" | "y", dir: number): boolean {
 
 /** Glide `el` by `delta` px along an axis. Notches that come quickly add up into one longer glide. */
 export function glide(el: Element, axis: "x" | "y", delta: number) {
-  const pos = () => (axis === "y" ? el.scrollTop : el.scrollLeft);
-  const max = axis === "y" ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
-  if (reduced()) { el.scrollBy({ [axis === "y" ? "top" : "left"]: delta, behavior: "instant" }); return; }
+  glideTo(el, axis, glideTarget(el, axis) + delta);
+}
+
+/** Where `el` is gliding to along an axis, or where it is when it isn't gliding. */
+export function glideTarget(el: Element, axis: "x" | "y"): number {
+  const run = runs.get(el)?.[axis];
+  const pos = axis === "y" ? el.scrollTop : el.scrollLeft;
+  // something else moved it (the scrollbar, a key, a jump to a section): it is where it is now
+  return run && Math.abs(pos - run.last) <= 3 ? run.target : pos;
+}
+
+/** Glide `el` to a scroll position along an axis. It lands on it exactly, and a target at or past either end lands
+ *  on the very edge, never a pixel or two short of it. */
+export function glideTo(el: Element, axis: "x" | "y", to: number) {
+  const top = axis === "y";
+  const pos = () => (top ? el.scrollTop : el.scrollLeft);
+  const end = () => (top ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth);
+  // scrollWidth and clientWidth are whole pixels, so the real end can be a fraction past end(): ask for a bit more
+  // and the browser stops on the edge itself
+  const set = (v: number) => el.scrollTo({ [top ? "top" : "left"]: v >= end() ? v + 2 : v, behavior: "instant" });
+  const target = Math.max(0, Math.min(end(), to));
+  if (reduced()) { set(target); return; }
   const state = runs.get(el) ?? {};
   runs.set(el, state);
-  let run = state[axis];
-  // something else moved it (the scrollbar, a key, a jump to a section): start from where it is now
-  if (run && Math.abs(pos() - run.last) > 3) { cancelAnimationFrame(run.raf); run = undefined; }
-  const from = run ? run.target : pos();
-  const target = Math.max(0, Math.min(max, from + delta));
-  if (run) { run.target = target; return; }
+  const run = state[axis];
+  if (run && Math.abs(pos() - run.last) <= 3) { run.target = target; return; }
+  if (run) cancelAnimationFrame(run.raf);
   const r: Run = { target, last: pos(), raf: 0, t: 0 };
   state[axis] = r;
+  // a scroll position snaps to whole device pixels, so a step under one rounds back to where it was
+  const px = Math.max(1, 1 / (window.devicePixelRatio || 1));
   const step = (now: number) => {
     // a frame's timestamp can be older than the wheel event, so the first frame counts as one frame, never less
     const dt = r.t ? Math.max(1, Math.min(64, now - r.t)) : 16.7;
@@ -58,11 +76,15 @@ export function glide(el: Element, axis: "x" | "y", delta: number) {
     const cur = pos();
     if (Math.abs(cur - r.last) > 3) { state[axis] = undefined; return; }
     const left = r.target - cur;
-    const move = Math.abs(left) < 0.6 ? left : left * (1 - Math.pow(1 - EASE, dt / 16.7));
-    el.scrollTo({ [axis === "y" ? "top" : "left"]: cur + move, behavior: "instant" });
+    let move = left * (1 - Math.pow(1 - EASE, dt / 16.7));
+    // the last couple of pixels go in one step, and no step is too small to move it: easing by fractions of a
+    // pixel would creep forever just short of the target
+    if (Math.abs(left) <= 2 * px) move = left;
+    else if (Math.abs(move) < px) move = Math.sign(left) * px;
+    set(cur + move);
     r.last = pos();
-    // stuck at an edge or arrived
-    if (Math.abs(r.target - r.last) < 0.6 || (Math.abs(r.last - cur) < 0.01 && Math.abs(move) >= 0.6)) { state[axis] = undefined; return; }
+    // arrived, or it didn't move at all (an edge, or the content shrank under it)
+    if (move === left || Math.abs(r.last - cur) < 0.01) { state[axis] = undefined; return; }
     r.raf = requestAnimationFrame(step);
   };
   r.raf = requestAnimationFrame(step);

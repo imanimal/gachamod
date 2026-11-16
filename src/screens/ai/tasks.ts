@@ -4,14 +4,13 @@
 // have) are left out and listed. Nothing is applied until the user presses Apply, and every apply records Undo.
 // Owner: SETTINGS/AI area.
 import {
-  characters, errorText, library, modKeys, modtools, shell, type Backup, type DrawRef, type GameState, type IniOutline, type MetaPatch,
+  characters, errorText, library, modKeys, type Backup, type DrawRef, type GameState, type IniOutline, type MetaPatch,
   type ModEntry,
 } from "../../lib/api";
-import { hiddenNote, hideFromAi, safeTags, type AiTask } from "../../lib/ai";
+import { hideFromAi, neutralName, nothingToSendNote, type AiTask } from "../../lib/ai";
 import { record } from "../../lib/history";
 import { allGames, currentGame, emitApp, go } from "../../lib/store";
 import { plural } from "../../ui/kit";
-import { toast } from "../../ui/toast";
 import { keysChanged, recordBackups } from "../../ui/KeyEditor";
 import { buildThemeTask } from "./themeTask";
 
@@ -31,8 +30,6 @@ export interface Preview {
   links: Array<{ label: string; hint?: string; run: () => void }>;
   /** Make the change. Resolves to lines saying what changed (shown after, so nothing happens silently). */
   apply?: () => Promise<string[]>;
-  /** Why there is nothing to apply, when the task only explains. */
-  noApply?: string;
 }
 export interface Built {
   prompt: string;
@@ -47,6 +44,8 @@ export interface TaskDef {
   defaultGoal?: string;
   /** A text box: required means the prompt can't be made without it. */
   text?: { label: string; placeholder: string; required: boolean; forGoal?: string };
+  /** A line under the chatbot choice, for tasks that need more than a small model. */
+  note?: string;
   build: (t: AiTask, input: TaskInput) => Promise<Built>;
 }
 
@@ -125,29 +124,24 @@ const GOAL_TEXT: Record<string, string> = {
   tags: "Give each mod up to 3 short lowercase tags for what it is, like outfit, recolor, hair, weapon, swimsuit, ui. Keep tags it already has unless they're wrong.",
 };
 
-const CHANGE_SHAPE = `{"changes":[{"mod":1,"name":"Ellen - Maid Outfit","character":"Ellen","tags":["outfit"],"adult":false,"why":"few words"}]}`;
+const CHANGE_SHAPE = `{"changes":[{"mod":1,"name":"Ellen - Maid Outfit","character":"Ellen","tags":["outfit"],"why":"few words"}]}`;
 
-/** The numbers (from 0) of the mods whose names stay out of the prompt (lib/ai.ts hideFromAi). */
-const hiddenOf = (mods: ModEntry[]) => new Set(mods.flatMap((m, i) => (hideFromAi(m) ? [i] : [])));
+// Mods that lib/ai.ts hideFromAi keeps out are left out of mod lists without a word, and nothing in a prompt says
+// whether a mod is for adults: it doesn't matter for these jobs, and chatbots refuse a whole request over it.
+const shareable = (mods: ModEntry[]) => mods.filter((m) => !hideFromAi(m));
 
-function modTable(mods: ModEntry[], hidden: Set<number>): string {
-  return ["number | name | folder | character | tags | adult", ...mods.map((m, i) => hidden.has(i)
-    ? `${i + 1} | (hidden) | - | ${cell(m.character)} | ${cell(safeTags(m.tags).join(", "))} | yes`
-    : `${i + 1} | ${cell(clip(m.name, 90))} | ${cell(clip(m.folder, 70))} | ${cell(m.character)} | ${cell(m.tags.join(", "))} | ${m.nsfw ? "yes" : "no"}`)].join("\n");
+function modTable(mods: ModEntry[]): string {
+  return ["number | name | folder | character | tags", ...mods.map((m, i) =>
+    `${i + 1} | ${cell(clip(m.name, 90))} | ${cell(clip(m.folder, 70))} | ${cell(m.character)} | ${cell(m.tags.join(", "))}`)].join("\n");
 }
 
-/** The "names of N adult mods stay hidden" part of what a task shares. */
-const hiddenShare = (n: number) => (n ? ` (names of ${plural(n, "adult mod")} stay hidden)` : "");
-/** A mod's name in a prompt. */
-const promptName = (m: ModEntry) => (hideFromAi(m) ? "(name hidden: adult mod)" : m.name);
-
 /** Read `changes` against the mods that were shared. */
-function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: GameState, hidden: Set<number>): { rows: PreviewRow[]; skipped: string[]; patches: Array<{ mod: ModEntry; patch: MetaPatch; why: string }> } {
+function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: GameState): { rows: PreviewRow[]; skipped: string[]; patches: Array<{ mod: ModEntry; patch: MetaPatch; why: string }> } {
   const rows: PreviewRow[] = [], skipped: string[] = [], patches: Array<{ mod: ModEntry; patch: MetaPatch; why: string }> = [];
   const byName = new Map(names.map((n) => [n.toLowerCase(), n]));
   const seen = new Set<number>();
   list(raw, "\"changes\"", 2000).forEach((c, i) => {
-    const e = obj(c, `Change ${i + 1}`, ["mod", "name", "character", "tags", "adult", "why"]);
+    const e = obj(c, `Change ${i + 1}`, ["mod", "name", "character", "tags", "why"]);
     const n = typeof e.mod === "number" ? e.mod : Number(e.mod);
     const mod = Number.isInteger(n) ? mods[n - 1] : undefined;
     if (!mod) { skipped.push(`Change ${i + 1}: there's no mod number ${String(e.mod)}.`); return; }
@@ -156,10 +150,7 @@ function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: Game
     const patch: MetaPatch = {};
     const lines: PreviewRow["lines"] = [];
     const bad: string[] = [];
-    if (e.name !== undefined && hidden.has(n - 1)) {
-      // the chatbot never saw this name
-      if (e.name !== null && e.name !== "") skipped.push(`${mod.name}: its name was hidden from the chatbot, so it keeps it.`);
-    } else if (e.name !== undefined) {
+    if (e.name !== undefined) {
       const v = str(e.name, 120);
       if (!v) bad.push("the name is empty or too long");
       else if (v !== mod.name) { patch.name = v; lines.push({ label: "Name", before: mod.name, after: v }); }
@@ -181,10 +172,6 @@ function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: Game
         if (next.join("\n") !== mod.tags.join("\n")) { patch.tags = next; lines.push({ label: "Tags", before: mod.tags.join(", ") || "None", after: next.join(", ") || "None" }); }
       }
     }
-    if (e.adult !== undefined) {
-      if (typeof e.adult !== "boolean") bad.push("adult isn't true or false");
-      else if (e.adult !== mod.nsfw) { patch.nsfw = e.adult; lines.push({ label: "For adults", before: mod.nsfw ? "Yes" : "No", after: e.adult ? "Yes" : "No" }); }
-    }
     if (bad.length) { skipped.push(`${mod.name}: ${bad.join(", ")}.`); return; }
     if (!lines.length) return;
     const why = optStr(e.why, 160);
@@ -201,7 +188,6 @@ function applyPatches(game: GameState, patches: Array<{ mod: ModEntry; patch: Me
       if (patch.name !== undefined) back.name = mod.name;
       if (patch.character !== undefined) back.character = mod.character ?? "";
       if (patch.tags !== undefined) back.tags = mod.tags;
-      if (patch.nsfw !== undefined) back.nsfw = mod.nsfw;
       return { id: mod.id, back };
     });
     const run = async (items: Array<{ id: string; patch: MetaPatch }>) => {
@@ -221,7 +207,6 @@ function applyPatches(game: GameState, patches: Array<{ mod: ModEntry; patch: Me
       const parts = [patch.name !== undefined ? `${mod.name} is now "${patch.name}"` : mod.name];
       if (patch.character !== undefined) parts.push(patch.character ? `character ${patch.character}` : "no character");
       if (patch.tags !== undefined) parts.push(`tags ${patch.tags.join(", ") || "none"}`);
-      if (patch.nsfw !== undefined) parts.push(patch.nsfw ? "marked for adults" : "not for adults");
       return `${parts.join(", ")}${why ? ` (${why})` : ""}`;
     });
     if (failed.length) out.push(`${plural(failed.length, "change")} didn't save: ${failed[0]}`);
@@ -236,17 +221,16 @@ const modsTask: TaskDef = {
   text: { label: "What should change?", placeholder: "Put the outfit name first, like \"Maid Outfit (Ellen)\"", required: true, forGoal: "other" },
   async build(t, input) {
     const game = gameOf(t);
-    const { mods, total } = await modsFor(t, game);
-    if (!mods.length) throw new Error(`${game.name} has no mods to edit yet.`);
+    const { mods: all, total } = await modsFor(t, game);
+    const mods = shareable(all);
+    if (!mods.length) throw new Error(all.length ? nothingToSendNote(all.length) : `${game.name} has no mods to edit yet.`);
     // the roster checks any character the answer sets; the prompt carries it only when characters are the point
     const names = await roster(game);
     const sendNames = (input.goal === "characters" || input.goal === "other") && names.length > 0;
     const ask = input.goal === "other" ? input.text.trim() : GOAL_TEXT[input.goal] ?? GOAL_TEXT.clean!;
-    const hidden = hiddenOf(mods);
     const prompt = [
       `I manage 3DMigoto mods for ${game.name} in a mod manager. ${ask}`,
-      `My mods, one per line:\n${modTable(mods, hidden)}`,
-      hiddenNote(hidden.size),
+      `My mods, one per line:\n${modTable(mods)}`,
       sendNames ? `${game.name} characters: ${names.join(", ")}.` : "",
       `List only mods that change, and only the fields that change. "mod" is the number from my list. ${ANSWER_RULE}`,
       "```json\n" + CHANGE_SHAPE + "\n```",
@@ -254,13 +238,13 @@ const modsTask: TaskDef = {
     return {
       prompt,
       shares: [
-        `Names, folder names, characters, tags and adult flags of ${plural(mods.length, "mod")}${total > mods.length ? ` (the first ${mods.length} of ${total})` : ""}${hiddenShare(hidden.size)}`,
+        `Names, folder names, characters and tags of ${plural(mods.length, "mod")}${total > all.length ? ` (from the first ${all.length} of ${total})` : ""}`,
         ...(sendNames ? [`${game.name}'s character list`] : []),
         ...(input.goal === "other" && input.text.trim() ? ["What you typed"] : []),
       ],
       read(reply) {
         const r = obj(reply, "The answer", ["changes"]);
-        const { rows, skipped, patches } = readChanges(r.changes, mods, names, game, hidden);
+        const { rows, skipped, patches } = readChanges(r.changes, mods, names, game);
         const label = `Changed ${plural(patches.length, "mod")} with the AI helper`;
         return {
           summary: patches.length ? `${plural(patches.length, "mod")} change${patches.length === 1 ? "s" : ""}` : "Nothing to change",
@@ -277,22 +261,22 @@ const customTask: TaskDef = {
   text: { label: "Your question or request", placeholder: "Which of these are duplicates? Or: rename these so the outfit comes first", required: true },
   async build(t, input) {
     const game = gameOf(t);
-    const { mods, total } = t.modIds?.length ? await modsFor(t, game, 200) : { mods: [] as ModEntry[], total: 0 };
+    const { mods: all, total } = t.modIds?.length ? await modsFor(t, game, 200) : { mods: [] as ModEntry[], total: 0 };
+    const mods = shareable(all);
+    if (all.length && !mods.length) throw new Error(nothingToSendNote(all.length));
     const names = mods.length ? await roster(game) : [];
-    const hidden = hiddenOf(mods);
     const prompt = [
       `I manage 3DMigoto mods for ${game.name} in a mod manager. ${input.text.trim()}`,
-      mods.length ? `The mods this is about, one per line:\n${modTable(mods, hidden)}` : "",
-      hiddenNote(hidden.size),
+      mods.length ? `The mods this is about, one per line:\n${modTable(mods)}` : "",
       `Put your answer in "answer" (plain text, short). If I asked for changes to the mods, list them in "changes" with only the fields that change ("mod" is the number from my list). ${ANSWER_RULE}`,
-      "```json\n" + `{"answer":"...","changes":[{"mod":1,"name":"New name","character":"Ellen","tags":["outfit"],"adult":false,"why":"few words"}]}` + "\n```",
+      "```json\n" + `{"answer":"...","changes":[{"mod":1,"name":"New name","character":"Ellen","tags":["outfit"],"why":"few words"}]}` + "\n```",
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
-      shares: ["What you typed", ...(mods.length ? [`Names, folder names, characters, tags and adult flags of ${plural(mods.length, "mod")}${total > mods.length ? ` (the first ${mods.length})` : ""}${hiddenShare(hidden.size)}`] : [])],
+      shares: ["What you typed", ...(mods.length ? [`Names, folder names, characters and tags of ${plural(mods.length, "mod")}${total > all.length ? ` (from the first ${all.length})` : ""}`] : [])],
       read(reply) {
         const r = obj(reply, "The answer", ["answer", "changes"]);
-        const { rows, skipped, patches } = mods.length ? readChanges(r.changes, mods, names, game, hidden) : { rows: [], skipped: [], patches: [] };
+        const { rows, skipped, patches } = mods.length ? readChanges(r.changes, mods, names, game) : { rows: [], skipped: [], patches: [] };
         const answer = optStr(r.answer, 6000);
         return {
           summary: patches.length ? `${plural(patches.length, "mod")} change${patches.length === 1 ? "s" : ""}` : answer ? "The chatbot's answer" : "Nothing in the answer",
@@ -304,44 +288,32 @@ const customTask: TaskDef = {
   },
 };
 
-// ── broken mods (explanations and exact steps), and keys that work off screen (applied by gachamod) ──
+// ── keys that work off screen (applied by gachamod) ──
 
-async function inspectAll(t: AiTask, game: GameState, cap: number) {
-  const { mods } = await modsFor(t, game, cap);
-  if (!mods.length) throw new Error("Pick the mod first.");
-  return Promise.all(mods.map(async (m) => ({ mod: m, info: await modtools.inspect(game.id, m.id).catch(() => null) })));
-}
-
-function readSteps(reply: unknown, mods: ModEntry[]): Preview {
-  const r = obj(reply, "The answer", ["mods"]);
-  const rows: PreviewRow[] = [], skipped: string[] = [], text: string[] = [];
-  list(r.mods, "\"mods\"", 50).forEach((x, i) => {
-    const e = obj(x, `Entry ${i + 1}`, ["mod", "explanation", "edits", "steps"]);
-    const mod = mods[Number(e.mod) - 1];
-    if (!mod) { skipped.push(`Entry ${i + 1}: there's no mod number ${String(e.mod)}.`); return; }
-    const lines: PreviewRow["lines"] = [];
-    list(e.edits, `${mod.name}'s edits`, 60).forEach((y, j) => {
-      const ed = obj(y, `${mod.name}, edit ${j + 1}`, ["file", "section", "change"]);
-      const change = str(ed.change, 600);
-      if (!change) { skipped.push(`${mod.name}, edit ${j + 1}: it doesn't say what to change.`); return; }
-      lines.push({ label: [optStr(ed.file, 120), optStr(ed.section, 120)].filter(Boolean).join(" ") || "Change", after: change });
-    });
-    list(e.steps, `${mod.name}'s steps`, 30).forEach((s, j) => { const v = str(s, 600); if (v) lines.push({ label: `Step ${j + 1}`, after: v }); });
-    rows.push({ title: mod.name, lines, note: optStr(e.explanation, 800) || undefined });
-  });
-  if (!rows.length && !skipped.length) text.push("The answer had nothing for these mods.");
+/** Prompt names for one mod's files or sections with explicit words swapped out (lib/ai.ts neutralName), and the
+ *  way back for reading the answer. Two names that end up the same get a number. */
+function aliases() {
+  const to = new Map<string, string>(), from = new Map<string, string>();
   return {
-    summary: rows.length ? `What to change in ${plural(rows.length, "mod")}` : "Nothing to change",
-    rows, skipped, text,
-    links: mods.map((m) => ({ label: `Open ${clip(m.name, 40)}`, hint: "Its folder, to edit the ini", run: () => { shell.openPath(m.path).catch((e) => toast(errorText(e), true)); } })),
-    noApply: "gachamod can't apply ini edits from here yet. Make them in the ini, save, then press F10 in game to reload.",
+    name(real: string): string {
+      const known = to.get(real);
+      if (known !== undefined) return known;
+      const base = neutralName(real);
+      let a = base;
+      for (let n = 2; from.has(a.toLowerCase()); n++) a = `${base}${n}`;
+      to.set(real, a); from.set(a.toLowerCase(), real);
+      return a;
+    },
+    real: (shown: string) => from.get(shown.toLowerCase()) ?? shown,
   };
 }
+type Aliases = ReturnType<typeof aliases>;
 
 const DRAW_SHAPE = `{"mods":[{"mod":1,"draw":[{"file":"Ellen.ini","section":"TextureOverrideEllenBodyPosition"}],"why":"few words"}]}`;
 
 const keysTask: TaskDef = {
   title: (t) => (t.modIds && t.modIds.length > 1 ? `Toggles only while on screen for ${plural(t.modIds.length, "mod")}` : "Toggles only while on screen"),
+  note: "This takes a strong chatbot, like Claude Opus 5.5. Weaker ones often pick the wrong sections. If a toggle stops working in game, Undo puts it back.",
   async build(t) {
     const game = gameOf(t);
     const { mods: picked } = await modsFor(t, game, 8);
@@ -353,12 +325,14 @@ const keysTask: TaskDef = {
     })));
     const todo = found.filter((f) => f.keys && f.keys.keys.length && !["own", "on", "global"].includes(f.keys.onScreen) && f.outline.some((o) => o.sections.length));
     if (!todo.length) throw new Error(picked.length === 1 ? "This mod's toggles already work only while it's on screen, or it has nothing to pick from." : "These mods' toggles already work only while they're on screen.");
-    const blocks = todo.map(({ mod, outline }, i) => {
+    // hidden mods go without their names, and explicit words in file and section names are swapped out
+    const items = todo.map((f) => ({ mod: f.mod, outline: f.outline, files: aliases(), sections: aliases() }));
+    const blocks = items.map(({ mod, outline, files, sections }, i) => {
       const inis = outline.map((o) => [
-        `  File ${o.ini}${o.namespace ? ` (namespace ${o.namespace})` : " (no namespace)"}${o.keys.length ? `, key sections: ${o.keys.slice(0, 20).join(", ")}` : ", no keys"}`,
-        ...o.sections.slice(0, 60).map((s) => `    [${s.section}] ${s.lines.join("; ")}`),
+        `  File ${files.name(o.ini)}${o.namespace ? ` (namespace ${neutralName(o.namespace)})` : " (no namespace)"}${o.keys.length ? `, key sections: ${o.keys.slice(0, 20).map(neutralName).join(", ")}` : ", no keys"}`,
+        ...o.sections.slice(0, 60).map((s) => `    [${sections.name(s.section)}] ${neutralName(s.lines.join("; "))}`),
       ].join("\n"));
-      return `Mod ${i + 1}: ${promptName(mod)}${mod.character ? ` (${mod.character})` : ""}\n${inis.join("\n")}`;
+      return `Mod ${i + 1}${hideFromAi(mod) ? "" : `: ${mod.name}`}${mod.character ? ` (${mod.character})` : ""}\n${inis.join("\n")}`;
     });
     const prompt = [
       `These 3DMigoto mods for ${game.name} have hotkeys that also work while their character isn't on screen, so they clash with other mods using the same keys. gachamod can fix that itself once it knows which sections draw the character: it sets a flag in those sections, clears it every frame in [Present] and adds a condition on the key sections.`,
@@ -370,13 +344,14 @@ const keysTask: TaskDef = {
     const mods = todo.map((f) => f.mod);
     return {
       prompt,
-      shares: [`Names and a few lines (hashes, buffers, draw calls) of the override sections in ${plural(mods.length, "mod")}, and their key section names. No other file contents`, "Mod names and characters"],
-      read: (reply) => readDraws(reply, game, todo.map((f) => ({ mod: f.mod, outline: f.outline }))),
+      shares: [`Names and a few lines (hashes, buffers, draw calls) of the override sections in ${plural(mods.length, "mod")}, and their key section names. No other file contents`,
+        "Mod names and characters"],
+      read: (reply) => readDraws(reply, game, items),
     };
   },
 };
 
-function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry; outline: IniOutline[] }>): Preview {
+function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry; outline: IniOutline[]; files: Aliases; sections: Aliases }>): Preview {
   const r = obj(reply, "The answer", ["mods"]);
   const rows: PreviewRow[] = [], skipped: string[] = [];
   const picks: Array<{ mod: ModEntry; draw: DrawRef[] }> = [];
@@ -392,9 +367,9 @@ function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry;
     const before = skipped.length;
     list(e.draw, `${it.mod.name}'s sections`, 40).forEach((y, j) => {
       const d = obj(y, `${it.mod.name}, section ${j + 1}`, ["file", "section"]);
-      const wantFile = typeof d.file === "string" ? d.file.trim().replaceAll("\\", "/").toLowerCase() : "";
+      const wantFile = typeof d.file === "string" ? it.files.real(d.file.trim().replaceAll("\\", "/")).toLowerCase() : "";
       const file = it.outline.find((o) => o.ini.toLowerCase() === wantFile);
-      const want = typeof d.section === "string" ? d.section.trim().replace(/^\[|\]$/g, "").toLowerCase() : "";
+      const want = typeof d.section === "string" ? it.sections.real(d.section.trim().replace(/^\[|\]$/g, "")).toLowerCase() : "";
       const sec = file?.sections.find((s) => s.section.toLowerCase() === want);
       if (!file || !sec) { skipped.push(`${it.mod.name}: ${String(d.file)} has no section ${String(d.section)}.`); return; }
       if (!draw.some((x) => x.ini === file.ini && x.section === sec.section)) draw.push({ ini: file.ini, section: sec.section });
@@ -431,31 +406,6 @@ function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry;
     } : undefined,
   };
 }
-
-const fixTask: TaskDef = {
-  title: (t) => (t.modIds && t.modIds.length > 1 ? `Fix ${plural(t.modIds.length, "mod")} after a game update` : "Fix a mod after a game update"),
-  async build(t) {
-    const game = gameOf(t);
-    const found = await inspectAll(t, game, 5);
-    const blocks = found.map(({ mod, info }, i) => {
-      const probs = (info?.problems ?? []).slice(0, 20).map((p) => `  ${p.kind}: ${p.detail}${p.ini ? ` (${p.ini})` : ""}`);
-      return `Mod ${i + 1}: ${promptName(mod)}${mod.character ? ` (${mod.character})` : ""}, installed ${new Date(mod.installedAt * 1000).toISOString().slice(0, 10)}. Ini files: ${(info?.inis ?? []).join(", ") || "unknown"}.\n${probs.join("\n") || "  No problems found by the app."}`;
-    });
-    const prompt = [
-      `These 3DMigoto mods for ${game.name} stopped working after a game update. Tell me what most likely broke (changed hashes, a changed vertex or index buffer layout) and the exact steps to fix each, like which community fixer to run or which hash to replace.`,
-      t.detail ? `What gachamod knows:\n${t.detail}` : "",
-      blocks.join("\n\n"),
-      `"mod" is the mod's number above. Use "edits" for exact ini changes and "steps" for anything else. ${ANSWER_RULE}`,
-      "```json\n" + `{"mods":[{"mod":1,"explanation":"one or two sentences","edits":[{"file":"Ellen.ini","section":"[TextureOverrideEllenBody]","change":"replace hash = 1a2b3c4d with hash = 5e6f7a8b"}],"steps":["Run the 2.0 fixer on the mod folder"]}]}` + "\n```",
-    ].filter(Boolean).join("\n\n");
-    const mods = found.map((f) => f.mod);
-    return {
-      prompt,
-      shares: [`Names, characters and problems the app found for ${plural(mods.length, "mod")}`, ...(t.detail ? ["The known broken hashes"] : [])],
-      read: (reply) => readSteps(reply, mods),
-    };
-  },
-};
 
 // ── mod ideas ──
 
@@ -498,7 +448,6 @@ export const TASKS: Record<string, TaskDef> = {
   mods: modsTask,
   custom: customTask,
   "keys-offscreen": keysTask,
-  "fix-mod": fixTask,
   recommend: recommendTask,
   theme: {
     title: () => "Make a theme with your chatbot",

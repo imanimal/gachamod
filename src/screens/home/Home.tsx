@@ -20,6 +20,7 @@ import { checkModUpdates, openModsFolder, rescan } from "../../shell/commands";
 import { GbBrowser, AdultSwitch } from "../browse/GbBrowser";
 import { GbStrip } from "../browse/GbStrip";
 import { rowKeys, useSideScroll } from "../browse/sideScroll";
+import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { useMods } from "../library/data";
 import { getUpdate } from "../library/actions";
 import { useRoster } from "../characters/roster";
@@ -205,13 +206,16 @@ function ProfileRow({ game }: { game: GameState }) {
   const { list } = useProfiles(game.id);
   const [busy, setBusy] = useState<number | null>(null);
   const row = useRef<HTMLDivElement>(null);
+  const [all, toggleAll] = useRowOpen("home.profiles");
+  const { left, right } = useSideScroll(row, [list?.length, all]);
   const pick = async (p: Profile) => {
     if (p.active || busy !== null) return;
     setBusy(p.id);
     try { await switchTo(game.id, p, list); } finally { setBusy(null); }
   };
   return (
-    <div ref={row} className="home-profiles" role="group" aria-label="Profiles" onKeyDown={(e) => rowKeys(e, ".home-pchip")}>
+    <div className={`home-profiles-wrap${all ? " is-all" : ""}`}>
+    <div ref={row} className={`home-profiles${all ? " is-all" : ""}`} role="group" aria-label="Profiles" onKeyDown={(e) => rowKeys(e, ".home-pchip")}>
       {list === null && <Skeleton className="home-pchip-skel" />}
       {(list ?? []).map((p) => (
         <button key={p.id} type="button" className={`home-pchip${p.active ? " on" : ""}`} aria-pressed={p.active}
@@ -227,14 +231,23 @@ function ProfileRow({ game }: { game: GameState }) {
         <Icon name="plus" />
       </button>
     </div>
+    <ShowAll open={all} onToggle={toggleAll} fits={!left && !right} label={`Show every profile (${list?.length ?? 0})`} />
+    </div>
   );
 }
 
 // ── a sideways row with its own header (updates, characters, recent installs) ──
 
-function Row({ title, count, more, moreLabel, moreTip, children, deps }: { title: string; count?: number; more?: () => void; moreLabel?: string; moreTip?: string; children: ReactNode; deps: unknown[] }) {
+function Row({ id, title, count, all: allLabel, more, moreLabel, moreTip, children, deps }: {
+  /** Names the row for remembering whether it shows everything. */
+  id: string; title: string; count?: number;
+  /** The tip on the button that shows everything: "Show every update (12)". */
+  all: string;
+  more?: () => void; moreLabel?: string; moreTip?: string; children: ReactNode; deps: unknown[];
+}) {
   const row = useRef<HTMLDivElement>(null);
-  const { left, right, page } = useSideScroll(row, deps);
+  const [all, toggleAll] = useRowOpen(`home.${id}`);
+  const { left, right, page } = useSideScroll(row, [...deps, all]);
   return (
     <section className="home-section" aria-label={title}>
       <header className="home-section-h">
@@ -244,9 +257,10 @@ function Row({ title, count, more, moreLabel, moreTip, children, deps }: { title
           <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
           <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
         </>}
+        <ShowAll open={all} onToggle={toggleAll} fits={!left && !right} label={allLabel} />
         {more && <Button size="sm" variant="ghost" iconRight="chevron" onClick={more} title={moreTip}>{moreLabel ?? "See all"}</Button>}
       </header>
-      <div ref={row} className="home-row" role="list" onKeyDown={(e) => rowKeys(e, ".home-item")}>{children}</div>
+      <div ref={row} className={`home-row${all ? " is-all" : ""}`} role="list" onKeyDown={(e) => rowKeys(e, ".home-item")}>{children}</div>
     </section>
   );
 }
@@ -271,7 +285,7 @@ function Updates({ game, mods, editing }: { game: GameState; mods: ModEntry[]; e
     try { for (const m of list) await getUpdate(game.id, m); } finally { setBusy(false); }
   };
   return (
-    <Row title={WIDGETS.updates.title} count={list.length} deps={[list.length]}
+    <Row id="updates" title={WIDGETS.updates.title} count={list.length} all={`Show every update (${list.length})`} deps={[list.length]}
       more={() => go("library")} moreLabel="In Mods" moreTip="Open Mods">
       {list.map((m) => (
         <div key={m.id} role="listitem" className="home-tile" onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>
@@ -301,7 +315,7 @@ function Characters({ game, mods, loaded, editing }: { game: GameState; mods: Mo
   if (!loaded) return null;
   if (!withMods.length) return editing ? <Nothing title={title}>{noun} you have mods for show here.</Nothing> : null;
   return (
-    <Row title={title} count={withMods.length} deps={[withMods.length]} more={() => go("characters")} moreLabel={`All ${noun.toLowerCase()}`}>
+    <Row id="chars" title={title} count={withMods.length} all={`Show every ${charNoun(game.id, true).toLowerCase()} (${withMods.length})`} deps={[withMods.length]} more={() => go("characters")} moreLabel={`All ${noun.toLowerCase()}`}>
       {withMods.map((c) => (
         <button key={c.name} type="button" role="listitem" className="home-item home-char" onClick={() => go({ view: "characters", character: c.name })}
           title={`${c.name}: ${plural(c.mods.length, "mod")}, ${c.on} on. Click for their mods`}
@@ -329,7 +343,7 @@ function Recent({ game, mods, loaded, editing }: { game: GameState; mods: ModEnt
     );
   }
   return (
-    <Row title={WIDGETS.recent.title} deps={[recent.length]} more={() => go("library")} moreLabel="All mods">
+    <Row id="recent" title={WIDGETS.recent.title} all={`Show all ${recent.length} recent mods`} deps={[recent.length]} more={() => go("library")} moreLabel="All mods">
       {recent.map((m) => (
         <button key={m.id} type="button" role="listitem" className={`home-item home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })}
           title={`${m.name}${m.enabled ? "" : " (off)"}`} onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>

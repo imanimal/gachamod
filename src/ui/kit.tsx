@@ -51,20 +51,21 @@ export function useBusy(): [boolean, (job: () => Promise<unknown>) => Promise<vo
 
 // ── inputs ──
 
-export function Toggle({ checked, onChange, label, hint, disabled, size = "md" }:
-  { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; hint?: ReactNode; disabled?: boolean; size?: "sm" | "md" }) {
+/** `onChange` gets whether Shift was held (Shift+click on a mod's switch keeps its character's other mods on). */
+export function Toggle({ checked, onChange, label, hint, disabled, size = "md", title }:
+  { checked: boolean; onChange: (v: boolean, shift: boolean) => void; label?: ReactNode; hint?: ReactNode; disabled?: boolean; size?: "sm" | "md"; title?: string }) {
   return (
-    <label className={cx("toggle", `toggle-${size}`, checked && "on", disabled && "off")}>
-      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+    <label className={cx("toggle", `toggle-${size}`, checked && "on", disabled && "off")} title={title}>
+      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked, (e.nativeEvent as { shiftKey?: boolean }).shiftKey === true)} />
       <span className="toggle-track" aria-hidden="true"><span className="toggle-knob" /></span>
       {(label || hint) && <span className="toggle-l">{label && <span className="toggle-t">{label}</span>}{hint && <span className="hint">{hint}</span>}</span>}
     </label>
   );
 }
 
-export function Checkbox({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean }) {
+export function Checkbox({ checked, onChange, label, disabled, title }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean; title?: string }) {
   return (
-    <label className={cx("check", checked && "on", disabled && "off")}>
+    <label className={cx("check", checked && "on", disabled && "off")} title={title}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="check-box" aria-hidden="true"><Icon name="check" /></span>
       {label && <span className="check-t">{label}</span>}

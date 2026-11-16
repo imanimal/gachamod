@@ -6,8 +6,9 @@ import { trashPhrase } from "../settings/automatic";
 import type { ModHealth } from "../../lib/fixes";
 import { charNoun } from "../../lib/games";
 import { portraitNow } from "../../lib/portraits";
-import { registerCommands, type Command } from "../../lib/search";
-import { currentGame, go } from "../../lib/store";
+import { registerCommands, scoreCommand, type Command } from "../../lib/search";
+import { currentGame, go, onApp } from "../../lib/store";
+import { held } from "../../lib/tauri";
 import { registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { isOwned, toggleOwned } from "../characters/owned";
 import { characterNames, isCharHidden, setCharHidden } from "../characters/roster";
@@ -16,6 +17,9 @@ import {
   openFolder, openOnGb, previewFromGb, resetPreview, setFavourite, setInProfile, setOn, setParent, trashMods, warmProfiles,
 } from "./actions";
 import { askLib } from "./LibDialogs";
+import { overlappingAll } from "./overlap";
+import { liveCharacterOf, liveShownInstead } from "../ingame/data";
+import { onPublish } from "./data";
 
 // what the mod screens saw last, so menus opened anywhere know a mod's health and a character's mods
 const lastHealth = new Map<GameId, Map<string, ModHealth>>();
@@ -71,9 +75,19 @@ registerMenu("mod", ({ game, mod, selection }) => {
   const fromGb = list.filter((m) => m.source);
   const onScreen = onlyOnScreenFn();
   const reasons = broken.flatMap((m) => healthOf(game, m.id)?.reasons ?? []);
+  // turning on next to the character's other mods that are on (live skins switch instead, one at a time)
+  const going = list.filter((m) => !m.enabled && !liveCharacterOf(game, m.id));
+  const beside = !allOn && going.length ? overlappingAll(going, lastMods.get(game) ?? []).filter((o) => !liveCharacterOf(game, o.id)) : [];
+  const shownInstead = liveShownInstead(game, mod.id);
   return [
     many && { header: `${list.length} mods selected` },
     { label: allOn ? "Turn off" : "Turn on", icon: "power", keys: "Space", onClick: () => void setOn(game, list, !allOn) },
+    !many && !mod.enabled && !!shownInstead && { label: `Show next to ${shownInstead}`, icon: "layers", keys: "Shift+Space",
+      title: `Turns it on next to ${shownInstead} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods`,
+      onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
+    beside.length > 0 && { label: "Turn on with others", icon: "layers", keys: "Shift+Space",
+      title: `Turns ${many ? "them" : "it"} on and keeps ${beside.length === 1 ? beside[0]!.name : `the ${beside.length} other mods`} on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same`,
+      onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
     !many && { label: "Details", icon: "info", keys: "Enter", onClick: () => openDetails(mod) },
     !many && (mod.parts ?? 0) > 0 && { label: "Parts", icon: "layers", title: "Folders inside it that turn on and off by themselves", onClick: () => openDetails(mod, "parts") },
     !many && mod.hasKeys && { label: "Toggles", icon: "key", title: "Its toggles, to change their keys or turn them off", onClick: () => openDetails(mod, "keys") },
@@ -129,27 +143,60 @@ registerMenu("character", ({ game, name }) => {
 
 // ── global search ──
 
-let modsCache: { game: GameId; at: number; list: ModEntry[] } | null = null;
-async function modsFor(game: GameId) {
-  if (modsCache?.game === game && Date.now() - modsCache.at < 5000) return modsCache.list;
-  const list = await library.list(game);
-  modsCache = { game, at: Date.now(), list };
-  return list;
+// The search asks on every key, so the mod list and the roster are kept, and loaded again after the library
+// changes. The last list answers while the new one loads, since a scan can hold the library for seconds.
+const KEEP = 60_000;
+const keptLists: Array<{ stale(): void }> = [];
+let watching = false;
+function watchLibrary() {
+  if (watching) return;
+  watching = true;
+  const stale = () => keptLists.forEach((k) => k.stale());
+  held(library.onChanged(stale));
+  onApp((e) => { if (e.type === "library-refresh") stale(); });
+  onPublish(stale);
 }
+function kept<T>(load: (game: GameId) => Promise<T>) {
+  let game: GameId | null = null, value: T | undefined, at = 0, loading: Promise<T> | null = null;
+  const refresh = (g: GameId) => {
+    const p = load(g);
+    loading = p;
+    p.then((v) => { if (loading === p) { value = v; at = Date.now(); loading = null; } }, () => { if (loading === p) loading = null; });
+    return p;
+  };
+  const k = {
+    get(g: GameId): Promise<T> {
+      watchLibrary();
+      if (g !== game) { game = g; value = undefined; at = 0; loading = null; }
+      if (value === undefined) return loading ?? refresh(g);
+      if (Date.now() - at > KEEP && !loading) refresh(g).catch(() => {});
+      return Promise.resolve(value);
+    },
+    stale() { at = 0; loading = null; },
+  };
+  keptLists.push(k);
+  return k;
+}
+const keptMods = kept((g) => library.list(g));
+const keptRoster = kept(characterNames);
+const modsFor = (game: GameId) => keptMods.get(game).catch(() => [] as ModEntry[]);
 
 registerCommands("library.characters", async (query) => {
   const g = currentGame();
-  if (!g || !query.trim()) return [];
+  if (!g) return [];
+  // the search just opened: load them now so the first letters typed find them
+  if (!query.trim()) { keptRoster.get(g.id).catch(() => {}); void modsFor(g.id); return []; }
   const one = charNoun(g.id, true), many = charNoun(g.id);
-  const [names, mods] = await Promise.all([characterNames(g.id), modsFor(g.id).catch(() => [] as ModEntry[])]);
+  const [names, mods] = await Promise.all([keptRoster.get(g.id).catch(() => []), modsFor(g.id)]);
   const count = new Map<string, number>();
   for (const m of mods) if (m.character) count.set(m.character.toLowerCase(), (count.get(m.character.toLowerCase()) ?? 0) + 1);
   const out: Command[] = [];
   for (const c of names) {
     const n = count.get(c.name.toLowerCase()) ?? 0;
     const img = portraitNow(g.id, c.name, c.icon);
+    // the character page goes before "<name> mods online" even with no mods
     out.push({ id: `char:${g.id}:${c.name}`, title: c.name, section: many, img, icon: "characters",
-      keywords: `${one} ${many} character page skins outfits`, hint: n ? `${n} ${n === 1 ? "mod" : "mods"}` : undefined, priority: n ? 4 : 0,
+      keywords: `${one} ${many} character page skins outfits`, hint: n ? `${n} ${n === 1 ? "mod" : "mods"}` : undefined, priority: n ? 4 : 1,
       run: () => go({ view: "characters", character: c.name }) });
     if (n) out.push({ id: `charmods:${g.id}:${c.name}`, title: `${c.name}'s mods`, section: "Mods", img, icon: "mods",
       keywords: `${one} installed mods skins my`, hint: `${n}`, where: "Mods", priority: 5, run: () => go({ view: "library", character: c.name }) });
@@ -159,16 +206,19 @@ registerCommands("library.characters", async (query) => {
 
 registerCommands("library.mods", async (query) => {
   const g = currentGame();
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!g || !words.length) return [];
+  if (!g || !query.trim()) return [];
   const one = charNoun(g.id, true);
-  const mods = await modsFor(g.id).catch(() => [] as ModEntry[]);
+  const mods = await modsFor(g.id);
+  // the best 60 matches, not the first 60 in folder order
   return mods
-    .filter((m) => { const hay = `${m.name} ${m.character ?? ""} ${m.tags.join(" ")} ${m.source?.submitter ?? ""}`.toLowerCase(); return words.some((w) => hay.includes(w.slice(0, 3))); })
-    .slice(0, 60)
-    .map((m) => ({
-      id: `mod:${g.id}:${m.id}`, title: m.name, section: "Mods", icon: "mods" as const,
+    .map((m): Command => ({
+      id: `mod:${g.id}:${m.id}`, title: m.name, section: "Mods", icon: "mods",
       keywords: `${m.character ?? ""} ${one} installed mod ${m.tags.join(" ")} ${m.source?.submitter ?? ""}`,
       hint: m.enabled ? "On" : "Off", where: `Mods › ${m.character ?? "No character"}`, run: () => go({ view: "library", modId: m.id }),
-    }));
+    }))
+    .map((c) => ({ c, s: scoreCommand(query, c) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 60)
+    .map((x) => x.c);
 });

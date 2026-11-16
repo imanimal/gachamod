@@ -1,6 +1,6 @@
 // The setup window's calls to src-setup (src-setup/src/main.rs). In a browser (npm run dev, then /setup.html) they
 // are faked so every screen can be seen: ?mode=install|maintain|uninstall|repair, ?theme=zzz, ?scheme=light,
-// ?installed=0.1.0 (a version, or "none"), ?running=1, ?fail=1.
+// ?installed=0.1.0 (a version, or "none"), ?latest=0.1.2 (the newest on GitHub), ?offline=1, ?running=1, ?fail=1.
 import type { Look } from "./look";
 
 export type Mode = "install" | "maintain" | "uninstall" | "repair";
@@ -35,6 +35,10 @@ export const api = {
   dataSize: () => call<number>("data_size"),
   install: (opts: InstallOpts) => call<string>("install", { opts }),
   repair: () => call<string>("repair"),
+  /** Download the newest gachamod from GitHub and install it over the copy there. */
+  update: () => call<string>("update"),
+  /** The newest version on GitHub. */
+  latest: () => call<string>("latest"),
   uninstall: (deleteData: boolean) => call<void>("uninstall", { deleteData }),
   stop: () => call<void>("stop"),
   openApp: (dir?: string) => call<void>("open_app", { dir: dir ?? null }),
@@ -91,6 +95,8 @@ async function demo(cmd: string, args?: Record<string, unknown>): Promise<unknow
     } satisfies SetupInfo;
     case "data_size": await sleep(700); return 2_576_980_378;
     case "install": await steps([["unpack", "Unpacking the installer", 400], ["copy", "Copying gachamod", 1600]]); return "C:\\Users\\you\\AppData\\Local\\gachamod";
+    case "latest": await sleep(900); if (p.get("offline")) throw "Couldn't reach GitHub. Check your internet connection."; return p.get("latest") ?? "0.1.2";
+    case "update": await steps([["download", `Downloading gachamod ${p.get("latest") ?? "0.1.2"}`, 1800], ["verify", "Checking the download", 500], ["copy", "Updating gachamod", 1200]]); return "C:\\Users\\you\\AppData\\Local\\gachamod";
     case "repair": await steps([["download", "Downloading gachamod 0.1.1", 1800], ["verify", "Checking the download", 500], ["copy", "Putting back gachamod", 1200]]); return "";
     case "uninstall": await steps([["remove", "Removing gachamod", 900], ...(args?.deleteData ? [["data", "Moving gachamod's data to the Recycle Bin", 900] as [string, string, number]] : [])]); return;
     default: return;

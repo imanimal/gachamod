@@ -144,10 +144,23 @@ pub async fn repair(app: AppHandle, payload: Option<Payload>, temp: PathBuf, dir
         }
         None => (download_newest(&app, &temp).await?, size_now),
     };
+    run_installer(app, exe, size, dir, "Putting back").await
+}
+
+/// Update to the newest release on GitHub, for when this setup has no newer installer inside it (the setup.exe next
+/// to gachamod, or an old download). It works without opening gachamod, so a copy that won't start can still update.
+pub async fn update(app: AppHandle, temp: PathBuf, dir: PathBuf) -> Result<PathBuf, String> {
+    let size = std::fs::metadata(dir.join(sys::APP_EXE)).map(|m| m.len()).unwrap_or(0);
+    let exe = download_newest(&app, &temp).await?;
+    run_installer(app, exe, size, dir, "Updating").await
+}
+
+/// Run an installer over the copy in `dir`, quietly, then check the result.
+async fn run_installer(app: AppHandle, exe: PathBuf, size: u64, dir: PathBuf, verb: &'static str) -> Result<PathBuf, String> {
     let admin = sys::pref("admin").as_deref() == Some("1");
     tauri::async_runtime::spawn_blocking(move || {
         if sys::running_in(&dir) { report(&app, "close", "Closing gachamod", None, Some(HOLD_CLOSE)); }
-        let r = run_nsis(&app, &exe, &format!("/S /D={}", dir.display()), &dir, size, "Putting back");
+        let r = run_nsis(&app, &exe, &format!("/S /D={}", dir.display()), &dir, size, verb);
         let _ = std::fs::remove_file(&exe);
         r?;
         finish(&app, &dir, admin)
@@ -160,18 +173,35 @@ fn net_err(e: reqwest::Error) -> String {
     else { format!("The download failed: {e}") }
 }
 
-/// Download the newest release's installer (the one the app's updater uses) and check its signature.
-async fn download_newest(app: &AppHandle, temp: &Path) -> Result<PathBuf, String> {
-    report(app, "download", "Asking GitHub for the newest gachamod", None, Some(HOLD_NET));
-    let client = reqwest::Client::builder().user_agent("gachamod-setup").connect_timeout(Duration::from_secs(15)).build().map_err(|e| e.to_string())?;
-    let wait = Duration::from_secs(30);
+fn client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder().user_agent("gachamod-setup").connect_timeout(Duration::from_secs(15)).build().map_err(|e| e.to_string())
+}
+
+struct Release { version: String, url: String, sig: String }
+
+/// The newest release's version and Windows installer, from the note the app's updater reads.
+async fn newest(client: &reqwest::Client, wait: Duration) -> Result<Release, String> {
     let text = tokio::time::timeout(wait, async { client.get(LATEST_JSON).send().await?.error_for_status()?.text().await }).await
-        .map_err(|_| "GitHub didn't answer for 30 seconds.".to_string())?.map_err(net_err)?;
+        .map_err(|_| format!("GitHub didn't answer for {} seconds.", wait.as_secs()))?.map_err(net_err)?;
     let v: serde_json::Value = serde_json::from_str(&text).map_err(|_| "GitHub's note about the newest version didn't make sense.".to_string())?;
     let p = &v["platforms"]["windows-x86_64"];
     let (Some(url), Some(sig)) = (p["url"].as_str(), p["signature"].as_str()) else { return Err("The newest release has no Windows installer.".into()) };
-    let version = v["version"].as_str().unwrap_or("").to_string();
-    let mut resp = tokio::time::timeout(wait, client.get(url).send()).await.map_err(|_| "GitHub didn't answer for 30 seconds.".to_string())?
+    Ok(Release { version: v["version"].as_str().unwrap_or("").trim_start_matches('v').to_string(), url: url.into(), sig: sig.into() })
+}
+
+/// The newest version on GitHub, for the window to offer an update.
+pub async fn latest_version() -> Result<String, String> {
+    let r = newest(&client()?, Duration::from_secs(10)).await?;
+    if r.version.is_empty() { Err("GitHub's note about the newest version has no version in it.".into()) } else { Ok(r.version) }
+}
+
+/// Download the newest release's installer (the one the app's updater uses) and check its signature.
+async fn download_newest(app: &AppHandle, temp: &Path) -> Result<PathBuf, String> {
+    report(app, "download", "Asking GitHub for the newest gachamod", None, Some(HOLD_NET));
+    let client = client()?;
+    let wait = Duration::from_secs(30);
+    let Release { version, url, sig } = newest(&client, wait).await?;
+    let mut resp = tokio::time::timeout(wait, client.get(&url).send()).await.map_err(|_| "GitHub didn't answer for 30 seconds.".to_string())?
         .map_err(net_err)?.error_for_status().map_err(net_err)?;
     let total = resp.content_length().unwrap_or(0);
     let mut bytes: Vec<u8> = Vec::with_capacity(total as usize);
@@ -187,7 +217,7 @@ async fn download_newest(app: &AppHandle, temp: &Path) -> Result<PathBuf, String
         }
     }
     report(app, "verify", "Checking the download", None, None);
-    verify(&bytes, sig)?;
+    verify(&bytes, &sig)?;
     let exe = temp.join(format!("gachamod_{version}_setup.exe"));
     std::fs::write(&exe, &bytes).map_err(|e| format!("Couldn't save the download into {}: {e}", temp.display()))?;
     Ok(exe)

@@ -65,7 +65,11 @@
 .home-quick-acts .seg { margin-left: .45rem; }
 
 /* profile chips: one click switches */
-.home-profiles { display: flex; align-items: center; gap: .4rem; flex: 1 1 20rem; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+/* sideways rows get 5px of padding, room for the 4px focus ring, and a margin that keeps them where they were */
+.home-profiles-wrap { display: flex; align-items: center; gap: .25rem; flex: 1 1 20rem; min-width: 0; }
+.home-profiles-wrap.is-all { align-items: flex-start; }
+.home-profiles-wrap.is-all > .ibtn { margin-top: .2rem; }
+.home-profiles { display: flex; align-items: center; gap: .4rem; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 5px 5px 7px; margin: -3px -3px -5px; }
 .home-profiles::-webkit-scrollbar { display: none; }
 .home-pchip { display: inline-flex; align-items: center; gap: .45rem; flex: none; max-width: 14rem; height: 2.3rem; padding: 0 .65rem 0 .3rem; border-radius: 999px;
   background: var(--surface-2); color: var(--text-2); font-weight: 600; box-shadow: inset 0 0 0 1px var(--line); }
@@ -80,7 +84,7 @@
 .home-pchip-skel { width: 10rem; height: 2.3rem; border-radius: 999px; }
 
 /* sideways rows */
-.home-row { display: flex; gap: .65rem; overflow-x: auto; scrollbar-width: none; padding: .3rem .2rem .5rem; }
+.home-row { display: flex; gap: .65rem; overflow-x: auto; scrollbar-width: none; padding: .3rem 5px .5rem; margin-inline: calc(.2rem - 5px); }
 .home-row::-webkit-scrollbar { display: none; }
 .home-tile { position: relative; display: flex; flex-direction: column; flex: none; width: 11.5rem; gap: .1rem; padding-bottom: .45rem; text-align: left;
   border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; color: inherit; }

@@ -42,6 +42,8 @@ pub struct GameState {
     pub running: bool,
     pub mod_count: u32,
     pub enabled_count: u32,
+    /// The key that reloads mods in the game (d3dx.ini `reload_config`), like "F10".
+    pub reload_key: String,
 }
 
 /// Where a mod came from online.

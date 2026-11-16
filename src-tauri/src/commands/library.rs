@@ -28,6 +28,13 @@ pub async fn mod_get(st: State<'_, AppState>, game: String, id: String) -> Resul
     blocking(move || library::get(&*lock(&db)?, &game, &id)).await
 }
 
+/// Of `others`, the mods that change the same parts as any of `ids` (asked before turning mods on).
+#[tauri::command]
+pub async fn mods_overlapping(st: State<'_, AppState>, game: String, ids: Vec<String>, others: Vec<String>) -> Result<Vec<String>> {
+    let db = st.db.clone();
+    blocking(move || library::overlapping(&*lock(&db)?, &game, &ids, &others)).await
+}
+
 #[tauri::command]
 /// `turn_off_others`: what the user picked when the UI asked about the character's other mods (None follows the
 /// "<game>.oneSkin" setting).

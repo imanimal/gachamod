@@ -677,3 +677,13 @@ fn shared_key_settings_make_the_same_file() {
     assert!(other[0].changed());
     let _ = fs::remove_dir_all(&a);
 }
+
+#[test]
+fn reload_bindings_become_a_key_to_press() {
+    assert_eq!(press_of("no_modifiers VK_F10"), Some((0x79, vec![], "F10".into())));
+    assert_eq!(press_of("ctrl no_alt VK_F5"), Some((0x74, vec![0x11], "Ctrl+F5".into())));
+    assert_eq!(press_of("shift alt r"), Some((0x52, vec![0x10, 0x12], "Shift+Alt+R".into())));
+    assert_eq!(press_of("VK_HOME"), Some((0x24, vec![], "HOME".into())));
+    assert_eq!(press_of("XB_BACK"), None);
+    assert_eq!(press_of("no_modifiers"), None);
+}

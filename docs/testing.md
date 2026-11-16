@@ -1,21 +1,23 @@
 # Checking a game
 
-The menu over the game while playing (docs/ingame.md, section 11) has only been tried in Zenless Zone Zero. Genshin
-Impact, Honkai: Star Rail, Wuthering Waves and Arknights: Endfield use the same kind of loader, but each could differ in
-whether it runs as administrator, whether it runs in exclusive fullscreen, and how it handles reloads. Players who have
-those games check them with Help, Check this game, and the results come to the developer in PostHog.
+Switching skins while playing (docs/ingame.md) has only been tried in Zenless Zone Zero. Genshin Impact, Honkai:
+Star Rail, Wuthering Waves and Arknights: Endfield use the same kind of loader, but each could differ in whether it
+runs as administrator, whether its loader reads keys when the game isn't in front, and how it handles reloads. Players
+who have those games check them with Help, Check this game, and the results come to the developer in PostHog.
 
 ## For players
 
 1. Pick the game in the sidebar and start it with mods.
 2. Open Help (the ? in the title bar), then Check this game.
-3. If the menu while playing is off, turn it on (the check has a button to its settings).
-4. Go through the three steps. Each has Yes, No and Skip, and most take a minute:
+3. If no character switches in game yet, press Switch every character in game. Undo takes it back afterwards.
+4. Go through the five steps. Each has Yes, No and Skip, and most take a minute:
 
 | Step | What you do | What gachamod checks by itself |
 | --- | --- | --- |
-| Open the menu | Press the menu key (F7) in the game | Whether gachamod heard the key, and whether the game was in exclusive fullscreen |
-| Pick from the menu | Pick a skin in that menu | Whether the pick reached gachamod (the game then reloads) |
+| Pick a skin from gachamod | Pick a skin in the check window | Whether the game saved the pick (it does 5 to 15 seconds later) |
+| Open the menu | Press the menu key (F7) in the game | Whether gachamod heard the key and which menu it opened |
+| Pick from the menu | Pick a skin in that menu | Whether gachamod read the pick back from the game |
+| Reload | Press F10 in the game | Nothing, it asks whether the skins stayed |
 | Controller | Press both sticks in | Whether gachamod saw it |
 
 5. Write anything that looked wrong, then press Send. It goes without an account. The window lists what's in it.
@@ -46,19 +48,19 @@ In PostHog, open SQL (or a new insight of the SQL kind) and run:
 
 ```sql
 SELECT timestamp, properties.game, properties.importer, properties.loader_version, properties.window_mode,
-       properties.game_admin, properties.elevated, properties.check_version,
-       properties.menu_opened, properties.menu_heard, properties.menu_pick_changed, properties.menu_pick_seen,
-       properties.pad_opened, properties.notes, properties.contact
+       properties.game_admin, properties.elevated,
+       properties.pick_changed, properties.pick_saved, properties.menu_opened, properties.menu_heard,
+       properties.menu_pick_changed, properties.menu_pick_read, properties.reload_kept, properties.pad_opened,
+       properties.notes, properties.contact
 FROM events
 WHERE event = 'game check'
 ORDER BY timestamp DESC
 LIMIT 200
 ```
 
-Save it to a dashboard. `menu_heard = none` with `game_admin = true` and `elevated = false` is Windows keeping the
-key away; `menu_heard = fullscreen` is a game in exclusive fullscreen. `menu_pick_seen = true` with
-`menu_pick_changed = no` means the pick went through but the game didn't reload (or the mod didn't draw). Checks with
-`check_version` 1 tested live switching, which is gone. `loader_log` holds the end of d3d11_log.txt when the player attached logs (open the event in Activity
+Save it to a dashboard. A row with `pick_saved = yes` and `pick_changed = no` means the loader took the key but the
+mod didn't draw the new skin; `pick_saved = no` with `game_admin = true` and `elevated = false` is Windows keeping
+the keys away. `loader_log` holds the end of d3d11_log.txt when the player attached logs (open the event in Activity
 to read it).
 
 docs/telemetry.md lists every value. Feedback lands as `feedback` events, crashes under Error tracking.
@@ -67,9 +69,9 @@ docs/telemetry.md lists every value. Feedback lands as `feedback` events, crashe
 
 Something to post on the GameBanana pages, the README or a Discord:
 
-> Play Genshin, Star Rail, Wuthering Waves or Endfield? gachamod's menu while you play has only been checked in
-> Zenless Zone Zero. If you have five minutes, start your game, open Help, Check this game in gachamod and go through
-> the steps. It sends the answers straight to me, no account needed.
+> Play Genshin, Star Rail, Wuthering Waves or Endfield? gachamod's skin switching while you play has only been
+> checked in Zenless Zone Zero. If you have ten minutes, start your game, open Help, Check this game in gachamod and
+> go through the steps. It sends the answers straight to me, no account needed.
 
 ### When a game passes
 
@@ -89,14 +91,28 @@ These have only run against the demo and unit tests (a stand-in .bat fixer).
   mod gets its own result and backup.
 - A mod the fixer leaves broken shows what the fixer did and "Try again" in its details and in Tools > Fixes, and
   still does after a restart.
-- The menu over the game: picking a skin closes it, the game comes forward and reloads, and the pick shows.
-  Clicking into the game closes it. Browse installs a mod while the game runs.
+- The menu over the game: picking a skin keeps the menu open and the keyboard comes back to it once the keys have
+  gone to the game. Clicking into the game still closes it. Browse installs a mod while the game runs.
 - Settings, Games, Uninstall mod loader for one game, then Install again: the Mods folder and d3dx_user.ini are where
   they were and XXMI Launcher shows the loader as not installed in between.
 - Uninstall XXMI Launcher: the launcher, loaders and shortcuts are in the Recycle Bin, the Mods folders are still in
   the XXMI folder, and the setup page offers to install again.
 - Reset gachamod: the app restarts on the first-start page, the old database is in `backups/before-reset-<time>/`,
   and logs and older backups are still there.
+
+### Still to check: the black window on more than one monitor
+
+Players on 0.1.1-beta.3 with more than one monitor saw the main window go black after switching to another window
+(and on one PC whenever it had focus); it only drew while the mouse moved over it. It doesn't happen on a single
+monitor. Every window now starts with WebView2's occlusion check off (docs/spec.md). Check, on such a PC:
+
+- Switch to another window on the same monitor and on the other one, open a window over gachamod, and alt-tab back:
+  the window keeps drawing each time.
+- If it still goes black, turn Hardware acceleration off (Settings, Appearance) and try again.
+- Restart from that setting's toast opens the window every time (the closing copy's WebView2 may still be running
+  with the other flags; `main_window` tries again for a few seconds).
+- `gachamod.exe --disable-gpu`, with gachamod closed and while it runs.
+- The menu over a game still opens, with hardware acceleration on and off.
 
 ### Still to check: installing XXMI from the app
 
@@ -109,3 +125,27 @@ PC without XXMI, check:
 - Whether the loaders need the Visual C++ runtime on a fresh Windows, and what the game does without it.
 - GitHub's limit for downloads without an account (60 API calls an hour per address) and the message it gives.
 - Antivirus holding or removing `d3d11.dll` or `3dmloader.dll` right after the copy.
+
+### Still to check: starting games and the reload key
+
+- Arknights: Endfield outside Steam, Play without mods (or Play with XXMI turned off): gachamod opens the GRYPHLINK
+  launcher instead of `Endfield.exe`, and pressing Start there plays the game. Check the launcher is found from the
+  game folder, the registry and `C:\Program Files\GRYPHLINK`.
+- Zenless Zone Zero from Steam: Play, with XXMI Launcher closed, switches XXMI's Game Launch to Steam, the toast says
+  so, and the game starts with mods (XXMI may restart Steam once to set the launch options). Play without mods starts
+  it through Steam with no "launch from Steam" message. Detection finds the Steam folder, including when the game sits
+  a folder below `steamapps\common\<app folder>`.
+- A community game, Play without mods while its 3DMigoto loader is still open from the last run: the toast says the
+  loader is running and to close it.
+- A game whose d3dx.ini binds `reload_config` to something other than F10 (try `ctrl VK_F5`): Reload in Tools,
+  the automatic reload after a change and every message name and press that key.
+- A Mods folder with another name inside the loader folder (`Mods_Custom`, included from d3dx.ini): a mod's saved
+  options show in its details and survive turning it off and on.
+- ZZZ with live characters: after gachamod starts, d3dx.ini has `settings_auto_save_interval = 1` and a
+  `d3dx.ini.gachamod.bak`. Pick a skin in the game's own menu (F7): My Mods and Tools show it within about two seconds.
+  Turn off "Show skins picked in the game right away" and the value goes back to 60.
+- Shift+click a live skin that isn't showing (My Mods and the F7 overlay): it turns on next to the skin showing, leaves
+  in-game switching, and both show after a reload. Turn on a hair recolour next to an outfit of the same character: the
+  outfit stays on. Another outfit turns the first one off.
+- Change several mods quickly with the game in front: gachamod presses the reload key once, then waits at least 10
+  seconds before the next press, and never more than three times a minute.

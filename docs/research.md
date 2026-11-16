@@ -32,7 +32,12 @@ Exe / folder data (XXMI config fields):
 | hi3 | BH3.exe | BH3.exe | Honkai Impact 3rd game | BH3_Data | HIMI/ | HOOK | NATIVE |
 | ef | Endfield.exe | Endfield.exe | EndField Game | Endfield_Data | EFMI/ | DIRECT | NATIVE |
 
-Enums: `InjectMode` = DIRECT / HOOK / SKIP. `GameLaunch` = DIRECT / STEAM / EPIC_GAMES / CUSTOM / MANUAL (default DIRECT). `StartMethod` = NATIVE / SHELL.
+Enums: `InjectMode` = DIRECT / HOOK / SKIP. `GameLaunch` = DIRECT / STEAM / EPIC_GAMES / CUSTOM / MANUAL (default DIRECT; the
+config stores these names, e.g. `"game_launch": "DIRECT"`). XXMI never picks STEAM by itself. With STEAM it starts the game with
+`steam.exe -silent -applaunch <app>`, and with `configure_platform_launch_options` (default true) it first writes the launch
+options into Steam's localconfig.vdf, stopping and restarting Steam to do it. For ZZZ and WW `skip_platform_game_launcher`
+(default true) makes those options `"<game exe>" && %command%`. The Steam copy of ZZZ (app 4162040) refuses a direct start and
+asks to be launched from Steam (Steam community thread, XXMI 2.5 source). `StartMethod` = NATIVE / SHELL.
 
 Typical install locations and how XXMI finds them:
 
@@ -304,7 +309,7 @@ type = cycle
 $swapvar = 0,1,2
 ```
 
-d3dx_user.ini (written by 3DMigoto on exit, on F10 reload, and every `settings_auto_save_interval` seconds (60 in GIMI d3dx.ini); Ctrl+Alt+F10 `wipe_user_config` deletes it):
+d3dx_user.ini (written by 3DMigoto on exit, on F10 reload, and every `settings_auto_save_interval` seconds (60 in GIMI d3dx.ini) but only when a value changed: a ZZZ session on 2026-11-15 saved once at a pick and not again for the next 8 minutes; Ctrl+Alt+F10 `wipe_user_config` deletes it):
 ```
 ; AUTOMATICALLY GENERATED FILE - DO NOT EDIT
 ; ...

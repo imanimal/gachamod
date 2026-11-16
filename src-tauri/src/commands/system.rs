@@ -214,8 +214,12 @@ pub async fn dev_clear_frame_dumps(st: State<'_, AppState>, game: String) -> Res
 }
 
 #[tauri::command]
-pub async fn dev_reload(game: String) -> Result<()> {
-    blocking(move || devtools::reload_in_game(&game)).await
+pub async fn dev_reload(st: State<'_, AppState>, game: String) -> Result<()> {
+    let db = st.db.clone();
+    blocking(move || {
+        let key = devtools::reload_key(&*lock(&db)?, &game);
+        devtools::reload_in_game(&game, &key)
+    }).await
 }
 
 #[tauri::command]

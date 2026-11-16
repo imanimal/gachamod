@@ -482,7 +482,7 @@ function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPic
                   ? <input className="gbb-saved-in" autoFocus value={name} aria-label="New name" onChange={(e) => setName(e.target.value)} onBlur={() => finish(s.id)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); finish(s.id); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEdit(null); } }} />
                   : (
-                    <button type="button" className="gbb-saved-b" title={describe(s.f)} onClick={() => { applySaved(game, s); onPick(); }}>
+                    <button type="button" className="gbb-saved-b" title={s.name === describe(s.f) || s.name === describe(s.f, true) ? undefined : `Puts back: ${describe(s.f, true)}`} onClick={() => { applySaved(game, s); onPick(); }}>
                       <Icon name={cur?.id === s.id ? "check" : "pin"} /><span>{s.name}</span>
                     </button>
                   )}

@@ -166,7 +166,8 @@ pub async fn gb_sign_in(app: AppHandle, st: State<'_, AppState>) -> Result<()> {
     }
     let url = acc::LOGIN_URL.parse().map_err(|_| Error::Invalid("Bad sign-in address".into()))?;
     let login = Login { data_dir: st.data_dir.clone(), db: st.db.clone(), http: st.http.clone(), done: Arc::new(AtomicBool::new(false)), app: app.clone() };
-    let mut builder = WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(url))
+    let gpu = app.try_state::<crate::Gpu>().map_or(true, |g| g.0);
+    let mut builder = crate::browser_flags(WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(url)), gpu)
         .title("Sign in to GameBanana")
         .inner_size(520.0, 760.0)
         .data_directory(acc::login_data_dir(&login.data_dir));

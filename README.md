@@ -22,13 +22,14 @@ gachamod updates itself. A new version downloads in the background and installs 
 away if you click Restart in the toast. Settings, Automatic can turn that off.
 
 To repair or uninstall, use Open setup in Settings, About, or pick gachamod in Windows Settings, Apps, Installed apps.
+If gachamod won't open, setup can update it too: it offers Update when GitHub has a newer version.
 Setup opens in the theme gachamod last showed. Repair puts the program, its shortcuts and its Windows entries back.
 Uninstall leaves your mods in their folders; tick "Also delete gachamod's data" to move its settings, profiles and
 trash to the Recycle Bin too.
 
-Play Genshin, Star Rail, Wuthering Waves or Endfield? The menu while you play has only been checked in Zenless Zone
-Zero so far. Start your game, open Help, Check this game, and go through the steps. It takes about five minutes and
-sends the answers to the developer (docs/testing.md).
+Play Genshin, Star Rail, Wuthering Waves or Endfield? Switching skins while you play has only been checked in Zenless
+Zone Zero so far. Start your game, open Help, Check this game, and go through the steps. It takes about ten minutes
+and sends the answers to the developer (docs/testing.md).
 
 ## What it does
 
@@ -42,8 +43,6 @@ sends the answers to the developer (docs/testing.md).
 - Checks GameBanana for newer files of the mods you have.
 - Edits XXMI's launch settings (arguments, priority, FPS unlock and the like) and 3DMigoto's debug options, and can
   press F10 in the game for you after a change.
-- Opens a menu over the game while you play (F7, or both sticks on a controller). Pick a skin there and the game
-  reloads its mods with it. The game has to run borderless or windowed.
 - Moves mods out of Integrated Mod Manager's folders if you used it before.
 
 ## .gachamod files

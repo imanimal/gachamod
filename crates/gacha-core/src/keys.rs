@@ -716,6 +716,34 @@ fn vk_named(name: &str) -> Option<u32> {
     })
 }
 
+/// A d3dx.ini key binding ("no_modifiers VK_F10", "ctrl VK_F5") as the keyboard key to press, the modifiers to hold
+/// with it and the name people know it by ("F10", "Ctrl+F5"). None when it names no keyboard key.
+pub fn press_of(binding: &str) -> Option<(u32, Vec<u32>, String)> {
+    let (mut held, mut names, mut found) = (Vec::new(), String::new(), None);
+    for t in binding.split_whitespace() {
+        let (code, name) = match t.to_ascii_lowercase().as_str() {
+            "ctrl" => (0x11, "Ctrl"),
+            "alt" => (0x12, "Alt"),
+            "shift" => (0x10, "Shift"),
+            "windows" => (0x5B, "Win"),
+            _ => {
+                if found.is_none() && !t.to_ascii_lowercase().starts_with("no_") {
+                    found = vk_code(t).filter(|c| *c >= 0x08).map(|c| (c, t));
+                }
+                continue;
+            }
+        };
+        if !held.contains(&code) { held.push(code); names.push_str(name); names.push('+'); }
+    }
+    let (code, token) = found?;
+    let name = match code {
+        0x70..=0x87 => format!("F{}", code - 0x6F),
+        0x30..=0x39 | 0x41..=0x5A => (code as u8 as char).to_string(),
+        _ => { let up = token.to_ascii_uppercase(); up.strip_prefix("VK_").unwrap_or(&up).to_string() }
+    };
+    Some((code, held, names + &name))
+}
+
 /// The Windows key code of a keyboard or mouse key name ("VK_UP", "up", "A", "0x41").
 fn vk_code(token: &str) -> Option<u32> {
     let up = token.trim().to_ascii_uppercase();
@@ -1069,7 +1097,7 @@ fn mod_of(db: &Db, game: &str, id: &str) -> Result<ModEntry> {
 }
 
 fn running_note(game: &str) -> Option<String> {
-    crate::launch::running(game).then(|| "Press F10 in game to load the change".to_string())
+    crate::launch::running(game).then(|| format!("Press {} in game to load the change", crate::devtools::key_name(game)))
 }
 
 /// An ini this edit leaves with none of gachamod's markers gets the author's kept copy, byte for byte, instead of

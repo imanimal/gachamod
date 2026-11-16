@@ -23,20 +23,22 @@ const fail = (e: unknown) => toast(errorText(e), true);
 // ── on and off ──
 
 /** Turn mods on or off with Undo. `prior` is every mod of the game as it was (fetched when not given), so mods the
- *  one-skin rule turns off come back on Undo too. Turning one mod on while its character has another on asks first
- *  (overlap.ts), by `at` or the focused element. False when nothing changed (the question was closed). */
-export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?: ModEntry[], at?: Element | null): Promise<boolean> {
+ *  one-skin rule turns off come back on Undo too. Turning mods on while their character has others on asks first
+ *  (overlap.ts), by `at` or the focused element; `keep` (Shift, or "Turn on with others") keeps the others on without
+ *  asking. False when nothing changed (the question was closed). */
+export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?: ModEntry[], at?: Element | null, keep = false): Promise<boolean> {
   const ids = list.filter((m) => m.enabled !== on).map((m) => m.id);
   if (!ids.length) { toast(on ? "They're already on" : "They're already off"); return false; }
   const from = at ?? document.activeElement;
   try {
     const all = prior ?? await library.list(game);
     let turnOffOthers: boolean | undefined;
-    if (on && ids.length === 1) {
-      const mod = all.find((m) => m.id === ids[0]) ?? list.find((m) => m.id === ids[0])!;
-      const c = await askOverlap(game, mod, all, from);
+    if (on && keep) turnOffOthers = false;
+    else if (on) {
+      const going = ids.map((id) => all.find((m) => m.id === id) ?? list.find((m) => m.id === id)!);
+      const c = await askOverlap(game, going, all, from);
       if (!c) return false;
-      if (c.parent && !(await setParent(game, mod, c.parent, all))) return false;
+      if (c.parent && going.length === 1 && !(await setParent(game, going[0]!, c.parent, all))) return false;
       turnOffOthers = c.turnOffOthers;
     }
     await toggleMods(game, ids, on, all, turnOffOthers);
@@ -170,7 +172,7 @@ export function openDetails(m: Pick<ModEntry, "id">, section?: DrawerSection) {
 }
 /** A part of the drawer to scroll to when it opens: its parts, toggles, conflicts, files and size, or its 3D view. It stays until
  *  the drawer has scrolled there (clearDrawerSection), so an effect that runs twice still finds it. */
-export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "parts";
+export type DrawerSection = "keys" | "conflicts" | "files" | "model" | "ingame" | "parts";
 let drawerSection: { id: string; section: DrawerSection } | null = null;
 export const drawerSectionFor = (id: string): DrawerSection | null => (drawerSection?.id === id ? drawerSection.section : null);
 export function clearDrawerSection() { drawerSection = null; }

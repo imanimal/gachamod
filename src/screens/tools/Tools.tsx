@@ -1,5 +1,5 @@
 // Tools, one page at a time like Settings (settings/Paged.tsx): problems and fixes after a game update, conflicts and
-// key clashes, launch options, the menu while playing, sharing or moving mods, and the mod maker tools (3DMigoto
+// key clashes, launch options, switching skins in game, sharing or moving mods, and the mod maker tools (3DMigoto
 // switches, files and logs, finding a hash). Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels.
 // Launch fields save on change (400 ms after the last one) with a small "Saved". Every page and panel is a route:
 // go({ view: "tools", section: "launch" }) or section: "fixes".
@@ -65,7 +65,7 @@ registerCommands("tools", () => {
   return [
     { id: "tools:fixes", title: "Fix mods after a game update", section: "Pages", icon: "wand", where: "Tools › Problems and fixes", keywords: "fixer fixes broken mods hash game update patch repair",
       run: () => go({ view: "tools", section: "fixes" }) },
-    { id: "tools:ingame", title: "Menu while playing", section: "Pages", icon: "gamepad", where: "Tools › Menu while playing", keywords: "in game overlay menu switch skins f7 controller",
+    { id: "tools:ingame", title: "In-game menu", section: "Pages", icon: "gamepad", where: "Tools › Switch skins in game", keywords: "in game overlay switch mods without reload f10 toggle menu",
       run: () => go({ view: "tools", section: "ingame" }) },
     { id: "tools:migoto", title: "Mod maker switches", section: "Pages", icon: "code", where: "Tools › Mod makers", keywords: "hunting mode dump shaders log 3dmigoto debug warnings",
       run: () => go({ view: "tools", section: "migoto" }) },
@@ -90,7 +90,7 @@ const PAGES: PageInfo[] = [
   { id: "problems", label: "Problems and fixes", icon: "warn", tip: "What stops a mod from showing right in game, and the fixers for mods a game update broke" },
   { id: "conflicts", label: "Conflicts", icon: "layers", tip: "Mods that are on and change the same parts of a model, or use the same keys" },
   { id: "launch", label: "Launch", icon: "play", tip: "How the game starts: arguments, window, commands before and after" },
-  { id: "ingame", label: "Menu while playing", icon: "gamepad", tip: "The menu that opens over the game while you play, to pick skins without leaving it" },
+  { id: "ingame", label: "Switch skins in game", icon: "swap" },
   { id: "packs", label: "Share and move", icon: "package", tip: "Share mods and profiles as a .gachamod file, or move mods out of Integrated Mod Manager" },
   { id: "migoto", label: "Mod makers", icon: "code", tip: "3DMigoto's hunting mode and logging, the shader cache and logs, and looking up a hash" },
 ];
@@ -374,8 +374,8 @@ function DevSection({ game }: { game: GameState }) {
           </div>
           <div className="tools-dev">
             <div className="tools-dev-row">
-              <span><b>Reload mods in game</b><span className="hint">Brings {game.short} to the front and presses F10</span></span>
-              <Button icon="refresh" busy={busy === "reload"} disabled={!game.running} title={game.running ? "Press F10 in the game" : `${game.name} isn't running`}
+              <span><b>Reload mods in game</b><span className="hint">Brings {game.short} to the front and presses {game.reloadKey || "F10"}, its reload key in d3dx.ini</span></span>
+              <Button icon="refresh" busy={busy === "reload"} disabled={!game.running} title={game.running ? `Press ${game.reloadKey || "F10"} in the game` : `${game.name} isn't running`}
                 onClick={() => void run("reload", async () => { await dev.reload(game.id); toast("Reloaded mods in game"); })}>Reload</Button>
             </div>
             <div className="tools-dev-row">

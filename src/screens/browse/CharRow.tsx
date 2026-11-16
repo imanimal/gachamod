@@ -9,7 +9,7 @@ import { IconButton } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
 import { Portrait } from "../../ui/Portrait";
-import { rowKeys, useSideScroll } from "./sideScroll";
+import { reveal, rowKeys, useSideScroll } from "./sideScroll";
 
 const EXPAND_KEY = "gm.browse.charsOpen";
 
@@ -22,11 +22,11 @@ export function CharRow({ game, chars, value, onChange, expanded, onExpanded }: 
   usePortraitBatch(game, chars.map((c) => c.name));
   const noun = charNoun(game);
 
-  // keep the picked character in view
+  // keep the picked character in view (scrolling the row only: the page stays where it is)
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLElement>(".gb-ch.on");
-    el?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [value, chars.length]);
+    const row = ref.current, el = row?.querySelector<HTMLElement>(".gb-ch.on");
+    if (row && el && !expanded) reveal(row, el, "center");
+  }, [value, chars.length, expanded]);
 
   if (!chars.length) return null;
   const want = value?.toLowerCase();

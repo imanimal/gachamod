@@ -9,6 +9,7 @@ import { restartAsAdmin } from "../../lib/elevation";
 import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type FeedbackStart as Start } from "../../lib/feedback";
 import { currentGame, currentRoute } from "../../lib/store";
 import { SetRow } from "./parts";
+import { setTester, useTester } from "../ingame/data";
 
 // ── the form ──
 
@@ -81,6 +82,7 @@ export function FeedbackSection() {
         <SetRow id="set-gamecheck" label="Check this game" hint="Walks through switching skins while you play, one step at a time, then sends what worked. About ten minutes with the game open">
           <Button size="sm" icon="check" onClick={openGameCheck} data-t="gamecheck-open" title="Checks the game picked in the sidebar">Check this game</Button>
         </SetRow>
+        <TesterRow />
         <SetRow id="set-usage" label="Usage counts" hint="Sends anonymous counts of which screens and buttons get used, so the developer knows what to work on. No mod names, file paths or account details"
           tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. docs/telemetry.md in gachamod's source lists every one">
           <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
@@ -97,8 +99,20 @@ export function FeedbackSection() {
   );
 }
 
+/** Tester options: switching skins in game in the games other than Zenless Zone Zero. The same switch shows in Tools,
+ *  Switch skins in game, for those games. */
+function TesterRow() {
+  const on = useTester();
+  return (
+    <SetRow id="set-tester" label="Tester options"
+      hint="Lets you set up switching skins in game in Genshin Impact, Star Rail, Wuthering Waves, Endfield and the others, not only Zenless Zone Zero. Check this game sends what you find to the developer">
+      <Toggle checked={on} onChange={(v) => void setTester(v)} />
+    </SetRow>
+  );
+}
+
 const ADMIN_TIP = "Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. "
-  + "As administrator, gachamod presses F10 for you after a change, its hotkeys work while you play and its menu opens over the game. "
+  + "As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. "
   + "Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way";
 
 // the row shows on two pages (Games, In-game hotkeys), so its state is shared and both copies agree

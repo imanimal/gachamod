@@ -1,6 +1,6 @@
-//! Check this game (Help menu): a player walks through the menu over the game while playing, and the results go to
-//! the developer. This holds what gachamod reads about the game's setup by itself, whether gachamod opened the menu
-//! (or turned on a pick from it), and the report sent at the end. docs/testing.md lists the steps. Owner: SYSTEM
+//! Check this game (Help menu): a player walks through switching skins while playing, and the results go to the
+//! developer. This holds what gachamod reads about the game's setup by itself, whether the game took a pick and
+//! whether gachamod opened the menu, and the report sent at the end. docs/testing.md lists the steps. Owner: SYSTEM
 //! area.
 
 use crate::db::{Db, Shared};
@@ -33,6 +33,7 @@ pub struct Setup {
     pub foreground_check: Option<String>,
     /// d3dx.ini `reload_config`, the key that reloads mods (normally F10).
     pub reload_key: Option<String>,
+    pub live_groups: u32,
     pub menu_style: String,
     pub menu_key: String,
     pub menu_pad: bool,
@@ -59,6 +60,7 @@ pub fn setup(db: &Db, game: &str) -> Result<Setup> {
         app_admin: devtools::self_elevated(),
         foreground_check: d3dx.as_deref().and_then(|t| d3dx_value(t, "check_foreground_window")),
         reload_key: d3dx.as_deref().and_then(|t| d3dx_value(t, "reload_config")),
+        live_groups: live::info(db, game).map(|i| i.groups.len() as u32).unwrap_or(0),
         menu_style: menu.style,
         menu_key: menu.key,
         menu_pad: menu.pad,
@@ -70,7 +72,7 @@ fn read_d3dx(importer: &Path) -> Option<String> {
 }
 
 /// The first value of `key` in an ini's text, in any section, skipping comments.
-fn d3dx_value(text: &str, key: &str) -> Option<String> {
+pub(crate) fn d3dx_value(text: &str, key: &str) -> Option<String> {
     text.lines().map(str::trim).filter(|l| !l.starts_with(';') && !l.starts_with('[')).find_map(|l| {
         let (k, v) = l.split_once('=')?;
         k.trim().eq_ignore_ascii_case(key).then(|| v.split(';').next().unwrap_or("").trim().to_string())
@@ -79,18 +81,34 @@ fn d3dx_value(text: &str, key: &str) -> Option<String> {
 
 fn now_ms() -> u64 { SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0) }
 
-// What gachamod did with the menu: game, what ("window": it opened over the game, "fullscreen": the key was pressed
-// but the game holds the screen in exclusive fullscreen, "picked": a skin was picked in it), when.
+/// What the game last saved for a live group, and when it saved (milliseconds since 1970).
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedPick { pub value: Option<u32>, pub saved_at: Option<u64> }
+
+/// The loader saves d3dx_user.ini 5 to 15 seconds after a pick made with a key. A value equal to the pick, saved after
+/// it was made, means the game took it.
+pub fn saved_pick(db: &Db, game: &str, group: u32) -> Result<SavedPick> {
+    let imp = games::importer_dir(db, game)?;
+    let value = crate::ini::user_value(&imp, &live::var_name(group)).and_then(|v| v.parse::<f64>().ok()).map(|v| v.max(0.0) as u32);
+    let saved_at = std::fs::metadata(imp.join("d3dx_user.ini")).and_then(|m| m.modified()).ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64);
+    Ok(SavedPick { value, saved_at })
+}
+
+// The menu openings gachamod handled: game, how ("window": its own menu over the game, "drawn": the one the game
+// draws, in exclusive fullscreen), when.
 static MENU: Mutex<Vec<(String, &'static str, u64)>> = Mutex::new(Vec::new());
 
-/// gachamod handled the menu for a game: "window", "fullscreen" or "picked" (see above).
+/// gachamod opened the skin menu for a game (its key or the controller shortcut). `how`: "window" or "drawn".
 pub fn note_menu(game: &str, how: &'static str) {
     let mut m = MENU.lock().unwrap_or_else(|e| e.into_inner());
     m.retain(|(g, _, _)| g != game);
     m.push((game.to_string(), how, now_ms()));
 }
 
-/// What gachamod last did with the menu for a game, if it did anything after `since` (milliseconds since 1970).
+/// How gachamod last opened the menu for a game, if it did after `since` (milliseconds since 1970). None also when
+/// the game took the key itself, which gachamod doesn't see.
 pub fn menu_opened(game: &str, since: u64) -> Option<String> {
     let m = MENU.lock().unwrap_or_else(|e| e.into_inner());
     m.iter().find(|(g, _, at)| g == game && *at >= since).map(|(_, how, _)| how.to_string())
@@ -101,7 +119,7 @@ pub fn menu_opened(game: &str, since: u64) -> Option<String> {
 #[serde(rename_all = "camelCase")]
 pub struct Report {
     pub game: String,
-    /// Each step's answer and what gachamod saw, as short plain values (`menu_pick_changed: "yes"`, `pad_heard: true`).
+    /// Each step's answer and what gachamod saw, as short plain values (`pick_changed: "yes"`, `pick_saved: true`).
     #[serde(default)]
     pub steps: Map<String, Value>,
     #[serde(default)]
@@ -127,6 +145,7 @@ fn body(db: &Db, r: &Report) -> Result<Value> {
     p.insert("game_admin".into(), json!(s.game_admin));
     p.insert("foreground_check".into(), cut(s.foreground_check));
     p.insert("reload_key".into(), cut(s.reload_key));
+    p.insert("live_groups".into(), json!(s.live_groups));
     p.insert("menu_style".into(), json!(s.menu_style));
     p.insert("menu_key".into(), json!(telemetry::text(&s.menu_key, 40)));
     p.insert("menu_pad".into(), json!(s.menu_pad));

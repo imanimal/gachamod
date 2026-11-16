@@ -63,6 +63,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-text-size", "appearance", "Text size", "font size zoom bigger smaller scale ui size", "sliders"],
   ["set-motion", "appearance", "Animations", "motion animation reduce reduced effects transitions", "sparkle"],
   ["set-hints", "appearance", "First-start hints", "hints tips highlight tutorial tour guide new user first start", "info"],
+  ["set-gpu", "appearance", "Hardware acceleration", "gpu graphics card hardware acceleration black screen window blank flicker drawing rendering performance", "sliders"],
   ["set-shuffle", "mods", "Shuffle outfits", "random randomize randomise outfits skins surprise each launch play daily", "dice"],
   ["set-chill", "fun", "Chill mode", "lower case lowercase chill relaxed text casual", "sparkle"],
   ["set-pity", "fun", "Pity counter", "pity gacha hard soft 90 browse count", "sparkle"],
@@ -89,6 +90,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-creators-prio", "creators", "Prioritized creators", "priority whitelist first top authors", "crown"],
   ["set-creators-blocked", "creators", "Blocked creators", "block blacklist mute hide authors", "block"],
   ["set-feedback", "feedback", "Send feedback", "feedback bug report problem suggestion idea contact developer message", "help"],
+  ["set-tester", "feedback", "Tester options", "tester testing experimental beta switch skins in game live genshin star rail wuthering waves endfield", "check"],
   ["set-gamecheck", "feedback", "Check this game", "test testing tester check game report works switching skins menu genshin star rail wuthering waves endfield", "check"],
   ["set-usage", "feedback", "Usage counts", "telemetry analytics usage statistics tracking privacy anonymous", "eye"],
   ["set-crashes", "feedback", "Crash reports", "crash report error bug automatic send privacy", "bug"],
@@ -97,6 +99,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-xxmi-uninstall", "games", "Uninstall XXMI Launcher", "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
   ["set-reset", "about", "Reset gachamod", "reset start over factory defaults clear wipe fresh delete settings data", "undo"],
   ["set-ai-chatbot", "ai", "Your chatbot", "chatgpt claude gemini copilot grok chatbot pick change", "ai"],
+  ["set-ai-adult", "ai", "Hide adult mods from the chatbot", "nsfw adult explicit names prompt refuse refused chatbot hide", "ai"],
 ];
 
 /** The page a panel or a setting row is on, to open it when the panel or row isn't shown (AI turned off, an empty list). */
@@ -123,7 +126,7 @@ registerCommands("settings", () => {
     };
   });
   for (const [section, panel, title, keywords, icon] of SETTINGS) {
-    if (section.startsWith("set-ai-chatbot") && !aiShown("useful")) continue;
+    if ((section === "set-ai-chatbot" || section === "set-ai-adult") && !aiShown("useful")) continue;
     list.push({ id: `settings:${section}:${title}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
       run: () => go({ view: "settings", section }) });
   }

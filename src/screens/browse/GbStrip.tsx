@@ -10,6 +10,7 @@ import { go, useGames } from "../../lib/store";
 import { Button, IconButton } from "../../ui/kit";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { rowKeys, useSideScroll } from "./sideScroll";
+import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { openWithFilters, useLibIndex } from "./state";
 import "./browse.css";
 
@@ -75,7 +76,8 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
 
   const shown = (items ?? []).filter((m) => !(m.submitter && creators[String(m.submitter.id)]?.blocked) && !hidden.includes(m.id) && !(nsfw === "hide" && m.nsfw)).slice(0, COUNT);
   const row = useRef<HTMLDivElement>(null);
-  const { left, right, page } = useSideScroll(row, [shown.length]);
+  const [all, toggleAll] = useRowOpen(`strip.${title}`);
+  const { left, right, page } = useSideScroll(row, [shown.length, all, !!error]);
   if (!gs) return null;
 
   const seeAll = more ?? (() => {
@@ -88,8 +90,11 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
       <header className="gb-strip-h">
         <h3 className="sub-h">{title}</h3>
         <span className="grow" />
-        <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
-        <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
+        {!all && <>
+          <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
+          <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
+        </>}
+        <ShowAll open={all} onToggle={toggleAll} fits={!items || (!left && !right)} label={`Show all ${shown.length} here`} />
         <Button size="sm" variant="ghost" iconRight="chevron" onClick={seeAll} title="Open these in Browse">See all</Button>
       </header>
       {error ? (
@@ -99,7 +104,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
           {query.followed && !subIds.length ? "Follow creators (right-click a creator's name) and their new mods show here." : "Nothing new here right now."}
         </div>
       ) : (
-        <div ref={row} className="gb-strip-row" role="list" onKeyDown={(e) => rowKeys(e, ".gb-card")}>
+        <div ref={row} className={`gb-strip-row${all ? " is-all" : ""}`} role="list" onKeyDown={(e) => rowKeys(e, ".gb-card")}>
           {items ? shown.map((m) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && prio.has(m.submitter.id))} />)
             : Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}
         </div>
