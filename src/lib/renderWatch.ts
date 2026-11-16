@@ -5,6 +5,7 @@
 import { pref } from "./prefs";
 import { call, inTauri } from "./tauri";
 import { currentRoute } from "./store";
+import { installRedraw } from "./redraw";
 
 /** Setting "render.log" (Settings, Feedback, privacy and logs, and Appearance). */
 export const renderLogPref = pref<boolean>("render.log", true, (r) => (r === "0" ? false : r === "1" ? true : undefined), (v) => (v ? "1" : "0"));
@@ -89,6 +90,14 @@ function environment(): string {
     + `pixel ratio ${devicePixelRatio}, page ${innerWidth}x${innerHeight}. WebGL: ${webgl()}. ${navigator.userAgent}`;
 }
 
+/** Connected game controllers and what they hold: one with a stuck stick or button moves the app by itself. */
+function pads(): string[] {
+  try {
+    return [...(navigator.getGamepads?.() ?? [])].filter((p): p is Gamepad => !!p && p.connected)
+      .map((p) => `${p.id}: ${p.buttons.filter((b) => b.pressed).length} pressed, axes ${p.axes.map((a) => a.toFixed(1)).join(" ")}`);
+  } catch { return []; }
+}
+
 /** The page's side of a check, as JSON (render.rs `probe`). */
 function probe(): string {
   return JSON.stringify({
@@ -96,12 +105,15 @@ function probe(): string {
     stalled: stalledAt !== null, longTasks, worstTaskMs: Math.round(worstTask), screen: currentRoute().view,
     theme: document.documentElement.dataset.theme ?? "default", scheme: document.documentElement.dataset.scheme ?? "",
     size: `${innerWidth}x${innerHeight}`, pixelRatio: devicePixelRatio, canvases: document.querySelectorAll("canvas").length,
+    classes: document.documentElement.className, layer: !!document.querySelector(".lightbox, .overlay"), pads: pads(),
   });
 }
 
-/** Start watching (once, before the window renders). `where` names the window ("main" or "overlay"). */
+/** Start watching (once, before the window renders). `where` names the window ("main" or "overlay"). Also starts the
+ *  page's own redraws (redraw.ts), which run whether or not the rendering log is on. */
 export function installRenderWatch(where: "main" | "overlay") {
   if (!inTauri()) return;
+  installRedraw();
   (window as unknown as { __gmRenderProbe?: () => string }).__gmRenderProbe = probe;
   requestAnimationFrame(frame);
   window.setInterval(tick, 1000);

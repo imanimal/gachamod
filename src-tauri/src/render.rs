@@ -1,8 +1,10 @@
 //! Rendering diagnostics for the app's windows; gacha_core::render_log keeps the files. This part hooks WebView2
 //! (its processes exiting, its version and folders), logs window events, checks every two seconds that the main
 //! window isn't black on screen, and takes what the page reports about its own frames (src/lib/renderWatch.ts). When
-//! something goes wrong it looks at the window from every side at once (`probe`) and writes an incident file.
-//! Owner: SYSTEM area.
+//! something goes wrong it looks at the window from every side at once (`probe`) and writes an incident file. It
+//! also keeps the window drawn: the page is asked for frames whenever focus or the screen changes (`redraw`,
+//! src/lib/redraw.ts), and a window that shows black while its page has a picture gets WebView2's view resized, then
+//! hidden and shown (`recover`). Owner: SYSTEM area.
 use gacha_core::render_log as rl;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
@@ -13,7 +15,8 @@ pub fn setting(db: &gacha_core::db::Shared) -> bool {
     db.lock().ok().and_then(|d| d.setting("render.log").ok().flatten()).as_deref() != Some("0")
 }
 
-/// Log what happens to a window: focus, moves between screens, size, scale and theme changes.
+/// Log what happens to a window: focus, moves between screens, size, scale and theme changes. Focus, screen and
+/// scale changes also ask its page for frames (`redraw`).
 pub fn watch_window<R: Runtime>(w: &WebviewWindow<R>) {
     struct Seen { moved: Instant, sized: Instant, screen: String }
     let label = w.label().to_string();
@@ -23,10 +26,10 @@ pub fn watch_window<R: Runtime>(w: &WebviewWindow<R>) {
     w.on_window_event(move |e| {
         let Ok(mut s) = seen.lock() else { return };
         match e {
-            WindowEvent::Focused(f) => rl::event(format!("{label}: {}", if *f { "focused" } else { "lost focus" })),
+            WindowEvent::Focused(f) => { redraw(&win); rl::event(format!("{label}: {}", if *f { "focused" } else { "lost focus" })); }
             WindowEvent::Moved(p) => {
                 let screen = screen_of(&win);
-                if screen != s.screen { rl::event(format!("{label}: moved to {screen}, at {},{}", p.x, p.y)); s.screen = screen; }
+                if screen != s.screen { redraw(&win); rl::event(format!("{label}: moved to {screen}, at {},{}", p.x, p.y)); s.screen = screen; }
                 else if s.moved.elapsed() > Duration::from_secs(2) { rl::event(format!("{label}: moved to {},{}", p.x, p.y)); }
                 s.moved = Instant::now();
             }
@@ -35,12 +38,18 @@ pub fn watch_window<R: Runtime>(w: &WebviewWindow<R>) {
                 if !state.is_empty() || s.sized.elapsed() > Duration::from_secs(2) { rl::event(format!("{label}: size {}x{}{state}", z.width, z.height)); }
                 s.sized = Instant::now();
             }
-            WindowEvent::ScaleFactorChanged { scale_factor, .. } => rl::event(format!("{label}: scale changed to {scale_factor}")),
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => { redraw(&win); rl::event(format!("{label}: scale changed to {scale_factor}")); }
             WindowEvent::ThemeChanged(t) => rl::event(format!("{label}: Windows theme changed to {t:?}")),
             WindowEvent::Destroyed => rl::event(format!("{label}: window closed")),
             _ => {}
         }
     });
+}
+
+/// Ask a window's page to draw every frame for the next two seconds (src/lib/redraw.ts). A window can be left black
+/// on screen after focus moves to another one, until its page draws again.
+pub fn redraw<R: Runtime>(w: &WebviewWindow<R>) {
+    let _ = w.eval("window.__gmRedraw && window.__gmRedraw()");
 }
 
 fn screen_of<R: Runtime>(w: &WebviewWindow<R>) -> String {
@@ -95,7 +104,7 @@ pub fn probe<R: Runtime>(w: &WebviewWindow<R>) -> (String, Option<Vec<u8>>) {
         if rl::ui_hung(h) { out.push_str("Windows says the window isn't answering\r\n"); }
         match rl::screen_check(h) {
             Some(c) => out.push_str(&format!("{}\r\n", c.describe())),
-            None => out.push_str("On screen: not read (the window isn't in front, or nobody has used the PC for a minute)\r\n"),
+            None => out.push_str("On screen: not read (another window covers it, or nobody has used the PC for a minute)\r\n"),
         }
     }
     out.push_str(&format!("Last key press or mouse move: {:.1} s ago\r\n", rl::idle().as_secs_f32()));
@@ -160,7 +169,8 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
                         *told = true;
                         rl::event("main: Windows says the window isn't answering");
                         let (check, png) = probe(&w);
-                        rl::incident("hung", "The main window stopped answering Windows", "Windows marked gachamod's window as not answering (its main thread hasn't read messages for 5 s or more)", &check, png.as_deref());
+                        let (title, what) = ("The main window stopped answering Windows", "Windows marked gachamod's window as not answering (its main thread hasn't read messages for 5 s or more)");
+                        if rl::incident("hung", title, what, &check, png.as_deref()).is_some() { rl::report(title, what, &check, ""); }
                     }
                 } else if let Some((since, _)) = hung.take() {
                     rl::event(format!("main: answering again after about {} s", since.elapsed().as_secs() + 5));
@@ -168,12 +178,20 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
                 match rl::screen_check(h) {
                     Some(c) if c.darkness.black() => {
                         black_ticks += 1;
+                        // one more frame is often all it takes
+                        if black_ticks == 1 { redraw(&w); }
                         if black_ticks == 2 && black.is_none() {
-                            let what = format!("The main window was black on screen for two checks in a row, 2 s apart, while it was in front. {}", c.describe());
+                            let title = "The main window was black on screen";
+                            let what = format!("The main window was black on screen for two checks in a row, 2 s apart, with no other window over it. The page was asked for frames after the first. {}", c.describe());
                             rl::event(format!("main: black on screen. {}", c.describe()));
                             let (check, png) = probe(&w);
-                            let file = rl::incident("black", "The main window was black on screen", &what, &check, png.as_deref());
-                            black = Some((Instant::now() - Duration::from_secs(2), file));
+                            let file = rl::incident("black", title, &what, &check, png.as_deref());
+                            black = Some((Instant::now() - Duration::from_secs(2), file.clone()));
+                            // a page that is black itself has nothing to show; otherwise make WebView2 show its picture
+                            let page_black = png.as_deref().and_then(rl::png_darkness).is_some_and(|d| d.black());
+                            let note = if page_black { "main: the page's own picture is black too, so WebView2's view was left alone".to_string() } else { recover(&w, h) };
+                            rl::event(&note);
+                            if let Some(f) = file { rl::add_to(&f, &note); rl::report(title, &what, &check, &note); }
                         }
                     }
                     Some(c) => {
@@ -191,6 +209,28 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
             let _ = (&w, &mut black_ticks, &mut black, &mut hung);
         }
     });
+}
+
+/// The page has a picture and the screen shows black: make WebView2 show it again, the gentlest way first, reading
+/// the screen after each. Returns what happened, for the log. Off the main thread.
+#[cfg(windows)]
+fn recover<R: Runtime>(w: &WebviewWindow<R>, hwnd: isize) -> String {
+    let mut tried: Vec<&str> = Vec::new();
+    for (name, step) in [("resizing WebView2's view", wv::Step::Resize), ("hiding and showing WebView2's view", wv::Step::Show)] {
+        for first in [true, false] {
+            // SAFETY: on the main thread, with the window's own WebView2 objects.
+            let _ = w.with_webview(move |pv| unsafe { wv::nudge(&pv, step, first) });
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        redraw(w);
+        std::thread::sleep(Duration::from_millis(600));
+        match rl::screen_check(hwnd) {
+            Some(c) if c.darkness.black() => tried.push(name),
+            Some(_) => return format!("main: drew again after {name}"),
+            None => return format!("main: couldn't tell whether {name} helped (another window covered it, or it was minimized)"),
+        }
+    }
+    format!("main: still black after {}", tried.join(" and "))
 }
 
 /// One thing the page noticed (src/lib/renderWatch.ts). `incident` is the kind when it's a problem worth a file.
@@ -217,7 +257,7 @@ pub fn render_events(window: WebviewWindow, events: Vec<PageEvent>) {
         let title = e.title.unwrap_or_else(|| "The page reported a drawing problem".into());
         std::thread::spawn(move || {
             let (check, png) = probe(&w);
-            rl::incident(&format!("page-{kind}"), &title, &e.text, &check, png.as_deref());
+            if rl::incident(&format!("page-{kind}"), &title, &e.text, &check, png.as_deref()).is_some() { rl::report(&title, &e.text, &check, ""); }
         });
     }
 }
@@ -239,10 +279,30 @@ mod wv {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::{take_pwstr, CapturePreviewCompletedHandler, ExecuteScriptCompletedHandler, ProcessFailedEventHandler};
     use windows::core::{w, Interface, BOOL, PWSTR};
-    use windows::Win32::Foundation::HGLOBAL;
+    use windows::Win32::Foundation::{HGLOBAL, RECT};
     use windows::Win32::System::Com::{IStream, StructuredStorage::CreateStreamOnHGlobal, STREAM_SEEK_SET};
 
     pub enum Part { Ui, Text(String), Picture(Result<Vec<u8>, String>) }
+
+    /// A way to make WebView2 show its picture again (`super::recover`).
+    #[derive(Clone, Copy)]
+    pub enum Step { Resize, Show }
+
+    /// One half of a step: the first makes the view a pixel shorter or hides it, the second puts it back.
+    pub unsafe fn nudge(pv: &tauri::webview::PlatformWebview, step: Step, first: bool) {
+        let c = pv.controller();
+        match step {
+            Step::Resize => {
+                let mut r = RECT::default();
+                if c.Bounds(&mut r).is_ok() {
+                    r.bottom += if first { -1 } else { 1 };
+                    let _ = c.SetBounds(r);
+                }
+                let _ = c.NotifyParentWindowPositionChanged();
+            }
+            Step::Show => { let _ = c.SetIsVisible(!first); }
+        }
+    }
 
     fn kind_name(k: COREWEBVIEW2_PROCESS_FAILED_KIND) -> &'static str {
         match k {
@@ -340,7 +400,10 @@ mod wv {
                 COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED => ("browser-exit", "WebView2's browser process exited"),
                 _ => ("other-exit", "A WebView2 process exited"),
             };
-            std::thread::spawn(move || { rl::incident(short.0, short.1, &text, "(the window was not probed: WebView2 may be restarting the process)", None); });
+            std::thread::spawn(move || {
+                let check = "(the window was not probed: WebView2 may be restarting the process)";
+                if rl::incident(short.0, short.1, &text, check, None).is_some() { rl::report(short.1, &text, check, ""); }
+            });
             Ok(())
         })), &mut token)?;
         Ok(())

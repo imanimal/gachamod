@@ -104,7 +104,8 @@ fn replace_ci(text: &str, from: &str, to: &str) -> String {
 /// What a crash file holds.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub struct Crash {
-    /// "panic" (Rust), "ui" (the window's code) or "exit" (the run ended without quitting).
+    /// "panic" (Rust), "ui" (the window's code), "exit" (the run ended without quitting) or "render" (a rendering
+    /// problem, render_log::report).
     pub kind: String,
     pub message: String,
     /// The source line, for a panic.

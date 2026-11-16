@@ -50,6 +50,11 @@ grouped by `$exception_fingerprint`.
 - `exit`: the last run ended without quitting and left no other crash file. Holds the end of the log. A killed
   process, a crash a panic hook can't see, and a Windows shutdown with gachamod open all look like this. Debug builds
   skip it, since `tauri dev` stops the app on every rebuild.
+- `render`: a rendering problem the rendering log caught (docs/spec.md): the window black on screen, the page's
+  frames stopping, a WebView2 process exiting. Holds what happened, the check of the window then (the screen read,
+  how black WebView2's picture of the page was, the page's frame counter, connected controllers), which step brought
+  the picture back, system.txt (graphics cards, drivers, screens, Windows drawing settings, WebView2's version and
+  folders) and the last events. No picture is sent. Five per run at most, and none while the rendering log is off.
 
 Messages, source lines and stacks go through `logs::scrub`, which replaces the user's home folder with `%USERPROFILE%`
 and their Windows account name with `<user>`. `npm run installer` builds with `--remap-path-prefix`, so paths from
