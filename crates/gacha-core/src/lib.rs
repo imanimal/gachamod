@@ -35,6 +35,7 @@ pub mod previews;
 pub mod profiles;
 pub mod queue;
 pub mod recycle;
+pub mod render_log;
 pub mod reset;
 pub mod settings_file;
 pub mod telemetry;

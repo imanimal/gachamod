@@ -1419,6 +1419,7 @@ dependencies = [
 name = "gachamod"
 version = "0.1.1-beta.4"
 dependencies = [
+ "chrono",
  "gacha-core",
  "reqwest 0.12.28",
  "serde",
@@ -1431,6 +1432,8 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "url",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

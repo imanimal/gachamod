@@ -4,7 +4,8 @@
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import { Button, Checkbox, Dialog, Panel, Segmented, TextField, Toggle } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { admin, errorText, report, shell, type AdminState, type FeedbackKind, type ReportState } from "../../lib/api";
+import { admin, errorText, rendering, report, shell, type AdminState, type FeedbackKind, type RenderState, type ReportState } from "../../lib/api";
+import { renderLogPref } from "../../lib/renderWatch";
 import { restartAsAdmin } from "../../lib/elevation";
 import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type FeedbackStart as Start } from "../../lib/feedback";
 import { currentGame, currentRoute } from "../../lib/store";
@@ -56,8 +57,8 @@ function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => vo
         ]} />
         <TextField multiline rows={6} autoFocus label="Message" value={text} onChange={setText} placeholder={PLACEHOLDER[kind]} />
         <TextField label="How to reach you (optional)" value={contact} onChange={setContact} placeholder="A Discord name or an email, if you'd like an answer" />
-        <span title="The last part of gachamod.log: what the app did and the errors it hit. Your user folder's name is taken out first">
-          <Checkbox checked={logs} onChange={setLogs} label="Attach the end of gachamod's log" />
+        <span title="The end of gachamod.log and of the rendering log: what the app did, the errors it hit, your graphics card and screens. Your user folder's name is taken out first">
+          <Checkbox checked={logs} onChange={setLogs} label="Attach gachamod's logs" />
         </span>
       </div>
     </Dialog>
@@ -94,8 +95,32 @@ export function FeedbackSection() {
           <Button size="sm" icon="folder" disabled={!st?.logsDir} title={st?.logsDir ?? undefined}
             onClick={() => { if (st?.logsDir) shell.openPath(st.logsDir).catch((e) => toast(errorText(e), true)); }}>Open logs folder</Button>
         </SetRow>
+        <RenderLogRow id="set-render-log" />
       </div>
     </Panel>
+  );
+}
+
+const RENDER_TIP = "Each problem gets an incident file with your graphics card, driver, screens and what the window showed. "
+  + "Attach gachamod's logs when you send feedback to include the newest one. "
+  + "If the window is black, press Win+R and open %APPDATA%\app.gachamod.desktop\logs\rendering";
+
+/** Settings, under Feedback and data and Appearance: the rendering log and its folder. Both copies share the setting.
+ *  `id` goes on one copy, the one a route scrolls to. */
+export function RenderLogRow({ id }: { id?: string }) {
+  const on = renderLogPref.use();
+  const [st, setSt] = useState<RenderState | null>(null);
+  useEffect(() => { rendering.state().then(setSt).catch(() => {}); }, []);
+  const n = st?.incidents ?? 0;
+  return (
+    <SetRow id={id} label="Rendering log" tip={RENDER_TIP}
+      hint={`Notes when the window goes black, stops drawing or the graphics process restarts. Stays on this PC${n ? `. ${n} problem${n === 1 ? "" : "s"} noted so far` : ""}`}>
+      <span className="set-admin">
+        <Button size="sm" icon="folder" disabled={!st?.dir} title={st?.dir ?? undefined}
+          onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>Open folder</Button>
+        <Toggle checked={on} label="Rendering log" onChange={(v) => void renderLogPref.set(v)} />
+      </span>
+    </SetRow>
   );
 }
 

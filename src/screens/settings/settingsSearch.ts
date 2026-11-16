@@ -95,6 +95,7 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-usage", "feedback", "Usage counts", "telemetry analytics usage statistics tracking privacy anonymous", "eye"],
   ["set-crashes", "feedback", "Crash reports", "crash report error bug automatic send privacy", "bug"],
   ["set-logs", "feedback", "Logs", "log logs file gachamod.log errors debug folder", "file"],
+  ["set-render-log", "feedback", "Rendering log", "rendering log black screen window blank flicker gpu graphics card driver nvidia frames debug", "file"],
   ["set-ai-show", "ai", "Turn AI on or off", "ai off hide ai disable chatbot buttons show everything", "ai"],
   ["set-xxmi-uninstall", "games", "Uninstall XXMI Launcher", "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
   ["set-reset", "about", "Reset gachamod", "reset start over factory defaults clear wipe fresh delete settings data", "undo"],

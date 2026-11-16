@@ -14,6 +14,7 @@ import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle }
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
+import { RenderLogRow } from "./Feedback";
 import { hiddenThemePref } from "../../lib/fun";
 import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
 import { hintsOnPref } from "../../shell/hints";
@@ -102,6 +103,7 @@ export function AppearanceSection() {
           tip="When the window is too broken to reach this, start gachamod.exe with --disable-gpu to turn it off">
           <GpuSwitch />
         </SetRow>
+        <RenderLogRow />
       </div>
     </Panel>
   );

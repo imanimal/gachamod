@@ -23,6 +23,8 @@ pub async fn settings_set(st: State<'_, AppState>, key: String, value: String) -
         d.set_setting(&key, &value)?;
         // a shorter trash time applies now
         if key == "trash.days" { let _ = gacha_core::library::purge_expired(&d); }
+        // the rendering log stops or starts at once (WebView2's own log follows from the next start)
+        if key == "render.log" { gacha_core::render_log::set_on(value != "0"); }
         Ok(())
     }).await
 }

@@ -680,6 +680,17 @@ UI:
   makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
   WebView2 won't start a second window in the same folder with other flags. Starting `gachamod.exe --disable-gpu`
   saves it off first; a copy already running saves it and restarts.
+- Rendering log ("render.log", default on; Settings, Feedback and data, and under Hardware acceleration in
+  Appearance). `gacha-core render_log.rs` keeps the files in `<data folder>/logs/rendering`, `src-tauri render.rs`
+  feeds it and `lib/renderWatch.ts` reports from the page. It logs window focus, moves, size and scale, screens
+  changing, sleep gaps, WebView2 processes exiting (`ProcessFailed`), the page's frames stopping or slowing, long
+  stalls and lost WebGL contexts. Every 2 s it reads the screen where the main window is (only while it's in front
+  and the PC was used in the last 50 s) and calls two black reads in a row a blackout. Each problem writes
+  `incident-<time>.txt`: the window from every side (Windows, the screen, WebView2's own picture of the page saved as
+  `.png`, the page's frame counter), `system.txt` (cards, drivers, screens, GPU scheduling, MPO), the last 400 events,
+  graphics driver and WebView2 crash entries from the Windows event log, and the end of WebView2's `chrome_debug.log`
+  (the log adds `--enable-logging --v=0` to every window's flags). Feedback with logs attached sends the newest
+  incident too.
 - New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
   rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or

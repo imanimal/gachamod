@@ -4,6 +4,7 @@
 mod commands;
 mod hotkeys;
 mod overlay;
+mod render;
 mod runner;
 mod state;
 
@@ -44,10 +45,15 @@ fn fit_to_screen(w: &tauri::WebviewWindow) {
     if size.width > area.width || size.height > area.height { let _ = w.maximize(); }
 }
 
-/// Hardware acceleration as this run started with it (setting "app.gpu", Settings > Appearance). The windows that
-/// share the app's WebView2 folder (the main window, the menu over a game) must all start with the same browser
-/// flags, so a change counts from the next start.
-pub struct Gpu(pub bool);
+/// Browser flags as this run started with them: hardware acceleration (setting "app.gpu", Settings > Appearance) and
+/// WebView2's own log for the rendering log (setting "render.log"). The windows that share the app's WebView2 folder
+/// (the main window, the menu over a game) must all start with the same flags, so a change counts from the next start.
+#[derive(Clone, Copy)]
+pub struct Flags { pub gpu: bool, pub log: bool }
+
+impl Flags {
+    pub fn of<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Flags { app.try_state::<Flags>().map_or(Flags { gpu: true, log: true }, |f| *f) }
+}
 
 /// Start gachamod with this to turn hardware acceleration off, for a window that draws black and can't reach
 /// Settings. A copy already running saves it and starts again.
@@ -66,20 +72,26 @@ fn gpu_setting(db: &gacha_core::db::Shared, turn_off: bool) -> bool {
 /// WebView2 flags for every window. Passing any replaces wry's own, so those are repeated. WebView2 stops drawing a
 /// window it thinks other windows cover, and with more than one monitor it can get that wrong and leave the window
 /// black until the mouse moves over it, so that check is off. With hardware acceleration off, it also draws without
-/// the graphics card.
-pub fn browser_flags<'a, R: tauri::Runtime, M: Manager<R>>(b: tauri::WebviewWindowBuilder<'a, R, M>, gpu: bool) -> tauri::WebviewWindowBuilder<'a, R, M> {
-    const FLAGS: &str = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion";
-    if gpu { b.additional_browser_args(FLAGS) } else { b.additional_browser_args(&format!("{FLAGS} --disable-gpu --disable-gpu-compositing")) }
+/// the graphics card. With the rendering log on, WebView2 writes chrome_debug.log in its folder (render.rs).
+pub fn browser_args(gpu: bool, log: bool) -> String {
+    let mut a = String::from("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion");
+    if !gpu { a.push_str(" --disable-gpu --disable-gpu-compositing"); }
+    if log { a.push_str(" --enable-logging --v=0"); }
+    a
+}
+
+pub fn browser_flags<'a, R: tauri::Runtime, M: Manager<R>>(b: tauri::WebviewWindowBuilder<'a, R, M>, f: Flags) -> tauri::WebviewWindowBuilder<'a, R, M> {
+    b.additional_browser_args(&browser_args(f.gpu, f.log))
 }
 
 /// The main window (tauri.conf.json, "create": false), made here so its browser flags can follow the setting.
-fn main_window(app: &tauri::App, gpu: bool) -> tauri::Result<tauri::WebviewWindow> {
+fn main_window(app: &tauri::App, flags: Flags) -> tauri::Result<tauri::WebviewWindow> {
     let Some(conf) = app.config().app.windows.iter().find(|w| w.label == "main").cloned() else {
         return Err(tauri::Error::WindowNotFound);
     };
     let mut tries = 0;
     loop {
-        match browser_flags(tauri::WebviewWindowBuilder::from_config(app.handle(), &conf)?, gpu).build() {
+        match browser_flags(tauri::WebviewWindowBuilder::from_config(app.handle(), &conf)?, flags).build() {
             Ok(w) => return Ok(w),
             // right after Restart, the closing copy's WebView2 may still run with the other setting for a moment
             Err(e) if tries < 4 && app.get_webview_window("main").is_none() => {
@@ -111,7 +123,7 @@ pub fn run() {
         // a second start (a gachamod:// link, a double-clicked .gachamod) hands its arguments here and exits
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             // SYSTEM: gachamod.exe --disable-gpu while it runs: saved, and gachamod starts again without it
-            if argv.iter().any(|a| a == NO_GPU_ARG) && app.try_state::<Gpu>().is_some_and(|g| g.0) {
+            if argv.iter().any(|a| a == NO_GPU_ARG) && app.try_state::<Flags>().is_some_and(|f| f.gpu) {
                 if let Some(st) = app.try_state::<state::AppState>() { gpu_setting(&st.db, true); }
                 gacha_core::logs::quitting();
                 app.restart();
@@ -139,7 +151,7 @@ pub fn run() {
                 _ => app.path().app_data_dir()?,
             };
             // SYSTEM: gachamod's own log, and a crash file for every panic
-            gacha_core::logs::init(&data_dir);
+            let logs_dir = gacha_core::logs::init(&data_dir);
             gacha_core::logs::catch_panics(env!("CARGO_PKG_VERSION"));
             gacha_core::logs::started(env!("CARGO_PKG_VERSION"));
             // SYSTEM: Reset gachamod left a note: start over before anything opens the database
@@ -152,9 +164,18 @@ pub fn run() {
             let state = state::AppState::new(data_dir)?;
             // SYSTEM: the window opens once hardware acceleration is known, before anything else can open one
             let gpu = gpu_setting(&state.db, std::env::args().any(|a| a == NO_GPU_ARG));
+            // SYSTEM: the rendering log (render.rs) watches the windows from the moment they open
+            let log = render::setting(&state.db);
+            gacha_core::render_log::init(&logs_dir, log);
             app.manage(state);
-            app.manage(Gpu(gpu));
-            fit_to_screen(&main_window(app, gpu)?);
+            app.manage(Flags { gpu, log });
+            let main = main_window(app, Flags { gpu, log })?;
+            render::watch_window(&main);
+            render::hook_webview(&main);
+            fit_to_screen(&main);
+            let sys = app.handle().clone();
+            std::thread::spawn(move || render::write_system(&sys, gpu, log));
+            render::start(app.handle().clone());
             *app.state::<Pending>().0.lock().unwrap() = opened_from_args(std::env::args());
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
@@ -288,6 +309,8 @@ pub fn run() {
             commands::report::feedback_send,
             commands::report::log_write,
             commands::report::report_ui_error,
+            render::render_events,
+            render::render_state,
             commands::report::admin_state,
             commands::report::admin_set_always,
             commands::report::game_check_setup,

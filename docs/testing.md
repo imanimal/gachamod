@@ -113,6 +113,9 @@ monitor. Every window now starts with WebView2's occlusion check off (docs/spec.
   with the other flags; `main_window` tries again for a few seconds).
 - `gachamod.exe --disable-gpu`, with gachamod closed and while it runs.
 - The menu over a game still opens, with hardware acceleration on and off.
+- After a blackout, `logs/rendering` holds an incident file. Check whether the screen read was black while WebView2's
+  own picture (`incident-*.png`) wasn't: that points at Windows or the driver showing the window, not at the page.
+  The rendering log's probe (WebView2's picture, the page's answer) has only run in unit tests and a normal start.
 
 ### Still to check: installing XXMI from the app
 

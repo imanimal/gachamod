@@ -59,8 +59,9 @@ kept.
 ## Feedback
 
 The `feedback` event holds `kind` (`problem`, `idea` or `other`), `message`, and `contact` when one was given. It also
-holds `screen` and `game` (where the player was), plus `log` when they left "Attach the end of gachamod's log" ticked
-(the last 30 KB, scrubbed). To read feedback in PostHog, filter events by `feedback`. A PostHog destination can send
+holds `screen` and `game` (where the player was), plus `log` and `render_log` when they left "Attach gachamod's logs"
+ticked (the last 30 KB of gachamod.log, and the newest rendering incident, system.txt and the end of rendering.log,
+30 KB at most; both scrubbed). To read feedback in PostHog, filter events by `feedback`. A PostHog destination can send
 each new one to Discord or email.
 
 ## Game checks

@@ -18,6 +18,9 @@ export interface UsageEvent { name: "screen" | "click" | "setting" | "input" | "
 
 export interface AdminState { elevated: boolean; always: boolean }
 
+/** The rendering log (src-tauri render.rs): its folder and how many incident files it holds. */
+export interface RenderState { on: boolean; dir: string | null; incidents: number }
+
 /** What gachamod reads about a game's setup by itself (gacha-core gamecheck.rs). */
 export interface CheckSetup {
   game: string;
@@ -61,6 +64,10 @@ export const report = {
   feedback: (feedback: Feedback) => call<void>("feedback_send", { feedback }),
   log: (lines: Array<{ level: "info" | "warn" | "error"; text: string }>) => call<void>("log_write", { lines }),
   uiError: (message: string, stack: string) => call<void>("report_ui_error", { message, stack }),
+};
+
+export const rendering = {
+  state: () => call<RenderState>("render_state"),
 };
 
 export const admin = {

@@ -18,6 +18,8 @@ export function registerReportDemo() {
     telemetry_events: () => undefined,
     log_write: () => undefined,
     report_ui_error: () => undefined,
+    render_events: () => undefined,
+    render_state: () => ({ on: on("render.log"), dir: "%APPDATA%\app.gachamod.desktop\logs\rendering", incidents: 0 }),
     feedback_send: async ({ feedback }) => {
       await demoWait(700);
       if (!String((feedback as { text?: string }).text ?? "").trim()) throw new Error("Write something first");

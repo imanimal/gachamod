@@ -18,6 +18,7 @@ import { App } from "./App";
 import { installDemo } from "./lib/demo";
 import { installTips } from "./lib/keys";
 import { installTelemetry } from "./lib/telemetry";
+import { installRenderWatch } from "./lib/renderWatch";
 
 installDemo();
 installTips();
@@ -28,6 +29,7 @@ const tauriWindow = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: {
 if (import.meta.env.DEV && location.hash === "#kit") void import("./dev/KitShowcase").then((m) => m.mount(document.getElementById("root")!));
 else if (tauriWindow === "overlay" || location.hash === "#overlay") {
   installTelemetry("overlay");
+  installRenderWatch("overlay");
   void import("./screens/ingame/Overlay").then((m) => createRoot(document.getElementById("root")!).render(<StrictMode><m.Overlay /></StrictMode>));
 }
-else { installTelemetry("main"); createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>); }
+else { installTelemetry("main"); installRenderWatch("main"); createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>); }

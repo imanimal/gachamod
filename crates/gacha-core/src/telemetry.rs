@@ -219,7 +219,7 @@ pub struct Feedback {
     /// How to answer, when the player wants an answer.
     #[serde(default)]
     pub contact: Option<String>,
-    /// Attach the end of the log (the user's folder and name taken out).
+    /// Attach the end of the log and of the rendering log (the user's folder and name taken out).
     #[serde(default)]
     pub logs: bool,
     #[serde(default)]
@@ -259,7 +259,12 @@ fn feedback_body(db: &Db, f: &Feedback) -> Value {
     if let Some(c) = f.contact.as_deref().map(str::trim).filter(|c| !c.is_empty()) { p.insert("contact".into(), json!(cut(c, 200))); }
     if let Some(s) = f.screen.as_deref().filter(|s| plain_value(&json!(s))) { p.insert("screen".into(), json!(s)); }
     if let Some(g) = f.game.as_deref().filter(|s| plain_value(&json!(s))) { p.insert("game".into(), json!(g)); }
-    if f.logs { p.insert("log".into(), json!(logs::scrub(&logs::tail(30_000)))); }
+    if f.logs {
+        p.insert("log".into(), json!(logs::scrub(&logs::tail(30_000))));
+        // the newest rendering incident, the graphics cards and screens, and the end of rendering.log
+        let render = crate::render_log::for_feedback(30_000);
+        if !render.is_empty() { p.insert("render_log".into(), json!(logs::scrub(&render))); }
+    }
     hand_sent(db, "feedback", p)
 }
 

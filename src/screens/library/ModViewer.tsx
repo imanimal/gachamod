@@ -176,6 +176,8 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
       controls.dispose();
       owned.forEach((o) => o.dispose());
       renderer.dispose();
+      // the rendering log skips a context lost on purpose (lib/renderWatch.ts)
+      canvas.dataset.closing = "1";
       renderer.forceContextLoss();
       canvas.remove();
     };

@@ -167,13 +167,14 @@ const PREFIX: Array<[string, Desc]> = [
   ["launch_", ["Reading launch options", HOLD.xxmi]],
   ["integration", ["Reading app links", HOLD.db]],
   ["report_", ["Reading what gachamod sends", HOLD.db]],
+  ["render_", ["Reading the rendering log", HOLD.disk]],
   ["admin_", ["Checking how gachamod runs", HOLD.disk]],
   ["game_check_", ["Reading the game's setup", HOLD.disk]],
 ];
 
 /** Commands that wait on the person (a file dialog, a sign-in window), or run in the background where nobody waits on
  *  them (usage counts, log lines), and so never count as slow. */
-const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "game_check_saved", "game_check_menu", "save_look"]);
+const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "render_events", "game_check_saved", "game_check_menu", "save_look"]);
 
 /** What a backend command does and what can hold it. */
 export function describeCall(cmd: string): Desc | null {

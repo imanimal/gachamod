@@ -24,12 +24,13 @@ static PICKING: AtomicBool = AtomicBool::new(false);
 fn window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
     if let Some(w) = app.get_webview_window(LABEL) { return Some(w); }
     // the same browser flags as the main window, or WebView2 won't start a second window in its folder
-    let gpu = app.try_state::<crate::Gpu>().map_or(true, |g| g.0);
-    let w = crate::browser_flags(WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into())), gpu)
+    let w = crate::browser_flags(WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html".into())), crate::Flags::of(app))
         .title("gachamod menu").inner_size(960.0, 640.0).decorations(false).resizable(false).always_on_top(true)
         // the game shows through: the page sets how much (the menu's Background setting)
         .transparent(true)
         .skip_taskbar(true).visible(false).focused(false).build().ok()?;
+    crate::render::watch_window(&w);
+    crate::render::hook_webview(&w);
     // clicking back into the game closes the menu. A pick also brings the game forward, and the menu stays for that
     let handle = app.clone();
     w.on_window_event(move |e| {
