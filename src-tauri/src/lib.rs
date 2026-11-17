@@ -22,7 +22,8 @@ pub enum Opened {
 fn opened_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<Opened> {
     args.into_iter().skip(1).filter_map(|a| {
         let lower = a.to_ascii_lowercase();
-        if lower.ends_with(".gachamod") { Some(Opened::File { path: a }) }
+        // a pack opens its importer; an archive (Open with, or a path on the command line) installs into the current game
+        if [".gachamod", ".zip", ".7z", ".rar"].iter().any(|x| lower.ends_with(x)) { Some(Opened::File { path: a }) }
         else if lower.contains("://") && !lower.starts_with("http") { Some(Opened::Link { url: a }) }
         else { None }
     }).collect()
@@ -288,7 +289,11 @@ pub fn run() {
             commands::account::gb_sign_out,
             commands::account::gb_follow,
             commands::account::gb_like,
+            commands::account::gb_subscribe,
+            commands::account::gb_thank,
+            commands::account::gb_mod_me,
             commands::account::gb_following,
+            commands::account::gb_content_settings,
             commands::modtools::fixes_info,
             commands::modtools::fixes_health,
             commands::modtools::fixes_apply,
@@ -309,6 +314,11 @@ pub fn run() {
             commands::ingame::keylist_set,
             commands::ingame::keylist_choose,
             commands::ingame::app_restart_admin,
+            commands::otherkeys::otherkeys_clashes,
+            commands::otherkeys::otherkeys_ask,
+            commands::otherkeys::otherkeys_move,
+            commands::otherkeys::otherkeys_change,
+            commands::otherkeys::otherkeys_keep,
             // ── SYSTEM: logs, crash reports, usage counts, feedback, administrator ──
             commands::report::report_state,
             commands::report::report_set,
@@ -367,7 +377,10 @@ pub fn run() {
             commands::system::setup_game,
             commands::system::launch_config_get,
             commands::system::launch_config_set,
+            commands::system::launch_unsafe_off,
             commands::system::game_launch,
+            commands::system::game_kick_check,
+            commands::system::game_kick_fix_done,
             commands::system::game_running,
             commands::system::dev_status,
             commands::system::dev_log_tail,

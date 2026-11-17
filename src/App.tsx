@@ -48,7 +48,9 @@ import "./lib/elevation";
 import "./lib/places";
 import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
 import { afterInstall } from "./screens/library/afterInstall";
+import { watchKeyClashes } from "./screens/ingame/otherKeys";
 import { installSmoothScroll } from "./lib/smoothScroll";
+import { splashReady } from "./splash/splash";
 
 
 export function App() {
@@ -85,6 +87,8 @@ export function App() {
       introSearch();
     }).catch((e) => { setLoaded(true); setLooked(true); toast(String((e as { message?: string }).message ?? e), true); });
   }, []);
+  // the opening screen plays once the games are read and the first screen is drawn (splash/splash.ts)
+  useEffect(() => { if (loaded) splashReady(); }, [loaded]);
   // the setup page made a game ready: that was the first start
   useEffect(() => {
     if (!ready && looked) sawSetup.current = true;
@@ -123,12 +127,15 @@ export function App() {
 
   // a game starting or stopping
   useEffect(() => held(gamesApi.onState((p) => { patchGame(p.game, { running: p.running }); notePlaying(p.game, p.running); })), []);
+  // another app's key that is also gachamod's (Medal's screenshot key and the skin menu's): ask in a toast
+  useEffect(() => (loaded ? watchKeyClashes() : undefined), [loaded]);
 
   // links and files the app was started with or handed later
   useEffect(() => {
     const open = (o: { kind: "link"; url: string } | { kind: "file"; path: string }) => {
-      if (o.kind === "file") emitApp({ type: "open-pack", path: o.path });
-      else emitApp({ type: "open-gb-link", url: o.url });
+      if (o.kind === "link") emitApp({ type: "open-gb-link", url: o.url });
+      else if (o.path.toLowerCase().endsWith(".gachamod")) emitApp({ type: "open-pack", path: o.path });
+      else emitApp({ type: "install-paths", paths: [o.path] });
     };
     appApi.startupOpened().then((list) => list.forEach(open)).catch(() => {});
     const offs = [

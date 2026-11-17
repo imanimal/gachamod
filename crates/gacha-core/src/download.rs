@@ -66,7 +66,15 @@ pub fn part_path(dir: &Path, file_name: &str) -> PathBuf {
 /// a hiccup. With `switch`, a download that stays slow carries on from another server with the same file, and goes
 /// back to `url` if that server fails.
 pub async fn download(http: &reqwest::Client, url: &str, dir: &Path, file_name: &str, switch: Option<&Switch>,
-                      mut progress: impl FnMut(u64, Option<u64>) -> bool) -> Result<Downloaded> {
+                      progress: impl FnMut(u64, Option<u64>) -> bool) -> Result<Downloaded> {
+    download_noting(http, url, dir, file_name, switch, progress, |_| {}).await
+}
+
+/// `download`, telling `note` what it is doing when that isn't receiving bytes: connecting, waiting to try again
+/// after the connection dropped, moving to another server, checking the finished file. An empty note means bytes are
+/// arriving and there is nothing more to say.
+pub async fn download_noting(http: &reqwest::Client, url: &str, dir: &Path, file_name: &str, switch: Option<&Switch>,
+                             mut progress: impl FnMut(u64, Option<u64>) -> bool, mut note: impl FnMut(String)) -> Result<Downloaded> {
     tokio::fs::create_dir_all(dir).await?;
     let path = dir.join(safe_file_name(file_name));
     let part = part_path(dir, file_name);
@@ -76,10 +84,15 @@ pub async fn download(http: &reqwest::Client, url: &str, dir: &Path, file_name: 
     let mut left: HashSet<String> = HashSet::new();
     let mut moves = 0u32;
     let mut size: Option<u64> = None;
+    // said once bytes flow again after a move, so the row keeps saying why the server changed
+    let mut moved = String::new();
     loop {
         let watch = switch.filter(|s| moves < s.most);
         let from = other.as_ref().map_or(url, |u| u.as_str());
-        match try_download(http, from, &part, other.is_some(), size, watch, &mut progress).await {
+        let host = Url::parse(from).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_else(|| "the server".into());
+        note(format!("Connecting to {host}"));
+        let step = try_download(http, from, &part, other.is_some(), size, watch, &mut progress, &mut || note(moved.clone())).await;
+        match step {
             Ok(Step::Done) => break,
             Ok(Step::Slow { at, total, rate }) => {
                 size = size.or(total);
@@ -90,6 +103,7 @@ pub async fn download(http: &reqwest::Client, url: &str, dir: &Path, file_name: 
                     Some(next) => {
                         crate::logs::info(format!("Download of {file_name}: {} gave {} KB/s, carrying on from {}",
                             at.host_str().unwrap_or("?"), rate / 1000, next.host_str().unwrap_or("?")));
+                        moved = format!("Moved to another GameBanana server, the last one sent {} KB/s", rate / 1000);
                         other = Some(next);
                     }
                     // nowhere left to go: stay, and stop watching
@@ -101,22 +115,31 @@ pub async fn download(http: &reqwest::Client, url: &str, dir: &Path, file_name: 
                 Some(failed) => {
                     crate::logs::info(format!("Download of {file_name}: {} failed ({e}), back to {url}", failed.host_str().unwrap_or("?")));
                     left.insert(origin(&failed));
+                    moved = "Back on the first server, the other one stopped".into();
                 }
                 None if matches!(e, Error::Network(_)) && attempt < 5 => {
                     attempt += 1;
+                    // a cancel is otherwise only seen when bytes arrive: ask before and after the pause, so a dead
+                    // connection doesn't keep the download's place for minutes
+                    let have = tokio::fs::metadata(&part).await.map(|m| m.len()).unwrap_or(0);
+                    if !progress(have, size) { return Err(Error::Invalid(CANCELLED.into())); }
+                    note(format!("The connection dropped. Trying again in {} s (try {attempt} of 5)", pause_secs(attempt)));
                     pause(attempt).await;
+                    if !progress(have, size) { return Err(Error::Invalid(CANCELLED.into())); }
                 }
                 None => return Err(e),
             },
         }
     }
     // hash the finished file in one pass (it may have arrived in pieces)
+    note("Checking the downloaded file".into());
     let (size, md5) = hash_file(&part).await?;
     tokio::fs::rename(&part, &path).await?;
     Ok(Downloaded { path, size, md5 })
 }
 
-async fn pause(attempt: u32) { tokio::time::sleep(Duration::from_secs(2u64.pow(attempt.min(4)))).await; }
+fn pause_secs(attempt: u32) -> u64 { 2u64.pow(attempt.min(4)) }
+async fn pause(attempt: u32) { tokio::time::sleep(Duration::from_secs(pause_secs(attempt))).await; }
 
 fn origin(u: &Url) -> String { u.origin().ascii_serialization() }
 
@@ -151,13 +174,24 @@ enum Step {
 /// One request: from the start, or the rest of a `.part` left by an earlier try. `strict` is for a server other than
 /// the file's own link: it fails instead of starting over or sending a file of another `size`.
 async fn try_download(http: &reqwest::Client, url: &str, part: &Path, strict: bool, size: Option<u64>, watch: Option<&Switch>,
-                      progress: &mut impl FnMut(u64, Option<u64>) -> bool) -> Result<Step> {
+                      progress: &mut impl FnMut(u64, Option<u64>) -> bool, flowing: &mut impl FnMut()) -> Result<Step> {
     let have = tokio::fs::metadata(part).await.map(|m| m.len()).unwrap_or(0);
     let mut req = http.get(url);
     if have > 0 { req = req.header("Range", format!("bytes={have}-")); }
     let resp = req.send().await.map_err(|e| Error::Network(format!("{}. Retry to resume", e.without_url())))?;
-    // asked for the rest of a file that is already complete
-    if have > 0 && resp.status().as_u16() == 416 { progress(have, Some(have)); return Ok(Step::Done); }
+    // asked for the rest of a file that is already complete: only when the part is the size the server has
+    // ("Content-Range: bytes */<size>"), else the part is from another file or another copy
+    if have > 0 && resp.status().as_u16() == 416 {
+        let full = resp.headers().get(reqwest::header::CONTENT_RANGE).and_then(|v| v.to_str().ok())
+            .and_then(|v| v.rsplit('/').next()?.trim().parse::<u64>().ok()).or(size);
+        if full.is_none_or(|n| n == have) { progress(have, Some(have)); return Ok(Step::Done); }
+        if strict { return Err(Error::Network("its copy is another size".into())); }
+        let _ = tokio::fs::remove_file(part).await;
+        return Err(Error::Network("The saved part didn't fit the file. Retry starts it again".into()));
+    }
+    // a busy or restarting server: worth another try, unlike a link that is gone
+    let code = resp.status().as_u16();
+    if matches!(code, 408 | 429 | 500..=599) { return Err(Error::Network(format!("The server answered {code}. Retry to resume"))); }
     if !resp.status().is_success() {
         return Err(Error::Http { status: resp.status().as_u16(), message: "The link expired. Try the file again".into() });
     }
@@ -170,6 +204,7 @@ async fn try_download(http: &reqwest::Client, url: &str, part: &Path, strict: bo
     let watch = watch.filter(|s| !(s.others)(&at).is_empty());
     let mut file = if resumed { tokio::fs::OpenOptions::new().append(true).open(part).await? } else { tokio::fs::File::create(part).await? };
     let mut stream = resp.bytes_stream();
+    flowing();
     let to_go = |received: u64| total.map_or(0, |t| t.saturating_sub(received));
     let mut window = (Instant::now(), received);
     loop {

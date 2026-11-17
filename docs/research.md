@@ -39,6 +39,28 @@ options into Steam's localconfig.vdf, stopping and restarting Steam to do it. Fo
 (default true) makes those options `"<game exe>" && %command%`. The Steam copy of ZZZ (app 4162040) refuses a direct start and
 asks to be launched from Steam (Steam community thread, XXMI 2.5 source). `StartMethod` = NATIVE / SHELL.
 
+How XXMI does the Steam start (game_launcher.py `launch` and `build_cmd_args`, platforms/steam/*, checked at tags v2.3.5
+to v2.5.0):
+- The options are the parts below joined with single spaces: `"<exe>" && %command%` (ZZZ with skip_platform_game_launcher
+  on; WW the same from 2.5.0; Endfield always from 2.4.8), then `d3d11_mode_cmd_args` if not empty, then `launch_options`
+  if `use_launch_options` (default true) even when empty, so the default ZZZ string ends in a space:
+  `"D:\SteamLibrary\steamapps\common\ZenlessZoneZero\ZenlessZoneZero.exe" && %command% `. Before 2.4.4 every `\` in
+  launch_options became `/`. `<exe>` is Python's `Path.resolve()` of the game exe: links followed, names as the disk spells
+  them, no `\\?\`. XXMI looks for it in `<library>\steamapps\common\<installdir>` (app manifest): right in that folder, then
+  under process_exe_rel_paths, then the only copy anywhere below (two copies: no exe part). Names come from
+  process_exe_names, else game_exe_names.
+- It reads and writes `UserLocalConfigStore\Software\Valve\Steam\apps\<app>\LaunchOptions` (keys any case from 2.5.0,
+  exact case before; a missing app entry is an error) in `<steam>\userdata\<account>\config\localconfig.vdf`, where the
+  account is the only one in `config\loginusers.vdf`, else the one with the latest `Timestamp`, and the folder is the low
+  32 bits of its SteamID64. It rewrites the whole file with the python `vdf` module.
+- When Steam's options differ from its string (exact compare): `steam.exe -shutdown -silent`, wait up to 30 s for steam.exe
+  to exit, write, `steam.exe -silent` (if Steam ran before), then right away `steam.exe -silent -applaunch <app>`, then
+  wait `process_timeout` (default 30 s) for the game. A Steam that just started isn't signed in, so that `-applaunch` is
+  lost or the wait runs out; the next start needs no restart and works. gachamod therefore writes the same string itself
+  and waits for the sign-in before starting XXMI (spec, Launching).
+- Steam notes its state in `HKCU\Software\Valve\Steam\ActiveProcess` (`pid`, `ActiveUser`, both 0 when closed or signed
+  out) and `HKCU\Software\Valve\Steam\Apps\<app>` (`Running`, `Updating`).
+
 Typical install locations and how XXMI finds them:
 
 - All importers first scan `HKCU\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache`, `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FeatureUsage\AppSwitched` and `...\FeatureUsage\ShowJumpView` for value names containing the exe name, and take the part before the exe name as the folder (`reg_search_game_folders`).

@@ -47,7 +47,6 @@ export const Backdrop = memo(function Backdrop({ game }: { game: GameState | nul
 export function SideDeco({ game, version }: { game: GameState | null; version?: string }) {
   return (
     <div className="side-deco" aria-hidden="true">
-      <span className="side-deco-t">{(game?.name ?? "gachamod").toUpperCase()}</span>
       <Glyphs run />
       <span className="side-deco-m">{game ? `${game.importer} · ${game.modCount} MODS` : "NO GAME"}{version ? ` · VER ${version}` : ""}</span>
       <Glyphs run className="rev" />

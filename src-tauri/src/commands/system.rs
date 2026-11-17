@@ -173,15 +173,37 @@ pub async fn launch_config_set(st: State<'_, AppState>, game: String, config: La
     blocking(move || launch::set_config(&*lock(&db)?, &game, &config)).await
 }
 
+/// Turn XXMI's Unsafe Mode off for a game (turning it on needs XXMI Launcher, which signs it).
+#[tauri::command]
+pub async fn launch_unsafe_off(st: State<'_, AppState>, game: String) -> Result<LaunchConfig> {
+    let db = st.db.clone();
+    blocking(move || launch::unsafe_off(&*lock(&db)?, &game)).await
+}
+
 #[tauri::command]
 pub async fn game_launch(st: State<'_, AppState>, game: String, vanilla: bool) -> Result<Option<String>> {
     let db = st.db.clone();
-    // game-state events come from devtools::watch, which checks processes every 3 seconds
+    // game-state events come from devtools::watch, which checks processes every 3 seconds. The database lock is let go
+    // while the game starts: that can wait on an admin prompt, or on Steam closing, starting and signing in.
     blocking(move || {
-        let (plan, note) = { let d = lock(&db)?; let p = launch::plan(&d, &game, vanilla)?; let n = launch::plan_note(&d, &game, &p, vanilla); (p, n) };
-        launch::start(plan)?;
-        Ok(note)
+        let plan = launch::plan(&*lock(&db)?, &game, vanilla)?;
+        let started = launch::start(plan.clone())?;
+        Ok(launch::plan_note(&*lock(&db)?, &game, &plan, vanilla, started))
     }).await
+}
+
+/// Before a start: whether to warn that Genshin Impact may stop with "Illegal tool detected" (only reads files).
+#[tauri::command]
+pub async fn game_kick_check(st: State<'_, AppState>, game: String, vanilla: bool) -> Result<launch::KickCheck> {
+    let db = st.db.clone();
+    blocking(move || launch::kick_check(&*lock(&db)?, &game, vanilla)).await
+}
+
+/// The player did the "Illegal tool detected" fix by hand (or takes that back).
+#[tauri::command]
+pub async fn game_kick_fix_done(st: State<'_, AppState>, done: bool) -> Result<()> {
+    let db = st.db.clone();
+    blocking(move || launch::set_kick_fix(&*lock(&db)?, done)).await
 }
 
 #[tauri::command]

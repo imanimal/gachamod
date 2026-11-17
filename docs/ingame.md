@@ -168,7 +168,7 @@ in section 2 is loader-independent. Only the library list and process names diff
   About screen as the idea source.
 - NRMM's C++ ini checker is derived from XXMI-Libs-Package, which is GPLv3 (3DMigoto is GPLv3). Do not copy it. We write our
   own flow-control check in Rust.
-- ZZZ Mod Hub is GPLv3. This repo is MIT, so we read it for technique only and copy nothing. Same for 3DMigoto and XXMI source.
+- ZZZ Mod Hub is GPLv3. This repo is CC BY-ND, so we read it for technique only and copy nothing. Same for 3DMigoto and XXMI source.
 - Files we generate (ini, shaders, bitmaps) must be ours. Do not ship game art. Character images come from GameBanana or the wiki
   as the portraits module already does.
 
@@ -411,8 +411,26 @@ line the first time in a run), and its group is `waiting` until the game takes i
 the mod card and a line in Tools. Turning off a live skin the game doesn't show (it picked another in its own menu) says
 what the character wears instead (`not_showing`).
 
-Zenless Zone Zero is the game this was checked in (`live::CHECKED`). In other games new groups, Every character and the
-drawn menu are a tester option (setting `ui.tester`, Settings > Feedback, privacy and logs); groups a game already has keep working.
+Zenless Zone Zero and Genshin Impact are the games the drawn menu was checked in (`live::CHECKED`). The user confirmed
+Genshin Impact on 2026-11-16, and it joined `CHECKED` that day. Switching in game itself (groups, Every character, the
+window over the game on F7) works in every game and Tools shows the page in all of them; it stays off by default
+outside those two.
+
+Honkai: Star Rail and Honkai Impact 3rd have the drawn menu too since 2026-11-16 (`live::SIMILAR`,
+`live::drawn_menu_open`), without anyone having tried it there: Genshin Impact worked at the first try, and these two
+draw the same way (miHoYo's Unity engine, an XXMI importer of GIMI's line, hook injection). Switching in game stays
+off by default in them. Wuthering Waves (Unreal) and Endfield load by direct injection through WWMI's line, so they
+wait for a report from Check this game.
+
+In the remaining games only the drawn menu is a tester option (setting `ui.testerOk`, `live::TESTER`, Settings >
+Feedback, privacy and logs; `live::allowed`). Turning tester options on asks first (`ingame/TesterConfirm.tsx`): the
+drawn menu's pictures load with the mods, so mods load slower and use more memory. The older `ui.tester` was set
+without that question and isn't read since 2026-11-16. Without tester options live.ini gets no drawn menu, the panel
+hides "Menu while you play" and "Show skins picked in the game right away", and a saved "Inside the game" reads as the
+window over the game (`menu_settings`), so F7 always opens a menu. A game that runs as administrator then needs
+gachamod as administrator for F7 (the panel's Blocked note says so). With tester options on, "Inside the game" keeps a
+Tester option tag (it opens Check this game) in those games (`LiveInfo.checked` is false).
+Until 2026-11-16 the whole feature was the tester option outside ZZZ (the user moved it to the drawn menu only).
 
 The panel has one switch, "Pick skins with F7 while you play" (`<game>.liveAll`, `live::set_all` and `auto_add`). On:
 every mod that has a character, has an ini and isn't a sub-mod goes live, and new ones join after a scan. Off: every
@@ -421,7 +439,8 @@ mod taken out by hand is kept in the store's `out` list and stays out until the 
 
 It is on by default in the checked games. `live::on_start` turns it on once per game (`<game>.liveAllSet` marks that it
 did), also where it was off: 0.1.1-beta.3 took live characters apart and turned it off without asking, and that left F7
-with nothing to open. After that only the player turns it off.
+with nothing to open. After that only the player turns it off. Genshin Impact gets that one turn-on at the first start
+after it joined `CHECKED`.
 
 Buffer sizes: a mod with more vertices than the game's model has `[TextureOverride...VertexLimitRaise]` sections with
 `override_vertex_count` and `override_byte_stride`. The loader reads those when it first meets the buffer, not when a
@@ -456,6 +475,11 @@ and `<game>.liveMenuPad` beside it (Tools > Switch skins in game, `MenuOptions`)
 | `game` | Always the menu the game draws | A `[KeyMenuOpen]` section in live.ini |
 
 An older `off` reads as `window`: the panel's one switch turns the menu off along with everything else.
+
+The window over the game is the menu in every game. Players who had picked `game` were set back to `window` once
+(`live::window_menu_once`, setting `live.windowMenuSet`), on 2026-11-16. The drawn menu opens only when the game holds
+the screen in exclusive fullscreen, or when gachamod can't hear the key (the game runs as administrator and gachamod
+doesn't; the panel then shows Run as administrator, the same row as in Settings, with Always).
 
 ### The window over the game
 
@@ -510,9 +534,12 @@ back. The menu marks such skins New and says to switch to another character and 
 that is the mod's own problem. Which skins have shown is kept per game in the window's browser storage
 (`ingame.seen.<game>`); the first read counts every live skin as shown, so only skins that join later are New.
 
-The app can't show a window over exclusive fullscreen. `devtools::exclusive_fullscreen` asks Windows
-(`SHQueryUserNotificationState` says a Direct3D program holds the screen), and then the key sends the number 1 with no
-group, which runs `CommandListMenuToggle` in live.ini.
+The app can't show a window over exclusive fullscreen. `devtools::exclusive_fullscreen(game)` checks the game itself:
+its window is in front and fills its monitor, and Windows says a Direct3D program holds the screen
+(`SHQueryUserNotificationState`). Before 2026-11-16 only the last part was checked, so any program in exclusive
+fullscreen sent the key to the drawn menu. Then the key sends the number 1 with no group, which runs
+`CommandListMenuToggle` in live.ini. A game without the drawn menu (outside Zenless Zone Zero and Genshin Impact with
+tester options off) gets a message to set its window mode to borderless instead, with a button to Settings, Launch options.
 
 `npm run dev` then http://localhost:1420/#overlay shows the window's UI with demo data.
 
@@ -524,18 +551,64 @@ group, which runs `CommandListMenuToggle` in live.ini.
   piece and the window size arrive in IniParams 86 to 89, which the draw list saves and puts back.
 - `menu<group>.dds`: one picture per character, a header and one row per skin with the thumbnail and name drawn in.
   Text is drawn by Windows (GDI), so names in any language show. Made for the screen's height and scaled by the shader.
-- `menu0.dds`: the list of characters, one row each, when there are two or more.
-- `menu.dds`: the two footers with the key hints, the scroll buttons and the check mark.
+  It is two lists wide: the left half is the menu as it shows, the right half has every row drawn as the picked row
+  (and the back button lit), which live.ini lays over the left half where the keys or the mouse are.
+- `menu0.dds`: the list of characters, one row each, when there are two or more. Two halves the same way.
+- `menu.dds`: the two footers with the key hints, then a strip with the scroll buttons, the same buttons lit, the check
+  mark and the check mark for the picked row (`Layout::btn_u`, `chk_u`). In Zenless Zone Zero two more strips follow: the
+  list's top corners and its bottom corners.
 - `menu.json`: a hash per picture, so only pictures whose names or previews changed are made again.
 
 Sections added to live.ini: `[Present]` runs `CommandListMenuFrame` while `$open` is 1, which works out the window size
-(the same fallbacks as the ZZMI core's text printer), which row the mouse is over, and draws about six rectangles through
-`[CustomShaderMenuQuad]`. Showing a row sets `$g<group>`, the number the gates read, so no tap from the app is needed.
+(the same fallbacks as the ZZMI core's text printer), which row the mouse is over, and draws about eight rectangles
+through `[CustomShaderMenuQuad]`. There is no scroll bar: 3DMigoto can't read the mouse wheel, and a bar made it
+look as if the wheel worked. A list longer than eight rows shows the two scroll buttons in the footer. Showing a
+row sets `$g<group>`, the number the gates read, so no tap from the app is needed.
+
+Each game's menu is drawn after its own menus (`Look`, picked from the game id; every size goes through `Layout` so the
+pictures and live.ini agree). All of it is shapes drawn in code and Windows fonts: Bahnschrift's widths for the games
+with condensed or DIN-like type, Segoe UI for the rest, and Segoe UI for any name the chosen font has no letters for.
+
+- Zenless Zone Zero: a grey frame with a black outline round a black well with a dot matrix. The header holds one
+  black capsule as wide as the rows' pills (`zzz_bar`): the back button or an orange slanted tag, the name in bold
+  italic condensed capitals, then halftone dots growing into its right end, which is orange with black stripes behind
+  a leaning edge. Rows are grey pills with round pictures; the picked one turns orange with black text, a hard shadow
+  and stripes. The check is an orange disc (black on the picked row), key hints are white capsules. The accent is
+  the game's orange (`#ff7a1c`, the same as its theme's default); it was lime until 2026-11-16. The gap between two
+  pills, above the first, under the last and at their sides is the same 6 px: a pill sits 3 inside its row, and the
+  header's last 3 px and the footer's first 3 px are drawn as the list's own background (`Layout::gut`). The well's
+  corners are round like the game's own insets (`Layout::round`, 22 px; 12 px on a key sheet). The rows scroll
+  under them, so the corners are two more strips at the end of `menu.dds` (`well_corners`) that live.ini lays over
+  the first and the last row in view, after the footer.
+- Genshin Impact: see-through navy with a thin gold border, gems on its corners, a four-point star and a gold rule with
+  diamond ends. The picked row is a cream pill with dark text and the picture in a dark round cap at its left end.
+- Honkai: Star Rail: smoked glass with faint stars and the top right corner cut round. Rows are cells with that cut;
+  the picked one is a pale plate with a line set inside it and an orange mark. Gold check, pale key pills.
+- Wuthering Waves: see-through black with 3 px corners, faint nested curves and a gold hairline with diamond ends. The
+  picked row turns white with a small gold diamond; the check is a gold diamond.
+- Honkai Impact 3rd: deep blue with cut corners and a cyan edge, slanted cyan ticks. The picked row is a cyan to blue
+  plate with a yellow tag.
+- Arknights: Endfield: a charcoal header with a yellow edge, a ruler and a crosshair over a light grey sheet. The picked
+  row is signal yellow with stripes down its left and corner brackets.
+- Community games: plain dark panels, the picked row a soft box with a violet edge.
 
 Pages: one per character (by name) with its skins, and with two or more characters one more that lists the characters.
 Up and down move, right (or A) shows the row, a click on a row shows it (hold Alt for the cursor). Left, or a click on a
 character's header, goes to the list of characters with the cursor on the one that was open; right or a click there
 opens a character. Enter does the same as right but isn't in the hints, since games open their chat on Enter.
+
+Those are the keys a menu starts with. Every one is the player's to change (Tools, Switch skins in game, Menu keys):
+`live::MENU_BINDS` lists what a key can do (open with a controller, up, down, show, back, close, show the key list),
+each with up to four 3DMigoto bindings, keyboard or controller (`MenuSettings::binds`, saved per game in
+`<game>.liveMenuBinds`, only the things that differ). `live::set_menu` writes each binding one way
+(`keys::clean_binding`) and refuses a key that already does something else in the menu, the menu key included, and
+F10. A thing may have no key. live.ini gets two keys to a `[Key...]` section, the way a keyboard key and a
+controller's button always shared one, and further keys a section of their own (`KeyMenuShow2`). The hints in the
+footer name each thing's first keyboard key. With "Use a controller in the menu" off, the controller's bindings
+are left out. The controller's buttons that open the menu also open the window over the game
+(`overlay::watch_pad`, `devtools::pad_down`). In that window a keyboard key bound to up, down, show, back or close
+does the same there (`ingame/data.ts` `boundAction`); arrow keys and Enter always keep what they do in a window,
+and a controller moves in it as in the rest of the app (`lib/gamepad.ts`), whatever the bindings say.
 
 Which character is on screen: every gated TextureOverride starts with `run = CommandList\gachamod\live\Seen<group>`,
 which sets a flag that `[Present]` reads and clears. The menu opens on that character each time its key is pressed, and
@@ -544,7 +617,11 @@ in the menu don't flip its toggles. Mods gated by an older version get both on t
 
 Checked without a game: the shader compiles with fxc for vs_5_0 and ps_5_0, the generated sections balance their ifs and
 only run lists that exist (tests in `menu.rs`), and the .dds reads back. `GACHAMOD_MENU_PNG=<folder> cargo test -p gacha-core
-mock_picture` writes a picture of the menu and the generated sections there.
+mock_picture` writes a picture of each look's menu (`menu-<look>.png`: skins, characters, the back button lit, a key
+sheet) and the generated sections there; `GACHAMOD_MENU_THUMB=<picture>` puts a preview on every row.
+
+Still to check in a game for the looks: the see-through panels (Genshin, Star Rail, Wuthering Waves, Honkai Impact 3rd)
+over bright scenes, and how the pictures read at 1440 and 2160.
 
 ### Games that run as administrator
 

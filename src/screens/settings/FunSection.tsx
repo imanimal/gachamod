@@ -1,19 +1,25 @@
-// Settings > Fun extras: chill mode, the pity counter, seasonal touches, the year card and (while animal has it on) mod of
-// the day. Everything here is off until turned on, except the mod of the day button. Owner: SETTINGS/AI area.
+// Settings > Fun extras: chill mode, the pull button, seasonal touches, the year card and (while animal has it on) mod
+// of the day. Everything here is off until turned on, except the mod of the day button. Owner: SETTINGS/AI area.
 import { useEffect, useState } from "react";
 import { library, type ModEntry } from "../../lib/api";
-import { chillPref, pityPref, seasonalPref, usePityCount } from "../../lib/fun";
+import { chillPref, PULL_PITY, pullPref, pullsSince, pullWord, seasonPref, type SeasonPick } from "../../lib/fun";
 import { motdPref, useMotdOn } from "../../lib/motd";
 import { playedIn } from "../../lib/playtime";
-import { useGames } from "../../lib/store";
-import { Button, Dialog, Panel, Segmented, Spinner, Toggle } from "../../ui/kit";
+import { useGame, useGames } from "../../lib/store";
+import { Button, Dialog, Panel, Segmented, Select, Spinner, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
+
+const SEASONS: Array<{ value: SeasonPick; label: string }> = [
+  { value: "off", label: "Off" }, { value: "date", label: "By the date" },
+  { value: "halloween", label: "Halloween" }, { value: "snow", label: "Snow" }, { value: "hearts", label: "Hearts" },
+];
 
 export function FunSection() {
   const chill = chillPref.use();
-  const pity = pityPref.use();
-  const pityN = usePityCount();
-  const seasonal = seasonalPref.use();
+  const pull = pullPref.use();
+  const pulls = pullsSince.use();
+  const word = pullWord(useGame()?.id);
+  const season = seasonPref.use();
   const motd = motdPref.use();
   const motdOn = useMotdOn();
   const [year, setYear] = useState(false);
@@ -25,12 +31,12 @@ export function FunSection() {
             onChange={(v) => void chillPref.set(v === "on", v === "on" ? "Turned on chill mode" : "Turned off chill mode")}
             options={[{ value: "off", label: "Off", title: "I like my UI uptight." }, { value: "on", label: "On", title: "chillax text" }]} />
         </SetRow>
-        <SetRow id="set-pity" label="Pity counter"
-          hint={pity ? `${pityN === 1 ? "1 mod" : `${pityN} mods`} opened in Browse since your last install. At 90 you hit hard pity` : "Counts the mods you open in Browse without installing one"}>
-          <Toggle checked={pity} onChange={(v) => void pityPref.set(v, v ? "Turned on the pity counter" : "Turned off the pity counter")} />
+        <SetRow id="set-pull" label={`${word} button`}
+          hint={`A button in Browse that opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every ${PULL_PITY}th pull without a 5 star is one${pull && pulls ? ` (${pulls} so far)` : ""}`}>
+          <Toggle checked={pull} onChange={(v) => void pullPref.set(v, v ? `Turned on the ${word} button` : `Turned off the ${word} button`)} />
         </SetRow>
-        <SetRow id="set-seasonal" label="Seasonal touches" hint="Snow in late December, hearts on Valentine's Day. Not while Animations is off">
-          <Toggle checked={seasonal} onChange={(v) => void seasonalPref.set(v, v ? "Turned on seasonal touches" : "Turned off seasonal touches")} />
+        <SetRow id="set-seasonal" label="Seasonal touches" hint="By the date: bats and pumpkins the week before Halloween, snow from 20 December, hearts on Valentine's Day. Not while Animations is off">
+          <Select<SeasonPick> value={season} onChange={(v) => void seasonPref.set(v, `Seasonal touches: ${v === "off" || v === "date" ? SEASONS.find((s) => s.value === v)!.label.toLowerCase() : SEASONS.find((s) => s.value === v)!.label}`)} options={SEASONS} />
         </SetRow>
         {motdOn && (
           <SetRow id="set-motd" label="Mod of the day" hint="A mod picked by animal, behind the gift button at the top of Browse">

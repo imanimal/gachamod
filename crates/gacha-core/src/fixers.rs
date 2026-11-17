@@ -107,18 +107,21 @@ pub async fn fetch(http: &reqwest::Client, data_dir: &Path, game: &str, req: Fix
 
 async fn fetch_from(http: &reqwest::Client, data_dir: &Path, game: &str, req: FixerRequest) -> Result<FixerFile> {
     let base = root(data_dir, game)?;
-    let tmp = base.join(".downloading");
+    // one folder per link: a part left by another file of the same name (an older release) is never carried on from
+    let tmp = base.join(format!(".downloading-{:x}", link_id(&req.url)));
     let got = download(http, &req.url, &tmp, &req.file, None, |_, _| true).await?;
     if let Some(want) = req.md5.as_deref().map(str::trim).filter(|m| !m.is_empty()) {
         if !got.md5.eq_ignore_ascii_case(want) {
-            let _ = tokio::fs::remove_file(&got.path).await;
+            let _ = tokio::fs::remove_dir_all(&tmp).await;
             return Err(Error::Invalid("The download doesn't match the checksum GameBanana lists. Try again".into()));
         }
     }
     let (data, game) = (data_dir.to_path_buf(), game.to_string());
-    tokio::task::spawn_blocking(move || place(&data, &game, &req, &got.path))
+    let placed = tokio::task::spawn_blocking(move || place(&data, &game, &req, &got.path))
         .await
-        .unwrap_or_else(|e| Err(Error::Invalid(e.to_string())))
+        .unwrap_or_else(|e| Err(Error::Invalid(e.to_string())));
+    let _ = tokio::fs::remove_dir_all(&tmp).await;
+    placed
 }
 
 /// Move a downloaded file into its folder (extracting an archive) and list it.
@@ -126,19 +129,21 @@ pub fn place(data_dir: &Path, game: &str, req: &FixerRequest, downloaded: &Path)
     let file = safe_file_name(&req.file);
     let stem = Path::new(&file).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let dir = root(data_dir, game)?.join(folder_name(&req.tool, "Fixer")).join(folder_name(&stem, "Files"));
-    if dir.exists() { std::fs::remove_dir_all(&dir)?; }
-    std::fs::create_dir_all(&dir)?;
-    if crate::archive::detect(downloaded).is_ok() {
-        let r = crate::archive::extract(downloaded, &dir);
+    // unpacked beside the folder first: a copy that worked stays until the new one is whole
+    let new = dir.with_file_name(format!("{}.new", folder_name(&stem, "Files")));
+    if new.exists() { std::fs::remove_dir_all(&new)?; }
+    std::fs::create_dir_all(&new)?;
+    let filled = if crate::archive::detect(downloaded).is_ok() {
+        let r = crate::archive::extract(downloaded, &new).map(|_| ());
         let _ = std::fs::remove_file(downloaded);
-        r?;
+        r
     } else {
-        let to = dir.join(&file);
-        if std::fs::rename(downloaded, &to).is_err() {
-            std::fs::copy(downloaded, &to)?;
-            let _ = std::fs::remove_file(downloaded);
-        }
-    }
+        let to = new.join(&file);
+        std::fs::rename(downloaded, &to).or_else(|_| std::fs::copy(downloaded, &to).map(|_| { let _ = std::fs::remove_file(downloaded); })).map_err(Error::from)
+    };
+    if let Err(e) = filled { let _ = std::fs::remove_dir_all(&new); return Err(e); }
+    if dir.exists() { std::fs::remove_dir_all(&dir)?; }
+    std::fs::rename(&new, &dir)?;
     let entry = FixerFile {
         tool_id: req.tool_id, file_id: req.file_id, tool: req.tool.clone(), file: req.file.clone(),
         dir: dir.to_string_lossy().into_owned(), main: main_of(&dir).to_string_lossy().into_owned(), at: crate::db::now(),
@@ -458,7 +463,13 @@ pub fn run_on_mods(shared: &crate::db::Shared, data_dir: &Path, game: &str, file
     let mut out = Vec::new();
     for r in readied {
         let after = snapshot(&r.dir);
-        out.push(settle(shared, game, r, &after, &fixer.tool, stopped, &output)?);
+        let (mod_id, name) = (r.m.id.clone(), r.m.name.clone());
+        match settle(shared, game, r, &after, &fixer.tool, stopped, &output) {
+            Ok(run) => out.push(run),
+            // one mod whose backup couldn't be finished doesn't hide what the fixer did to the others
+            Err(e) if mod_ids.len() > 1 => out.push(FixerRun { mod_id, name, stopped, output: e.to_string(), ..Default::default() }),
+            Err(e) => return Err(e),
+        }
     }
     Ok(out)
 }

@@ -74,7 +74,7 @@ pub fn list(path: &Path) -> Result<Vec<String>> {
         Format::SevenZ => {
             let a = sevenz_rust2::Archive::open(path).map_err(damaged)?;
             for e in &a.files {
-                if !e.is_directory() && e.has_stream() { if let Some(p) = safe_relative(e.name()) { out.push(rel_string(&p)); } }
+                if !e.is_directory() { if let Some(p) = safe_relative(e.name()) { out.push(rel_string(&p)); } }
             }
         }
         Format::Rar => {
@@ -89,7 +89,10 @@ pub fn list(path: &Path) -> Result<Vec<String>> {
 }
 
 /// Extract every regular file into `dest` (created if needed). Returns the relative paths written.
-pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> {
+pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> { extract_with(path, dest, &mut |_| {}) }
+
+/// `extract`, telling `written` the size of each file once it is out.
+pub fn extract_with(path: &Path, dest: &Path, written_bytes: &mut dyn FnMut(u64)) -> Result<Vec<String>> {
     fs::create_dir_all(dest)?;
     let mut written = Vec::new();
     let target = |rel: &Path| -> Result<PathBuf> {
@@ -105,7 +108,8 @@ pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> {
                 if !f.is_file() { continue; }
                 let Some(rel) = safe_relative(f.name()) else { continue };
                 let mut out = File::create(target(&rel)?)?;
-                io::copy(&mut f, &mut out).map_err(|e| if !writing(&e) && matches!(e.kind(), io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof) { damaged(e) } else { e.into() })?;
+                let n = io::copy(&mut f, &mut out).map_err(|e| if !writing(&e) && matches!(e.kind(), io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof) { damaged(e) } else { e.into() })?;
+                written_bytes(n);
                 written.push(rel_string(&rel));
             }
         }
@@ -113,7 +117,8 @@ pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> {
             let mut r = sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty()).map_err(damaged)?;
             let mut err: Option<Error> = None;
             r.for_each_entries(|entry, reader| {
-                if entry.is_directory() || !entry.has_stream() { return Ok(true); }
+                // an entry without a stream is an empty file: it is written like any other (the reader is empty)
+                if entry.is_directory() { return Ok(true); }
                 let Some(rel) = safe_relative(entry.name()) else {
                     // solid archives must still be read through
                     io::copy(reader, &mut io::sink())?;
@@ -121,7 +126,7 @@ pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> {
                 };
                 match target(&rel).and_then(|t| File::create(t).map_err(Error::from)) {
                     Ok(mut out) => match io::copy(reader, &mut out) {
-                        Ok(_) => { written.push(rel_string(&rel)); Ok(true) }
+                        Ok(n) => { written_bytes(n); written.push(rel_string(&rel)); Ok(true) }
                         // a full drive is not a damaged archive
                         Err(e) if writing(&e) => { err = Some(e.into()); Ok(false) }
                         Err(e) => Err(e.into()),
@@ -142,7 +147,8 @@ pub fn extract(path: &Path, dest: &Path) -> Result<Vec<String>> {
                     Some(rel) => {
                         let t = target(&rel)?;
                         let (data, next) = header.read().map_err(damaged)?;
-                        std::fs::write(&t, data)?;
+                        std::fs::write(&t, &data)?;
+                        written_bytes(data.len() as u64);
                         written.push(rel_string(&rel));
                         next
                     }

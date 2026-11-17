@@ -18,7 +18,7 @@ export function Portrait({ game, name, icon, size = 40, className, square, ring,
       style={{ width: dim, height: dim } as CSSProperties} title={title}>
       {src
         ? <LazyImg src={src} alt="" decoding="async" draggable={false} onError={() => setBroken(src)}
-            style={p.crop && src === p.src ? { objectPosition: "50% 8%" } : undefined} />
+            style={src === p.src ? p.style : undefined} />
         : <span className="avatar-t" style={{ fontSize: `calc(${dim} * .38)` }}>{initials}</span>}
     </span>
   );

@@ -7,7 +7,6 @@ import type { GameId, ModEntry } from "./api";
 import { queue, type QueueItem, type QueueRequest } from "./api/online";
 import { currentGame } from "./store";
 import { toast } from "../ui/toast";
-import { pityReset } from "./fun";
 import { HOLD, track } from "./activity";
 import { doneHint } from "../shell/hints";
 
@@ -81,6 +80,10 @@ export interface GbMod extends GbCard {
   game: { id: number; name: string } | null;
   /** A GameBanana tool (a fixer, a script) rather than a mod: it is downloaded, never installed. */
   tool?: boolean;
+  /** Members subscribed to it on GameBanana (_nSubscriberCount). */
+  subscribers?: number;
+  /** Thanks its creator got for it (_nThanksCount). */
+  thanks?: number;
 }
 
 export interface GbUpdate { id: number; name: string; version: string | null; added: number; changes: Array<{ cat: string; text: string }>; text: string }
@@ -617,6 +620,9 @@ export function modPage(id: number, signal?: AbortSignal): Promise<GbMod | null>
   return itemPage("Mod", id, signal);
 }
 
+/** Read a mod's page fresh next time, after a like, subscription or thanks changed its counts. */
+export function forgetModPage(id: number) { memo.delete(`mod:${id}`); }
+
 /** Everything about one tool (Tool/<id>/ProfilePage, the same shape as a mod's page). */
 export function toolPage(id: number, signal?: AbortSignal): Promise<GbMod | null> {
   return itemPage("Tool", id, signal);
@@ -656,6 +662,8 @@ async function itemPage(model: GbModel, id: number, signal?: AbortSignal): Promi
       descriptionHtml: str(o._sText) ?? "",
       images, files: unique, superCategory, ratings, visibility,
       updatesCount: num(o._nUpdatesCount) ?? 0,
+      subscribers: num(o._nSubscriberCount) ?? 0,
+      thanks: num(o._nThanksCount) ?? 0,
       game: game && gameId !== null ? { id: gameId, name: str(game._sName) ?? "" } : null,
       ...(model === "Tool" ? { tool: true, character: null, kind: "tool" as const, url: card.url.includes("/tools/") ? card.url : `https://gamebanana.com/tools/${id}` } : {}),
     } satisfies GbMod;
@@ -1222,7 +1230,6 @@ export function buildRequest(game: GameId, mod: GbMod, file: GbFile, replaces?: 
 export async function queueModFile(game: GameId, mod: GbMod, file: GbFile, replaces?: string): Promise<QueueItem | null> {
   const snap = await queue.add(buildRequest(game, mod, file, replaces));
   doneHint("install");
-  pityReset();
   const waiting = snap.items.filter((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled").length;
   if (waiting === 25) toast("25 mods queued. Your drive has been notified");
   const mine = snap.items.filter((i) => i.req.game === game && i.req.fileId === file.id);

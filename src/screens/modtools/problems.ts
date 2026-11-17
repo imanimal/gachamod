@@ -33,8 +33,8 @@ export const ignoredProblems = (ign: Ignored, game: GameId, m: ModProblems) =>
 export const badgeKeys = (list: ModProblems[], ign: Ignored, game: GameId) =>
   list.flatMap((m) => (m.enabled ? shownProblems(ign, game, m).filter((p) => p.severity === "bad").map((p) => problemSeenKey(m.modId, problemKey(p))) : []));
 
-/** A broken part with no fix in the mod's files: downloading the mod again may bring the file back. */
-export const needsDownload = (shown: Problem[]) => shown.some((p) => p.severity === "bad" && !p.fix);
+/** A missing file or broken part with no fix in the mod's files: downloading the mod again may bring the file back. */
+export const needsDownload = (shown: Problem[]) => shown.some((p) => !p.fix && (p.severity === "bad" || p.kind === "missing_file"));
 
 export function ignore(game: GameId, m: ModProblems, problems: Problem[]) {
   if (!problems.length) return;

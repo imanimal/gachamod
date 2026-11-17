@@ -68,6 +68,61 @@ pub struct InstallOutcome {
     /// Several candidates and no choice yet: the UI asks, then calls again with `choose`.
     pub needs_choice: Option<Vec<Candidate>>,
     pub notes: Vec<String>,
+    /// The file was a bundle of separate mods, each installed on its own (not variants of one mod).
+    #[serde(default)]
+    pub bundle: bool,
+}
+
+/// What an install is doing, for the Downloads list: the step ("Unpacking Lucia-Velvet v1.0.zip (3 of 18)"), how far
+/// along (`done` of `total`, 0 total when unknown), and for a bundle the mods found in it and how many are in place.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallProgress {
+    pub step: String,
+    pub done: u32,
+    pub total: u32,
+    pub mods: Vec<String>,
+    pub placed: u32,
+}
+
+type Reporter = (InstallProgress, Box<dyn Fn(&InstallProgress)>, std::time::Instant);
+thread_local! {
+    static PROGRESS: std::cell::RefCell<Option<Reporter>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `work` with `report` told about each step that staging and placing take on this thread, starting from
+/// `start`. A step that starts something (a new archive, a new mod) is told right away, byte counts at most every
+/// 200 ms.
+pub fn with_progress<T>(start: InstallProgress, report: impl Fn(&InstallProgress) + 'static, work: impl FnOnce() -> T) -> T {
+    let back = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(1)).unwrap_or_else(std::time::Instant::now);
+    PROGRESS.with(|p| *p.borrow_mut() = Some((start, Box::new(report), back)));
+    let r = work();
+    PROGRESS.with(|p| *p.borrow_mut() = None);
+    r
+}
+
+fn progress(now: bool, change: impl FnOnce(&mut InstallProgress)) {
+    PROGRESS.with(|p| {
+        let mut b = p.borrow_mut();
+        let Some((state, report, last)) = b.as_mut() else { return };
+        change(state);
+        if now || last.elapsed() >= std::time::Duration::from_millis(200) { *last = std::time::Instant::now(); report(state); }
+    });
+}
+
+fn size_text(b: u64) -> String {
+    let mb = b as f64 / 1_048_576.0;
+    if mb >= 1024.0 { format!("{:.1} GB", mb / 1024.0) } else { format!("{} MB", mb.round() as u64) }
+}
+
+/// Extract `a`, with the step saying `what` and how much is out so far.
+fn extract_shown(a: &Path, dest: &Path, what: &str) -> Result<Vec<String>> {
+    progress(true, |p| p.step = what.to_string());
+    let mut bytes = 0u64;
+    crate::archive::extract_with(a, dest, &mut |n| {
+        bytes += n;
+        progress(false, |p| p.step = format!("{what}, {} out so far", size_text(bytes)));
+    })
 }
 
 /// The file the runner saves a remote preview to, inside the staging folder (any image extension).
@@ -216,9 +271,8 @@ fn new_staging(data_dir: &Path) -> Result<PathBuf> {
     Err(Error::Conflict("Couldn't make a folder to unpack into. Try again".into()))
 }
 
-/// Extract an archive (zip, 7z, rar) into a fresh staging folder under `<data>/staging/` and return it. When the
-/// result holds no ini at all and exactly one archive file, that one is unpacked too (archives inside archives are
-/// common on GameBanana).
+/// Extract an archive (zip, 7z, rar) into a fresh staging folder under `<data>/staging/` and return it. Archives
+/// inside it are unpacked too, a few levels deep (see `unpack_nested`).
 pub fn stage(data_dir: &Path, archive: &Path) -> Result<PathBuf> {
     let dir = new_staging(data_dir)?;
     match stage_into(archive, &dir) {
@@ -228,31 +282,98 @@ pub fn stage(data_dir: &Path, archive: &Path) -> Result<PathBuf> {
 }
 
 fn stage_into(archive: &Path, dir: &Path) -> Result<()> {
-    crate::archive::extract(archive, dir)?;
-    for _ in 0..2 {
-        if leads_to_ini(dir) { break; }
-        let inner: Vec<PathBuf> = walkdir::WalkDir::new(dir).into_iter().flatten()
-            .filter(|e| e.file_type().is_file() && ARCHIVE_EXT.contains(&ext_of(e.path()).as_str()))
-            .map(|e| e.into_path()).collect();
-        if inner.len() != 1 { break; }
-        let a = &inner[0];
-        let parent = a.parent().unwrap_or(dir);
-        let stem = a.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "inner".into());
-        let target = unique_child(parent, &sanitize_name(&stem));
-        crate::archive::extract(a, &target)?;
-        let _ = fs::remove_file(a);
-    }
+    extract_shown(archive, dir, &format!("Unpacking {}", name_of(archive)))?;
+    unpack_nested(dir);
     Ok(())
 }
 
-/// Stage an archive, or copy a folder (never move the user's own folder) into a fresh staging folder.
+/// How many levels of archives inside archives are unpacked (the dropped archive is the first).
+pub const NESTED_DEPTH: usize = 5;
+/// At most this many inner archives are unpacked from one drop.
+const NESTED_MAX: usize = 400;
+/// What staging learned while unpacking inner archives: the folders that were archives (so each can become its own
+/// mod) and the archives that couldn't be opened. Read and removed by `place`.
+const NESTED_FILE: &str = ".gachamod-nested.json";
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct Nested {
+    /// Folders inside staging (forward slashes) that each came from an inner archive.
+    origins: Vec<String>,
+    /// Inner archives that couldn't be opened, by name.
+    broken: Vec<String>,
+}
+
+fn read_nested(staging: &Path) -> Nested {
+    fs::read(staging.join(NESTED_FILE)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// The second and later volumes of a split rar (`x.part2.rar`): UnRAR reads them through the first one.
+fn later_volume(p: &Path) -> bool {
+    let stem = p.file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    stem.rsplit_once(".part").is_some_and(|(_, n)| n.parse::<u32>().is_ok_and(|n| n > 1))
+}
+
+/// Unpack every archive found in `dir` that isn't inside a mod folder (a mod may carry a spare zip of its own), each
+/// into a folder named after it beside it, and again for archives those held, up to `NESTED_DEPTH` levels in all.
+/// A bundle of mods (a zip of zips, or a folder of rars) becomes one staging tree. An inner archive that won't open
+/// is left as it is and noted.
+pub fn unpack_nested(dir: &Path) {
+    let mut nested = read_nested(dir);
+    let mut done = 0;
+    for _ in 1..NESTED_DEPTH {
+        if is_mod_dir(dir) { break; }
+        let found: Vec<PathBuf> = walkdir::WalkDir::new(dir).into_iter()
+            .filter_entry(|e| e.depth() == 0 || !e.file_type().is_dir() || (!skipped(&name_of(e.path())) && !is_mod_dir(e.path())))
+            .flatten()
+            .filter(|e| e.file_type().is_file() && ARCHIVE_EXT.contains(&ext_of(e.path()).as_str()) && !later_volume(e.path()))
+            .filter(|e| !nested.broken.contains(&rel_key(dir, e.path())))
+            .map(|e| e.into_path()).collect();
+        if found.is_empty() { break; }
+        let n = found.len();
+        for (k, a) in found.into_iter().enumerate() {
+            if done >= NESTED_MAX { break; }
+            done += 1;
+            progress(true, |p| { p.done = k as u32; p.total = n as u32; });
+            let parent = a.parent().unwrap_or(dir);
+            let stem = a.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "inner".into());
+            let stem = stem.rsplit_once(".part1").map(|(s, _)| s.to_string()).unwrap_or(stem);
+            let target = unique_child(parent, &sanitize_name(&stem));
+            match extract_shown(&a, &target, &format!("Unpacking {} ({} of {n})", name_of(&a), k + 1)) {
+                Ok(_) => {
+                    nested.origins.push(rel_key(dir, &target));
+                    let _ = fs::remove_file(&a);
+                    // the other volumes of a split rar were read through the first one
+                    let lower = name_of(&a).to_ascii_lowercase();
+                    if let Some((base, _)) = lower.rsplit_once(".part1") {
+                        for v in entries(parent) {
+                            let n = name_of(&v).to_ascii_lowercase();
+                            if v.is_file() && n.starts_with(&format!("{base}.part")) && n.ends_with(".rar") { let _ = fs::remove_file(v); }
+                        }
+                    }
+                }
+                Err(_) => {
+                    let _ = fs::remove_dir_all(&target);
+                    nested.broken.push(rel_key(dir, &a));
+                }
+            }
+        }
+        if done >= NESTED_MAX { break; }
+    }
+    if !nested.origins.is_empty() || !nested.broken.is_empty() {
+        if let Ok(b) = serde_json::to_vec(&nested) { let _ = fs::write(dir.join(NESTED_FILE), b); }
+    }
+}
+
+/// Stage an archive, or copy a folder (never move the user's own folder) into a fresh staging folder. Archives in a
+/// copied folder are unpacked as for an archive.
 pub fn stage_any(data_dir: &Path, path: &Path) -> Result<PathBuf> {
     if !path.exists() { return Err(Error::Invalid(format!("\"{}\" isn't there anymore", name_of(path)))); }
     if !path.is_dir() { return stage(data_dir, path); }
     let dir = new_staging(data_dir)?;
     let target = dir.join(sanitize_name(&name_of(path)));
+    progress(true, |p| p.step = format!("Copying {}", name_of(path)));
     match copy_dir(path, &target) {
-        Ok(()) => Ok(dir),
+        Ok(()) => { unpack_nested(&dir); Ok(dir) }
         Err(e) => { let _ = fs::remove_dir_all(&dir); Err(e) }
     }
 }
@@ -476,10 +597,92 @@ fn combine(staging: &Path, chosen: &[Candidate]) -> Result<(Candidate, usize)> {
     Ok((Candidate { key: PARTS_DIR.into(), label: chosen[0].label.clone(), ini_count, size, preview }, off))
 }
 
+/// A group of candidates that make one mod in a bundle, with the name and character it gets.
+struct BundleGroup { keys: Vec<String>, name: String, character: Option<String> }
+
+/// The character a candidate is for, from its own name and then the folders above it (nearest first).
+fn guess_character(m: &crate::aliases::Matcher, c: &Candidate) -> Option<String> {
+    let parts: Vec<&str> = c.key.split('/').filter(|s| !s.is_empty()).rev().collect();
+    let hints: Vec<&str> = std::iter::once(c.label.as_str()).chain(parts).collect();
+    m.best(&hints)
+}
+
+/// When the candidates are separate mods rather than variants of one, how they split into mods. They are separate
+/// when they came from different archives inside the file (a zip of zips), or when they are for different
+/// characters. Candidates from one archive and for one character stay together as the parts of one mod.
+fn bundle_groups(d: &crate::db::Db, game: &str, all: &[Candidate], nested: &Nested) -> Option<Vec<BundleGroup>> {
+    let origin_of = |key: &str| -> String {
+        nested.origins.iter().filter(|o| key == o.as_str() || key.starts_with(&format!("{o}/")))
+            .max_by_key(|o| o.len()).cloned().unwrap_or_default()
+    };
+    let m = crate::library::matcher(d, game).ok()?;
+    let chars: Vec<Option<String>> = all.iter().map(|c| guess_character(&m, c)).collect();
+    // (origin, character) -> candidate indexes, in archive order
+    let mut groups: Vec<((String, Option<String>), Vec<usize>)> = Vec::new();
+    for (i, c) in all.iter().enumerate() {
+        let k = (origin_of(&c.key), chars[i].clone());
+        match groups.iter_mut().find(|g| g.0 == k) { Some(g) => g.1.push(i), None => groups.push((k, vec![i])) }
+    }
+    let origins: std::collections::HashSet<&str> = groups.iter().map(|g| g.0 .0.as_str()).collect();
+    let known: std::collections::HashSet<&String> = chars.iter().flatten().collect();
+    if origins.len() < 2 && known.len() < 2 { return None; }
+    let mut out = Vec::new();
+    for ((origin, character), idx) in groups {
+        // candidates with no character and no archive of their own are told apart only by their folders
+        let split = character.is_none() && origin.is_empty() && idx.len() > 1;
+        let sets: Vec<Vec<usize>> = if split { idx.iter().map(|&i| vec![i]).collect() } else { vec![idx] };
+        for set in sets {
+            let first = &all[set[0]];
+            let origin_name = origin.rsplit('/').next().filter(|s| !s.is_empty()).map(|s| crate::library::display_folder(s).to_string());
+            let generic = |l: &str| l == "Mod" || GENERIC.contains(&l.to_ascii_lowercase().as_str());
+            let name = if set.len() == 1 && !generic(&first.label) { first.label.clone() }
+                else { origin_name.or_else(|| character.clone()).unwrap_or_else(|| first.label.clone()) };
+            out.push(BundleGroup { keys: set.iter().map(|&i| all[i].key.clone()).collect(), name, character: character.clone() });
+        }
+    }
+    Some(out)
+}
+
+/// Install each group of a bundle as its own mod. One that fails is noted and the rest still go in.
+fn place_bundle(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, groups: Vec<BundleGroup>) -> Result<InstallOutcome> {
+    let mut out = InstallOutcome { bundle: true, ..Default::default() };
+    let mut first_err = None;
+    let n = groups.len() as u32;
+    progress(true, |p| { p.mods = groups.iter().map(|g| g.name.clone()).collect(); p.placed = 0; p.done = 0; p.total = n; });
+    for (k, g) in groups.into_iter().enumerate() {
+        let k = k as u32;
+        progress(true, |p| { p.step = format!("Installing {} ({} of {n})", g.name, k + 1); p.placed = k; p.done = k; });
+        let m = InstallMeta { name: Some(g.name.clone()), character: g.character, nsfw: meta.nsfw, source: meta.source.clone(), ..Default::default() };
+        match place_inner(db, data_dir, game, staging, &m, &g.keys) {
+            Ok(o) => { out.installed.extend(o.installed); out.notes.extend(o.notes); progress(true, |p| { p.placed = k + 1; p.done = k + 1; }); }
+            Err(e) => {
+                out.notes.push(format!("Couldn't install {}: {e}", g.name));
+                first_err.get_or_insert(e);
+            }
+        }
+    }
+    match first_err {
+        Some(e) if out.installed.is_empty() => Err(e),
+        _ => Ok(out),
+    }
+}
+
 fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
     let all = find_roots(staging)?;
+    let nested = read_nested(staging);
     if all.is_empty() {
-        return Err(Error::Invalid("No mod found inside. A mod is a folder with at least one .ini file in it".into()));
+        let mut msg = "No mod found inside. A mod is a folder with at least one .ini file in it".to_string();
+        if !nested.broken.is_empty() { msg = format!("No mod found inside. Couldn't open {}", nested.broken.join(", ")); }
+        return Err(Error::Invalid(msg));
+    }
+    // a bundle of separate mods installs each on its own, without asking
+    if choose.is_empty() && meta.setups.is_empty() && meta.replaces.is_none() && all.len() > 1 {
+        let groups = { let d = lock(db)?; bundle_groups(&d, game, &all, &nested) };
+        if let Some(groups) = groups {
+            let mut o = place_bundle(db, data_dir, game, staging, meta, groups)?;
+            for b in &nested.broken { o.notes.push(format!("Couldn't open {b}, so it was left out")); }
+            return Ok(o);
+        }
     }
     let in_archive = all.len();
     // shared settings pick the archive's folders themselves; when some can't be found the user picks
@@ -505,6 +708,8 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     };
 
     let base_name = meta.name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| chosen[0].label.clone());
+    // a bundle's own steps name each mod; a single mod says it is moving in
+    progress(true, |p| if p.mods.is_empty() { p.step = format!("Moving {base_name} into the Mods folder"); p.total = 0; });
     let (mods_dir, character, old, mut removed) = {
         let d = lock(db)?;
         let mods_dir = crate::games::mods_dir(&d, game)?;
@@ -559,7 +764,16 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
 
         // an update replaces the first candidate in place: same folder, id, name, tags and on/off state
         let mut target = None;
+        let mut src = src;
+        let mut beside = false;
         if let (0, Some(o)) = (i, old.as_ref()) {
+            // the new files go next to the old mod first (off, so the game doesn't load them): the old copy only
+            // leaves once the new one is on its drive
+            let parent = Path::new(&o.path).parent().map(Path::to_path_buf).unwrap_or_else(|| mods_dir.clone());
+            let next = unique_child(&parent, &format!("{DISABLED_PREFIX}gachamod update {}", &crate::library::new_id()[..8]));
+            move_dir(&src, &next)?;
+            src = next;
+            beside = true;
             let removed = { let d = lock(db)?; crate::library::remove(&d, data_dir, game, std::slice::from_ref(&o.id), "replaced") };
             match removed {
                 Ok(_) if !Path::new(&o.path).exists() => {
@@ -607,7 +821,15 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
             (None, None) => unique_child(&mods_dir.join(&group), &format!("{DISABLED_PREFIX}{}", sanitize_name(&name))),
         };
 
-        move_dir(&src, &target)?;
+        let target = match move_dir(&src, &target) {
+            Ok(()) => target,
+            // the update is already in the Mods folder: it stays where it is rather than being lost
+            Err(_) if beside => {
+                notes.push(format!("Windows didn't let gachamod rename the new copy of {}, so it is in the folder \"{}\"", sidecar.name, name_of(&src)));
+                src.clone()
+            }
+            Err(e) => return Err(e),
+        };
         let own = if cand.key.is_empty() { preview_in(&target) } else { preview_src.clone() };
         if let Some(p) = give_preview(&target, own.as_deref()) { sidecar.preview = Some(p); }
         // the picture didn't download: show GameBanana's link until the mod has a preview.* of its own
@@ -643,7 +865,8 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         for e in &mut installed { if let Ok(now) = crate::library::get(&d, game, &e.id) { *e = now; } }
     }
     crate::devtools::mark_changed(game);
-    Ok(InstallOutcome { installed, needs_choice: None, notes })
+    for b in &nested.broken { notes.push(format!("Couldn't open {b}, so it was left out")); }
+    Ok(InstallOutcome { installed, needs_choice: None, notes, bundle: false })
 }
 
 /// Install archives or folders right away, without the queue (the app itself queues local installs so they get
@@ -657,10 +880,11 @@ pub fn install_local(db: &crate::db::Shared, data_dir: &Path, game: &str, paths:
         let o = place(db, data_dir, game, &staging, &meta, choose)?;
         if o.needs_choice.is_some() {
             let _ = fs::remove_dir_all(&staging);
-            return Ok(InstallOutcome { needs_choice: o.needs_choice, installed: out.installed, notes: out.notes });
+            return Ok(InstallOutcome { needs_choice: o.needs_choice, installed: out.installed, notes: out.notes, bundle: false });
         }
         out.installed.extend(o.installed);
         out.notes.extend(o.notes);
+        out.bundle |= o.bundle;
     }
     Ok(out)
 }
@@ -787,6 +1011,75 @@ mod tests {
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].key, "Jane Doe/Jane");
         assert!(!staging.join("Jane Doe.zip").exists());
+    }
+
+    fn zip_of(path: &Path, files: &[(&str, Vec<u8>)]) {
+        let mut z = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        let o = zip::write::SimpleFileOptions::default();
+        for (n, b) in files { z.start_file(*n, o).unwrap(); z.write_all(b).unwrap(); }
+        z.finish().unwrap();
+    }
+
+    #[test]
+    fn archives_nest_a_few_levels_but_not_inside_mods() {
+        let t = Tmp::new("deep");
+        let l3 = t.0.join("l3.zip");
+        zip_of(&l3, &[("Deep/deep.ini", b"[x]".to_vec()), ("Deep/spare.zip", b"PK not really".to_vec())]);
+        let l2 = t.0.join("l2.zip");
+        zip_of(&l2, &[("inner/Level3.zip", fs::read(&l3).unwrap()), ("Side/side.ini", b"[x]".to_vec())]);
+        let l1 = t.0.join("l1.zip");
+        zip_of(&l1, &[("Level2.zip", fs::read(&l2).unwrap()), ("broken.rar", b"nope".to_vec())]);
+        let staging = stage(&t.0.join("data"), &l1).unwrap();
+        let k: Vec<String> = find_roots(&staging).unwrap().into_iter().map(|c| c.key).collect();
+        assert_eq!(k, ["Level2/inner/Level3/Deep", "Level2/Side"]);
+        // a mod's own zip is its business
+        assert!(staging.join("Level2/inner/Level3/Deep/spare.zip").is_file());
+        let n = read_nested(&staging);
+        assert_eq!(n.origins, ["Level2", "Level2/inner/Level3"]);
+        assert_eq!(n.broken, ["broken.rar"]);
+    }
+
+    #[test]
+    fn a_zip_of_mods_installs_each_on_its_own() {
+        let t = Tmp::new("bundle");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let ellen = t.0.join("e.zip");
+        zip_of(&ellen, &[("Red/a.ini", b"[x]".to_vec()), ("Blue/a.ini", b"[x]".to_vec())]);
+        let jane = t.0.join("j.zip");
+        zip_of(&jane, &[("JaneDoe Maid/j.ini", b"[x]".to_vec())]);
+        let outer = t.0.join("pack.zip");
+        zip_of(&outer, &[("pack/Ellen Bunny.zip", fs::read(&ellen).unwrap()), ("pack/Jane Maid.zip", fs::read(&jane).unwrap()), ("pack/readme.txt", b"hi".to_vec())]);
+        let o = install_local(&db, &data, "zzz", std::slice::from_ref(&outer), &[]).unwrap();
+        assert!(o.bundle && o.needs_choice.is_none());
+        let names: Vec<(String, Option<String>)> = o.installed.iter().map(|m| (m.name.clone(), m.character.clone())).collect();
+        // Ellen's two folders are the parts of one mod, named after its archive
+        assert_eq!(names, [("Ellen Bunny".to_string(), Some("Ellen Joe".to_string())), ("JaneDoe Maid".to_string(), Some("Jane Doe".to_string()))]);
+        assert!(mods.join("Ellen Joe/DISABLED Ellen Bunny").is_dir());
+        assert!(mods.join("Jane Doe/DISABLED JaneDoe Maid/j.ini").is_file());
+
+        // the steps name each inner archive and each mod as it goes in
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::<InstallProgress>::new()));
+        let s2 = seen.clone();
+        with_progress(InstallProgress::default(), move |p| s2.borrow_mut().push(p.clone()), || install_local(&db, &data, "zzz", std::slice::from_ref(&outer), &[]).unwrap());
+        let seen = seen.borrow();
+        assert!(seen.iter().any(|p| p.step == "Unpacking Ellen Bunny.zip (1 of 2)"));
+        let last = seen.last().unwrap();
+        assert_eq!((last.mods.len(), last.placed), (2, 2));
+    }
+
+    #[test]
+    fn variants_of_one_mod_still_ask() {
+        let t = Tmp::new("notbundle");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let z = t.0.join("v.zip");
+        zip_of(&z, &[("Ellen/Red/a.ini", b"[x]".to_vec()), ("Ellen/Blue/a.ini", b"[x]".to_vec())]);
+        let o = install_local(&db, &data, "zzz", std::slice::from_ref(&z), &[]).unwrap();
+        assert!(!o.bundle);
+        assert_eq!(o.needs_choice.unwrap().len(), 2);
     }
 
     #[test]

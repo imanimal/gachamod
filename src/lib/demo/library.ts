@@ -630,7 +630,7 @@ export function registerLibraryDemo() {
     // pretend another app holds Ctrl+Alt+T, so the "taken" mark can be seen in the browser
     hotkeys_sync: () => {
       const all = [...demoDb.profiles.values()].flat().map((p) => p.hotkey);
-      return all.includes("Ctrl+Alt+T") ? [{ combo: "Ctrl+Alt+T", reason: "Ctrl+Alt+T is used by another app. Pick another key" }] : [];
+      return all.includes("Ctrl+Alt+T") ? [{ combo: "Ctrl+Alt+T", reason: "Ctrl+Alt+T is used by another app, so it can't switch profiles. Pick another key" }] : [];
     },
     profile_capture: ({ id }) => {
       const p = findProfile(Number(id));

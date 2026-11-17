@@ -64,6 +64,8 @@ pub fn ini_referenced(dir: &Path) -> HashSet<String> {
         if !e.file_type().is_file() { continue; }
         let name = e.file_name().to_string_lossy().to_ascii_lowercase();
         if !name.ends_with(".ini") || name == "desktop.ini" { continue; }
+        // an ini this big is generated data, not a list of textures
+        if e.metadata().is_ok_and(|m| m.len() > 8 * 1024 * 1024) { continue; }
         let Ok(bytes) = std::fs::read(e.path()) else { continue };
         let text = String::from_utf8_lossy(&bytes);
         let base = e.path().parent().unwrap_or(dir);

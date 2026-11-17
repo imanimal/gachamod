@@ -68,7 +68,6 @@
 
   /* spare room goes to the nav and profiles; the decoration is one caption line with a code ticker */
   .side-deco { display: flex; position: relative; max-height: 2.4rem; overflow: hidden; flex-direction: column; justify-content: flex-end; gap: .3rem; padding: .2rem .3rem; color: #3a3a3a; }
-  .side-deco-t { display: none; }
   .side-deco-m { position: relative; font-size: .6rem; font-weight: 600; letter-spacing: .14em; color: #8d8d8d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: .2rem; }
   .side-deco-m::before { content: "[ "; } .side-deco-m::after { content: " ]"; }
   .side-deco .glyphs { flex: none; position: relative; height: 8px; }
@@ -79,7 +78,7 @@
   .side-game-cur { border-radius: 4px; background: #262626; box-shadow: 0 0 0 1px rgb(255 255 255 / .08), inset 3px 0 0 var(--g-accent, var(--acc)); }
   .side-game-cur:hover { background: #2e2e2e; box-shadow: 0 0 0 1px rgb(255 255 255 / .3), inset 3px 0 0 var(--g-accent, var(--acc)); }
   .side-game-t { font-weight: 600; }
-  .side-game-add { border-radius: 999px; color: var(--acc); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .25); }
+  .side-game-add { border-radius: 1.3rem; color: var(--acc); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .25); }
   .side-game-add:hover { background: var(--acc); color: #111; box-shadow: none; }
   .side-g { border-radius: 4px; }
   .side-g.running::after { border-radius: 1px; background: var(--lime); border-color: var(--stage); }

@@ -4,6 +4,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]";
+
 export function Popover({ anchor, onClose, children, width = "21em", label, align = "end" }: {
   anchor: HTMLElement | null; onClose: () => void; children: ReactNode; width?: string; label?: string;
   /** Line up with the button's right edge ("end", the default) or its left edge ("start"). */
@@ -38,7 +40,15 @@ export function Popover({ anchor, onClose, children, width = "21em", label, alig
   }, [anchor, align]);
   useEffect(() => {
     const down = (e: MouseEvent) => { const t = e.target as Node; if (!ref.current?.contains(t) && !anchor?.contains(t)) onClose(); };
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      // focus inside goes back to the button that opened it, so the keyboard and controller don't lose their place
+      const inside = !!ref.current?.contains(document.activeElement);
+      onClose();
+      const back = anchor?.matches(FOCUSABLE) ? anchor : anchor?.querySelector<HTMLElement>(FOCUSABLE);
+      if (inside && back?.isConnected) back.focus({ preventScroll: true });
+    };
     document.addEventListener("mousedown", down, true);
     window.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("keydown", key, true); };

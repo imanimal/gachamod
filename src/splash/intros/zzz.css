@@ -1,0 +1,47 @@
+/* Zenless Zone Zero's opening (splash/intros/zzz.ts): a black CRT with the tip on it, then the set turning on.
+   --zz-acc is the set's glow, Fairy's blue, set on the stage. Owner: SHELL area. */
+
+.splash[data-intro="zzz"] { --zz-acc: #3cc8ff; }
+/* while it plays the stage is see-through and the two black bars hide everything but the picture */
+.splash[data-intro="zzz"][data-on] { background: transparent; }
+
+/* ── the hold screen: faint scanlines and a soft sheen on the glass ── */
+.splash[data-intro="zzz"] .zz-hold { position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  background:
+    radial-gradient(ellipse 62% 56% at 50% 47%, rgb(255 255 255 / .034), transparent 72%),
+    repeating-linear-gradient(to bottom, rgb(255 255 255 / .022) 0 1px, transparent 1px 3px); }
+
+/* ── the tip ── */
+.splash[data-intro="zzz"] .splash-tip { z-index: 7; gap: 1.2rem; }
+.splash[data-intro="zzz"] .splash-tip-i { width: 1.7rem; height: 1.7rem; stroke: var(--zz-acc); stroke-width: 1.5; opacity: 1; }
+.splash[data-intro="zzz"] .splash-tip-t { font-family: "Rubik", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 400;
+  font-size: 1.08rem; line-height: 1.7; letter-spacing: .01em; opacity: .84; }
+.splash[data-intro="zzz"] .splash-tip kbd { min-width: 1.9em; margin: 0 .2em; padding: .16em .72em .14em; border-radius: 999px; vertical-align: .08em;
+  font-family: "Rubik", "Segoe UI", system-ui, sans-serif; font-style: italic; font-weight: 700; font-size: .74em; line-height: 1.35; letter-spacing: .03em;
+  color: #fff; background: #141414;
+  box-shadow: inset 0 0 0 1.5px #3e3e3e, 0 0 0 1.5px #000, 0 0 0 2.5px rgb(255 255 255 / .2); }
+
+/* ── the set, while it plays (bottom to top) ── */
+.splash[data-intro="zzz"] :is(.zz-noise, .zz-flash, .zz-scan, .zz-glass) { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.splash[data-intro="zzz"] .zz-noise { z-index: 1; image-rendering: pixelated; background: #000; }
+.splash[data-intro="zzz"] .zz-flash { z-index: 2; background: color-mix(in srgb, #fff 90%, var(--zz-acc)); }
+.splash[data-intro="zzz"] .zz-scan { z-index: 3; background: repeating-linear-gradient(to bottom, rgb(0 0 0 / .3) 0 1px, transparent 1px 3px); }
+.splash[data-intro="zzz"] .zz-roll { position: absolute; left: 0; right: 0; top: 0; z-index: 3; height: 16%; pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgb(255 255 255 / .05) 35%, rgb(255 255 255 / .1) 55%, rgb(0 0 0 / .2) 62%, transparent); }
+/* the tube: rounded corners and darker edges */
+.splash[data-intro="zzz"] .zz-glass { z-index: 4; border-radius: 3.4vmin / 4vmin;
+  box-shadow: 0 0 0 6vmax #000, inset 0 0 16vmin 1vmin rgb(0 0 0 / .62), inset 0 0 3vmin rgb(0 0 0 / .5); }
+/* black above and below the picture, a hot line on each inner edge with the colours split a little */
+.splash[data-intro="zzz"] .zz-bar { position: absolute; left: 0; right: 0; z-index: 5; height: calc(50% + 2px); background: #000; pointer-events: none; }
+.splash[data-intro="zzz"] .zz-bar-t { top: 0; }
+.splash[data-intro="zzz"] .zz-bar-b { bottom: 0; }
+.splash[data-intro="zzz"] .zz-edge { position: absolute; left: 0; right: 0; height: 2px; background: #fff;
+  box-shadow: 0 -2px 0 rgb(255 36 84 / .75), 0 2px 0 rgb(0 226 255 / .7), 0 0 12px 2px var(--zz-acc), 0 0 40px 6px color-mix(in srgb, var(--zz-acc) 45%, transparent); }
+.splash[data-intro="zzz"] .zz-bar-t .zz-edge { bottom: -1px; }
+.splash[data-intro="zzz"] .zz-bar-b .zz-edge { top: -1px; }
+/* the point of light and the line it stretches into */
+.splash[data-intro="zzz"] .zz-dot { position: absolute; left: 50%; top: 50%; z-index: 8; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+  background: #fff; pointer-events: none;
+  box-shadow: 0 0 5px 2px #fff, 0 0 18px 6px var(--zz-acc), 0 0 64px 20px color-mix(in srgb, var(--zz-acc) 42%, transparent); }
+.splash[data-intro="zzz"] .zz-beam { position: absolute; left: 0; right: 0; top: 50%; z-index: 8; height: 2px; margin-top: -1px; background: #fff; pointer-events: none;
+  box-shadow: 0 0 4px 1px #fff, 0 0 14px 3px var(--zz-acc), 0 0 48px 10px color-mix(in srgb, var(--zz-acc) 40%, transparent); }

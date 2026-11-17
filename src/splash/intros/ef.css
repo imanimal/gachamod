@@ -1,0 +1,76 @@
+/* Arknights: Endfield's opening (splash/intros/ef.ts): a charcoal stage, signal yellow, hairline grids, corner marks
+   and hazard stripes. Layers from the bottom: the shutters (.ef-doors), the cover with the scan bar on its left edge
+   (.ef-cover), the tip, the corner marks (.ef-crop). Owner: SHELL area. */
+
+.splash[data-intro="ef"] { --ef-y: #ffee00; --ef-bg: #1b1b1b; --ef-ink: #ebeae6; --ef-seam: #0d0d0d;
+  --ef-grid: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' shape-rendering='crispEdges' fill='none'%3E%3Cpath d='M12.5 0v120M36.5 0v120M84.5 0v120M108.5 0v120M0 12.5h120M0 36.5h120M0 84.5h120M0 108.5h120' stroke='%23fff' stroke-opacity='.032'/%3E%3Cpath d='M60.5 0v120M0 60.5h120' stroke='%23fff' stroke-opacity='.065'/%3E%3Cpath d='M60.5 54v13M54 60.5h13' stroke='%23fff' stroke-opacity='.3'/%3E%3C/svg%3E"); }
+
+/* ── the tip: fine Figtree on charcoal, keys as small light caps ── */
+.splash[data-intro="ef"] .splash-tip { gap: 1.1rem; }
+.splash[data-intro="ef"] .splash-tip-i { width: 1.6rem; height: 1.6rem; stroke-width: 1.2; opacity: .6; }
+.splash[data-intro="ef"] .splash-tip-t { font-family: "Figtree", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 400;
+  font-size: 1.08rem; line-height: 1.75; letter-spacing: .012em; opacity: .88; }
+.splash[data-intro="ef"] .splash-tip kbd { min-width: 1.7em; margin: 0 .16em; padding: .12em .5em .1em; border-radius: 2px; vertical-align: .08em;
+  font-family: "Figtree", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: .74em; line-height: 1.45;
+  letter-spacing: .03em; color: var(--ef-bg); background: var(--ef-ink); box-shadow: none; }
+
+/* ── the shutters: four rows, each split at a seam that steps left and right of the middle ── */
+.splash[data-intro="ef"] .ef-doors { position: absolute; inset: 0; z-index: 1; }
+.splash[data-intro="ef"] .ef-door { position: absolute; top: calc(var(--i) * 25%); height: calc(25% + 1px); will-change: transform;
+  background: var(--ef-grid) var(--ef-bg); box-shadow: inset 0 1px 0 var(--ef-seam), inset 0 2px 0 rgb(255 255 255 / .045); }
+/* the left one runs 1px under the right one so no hairline of the app shows at the seam */
+.splash[data-intro="ef"] .ef-door[data-side="l"] { left: 0; width: calc(50% + var(--jog) + 1px); background-position: 0 calc(var(--i) * -25vh); }
+.splash[data-intro="ef"] .ef-door[data-side="r"] { right: 0; width: calc(50% - var(--jog)); background-position: right 0 top calc(var(--i) * -25vh); }
+.splash[data-intro="ef"] .ef-door[data-row="0"] { box-shadow: none; }
+
+/* the hazard edge on each inner end, striped so the two halves meet in chevrons, with a dark seam line */
+.splash[data-intro="ef"] .ef-haz { position: absolute; top: 1px; bottom: 0; width: 15px; }
+.splash[data-intro="ef"] .ef-door[data-row="0"] .ef-haz { top: 0; }
+.splash[data-intro="ef"] .ef-door[data-side="l"] .ef-haz { right: 4px; box-shadow: 4px 0 0 var(--ef-seam);
+  background: repeating-linear-gradient(45deg, var(--ef-y) 0 5px, var(--ef-bg) 5px 11px); }
+.splash[data-intro="ef"] .ef-door[data-side="r"] .ef-haz { left: 3px; box-shadow: -3px 0 0 var(--ef-seam);
+  background: repeating-linear-gradient(-45deg, var(--ef-y) 0 5px, var(--ef-bg) 5px 11px); }
+
+/* each row's number beside the seam */
+.splash[data-intro="ef"] .ef-num { position: absolute; top: 14px; right: 32px; font: 400 10px/1 "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: .06em; color: rgb(235 234 230 / .36); }
+
+/* tick rulers along the window's edges */
+.splash[data-intro="ef"] .ef-door::before { content: ""; position: absolute; top: 0; bottom: 0; width: 9px;
+  background: repeating-linear-gradient(180deg, rgb(235 234 230 / .2) 0 1px, transparent 1px 8px) 0 0 / 4px 100% no-repeat,
+    repeating-linear-gradient(180deg, rgb(235 234 230 / .34) 0 1px, transparent 1px 40px) 0 0 / 9px 100% no-repeat; }
+.splash[data-intro="ef"] .ef-door[data-side="l"]::before { left: 0; }
+.splash[data-intro="ef"] .ef-door[data-side="r"]::before { right: 0; transform: scaleX(-1); }
+.splash[data-intro="ef"] .ef-door:is([data-row="0"], [data-row="3"])::after { content: ""; position: absolute; left: 0; right: 0; height: 9px;
+  background: repeating-linear-gradient(90deg, rgb(235 234 230 / .2) 0 1px, transparent 1px 8px) 0 0 / 100% 4px no-repeat,
+    repeating-linear-gradient(90deg, rgb(235 234 230 / .34) 0 1px, transparent 1px 40px) 0 0 / 100% 9px no-repeat; }
+.splash[data-intro="ef"] .ef-door[data-row="0"]::after { top: 0; }
+.splash[data-intro="ef"] .ef-door[data-row="3"]::after { bottom: 0; transform: scaleY(-1); }
+.splash[data-intro="ef"] .ef-door[data-side="r"]:is([data-row="0"], [data-row="3"])::after { background-position: right 0 top 0, right 0 top 0; }
+
+/* ── the cover: charcoal over the shutters until the scan; the bar and its trail sit in the 140px left of the screen ── */
+.splash[data-intro="ef"] .ef-cover { position: absolute; z-index: 2; top: 0; bottom: 0; left: -140px; width: calc(100% + 140px); will-change: transform;
+  background: linear-gradient(var(--ef-bg) 0 0) 140px 0 / 100% 100% no-repeat; }
+.splash[data-intro="ef"] .ef-scan { position: absolute; top: 0; bottom: 0; left: 0; width: 140px;
+  background: linear-gradient(var(--ef-y) 0 0) 100% 0 / 3px 100% no-repeat,
+    repeating-linear-gradient(180deg, var(--ef-y) 0 1px, transparent 1px 40px) calc(100% - 3px) 0 / 7px 100% no-repeat,
+    linear-gradient(rgb(255 238 0 / .55) 0 0) calc(100% - 13px) 0 / 1px 100% no-repeat,
+    linear-gradient(rgb(255 238 0 / .05) 0 0) calc(100% - 14px) 0 / 36px 100% no-repeat,
+    linear-gradient(rgb(255 238 0 / .3) 0 0) calc(100% - 64px) 0 / 1px 100% no-repeat; }
+
+/* ── the corner marks: around the tip on the hold screen, at the window corners from the scan on ── */
+.splash[data-intro="ef"] .ef-crop { position: absolute; inset: 0; z-index: 6; pointer-events: none; transition: opacity .28s ease-out;
+  --ef-dx: calc(50vw - var(--ef-tw, 0px) / 2 - 34px); --ef-dy: calc(50vh - var(--ef-th, 0px) / 2 - 36px); }
+.splash[data-intro="ef"] .splash-tip[data-wait] ~ .ef-crop { opacity: 0; transition: none; }
+.splash[data-intro="ef"] .ef-c { position: absolute; width: 0; height: 0; }
+.splash[data-intro="ef"] .ef-c[data-c="tl"] { left: 20px; top: 20px; transform: translate(var(--ef-dx), var(--ef-dy)); }
+.splash[data-intro="ef"] .ef-c[data-c="tr"] { right: 20px; top: 20px; transform: translate(calc(-1 * var(--ef-dx)), var(--ef-dy)); }
+.splash[data-intro="ef"] .ef-c[data-c="bl"] { left: 20px; bottom: 20px; transform: translate(var(--ef-dx), calc(-1 * var(--ef-dy))); }
+.splash[data-intro="ef"] .ef-c[data-c="br"] { right: 20px; bottom: 20px; transform: translate(calc(-1 * var(--ef-dx)), calc(-1 * var(--ef-dy))); }
+.splash[data-intro="ef"] .ef-c i { position: absolute; display: block; background: var(--ef-y); }
+.splash[data-intro="ef"] .ef-h { width: 10px; height: 2px; }
+.splash[data-intro="ef"] .ef-v { width: 2px; height: 10px; }
+.splash[data-intro="ef"] .ef-c[data-c="tl"] i { left: 0; top: 0; transform-origin: 0 0; }
+.splash[data-intro="ef"] .ef-c[data-c="tr"] i { right: 0; top: 0; transform-origin: 100% 0; }
+.splash[data-intro="ef"] .ef-c[data-c="bl"] i { left: 0; bottom: 0; transform-origin: 0 100%; }
+.splash[data-intro="ef"] .ef-c[data-c="br"] i { right: 0; bottom: 0; transform-origin: 100% 100%; }

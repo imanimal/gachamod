@@ -20,6 +20,7 @@ import { RenderLogRow } from "./Feedback";
 import { hiddenThemePref } from "../../lib/fun";
 import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
 import { hintsOnPref } from "../../shell/hints";
+import { INTRO_LIST, introPick, replaySplash, setIntroPick, themeIntro } from "../../splash/splash";
 import { about, errorText } from "../../lib/api";
 import { pref } from "../../lib/prefs";
 
@@ -110,6 +111,9 @@ export function LayoutSection() {
         <SetRow id="set-motion" label="Animations" hint="Off keeps every change instant">
           <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
         </SetRow>
+        <SetRow id="set-intro" label="Opening screen" hint="An intro with a one-line tip while gachamod starts. Theme's own plays the one that goes with the theme in use. A click or Escape skips it">
+          <IntroPicker />
+        </SetRow>
         <SetRow id="set-hints" label="First-start hints" hint="Right after setup, Browse, Install and Downloads look faintly selected until you've used them once">
           <HintsSwitch />
         </SetRow>
@@ -144,6 +148,23 @@ function GpuSwitch() {
       { label: "Restart", run: () => void about.relaunch().catch((e) => toast(errorText(e), true)) });
   };
   return <Toggle checked={on} label="Hardware acceleration" onChange={(v) => void change(v)} />;
+}
+
+function IntroPicker() {
+  useTheme(); // the "Theme's own" label follows the theme
+  const [pick, setPick] = useState(introPick);
+  const own = INTRO_LIST.find((i) => i.id === themeIntro())?.name ?? "Default";
+  const options = [
+    { value: "theme", label: `Theme's own (${own})` },
+    ...INTRO_LIST.map((i) => ({ value: i.id, label: i.name })),
+    { value: "off", label: "Off" },
+  ];
+  return (
+    <>
+      <Button size="sm" variant="ghost" icon="play" onClick={replaySplash} disabled={pick === "off"} title="Play the opening screen now">Play it</Button>
+      <Select value={pick} options={options} onChange={(v) => { setIntroPick(v); setPick(v); }} />
+    </>
+  );
 }
 
 function HintsSwitch() {

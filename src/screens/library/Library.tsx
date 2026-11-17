@@ -3,7 +3,7 @@
 // then types and characters. Then the shared mod grid with selection and its bulk bar. Only sort and layout are kept;
 // the filters reset when the page is left, so My Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
 // a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { errorText, library, settings, type ModEntry } from "../../lib/api";
 import { checkUpdates } from "../../lib/gamebanana";
 import { useModHealth } from "../../lib/fixes";
@@ -81,6 +81,8 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
   const [show, setShow] = useState<Show>("all");
   const [flag, setFlag] = useState<Flag | null>(null);
   const [search, setSearch] = useState(() => route.search ?? "");
+  // the box updates at once; the list follows when the typing lets it
+  const dSearch = useDeferredValue(search);
   const modsRef = useRef(mods);
   modsRef.current = mods;
   const character = route.character ?? null;
@@ -146,7 +148,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
   }), [mods, isProblem]);
 
   const shown = useMemo(() => {
-    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const words = dSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const ch = character?.toLowerCase();
     const out = mods.filter((m) => {
       if (m.nsfw && nsfw === "hide") return false;
@@ -171,7 +173,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
       : prefs.sort === "size" ? (a, b) => b.sizeBytes - a.sizeBytes || byName(a, b)
       : (a, b) => b.installedAt - a.installedAt || byName(a, b));
     return out;
-  }, [mods, prefs, show, flag, search, nsfw, character, kind, kinds, isProblem]);
+  }, [mods, prefs, show, flag, dSearch, nsfw, character, kind, kinds, isProblem]);
 
   const filtersOn = show !== "all" || !!flag || !!character || !!kind || !!search.trim();
   const size = useMemo(() => mods.reduce((n, m) => n + m.sizeBytes, 0), [mods]);

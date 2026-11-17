@@ -248,6 +248,38 @@ pub async fn gb_like(app: AppHandle, st: State<'_, AppState>, mod_id: u64, on: b
     check(&app, &st, r)
 }
 
+/// Subscribe to a mod on GameBanana, or stop. One request per click.
+#[tauri::command]
+pub async fn gb_subscribe(app: AppHandle, st: State<'_, AppState>, mod_id: u64, on: bool) -> Result<()> {
+    let c = cookie(&st)?;
+    let r = acc::subscribe_mod(&st.http, &c, mod_id, on).await;
+    check(&app, &st, r)
+}
+
+/// Give a mod's creator a thanks with `points` of the member's points. One request per click, never repeated.
+#[tauri::command]
+pub async fn gb_thank(app: AppHandle, st: State<'_, AppState>, mod_id: u64, points: u32) -> Result<()> {
+    let c = cookie(&st)?;
+    let r = acc::thank(&st.http, &c, mod_id, points).await;
+    check(&app, &st, r)
+}
+
+/// Whether the member liked, subscribed to or thanked a mod, and their points. Read only.
+#[tauri::command]
+pub async fn gb_mod_me(app: AppHandle, st: State<'_, AppState>, mod_id: u64) -> Result<acc::ModMe> {
+    let c = cookie(&st)?;
+    let r = acc::mod_me(&st.http, &c, mod_id).await;
+    check(&app, &st, r)
+}
+
+/// What the member's GameBanana content settings say about mods for adults. Read only.
+#[tauri::command]
+pub async fn gb_content_settings(app: AppHandle, st: State<'_, AppState>) -> Result<Option<acc::AdultPref>> {
+    let c = cookie(&st)?;
+    let r = acc::content_settings(&st.http, &c).await;
+    check(&app, &st, r)
+}
+
 /// The creators the signed-in member follows on GameBanana.
 #[tauri::command]
 pub async fn gb_following(app: AppHandle, st: State<'_, AppState>) -> Result<Vec<GbUser>> {

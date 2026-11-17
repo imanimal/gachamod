@@ -7,5 +7,6 @@ export * from "./keylist";
 export * from "./library";
 export * from "./modtools";
 export * from "./online";
+export * from "./otherkeys";
 export * from "./report";
 export * from "./system";

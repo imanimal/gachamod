@@ -34,7 +34,7 @@ import { GbBrowser } from "../browse/GbBrowser";
 import { OnlineOverlays } from "../browse/OnlineOverlays";
 import { openGbMod, openWithFilters } from "../browse/state";
 import { Downloads } from "../downloads/Downloads";
-import { isNewSkin, markShown, newSkinTip, reloadLive, useLive } from "./data";
+import { boundAction, isNewSkin, markShown, newSkinTip, reloadLive, useLive } from "./data";
 import { useKeyList } from "./KeyListParts";
 import { KeysTab } from "./OverlayKeys";
 import "./overlay.css";
@@ -137,6 +137,9 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const tabList = keysOn ? TABS : TABS.filter((t) => t !== "keys");
   const tabsRef = useRef(tabList);
   tabsRef.current = tabList;
+  // the menu's keys as the player picked them (Tools, Switch skins in game, Menu keys)
+  const bindsRef = useRef(info?.menu.binds);
+  bindsRef.current = info?.menu.binds;
   const route = useRoute();
   /** The page Keys was picked on: Keys shows while that page does, so any page opened after it leaves Keys. */
   const [keysAt, setKeysAt] = useState<Route | null>(null);
@@ -270,6 +273,17 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       if (e.key === "Escape") { if (!open && !(typing && (e.target as HTMLInputElement).value)) leave(); return; }
       // a key something handled already: a card's I (install), a row of characters' arrows
       if (e.defaultPrevented) return;
+      // a key the player picked for the menu does here what it does in the menu the game draws
+      const bound = typing || open ? null : boundAction(e, bindsRef.current);
+      if (bound) {
+        e.preventDefault();
+        if (bound === "up") moveFocus(0, -1);
+        else if (bound === "down") moveFocus(0, 1);
+        else if (bound === "show") (document.activeElement as HTMLElement | null)?.click();
+        else if (bound === "close") close();
+        else if (detailRef.current || currentRoute().user) leave();
+        return;
+      }
       if (e.altKey && !e.ctrlKey && e.key === "ArrowLeft" && !typing) { e.preventDefault(); back(); return; }
       const dir: Record<string, [number, number]> = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
       const d = dir[e.key];
@@ -293,7 +307,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     window.addEventListener("mouseup", onMouse);
     const offPad = installGamepad({ nextView: turn, play: () => {}, menu: menuForFocus, back: leave, palette: search });
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("mouseup", onMouse); offPad(); };
-  }, [game, leave, setTab]);
+  }, [game, leave, close, setTab]);
 
   const say = (text: string, bad = false) => setNote({ text, bad });
 

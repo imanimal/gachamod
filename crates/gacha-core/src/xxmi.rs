@@ -171,14 +171,101 @@ pub fn starts_exe(custom_root: Option<&str>, code: &str) -> bool {
     importer_config(custom_root, code).is_ok_and(|c| matches!(c["Importer"]["game_launch"].as_str(), None | Some("DIRECT")))
 }
 
-/// Set XXMI's Game Launch for `code` to Steam, for a game whose Steam copy only starts from Steam. An XXMI from
+/// XXMI waits at least this long (seconds) for a game it starts through Steam. Its wait starts when it asks Steam, and
+/// a Steam that is restarting or running a game's first-time setup takes longer than XXMI's default 30.
+const STEAM_PROCESS_TIMEOUT: u64 = 90;
+
+/// Set XXMI's Game Launch for `code` to Steam, for a game whose Steam copy only starts from Steam, and raise its wait
+/// for the game to STEAM_PROCESS_TIMEOUT (only at this switch, so a value set later in XXMI stays). An XXMI from
 /// before it could start games through Steam has no Steam launch options in its config.
 pub fn launch_through_steam(custom_root: Option<&str>, code: &str) -> Result<()> {
     let cur = importer_config(custom_root, code)?;
     if cur["Importer"].get("configure_platform_launch_options").is_none() {
         return Err(Error::NotSetUp("This XXMI Launcher can't start Steam games. Open XXMI Launcher once so it updates, then try again".into()));
     }
-    set_importer_config(custom_root, code, &serde_json::json!({ "Importer": { "game_launch": "STEAM" } }))
+    let mut patch = serde_json::json!({ "Importer": { "game_launch": "STEAM" } });
+    if cur["Importer"]["process_timeout"].as_u64().is_some_and(|t| t < STEAM_PROCESS_TIMEOUT) {
+        patch["Importer"]["process_timeout"] = STEAM_PROCESS_TIMEOUT.into();
+    }
+    set_importer_config(custom_root, code, &patch)
+}
+
+/// The Steam launch options XXMI Launcher writes for `code`'s game (Steam app `app`) before it starts it through
+/// Steam, or None when it leaves them alone. XXMI restarts Steam whenever Steam has other ones, so this must match
+/// what it builds exactly.
+pub fn steam_launch_options(custom_root: Option<&str>, code: &str, app: u32) -> Option<String> {
+    let root = find_root(custom_root)?;
+    let cfg = read_config(&root.join(CONFIG_FILE)).ok()?;
+    let imp = &cfg["Importers"][code]["Importer"];
+    let version = cfg["Packages"]["packages"]["Launcher"]["deployed_version"].as_str().unwrap_or_default();
+    let fallback = game_for_code(code).and_then(crate::games::def).map(|g| g.exe_names).unwrap_or_default();
+    let exe = crate::steam::app_dir(app).and_then(|d| steam_game_exe(&d, imp, fallback)).map(|e| python_resolve(&e));
+    steam_options(code, imp, version, exe.as_deref())
+}
+
+/// XXMI's `build_cmd_args` for a Steam start (core/game_launcher.py): `"<game exe>" && %command%` when it skips the
+/// game's own launcher, then `d3d11_mode_cmd_args` when set, then `launch_options` when `use_launch_options` is on (an
+/// empty one still adds its space). Before 2.4.4 XXMI turned `\` into `/` in launch_options; WWMI gets the exe part
+/// from 2.5.0 and EFMI from 2.4.8. Missing keys take XXMI's defaults.
+pub fn steam_options(code: &str, imp: &Value, version: &str, exe: Option<&str>) -> Option<String> {
+    let flag = |k: &str| imp[k].as_bool().unwrap_or(true);
+    if !flag("configure_platform_launch_options") { return None; }
+    let at_least = |want: [u32; 3]| version_parts(version).is_none_or(|v| v >= want);
+    let skip = flag("skip_platform_game_launcher");
+    let exe_part = match code {
+        "ZZMI" => skip,
+        "WWMI" => skip && at_least([2, 5, 0]),
+        "EFMI" => at_least([2, 4, 8]),
+        _ => false,
+    };
+    let mut parts = Vec::new();
+    if let Some(e) = exe.filter(|_| exe_part) { parts.push(format!("\"{e}\" && %command%")); }
+    if let Some(d) = imp["d3d11_mode_cmd_args"].as_str().filter(|d| !d.is_empty()) { parts.push(d.to_string()); }
+    if flag("use_launch_options") {
+        let o = imp["launch_options"].as_str().unwrap_or_default();
+        parts.push(if at_least([2, 4, 4]) { o.to_string() } else { o.replace('\\', "/") });
+    }
+    Some(parts.join(" "))
+}
+
+/// "2.4.1" as [2, 4, 1].
+fn version_parts(v: &str) -> Option<[u32; 3]> {
+    let mut it = v.trim().trim_start_matches('v').split('.').map(|p| p.parse::<u32>().ok());
+    Some([it.next()??, it.next().flatten().unwrap_or(0), it.next().flatten().unwrap_or(0)])
+}
+
+/// The game exe XXMI finds in a Steam install folder (validate_game_exe_path): for each name in process_exe_names (or
+/// game_exe_names), the file right in the folder, then under process_exe_rel_paths, then the only copy anywhere below.
+/// Two copies below and it gives up.
+fn steam_game_exe(dir: &Path, imp: &Value, fallback: &[&str]) -> Option<PathBuf> {
+    let list = |k: &str| imp[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect::<Vec<_>>()).unwrap_or_default();
+    let mut names = list("process_exe_names");
+    if names.is_empty() { names = list("game_exe_names"); }
+    if names.is_empty() { names = fallback.iter().map(|n| n.to_string()).collect(); }
+    for name in &names {
+        let here = dir.join(name);
+        if here.is_file() { return Some(here); }
+        if let Some(p) = list("process_exe_rel_paths").iter().map(|r| dir.join(r).join(name)).find(|p| p.is_file()) { return Some(p); }
+        let found: Vec<PathBuf> = walkdir::WalkDir::new(dir).min_depth(1).into_iter().flatten()
+            .filter(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(name)).map(|e| e.into_path()).take(2).collect();
+        match found.as_slice() {
+            [one] if one.is_file() => return Some(one.clone()),
+            [_, _] => return None,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A path as Python's `Path.resolve()` prints it on Windows: links followed, each name as the disk spells it, no
+/// `\\?\` prefix.
+fn python_resolve(p: &Path) -> String {
+    let Ok(full) = std::fs::canonicalize(p) else { return p.display().to_string() };
+    let s = full.to_string_lossy();
+    match s.strip_prefix(r"\\?\UNC\") {
+        Some(rest) => format!(r"\\{rest}"),
+        None => s.strip_prefix(r"\\?\").unwrap_or(&s).to_string(),
+    }
 }
 
 /// Read `Importers.<code>` as JSON (both Importer and Migoto blocks).
@@ -256,7 +343,8 @@ pub fn patch_text(text: &str, code: &str, patch: &Value) -> Result<String> {
 
 static BACKED_UP: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
-fn backup_once(path: &Path) -> Result<()> {
+/// Copy `path` to `<name>.gachamod.bak` before its first write in this app session.
+pub(crate) fn backup_once(path: &Path) -> Result<()> {
     let mut done = BACKED_UP.lock().map_err(|_| Error::Invalid("Backup state is unavailable. Restart gachamod".into()))?;
     if done.iter().any(|p| p == path) { return Ok(()); }
     let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
@@ -597,6 +685,47 @@ mod tests {
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(v["Importers"]["ZZMI"]["Importer"]["launch_options"], "-b");
         assert!(!dir.join(format!("{CONFIG_FILE}.gachamod-tmp")).exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn builds_steam_launch_options_like_xxmi() {
+        let exe = Some(r"D:\SteamLibrary\steamapps\common\ZenlessZoneZero\ZenlessZoneZero.exe");
+        let defaults = json!({ "launch_options": "" });
+        // an empty launch_options still adds its space
+        assert_eq!(steam_options("ZZMI", &defaults, "2.4.1", exe).as_deref(),
+            Some(r#""D:\SteamLibrary\steamapps\common\ZenlessZoneZero\ZenlessZoneZero.exe" && %command% "#));
+        assert_eq!(steam_options("ZZMI", &json!({}), "2.5.0", exe), steam_options("ZZMI", &defaults, "2.5.0", exe));
+        let set = json!({ "launch_options": r"-path C:\x", "d3d11_mode_cmd_args": "-dx11", "use_launch_options": true });
+        assert_eq!(steam_options("ZZMI", &set, "2.5.0", exe).as_deref(),
+            Some(r#""D:\SteamLibrary\steamapps\common\ZenlessZoneZero\ZenlessZoneZero.exe" && %command% -dx11 -path C:\x"#));
+        assert_eq!(steam_options("ZZMI", &set, "2.4.3", None).as_deref(), Some("-dx11 -path C:/x"), "before 2.4.4 \\ became /");
+        let off = json!({ "launch_options": "-a", "use_launch_options": false, "skip_platform_game_launcher": false });
+        assert_eq!(steam_options("ZZMI", &off, "2.5.0", exe).as_deref(), Some(""));
+        assert_eq!(steam_options("ZZMI", &json!({ "configure_platform_launch_options": false }), "2.5.0", exe), None);
+        assert_eq!(steam_options("WWMI", &defaults, "2.4.9", exe).as_deref(), Some(""), "WWMI gets the exe from 2.5.0");
+        assert!(steam_options("WWMI", &defaults, "2.5.0", exe).unwrap().contains("&& %command%"));
+        assert_eq!(version_parts("2.4.10"), Some([2, 4, 10]));
+        assert_eq!(version_parts(""), None);
+    }
+
+    #[test]
+    fn finds_the_steam_exe_where_xxmi_does() {
+        let dir = std::env::temp_dir().join(format!("gachamod-steam-exe-{}-{}", std::process::id(), crate::db::now()));
+        let nested = dir.join("Games").join("ZenlessZoneZero Game");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("ZenlessZoneZero.exe"), b"").unwrap();
+        let imp = json!({ "game_exe_names": ["ZenlessZoneZero.exe", "ZenlessZoneZeroBeta.exe"], "process_exe_names": [] });
+        assert_eq!(steam_game_exe(&dir, &imp, &[]), Some(nested.join("ZenlessZoneZero.exe")));
+        std::fs::write(dir.join("ZenlessZoneZero.exe"), b"").unwrap();
+        assert_eq!(steam_game_exe(&dir, &imp, &[]), Some(dir.join("ZenlessZoneZero.exe")), "right in the folder wins");
+        std::fs::remove_file(dir.join("ZenlessZoneZero.exe")).unwrap();
+        std::fs::create_dir_all(dir.join("Backup")).unwrap();
+        std::fs::write(dir.join("Backup").join("ZenlessZoneZero.exe"), b"").unwrap();
+        assert_eq!(steam_game_exe(&dir, &imp, &[]), None, "two copies below and XXMI gives up");
+        assert_eq!(steam_game_exe(&dir, &json!({}), &["Nope.exe"]), None);
+        let resolved = python_resolve(&nested.join("ZenlessZoneZero.exe"));
+        assert!(!resolved.starts_with(r"\\?\") && resolved.ends_with("ZenlessZoneZero.exe"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -14,13 +14,28 @@ export interface LiveReady { character: string; mods: LiveMod[] }
 /** How the skin menu opens while playing. "window": gachamod's menu over the game (in exclusive fullscreen the game
  *  draws its own). "game": always the one the game draws. `key` is written like a hotkey ("F7", "Ctrl+Alt+M"). */
 /** `fastSave`: the game saves its values every second (d3dx.ini `settings_auto_save_interval`), so a pick made in its
- *  own menu shows in gachamod at once. */
-export interface MenuSettings { style: "window" | "game"; key: string; pad: boolean; fastSave: boolean }
+ *  own menu shows in gachamod at once. `pad`: a controller works the menu too. `binds`: the keys of everything else
+ *  the menu does (MENU_BINDS), as 3DMigoto bindings ("VK_UP", "ctrl J", "XB_A"); a thing left out of a change keeps
+ *  its keys. */
+export interface MenuSettings { style: "window" | "game"; key: string; pad: boolean; fastSave: boolean; binds: Record<string, string[]> }
+/** live.rs MENU_BINDS: what a key can do in the skin menu, with its keys until the player picks others. "open" holds
+ *  only a controller's buttons; the keyboard key that opens the menu is `MenuSettings.key`. */
+export const MENU_BINDS: Readonly<Record<string, string[]>> = {
+  open: ["XB_LEFT_THUMB XB_RIGHT_THUMB"],
+  up: ["VK_UP", "XB_DPAD_UP"],
+  down: ["VK_DOWN", "XB_DPAD_DOWN"],
+  show: ["VK_RIGHT", "XB_DPAD_RIGHT", "VK_RETURN", "XB_A"],
+  back: ["VK_LEFT", "XB_DPAD_LEFT"],
+  close: ["XB_B"],
+  keys: ["XB_Y"],
+};
 /** `blocked`: the game runs as administrator and gachamod doesn't, so gachamod's keys never reach it. `all`: the
  *  panel's one switch: every mod that has a character switches in game, and new ones join by themselves (on by
- *  default in Zenless Zone Zero). `allowed`: new groups and the drawn
- *  menu can be set up (Zenless Zone Zero, or any game with tester options on, "ui.tester"). */
-export interface LiveInfo { groups: LiveGroup[]; ready: LiveReady[]; running: boolean; menu: MenuSettings; blocked: boolean; all: boolean; allowed: boolean }
+ *  default in Zenless Zone Zero and Genshin Impact, live.rs CHECKED). `allowed`: the menu the game draws can be used
+ *  (live.rs drawn_menu_open: those two, Star Rail and Honkai Impact 3rd; or any game with tester options on,
+ *  "ui.testerOk"). `checked`: the drawn menu needs no tester options here; elsewhere "Inside the game" is marked as
+ *  a tester option. */
+export interface LiveInfo { groups: LiveGroup[]; ready: LiveReady[]; running: boolean; menu: MenuSettings; blocked: boolean; all: boolean; allowed: boolean; checked: boolean }
 export interface LiveChange { changed: string[]; skipped: ModSkip[]; backups: ModBackup[]; turnedOn: string[]; turnedOff: string[] }
 /** `reload`: the mod was off and was turned on, so it shows after a reload. `send`: the pick went to the running game. */
 export interface Picked { reload: boolean; send: boolean; note?: string | null }

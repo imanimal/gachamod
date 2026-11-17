@@ -36,7 +36,7 @@ export function InGameOptions({ game, modId }: { game: GameId; modId: string }) 
   }
   // with the switch in Tools off, nothing switches in game, so there's nothing to offer one mod at a time
   const ready = info.ready.find((r) => r.mods.some((m) => m.modId === modId));
-  if (!ready || !info.all || (!info.allowed && !info.groups.length)) return null;
+  if (!ready || !info.all) return null;
   const grouped = info.groups.find((x) => x.character.toLowerCase() === ready.character.toLowerCase());
   return (
     <Panel title="In game" icon="swap" className="mi-panel mi-ingame">

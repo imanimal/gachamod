@@ -1,6 +1,6 @@
 // Demo handlers for live switching (lib/api/ingame.ts): groups kept in memory, picks just remembered.
 // Owner: INGAME area.
-import type { LiveChange, LiveGroup, LiveInfo, LiveMod, MenuSettings, ModChange, ModEntry } from "../api";
+import { MENU_BINDS, type LiveChange, type LiveGroup, type LiveInfo, type LiveMod, type MenuSettings, type ModChange, type ModEntry } from "../api";
 import { call, registerDemo } from "../tauri";
 import { demoDb, demoWait } from "./db";
 import { liveHooks, setEnabled, setFolders } from "./library";
@@ -14,7 +14,11 @@ const liveMod = (m: ModEntry | undefined, id: string, slot: number): LiveMod =>
 const fail = (message: string) => { throw { kind: "invalid", message }; };
 const alls = new Map<string, boolean>();
 const menus = new Map<string, MenuSettings>();
-const menuOf = (game: string): MenuSettings => menus.get(game) ?? { style: "window", key: "F7", pad: true, fastSave: true };
+// like live.rs menu_settings: "game" without tester options reads as the window over the game
+const menuOf = (game: string): MenuSettings => {
+  const m = menus.get(game) ?? { style: "window", key: "F7", pad: true, fastSave: true, binds: { ...MENU_BINDS } };
+  return m.style === "game" && !allowed(game) ? { ...m, style: "window" } : m;
+};
 const loaded = (m: ModEntry) => m.enabled || !!m.standby;
 
 /** Library rows of these groups follow the picks: the one showing is on, the others wait on standby. */
@@ -84,15 +88,21 @@ function info(game: string): LiveInfo {
     .map((l) => ({ character: l[0]!.character!, mods: l.filter((m) => !live.has(m.id)).map((m) => liveMod(m, m.id, 0)) }))
     .sort((a, b) => a.character.localeCompare(b.character));
   const running = !!demoDb.games.find((g) => g.id === game)?.running;
-  return { groups: out, ready, running, menu: menuOf(game), blocked: false, all: alls.get(game) ?? false, allowed: allowed(game) };
+  return { groups: out, ready, running, menu: menuOf(game), blocked: false, all: alls.get(game) ?? false, allowed: allowed(game), checked: drawnMenuOpen(game) };
 }
 
-/** live.rs CHECKED and allowed: Zenless Zone Zero, or any game with tester options on. */
-const allowed = (game: string) => game === "zzz" || demoDb.settings.get("ui.tester") === "1";
-function testerOnly(game: string) {
-  if (allowed(game) || groupsOf(game).length) return;
+/** live.rs CHECKED: the games where switching in game is on by default. */
+const CHECKED = ["zzz", "gi"];
+/** live.rs SIMILAR: games that draw the way the checked ones do. */
+const SIMILAR = ["hsr", "hi3"];
+/** live.rs drawn_menu_open: the games where the menu the game draws isn't a tester option. */
+const drawnMenuOpen = (game: string) => CHECKED.includes(game) || SIMILAR.includes(game);
+/** live.rs allowed: the menu the game draws, in a game it is open in or any game with tester options on. */
+const allowed = (game: string) => drawnMenuOpen(game) || demoDb.settings.get("ui.testerOk") === "1";
+function drawnMenuAllowed(game: string) {
+  if (allowed(game)) return;
   const name = demoDb.games.find((g) => g.id === game)?.name ?? "this game";
-  fail(`Switching skins in game is a tester option in ${name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it`);
+  fail(`The menu the game draws is a tester option in ${name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it`);
 }
 
 export function registerIngameDemo() {
@@ -100,14 +110,13 @@ export function registerIngameDemo() {
     live_info: async ({ game }) => {
       await demoWait(120);
       const g = String(game);
-      // on by default in Zenless Zone Zero (live.rs on_start)
-      if (g === "zzz" && !alls.has(g)) await call("live_set_all", { game: g, on: true });
+      // on by default in the checked games, Zenless Zone Zero and Genshin Impact (live.rs on_start)
+      if (CHECKED.includes(g) && !alls.has(g)) await call("live_set_all", { game: g, on: true });
       return info(g);
     },
     live_add: async ({ game, ids }) => {
       await demoWait(300);
       const g = String(game);
-      testerOnly(g);
       const byId = new Map(modsOf(g).map((m) => [m.id, m]));
       const groups = groupsOf(g);
       const out: LiveChange = { changed: [], skipped: [], backups: [], turnedOn: [], turnedOff: [] };
@@ -155,7 +164,6 @@ export function registerIngameDemo() {
     },
     live_set_all: async ({ game, on }) => {
       const g = String(game);
-      if (on) testerOnly(g);
       alls.set(g, !!on);
       const none: LiveChange = { changed: [], skipped: [], backups: [], turnedOn: [], turnedOff: [] };
       // off takes every character out (live.rs set_all)
@@ -171,9 +179,14 @@ export function registerIngameDemo() {
     live_menu_set: async ({ game, menu }) => {
       await demoWait(120);
       const m = menu as MenuSettings;
-      if (m.style === "game" && menuOf(String(game)).style !== "game") testerOnly(String(game));
+      if (m.style === "game" && menuOf(String(game)).style !== "game") drawnMenuAllowed(String(game));
       if (!/^((Ctrl|Alt|Shift|Win)\+)*(F\d+|[A-Z0-9]|Num\d|Up|Down|Left|Right|Home|End|PageUp|PageDown|Insert|Delete|Space)$/.test(m.key)) fail(`${m.key} can't open the menu. Try F7`);
-      menus.set(String(game), { ...m });
+      // like live.rs checked_binds: a thing left out keeps its keys, and a key does one thing
+      const binds = { ...menuOf(String(game)).binds, ...m.binds };
+      const all = Object.values(binds).flat();
+      const twice = all.find((k, i) => all.indexOf(k) !== i);
+      if (twice) fail(`${twice} already does something else in the menu. Pick another key`);
+      menus.set(String(game), { ...m, binds });
       return menuOf(String(game));
     },
     // the menu window: the demo shows it for the first game, with a character made live so there is something to see

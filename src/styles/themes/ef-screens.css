@@ -46,7 +46,7 @@
   .mod-img-stand { background: var(--hatch), linear-gradient(180deg, #e9e8e8, #cfcdcd); }
   .mod-img .mod-img-portrait { border-radius: 4px; box-shadow: 0 0 0 1px rgb(0 0 0 / .35), 0 0 0 4px rgb(255 255 255 / .7); background: #fff; }
   .mod-img-ghost { font-weight: 700; font-size: 2.3rem; color: transparent; -webkit-text-stroke: 1px rgb(0 0 0 / .22); opacity: 1; letter-spacing: .02em; }
-  .library-bulk { border-radius: 999px; background: rgb(27 27 27 / .96); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .75), 0 14px 30px rgb(0 0 0 / .35); padding: .35rem .45rem .35rem 1.1rem; }
+  .library-bulk { border-radius: 1.4rem; background: rgb(27 27 27 / .96); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .75), 0 14px 30px rgb(0 0 0 / .35); padding: .35rem .45rem .35rem 1.1rem; }
   .library-bulk-n { font-weight: 700; color: var(--acc); }
   .trash-item { border-radius: 3px; background: var(--paper); box-shadow: 0 0 0 1px rgb(0 0 0 / .1), inset 3px 0 0 var(--plate); padding: .45rem .5rem .45rem .9rem; }
   .mod-drawer-img { border-radius: 4px; box-shadow: 0 0 0 1px rgb(0 0 0 / .25), 0 4px 0 -1px var(--acc); }
@@ -93,7 +93,7 @@
   .home-char { border-radius: 4px; }
   .home-char:hover { background: var(--paper); box-shadow: 0 0 0 1px var(--ink); }
   .home-first { border-radius: 4px; background: var(--paper); box-shadow: 0 0 0 1px rgb(0 0 0 / .1), inset 3px 0 0 var(--acc); }
-  .home-edit-bar { border-radius: 999px; background: rgb(27 27 27 / .96); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .7); --text: #f4f4f4; --text-2: #c4c4c4; }
+  .home-edit-bar { border-radius: 1.5rem; background: rgb(27 27 27 / .96); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .7); --text: #f4f4f4; --text-2: #c4c4c4; }
   .home-w.is-edit { border-radius: 4px; box-shadow: 0 0 0 1px var(--ink); background: var(--brackets); }
   /* the quick bar: a stage banner like the old hero, the game picture under it */
   .home-quick { border-radius: 4px; background: var(--contour) 0 0 / 420px, var(--stage); box-shadow: 0 0 0 1px #000; color: #f4f4f4; }
@@ -170,7 +170,7 @@
   .gb-gallery-main { border-radius: 4px; background: var(--stage); box-shadow: 0 0 0 1px rgb(0 0 0 / .3); }
   .gb-thumb { border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / .2); }
   .gb-thumb.on { outline: 0; box-shadow: 0 0 0 1.5px var(--ink), 0 0 0 4px var(--acc); }
-  .gb-submitter { border-radius: 999px; font-weight: 600; }
+  .gb-submitter { border-radius: 1rem; font-weight: 600; }
   .gb-stats { font-weight: 600; }
   .gb-gallery-empty { border-radius: 4px; background: var(--hatch), var(--well-2); }
   .gb-post { border-radius: 3px; background: var(--paper); box-shadow: 0 0 0 1px rgb(0 0 0 / .1); }
@@ -204,7 +204,7 @@
   /* ── settings, tools: rows like the game's settings list ── */
   .set-row, .tools-dev-row, .set-game { border-bottom: 1px dashed var(--line-2); }
   .set-row:last-child, .tools-dev-row:last-child, .set-game:last-child { border-bottom: 0; }
-  .set-importer { border-radius: 999px; background: var(--pill); color: var(--pill-ink); box-shadow: 0 0 0 1px rgb(0 0 0 / .25); font-weight: 600; }
+  .set-importer { border-radius: 1rem; background: var(--pill); color: var(--pill-ink); box-shadow: 0 0 0 1px rgb(0 0 0 / .25); font-weight: 600; }
   .theme-card { padding: .4rem; }
   .theme-preview { border-radius: 3px; }
   .set-pergame-h { text-transform: uppercase; letter-spacing: .1em; font-size: .72em; font-weight: 600; }

@@ -77,6 +77,11 @@
 .gb-stat { display: inline-flex; align-items: center; gap: .25rem; font-family: var(--font-num); }
 .gb-stat-btn { color: inherit; border-radius: var(--radius-xs); padding: 0 .2rem; }
 .gb-stat-btn:hover { color: var(--text); background: var(--hover); }
+.gb-stat-btn.on .i { color: var(--accent-ink); }
+.gb-stat-btn.on .i.fill path { fill: currentColor; }
+.gb-thank { display: flex; flex-direction: column; gap: .6rem; padding: .7rem .75rem; }
+.gb-thank p { margin: 0; }
+.gb-thank .btn { align-self: flex-start; }
 .gb-sentinel { height: 1px; }
 .gb-more { display: flex; justify-content: center; padding: .5rem 0 1rem; }
 

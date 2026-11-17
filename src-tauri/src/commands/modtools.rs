@@ -77,7 +77,7 @@ pub async fn fixes_info(game: String) -> Result<FixInfo> {
 #[tauri::command]
 pub async fn fixes_health(st: State<'_, AppState>, game: String) -> Result<Vec<ModHealth>> {
     let db = st.db.clone();
-    blocking(move || fixes::health(&db.lock().unwrap(), &game)).await
+    blocking(move || fixes::health(&db, &game)).await
 }
 
 /// Swap outdated hashes in these mods; each changed mod's backup undoes it.

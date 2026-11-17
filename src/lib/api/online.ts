@@ -17,7 +17,7 @@ export interface InstallMeta {
 
 export interface Candidate { key: string; label: string; iniCount: number; size: number; preview: string | null }
 
-export interface InstallOutcome { installed: ModEntry[]; needsChoice: Candidate[] | null; notes: string[] }
+export interface InstallOutcome { installed: ModEntry[]; needsChoice: Candidate[] | null; notes: string[]; /** separate mods from one file, each installed on its own */ bundle?: boolean }
 
 export interface QueueRequest {
   game: GameId; gbModId: number; fileId: number; url: string; fileName: string; size: number; md5?: string | null;
@@ -43,7 +43,13 @@ export type QueueItem = {
   staging?: string | null;
   /** Candidate keys picked for a NeedsChoice item. */
   choose?: string[];
+  /** What an install is doing right now. */
+  progress?: InstallProgress | null;
 } & ItemState;
+
+/** An install's current step ("Unpacking Lucia-Velvet v1.0.zip"), how far along it is (`done` of `total`, 0 total
+ *  when unknown), and for a bundle, the mods found in it with how many are in place so far. */
+export interface InstallProgress { step: string; done: number; total: number; mods: string[]; placed: number }
 export interface QueueSummary { running: number; waiting: number; needsChoice: number; done: number; failed: number }
 export interface QueueSnapshot { items: QueueItem[]; summary: QueueSummary }
 

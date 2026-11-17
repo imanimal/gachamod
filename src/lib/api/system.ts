@@ -27,6 +27,8 @@ export interface LaunchConfig {
   customExe: string | null;
   extras: Record<string, unknown>;
   migoto: MigotoConfig;
+  /** How XXMI loads DLLs into the game; null outside XXMI. */
+  dll: DllConfig | null;
   closeOnLaunch: boolean;
   /** Fields that can't be changed from here right now ("preLaunch", "migoto.callsLogging", "migoto" ...), with the
    *  reason to show beside them. Read only. */
@@ -35,12 +37,20 @@ export interface LaunchConfig {
   xxmiAvailable: boolean;
 }
 
+/** XXMI's own DLL settings (launch.rs DllConfig). `injectMode`: "HOOK", "DIRECT" or "SKIP". XXMI signs `libraries`
+ *  and `unsafeMode`, so the form never changes them: `launchConfig.unsafeOff` turns Unsafe Mode off. */
+export interface DllConfig { injectMode: string; injectLibraries: boolean; libraries: string; unsafeMode: boolean }
+
 export interface FolderUse { path: string | null; files: number; bytes: number }
 export interface DevStatus {
   log: FolderUse; shaderCache: FolderUse; shaderFixes: FolderUse; frameDumps: FolderUse; d3dxIni: string | null; d3dxUserIni: string | null;
 }
 
 export interface Integration { id: string; label: string; supported: boolean; ours: boolean; owner: string | null }
+
+/** launch.rs KickCheck. `undone`: the player did the fix but XXMI's own d3d11.dll is back. `fixed`: GIMI's d3d11.dll
+ *  isn't XXMI's own, so a fix looks done. `said`: the player said they did the fix. */
+export interface KickCheck { warn: boolean; undone: boolean; fixed: boolean; said: boolean }
 
 export const games = {
   list: () => call<GameState[]>("games_list"),
@@ -49,6 +59,10 @@ export const games = {
   setShown: (game: GameId, shown: boolean) => call<GameState[]>("game_set_shown", { game, shown }),
   /** Resolves to a note when the player should know something (a community game started without its loader). */
   launch: (game: GameId, vanilla = false) => call<string | null>("game_launch", { game, vanilla }),
+  /** Before a start: whether to warn that Genshin Impact's anti-cheat may stop it ("Illegal tool detected"). */
+  kickCheck: (game: GameId, vanilla = false) => call<KickCheck>("game_kick_check", { game, vanilla }),
+  /** The player did the fix from the community guide by hand (saves GIMI's d3d11.dll as it is), or takes it back. */
+  kickFixDone: (done: boolean) => call<void>("game_kick_fix_done", { done }),
   running: (game: GameId) => call<boolean>("game_running", { game }),
   /** The game's own icon at 256 px, taken from its exe and kept as a PNG in the app's data folder; null when the game
    *  folder isn't known. */
@@ -74,6 +88,8 @@ export const xxmi = {
 export const launchConfig = {
   get: (game: GameId) => call<LaunchConfig>("launch_config_get", { game }),
   set: (game: GameId, config: LaunchConfig) => call<LaunchConfig>("launch_config_set", { game, config }),
+  /** Turn XXMI's Unsafe Mode off (only XXMI Launcher can turn it on). Resolves to the form as it now reads. */
+  unsafeOff: (game: GameId) => call<LaunchConfig>("launch_unsafe_off", { game }),
 };
 
 export const dev = {

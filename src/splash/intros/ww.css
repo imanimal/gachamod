@@ -1,0 +1,38 @@
+/* Wuthering Waves (intros/ww.ts): a cold near-black, the tip in fine Lato with keys as thin outlined caps, and under it
+   a flat trace like an idle oscilloscope: a hairline between two diamonds, fine ticks and a gold diamond at its centre.
+   Owner: SHELL area. */
+
+.splash[data-intro="ww"] { --ww-gold: #e9d58a; --ww-line: #ceb99c; }
+
+.splash[data-intro="ww"] .splash-tip { gap: 1.05rem; }
+.splash[data-intro="ww"] .splash-tip-i { width: 1.55rem; height: 1.55rem; stroke-width: 1.2; opacity: .6; }
+
+/* the words are cut out of a background so a bright band can cross them and take them away (ww.ts moves it from
+   80% to 15%): gone on the left of the band, ink on the right */
+.splash[data-intro="ww"] .splash-tip-t { font-family: "Lato", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 400;
+  font-size: 1.05rem; line-height: 1.75; letter-spacing: .012em; opacity: 1; color: transparent;
+  background: linear-gradient(100deg, transparent 0 44%, color-mix(in srgb, var(--ww-gold) 80%, transparent) 46.5%, #fff 48.5%,
+    color-mix(in srgb, var(--splash-ink) 84%, transparent) 51% 100%) 100% 0 / 300% 100% no-repeat;
+  -webkit-background-clip: text; background-clip: text; }
+.splash[data-intro="ww"] .splash-tip kbd { min-width: 1.95em; margin: 0 .2em; padding: .16em .55em .12em; border-radius: 2px; vertical-align: .1em;
+  font-family: "Lato", "JetBrains Mono", sans-serif; font-weight: 700; font-size: .7em; line-height: 1.5; letter-spacing: .08em; text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--splash-ink) 40%, transparent); }
+
+/* the trace */
+.splash[data-intro="ww"] .ww-trace { position: relative; flex: none; width: min(42rem, 88vw); height: 9px; margin-top: .6rem; }
+.splash[data-intro="ww"] .ww-trace > i { position: absolute; display: block; }
+.splash[data-intro="ww"] .ww-trace-line { left: 7px; right: 7px; top: 4px; height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--splash-ink) 12%, transparent), color-mix(in srgb, var(--splash-ink) 62%, transparent) 50%,
+    color-mix(in srgb, var(--splash-ink) 12%, transparent)); }
+/* a short tick every 32nd, a taller one every 8th, both fading toward the ends */
+.splash[data-intro="ww"] .ww-trace-ticks { left: 7px; right: 7px; top: 0; height: 9px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--splash-ink) 30%, transparent) 0 1px, transparent 0) -.5px 50% / calc(100% / 8) 9px repeat-x,
+    linear-gradient(90deg, color-mix(in srgb, var(--splash-ink) 22%, transparent) 0 1px, transparent 0) -.5px 50% / calc(100% / 32) 3px repeat-x;
+  -webkit-mask: linear-gradient(90deg, transparent 3%, #000 32% 68%, transparent 97%); mask: linear-gradient(90deg, transparent 3%, #000 32% 68%, transparent 97%); }
+.splash[data-intro="ww"] .ww-trace-d { top: 2px; width: 5px; height: 5px; transform: rotate(45deg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ww-line) 85%, transparent); }
+.splash[data-intro="ww"] .ww-trace-l { left: 1px; }
+.splash[data-intro="ww"] .ww-trace-r { right: 1px; }
+.splash[data-intro="ww"] .ww-trace-c { left: calc(50% - 2px); top: 2.5px; width: 4px; height: 4px; transform: rotate(45deg); background: var(--ww-gold); opacity: .9; }
+
+/* the waveform, the rings and, after the pulse, the backdrop */
+.splash[data-intro="ww"] .ww-scope { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }

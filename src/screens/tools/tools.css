@@ -1,4 +1,4 @@
-/* Tools screen layout. Colours are theme tokens only. Owner: SETTINGS/AI area. */
+/* Tools screen layout, and the launch options in Settings (settings/Launch.tsx) and the Genshin warning, which share these rules. Colours are theme tokens only. Owner: SETTINGS/AI area. */
 .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem 1.2rem; }
 .tools-hooks { display: grid; grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: 1rem 1.2rem; margin: 1.2rem 0; }
 .tools-hook { display: flex; flex-direction: column; gap: .5rem; }
@@ -23,10 +23,21 @@
   border: 1px solid var(--line); font-size: .82em; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
 .tools-xxmi { color: var(--accent-ink); font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .tools-xxmi:hover { color: var(--text); }
+.tools-kick { display: grid; gap: .6rem; margin: 1rem 0; }
 
 /* Tools > Fixes: new fixers on GameBanana and where the data comes from */
 .fx-new { margin-top: .9rem; padding: .7rem .85rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+.fx-dead { margin-top: .75rem; padding: .6rem .85rem; border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); display: grid; gap: .45rem; }
+.fx-dead .tp-ignored { margin-top: 0; }
+.fx-dead .tp-ignored-mod .hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-new .tp-list { margin-top: .45rem; gap: .25rem; }
 .fx-new-item { gap: .6rem; }
 .fx-source { display: flex; flex-direction: column; gap: .15rem; }
 .fx-source .row { gap: .6rem; }
+.kick-steps ol { list-style: none; margin: .5rem 0 0; padding: 0; display: grid; gap: .8rem; }
+.kick-step { display: grid; grid-template-columns: 1.6rem 1fr; gap: .6rem; align-items: start; }
+.kick-step-n { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 1px solid var(--line-2); font-size: .85rem; color: var(--text-2); }
+.kick-step.done .kick-step-n { color: var(--ok); border-color: var(--ok); }
+.kick-step-b { display: grid; gap: .4rem; justify-items: start; min-width: 0; }
+.kick-step-b p { margin: 0; }
+.kick-step-b .field, .kick-step-b label { justify-self: stretch; }

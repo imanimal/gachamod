@@ -1037,7 +1037,8 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
                 }
             }
         }
-        // one problem per kind of missing file, except ones with a fix of their own
+        // one problem per kind of missing file, except ones with a fix of their own. A missing file is at most a
+        // warning: authors often leave lines for textures they didn't ship and the mod still shows fine
         let mut groups: BTreeMap<u8, Vec<String>> = BTreeMap::new();
         for (f, section) in &missing {
             let shown_f = f.replace('\\', "/");
@@ -1050,7 +1051,7 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
                     let (severity, detail) = if kind == 1 {
                         ("warn", format!("{} needs {shown_f}, which isn't in the mod folder. Only the remap for another model of the character (a skin, or the Raiden boss) uses it", m.rel))
                     } else {
-                        ("bad", format!("{} needs {shown_f}, which isn't in the mod folder", m.rel))
+                        ("warn", format!("{} needs {shown_f}, which isn't in the mod folder", m.rel))
                     };
                     let mut p = problem("missing_file", severity, Some(&m.rel), detail);
                     p.fix = Some(ProblemFix { kind: "point".into(), ini: Some(m.rel.clone()), from: Some(f.clone()), to: Some(to), inis: vec![] });
@@ -1067,7 +1068,7 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
                 1 => ("warn", missing_group(&m.rel, &list, "needs",
                     ". Only the remap for another model of the character (a skin, or the Raiden boss) uses it",
                     ". Only the remap for another model of the character (a skin, or the Raiden boss) uses them")),
-                _ => ("bad", missing_group(&m.rel, &list, "needs", "", "")),
+                _ => ("warn", missing_group(&m.rel, &list, "needs", "", "")),
             };
             out.push(problem("missing_file", severity, Some(&m.rel), detail));
         }
@@ -1429,12 +1430,14 @@ pub fn conflicts(db: &Db, game: &str) -> Result<Vec<ConflictGroup>> {
         if list.len() < 2 || list.len() >= COMMON_HASH { continue; }
         groups.entry(list).or_default().push(h);
     }
+    // a mod is the first of many groups: its folder is walked once, not once per group
+    let mut parts_of: HashMap<usize, HashMap<String, Vec<String>>> = HashMap::new();
     let mut out: Vec<ConflictGroup> = groups.into_iter().map(|(idx, mut hashes)| {
         hashes.sort();
         let n = hashes.len() as u32;
         let first = mods[idx[0]].character.clone();
         let character = first.filter(|c| idx.iter().all(|&i| mods[i].character.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(c))));
-        let parts = part_names(&parts_by_hash(Path::new(&mods[idx[0]].path)), &hashes);
+        let parts = part_names(parts_of.entry(idx[0]).or_insert_with(|| parts_by_hash(Path::new(&mods[idx[0]].path))), &hashes);
         let all_ignored = idx.iter().all(|&a| idx.iter().all(|&b| a == b || ignored.contains(&pair_key(&mods[a].id, &mods[b].id))));
         ConflictGroup {
             mods: idx.iter().map(|&i| ConflictRef { mod_id: mods[i].id.clone(), name: mods[i].name.clone(), shared: n, parts: parts.clone(), hashes: Vec::new() }).collect(),
@@ -1655,8 +1658,8 @@ mod tests {
         write_remap_mod(&d);
         let ps = lint_dir(&d);
         let of = |f: &str| ps.iter().find(|p| p.detail.contains(f)).unwrap_or_else(|| panic!("{f}: {ps:?}"));
-        // a part that draws with it is broken, with nothing to point it to
-        assert_eq!(of("Body.ib").severity, "bad");
+        // a part that draws with it is a warning (mods often still show fine), with nothing to point it to
+        assert_eq!(of("Body.ib").severity, "warn");
         assert!(of("Body.ib").fix.is_none());
         // nothing names [ResourceDressIB], so 3DMigoto never loads it
         assert_eq!(of("Dress.ib").severity, "info");
@@ -1664,7 +1667,7 @@ mod tests {
         let remap = of("RemapBlend");
         assert_eq!(remap.severity, "warn");
         assert_eq!(remap.fix.as_ref().and_then(|f| f.to.as_deref()), Some(r".\RegularRaiden\RaidenShogunRemapBlend.buf"));
-        assert_eq!(ps[0].severity, "bad", "worst first");
+        assert_eq!(ps.last().map(|p| p.severity.as_str()), Some("info"), "worst first");
 
         // a file one folder up is found from a variant folder
         let v = temp("up");

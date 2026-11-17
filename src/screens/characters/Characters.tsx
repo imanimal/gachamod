@@ -159,7 +159,7 @@ function Tile({ game, c }: { game: GameId; c: RosterChar }) {
       {wearing && <span className="portrait-bg"><LazyImg src={fileUrl(wearing.preview)} alt="" decoding="async" /></span>}
       <span className={`portrait-img${p.sharp ? "" : " is-soft"}`}>
         {p.src && !broken
-          ? <LazyImg src={p.src} alt="" decoding="async" draggable={false} onError={() => setBroken(true)} style={p.crop ? { objectPosition: "50% 8%" } : undefined} />
+          ? <LazyImg src={p.src} alt="" decoding="async" draggable={false} onError={() => setBroken(true)} style={p.style} />
           : <span className="roster-tile-initials">{initials}</span>}
       </span>
       {c.owned && <span className="roster-owned" aria-label="Owned"><Icon name="check" /></span>}

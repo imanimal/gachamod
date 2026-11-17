@@ -5,6 +5,9 @@ import { demoDb, demoWait } from "./db";
 
 const ME = { id: 1, name: "Player", avatar: null };
 let user: typeof ME | null = null;
+// the made-up member's GameBanana points, and the free thanks they get once a day
+let myPoints = 240;
+let freeThank = true;
 const state = () => ({ available: demoDb.settings.get("account.gbSignIn") !== "0", user });
 
 export function registerAccountDemo() {
@@ -14,6 +17,14 @@ export function registerAccountDemo() {
     gb_sign_out: () => { user = null; return state(); },
     gb_follow: () => undefined,
     gb_like: () => undefined,
+    gb_subscribe: () => undefined,
+    gb_thank: ({ points }) => {
+      if (!freeThank) myPoints -= Number(points);
+      freeThank = false;
+    },
+    gb_mod_me: () => ({ liked: null, subscribed: null, thanked: null, own: false, points: myPoints, freeThank }),
     gb_following: () => [],
+    // the made-up member hides every adult rating on GameBanana
+    gb_content_settings: () => (user ? { mode: "hide", untouched: false } : null),
   });
 }

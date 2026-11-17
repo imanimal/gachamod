@@ -20,6 +20,7 @@ import { installTips } from "./lib/keys";
 import { installTelemetry } from "./lib/telemetry";
 import { installRenderWatch } from "./lib/renderWatch";
 import { isMenuWindow } from "./lib/tauri";
+import { startSplash } from "./splash/splash";
 
 installDemo();
 installTips();
@@ -32,4 +33,4 @@ else if (isMenuWindow()) {
   installRenderWatch("overlay");
   void import("./screens/ingame/Overlay").then((m) => createRoot(document.getElementById("root")!).render(<StrictMode><m.Overlay /></StrictMode>));
 }
-else { installTelemetry("main"); installRenderWatch("main"); createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>); }
+else { startSplash(); installTelemetry("main"); installRenderWatch("main"); createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>); }

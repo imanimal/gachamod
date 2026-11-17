@@ -1,0 +1,21 @@
+/* Honkai: Star Rail's opening screen (splash/intros/hsr.ts): deep space drawn on a canvas, and the tip in fine Sofia
+   Sans with keys as small pale plates cut at the top right, under a thin rule with gold diamond ends that runs
+   through the icon. Owner: SHELL area. */
+
+.splash[data-intro="hsr"] { --hsr-gold: #e2c78e; }
+.splash[data-intro="hsr"] .hsr-sky { position: absolute; inset: 0; z-index: 1; display: block; width: 100%; height: 100%; pointer-events: none; }
+
+.splash[data-intro="hsr"] .splash-tip { gap: 1.3rem; max-width: min(42rem, 86vw); transform-origin: 50% 50%; will-change: transform, opacity; }
+.splash[data-intro="hsr"] .splash-tip-i { position: relative; width: 1.6rem; height: 1.6rem; stroke-width: 1.2; opacity: .66; }
+.splash[data-intro="hsr"] .splash-tip-t { font-family: "Sofia Sans", "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font-weight: 400; font-size: 1.16rem; line-height: 1.7; letter-spacing: .024em; opacity: .88; }
+.splash[data-intro="hsr"] .splash-tip kbd { min-width: 1.7em; margin: 0 .16em; padding: .1em .5em .08em; border-radius: 1.5px 6px 1.5px 1.5px; vertical-align: .08em;
+  font-family: "Sofia Sans Semi Condensed", "Sofia Sans", "Bahnschrift", sans-serif; font-weight: 600; font-size: .76em; line-height: 1.45; letter-spacing: .05em;
+  color: #10121f; background: #dfe2ea; box-shadow: inset 0 -1px 0 rgb(16 18 31 / .18); }
+
+/* the rule: centred on the icon, wider than the text so the icon sits in its gap */
+.splash[data-intro="hsr"] .hsr-rule { position: absolute; top: .8rem; left: 50%; width: min(21rem, 72vw); aspect-ratio: 300 / 12; height: auto;
+  transform: translate(-50%, -50%); overflow: visible; pointer-events: none; }
+.splash[data-intro="hsr"] .hsr-rule-l { fill: none; stroke: currentColor; stroke-opacity: .3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.splash[data-intro="hsr"] .hsr-rule-p { fill: none; stroke: currentColor; stroke-opacity: .55; stroke-width: 2.4; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.splash[data-intro="hsr"] .hsr-rule-d { fill: var(--hsr-gold); fill-opacity: .9; }

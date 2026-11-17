@@ -49,8 +49,9 @@ in a release.
   "Needs its author".
 - A change that needs a buffer rewrite gets a rule with `tool` set to the fixer that does it, so Fix downloads and
   runs that fixer.
-- Licences: MIT or GPL data can go in the JSON. CC BY-NC-ND fixers can't be copied: only link them in `tool`, and
-  gachamod downloads and runs the author's own file.
+- Licences: hashes and rule parameters are facts, so they can come from MIT or GPL tools (credit them in `sources[]`).
+  Don't copy GPL files or code: gachamod is CC BY-ND, and GPL material can't go into it. CC BY-NC-ND fixers can't be
+  copied either: only link them in `tool`, and gachamod downloads and runs the author's own file.
 - Run into the same old hash going to two different new hashes? Add it to `conflicts[]` with what was chosen.
 
 New characters in the update go in `crates/gacha-core/data/characters/<game>.json` (name as GameBanana spells it,

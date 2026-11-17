@@ -43,7 +43,7 @@
   .mod-img-stand { background: var(--rings), linear-gradient(180deg, #2c3246, #454e6b); }
   .mod-img .mod-img-portrait { box-shadow: 0 0 0 2px rgb(20 22 30 / .6), 0 0 0 3px rgb(255 255 255 / .7); background: #2c3245; }
   .mod-img-ghost { font-weight: 800; letter-spacing: .02em; color: #fff; opacity: .08; }
-  .library-bulk { border-radius: 999px; background: var(--rings), var(--bar); box-shadow: 0 12px 34px rgb(0 0 0 / .55), inset 0 0 0 1px rgb(255 255 255 / .16); padding: .4rem .5rem .4rem 1.2rem; }
+  .library-bulk { border-radius: 1.4rem; background: var(--rings), var(--bar); box-shadow: 0 12px 34px rgb(0 0 0 / .55), inset 0 0 0 1px rgb(255 255 255 / .16); padding: .4rem .5rem .4rem 1.2rem; }
   .library-bulk-n { font-weight: 700; color: var(--gold-hi); }
   .trash-list { gap: 3px; }
   .trash-item { border-radius: var(--cut-sm); background: var(--row); padding: .45rem .6rem .45rem .9rem; }
@@ -131,10 +131,10 @@
   .gb-gallery-main { border-radius: var(--cut); background: #14151c; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
   .gb-thumb { border-radius: 2px 8px 2px 2px; outline: 2px solid transparent; }
   .gb-thumb.on { outline: 2px solid #fff; }
-  .gb-submitter { border-radius: 999px; font-weight: 700; }
+  .gb-submitter { border-radius: 1rem; font-weight: 700; }
   .gb-stats { font-weight: 600; font-family: var(--font-num); }
   .gb-gallery-empty { border-radius: var(--cut); background: rgb(255 255 255 / .06); }
-  .gb-older, .gb-posts-t { border-radius: 999px; }
+  .gb-older, .gb-posts-t { border-radius: 1rem; }
   .gb-lightbox-prev, .gb-lightbox-next { background: #e2e2e2; color: var(--ink); }
   .gb-variant { background: var(--strip); padding: 0 0 .55rem; gap: .3rem; }
   .gb-variant > :not(.gb-variant-img) { padding: 0 .6rem; }
@@ -170,6 +170,7 @@
   /* ── settings and tools: rows are plates stacked 3 px apart ── */
   .set-rows, .set-games, .tools-dev { gap: 3px; }
   .set-row, .tools-dev-row, .set-game { padding: .5rem .9rem; border-bottom: 0; border-radius: var(--cut-sm); background: var(--row); }
+  .ext-src { border-radius: var(--cut-sm); }
   .set-game { padding: .65rem .9rem; }
   .set-row > span:first-child, .tools-dev-row > span:first-child { font-weight: 600; }
   .set-game-h { font-weight: 700; }

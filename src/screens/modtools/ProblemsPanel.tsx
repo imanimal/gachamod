@@ -39,10 +39,14 @@ export function ProblemsPanel() {
     .sort((a, b) => rank(a.shown[0]!.severity) - rank(b.shown[0]!.severity) || Number(b.m.enabled) - Number(a.m.enabled));
   const ignored = rows.filter((r) => r.hidden.length);
   const total = listed.reduce((s, r) => s + r.shown.length, 0);
+  // warnings alone (a texture the .ini names but the mod doesn't ship) rarely show in game: folded away, not counted
+  const brokenRows = listed.filter((r) => r.shown.some((p) => p.severity === "bad"));
+  const warnRows = listed.filter((r) => !brokenRows.includes(r));
+  const badCount = brokenRows.reduce((s, r) => s + r.shown.filter((p) => p.severity === "bad").length, 0);
   const auto = list ? autoFixes(list, ign, game).length : 0;
 
   return (
-    <Panel id="problems" title="Problems" icon="warn" className="tp tp-problems" count={list ? total : undefined}
+    <Panel id="problems" title="Problems" icon="warn" className="tp tp-problems" count={list ? badCount : undefined}
       actions={<>
         {auto > 1 && (
           <Button size="sm" icon="wand" busy={busy === "all"} disabled={!!busy} title={`Make all ${auto} fixes that need no choice, as one step you can undo`}
@@ -54,17 +58,27 @@ export function ProblemsPanel() {
         )}
         <Button size="sm" variant="ghost" icon="refresh" busy={checking} onClick={check} disabled={!list} title="Look for problems in every mod again">Check again</Button>
       </>}>
-      <p className="hint tp-intro">What stops a mod from showing right in game, for mods on and off. Only broken parts of mods that are on add to the count on Tools.</p>
+      <p className="hint tp-intro">What could stop a mod from showing right in game. Warnings, like a file the .ini names that the mod doesn't ship, usually make no difference, so they're folded away.</p>
       {!list ? (
         <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>
-      ) : listed.length === 0 ? (
-        <p className="tp-none muted">{ignored.length ? "Nothing else to fix. The problems you ignored are below." : "No problems found."}</p>
+      ) : brokenRows.length === 0 ? (
+        <p className="tp-none muted">{warnRows.length ? "Nothing broken. Only warnings, below." : ignored.length ? "Nothing else to fix. The problems you ignored are below." : "No problems found."}</p>
       ) : (
         <ul className="tp-list tp-problem-list">
-          {listed.map(({ m, shown }) => (
+          {brokenRows.map(({ m, shown }) => (
             <ModRow key={m.modId} game={game} m={m} shown={shown} busy={busy} run={run} />
           ))}
         </ul>
+      )}
+      {list && warnRows.length > 0 && (
+        <details className="tp-ignored">
+          <summary className="hint">Warnings ({warnRows.reduce((s, r) => s + r.shown.length, 0)})</summary>
+          <ul className="tp-list tp-problem-list">
+            {warnRows.map(({ m, shown }) => (
+              <ModRow key={m.modId} game={game} m={m} shown={shown} busy={busy} run={run} />
+            ))}
+          </ul>
+        </details>
       )}
       {ignored.length > 0 && (
         <details className="tp-ignored">
@@ -88,13 +102,14 @@ function ModRow({ game, m, shown, busy, run }: {
   game: GameId; m: ModProblems; shown: Problem[]; busy: string | null; run: (key: string, job: () => Promise<unknown>) => Promise<void>;
 }) {
   const download = needsDownload(shown);
+  const broken = shown.some((p) => p.severity === "bad");
   return (
     <li className="tp-problem">
       <div className="tp-problem-h row">
         <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
         {!m.enabled && <Badge tone="muted" title="This mod is off, so its problems don't count on Tools">Off</Badge>}
         {download && (m.source
-          ? <Button size="sm" icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}
+          ? <Button size="sm" variant={broken ? undefined : "ghost"} icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}
               title="Download this mod from GameBanana again, which can bring back a missing file. Its settings stay"
               onClick={() => void run(`dl${m.modId}`, () => downloadAgain(game, m))}>Download again</Button>
           : <Button size="sm" variant="ghost" icon="search" title="This mod isn't linked to GameBanana. Search for it there by name"

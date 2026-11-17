@@ -87,7 +87,12 @@ pub fn toggle<R: Runtime>(app: &AppHandle<R>, game: &str) {
         let _ = devtools::show_game(game);
         return;
     }
-    if devtools::exclusive_fullscreen() {
+    // the window over the game always, unless this game holds the screen in exclusive fullscreen right now
+    if devtools::exclusive_fullscreen(game) {
+        if !drawn_menu(app, game) {
+            let _ = app.emit(events::TOAST, serde_json::json!({ "text": fullscreen_text(game), "bad": true }));
+            return;
+        }
         match live::send_menu_toggle(game) {
             Ok(()) => gamecheck::note_menu(game, "drawn"),
             Err(e) => { let _ = app.emit(events::TOAST, serde_json::json!({ "text": e.to_string(), "bad": true })); }
@@ -96,6 +101,16 @@ pub fn toggle<R: Runtime>(app: &AppHandle<R>, game: &str) {
     }
     gamecheck::note_menu(game, "window");
     open(app, game, None);
+}
+
+/// The game has the menu it draws itself (`live::drawn_menu_open`, or tester options are on).
+fn drawn_menu<R: Runtime>(app: &AppHandle<R>, game: &str) -> bool {
+    app.try_state::<AppState>().and_then(|st| st.db.lock().ok().map(|d| live::allowed(&d, game))).unwrap_or(false)
+}
+
+fn fullscreen_text(game: &str) -> String {
+    let name = gacha_core::games::def(game).map_or("The game", |g| g.name);
+    format!("{name} runs in exclusive fullscreen, where no window can show over it. Set its window mode to borderless to use the skin menu")
 }
 
 /// Show the menu window over `game`, on `tab` ("keys") or where it was.
@@ -122,7 +137,11 @@ pub fn toggle_keys<R: Runtime>(app: &AppHandle<R>, game: &str) {
         let _ = devtools::show_game(game);
         return;
     }
-    if devtools::exclusive_fullscreen() {
+    if devtools::exclusive_fullscreen(game) {
+        if !drawn_menu(app, game) {
+            let _ = app.emit(events::TOAST, serde_json::json!({ "text": fullscreen_text(game), "bad": true }));
+            return;
+        }
         if let Err(e) = live::send_keys_toggle(game) {
             let _ = app.emit(events::TOAST, serde_json::json!({ "text": e.to_string(), "bad": true }));
         }
@@ -147,18 +166,21 @@ pub fn game_for<R: Runtime>(app: &AppHandle<R>, combo: &str) -> Option<String> {
     keys.into_iter().find(|(g, s)| s.key == combo && running.contains(&g.as_str())).map(|(g, _)| g)
 }
 
-/// Both sticks pressed in opens the menu, like the key. The pad is only read while a game with a menu runs.
+/// A controller's buttons that open the menu, like the key: both sticks pressed in until the player picks others
+/// (`MenuSettings::binds`, "open"). The pad is only read while a game with a menu runs.
 pub fn watch_pad<R: Runtime>(app: AppHandle<R>) {
     let _ = std::thread::Builder::new().name("gachamod-pad".into()).spawn(move || {
         let mut was_down = false;
-        let mut games: Vec<String> = Vec::new();
+        // each game with the button sets that open its menu
+        let mut games: Vec<(String, Vec<Vec<String>>)> = Vec::new();
         let mut tick = 0u32;
         loop {
             // look again every two seconds for which games want it
             if tick % 50 == 0 {
                 let running = launch::running_in(&launch::processes());
                 games = app.try_state::<AppState>().and_then(|st| st.db.lock().ok().map(|d| live::menu_keys(&d))).unwrap_or_default()
-                    .into_iter().filter(|(g, s)| s.pad && running.contains(&g.as_str())).map(|(g, _)| g).collect();
+                    .into_iter().filter(|(g, s)| s.pad && running.contains(&g.as_str()))
+                    .map(|(g, s)| { let sets = s.binds_of("open").iter().map(|b| b.split_whitespace().map(String::from).collect()).collect(); (g, sets) }).collect();
             }
             tick = tick.wrapping_add(1);
             if games.is_empty() {
@@ -167,9 +189,9 @@ pub fn watch_pad<R: Runtime>(app: AppHandle<R>) {
                 std::thread::sleep(Duration::from_secs(2));
                 continue;
             }
-            let down = devtools::pad_sticks_down();
-            if down && !was_down { toggle(&app, &games[0]); }
-            was_down = down;
+            let held = games.iter().find(|(_, sets)| sets.iter().any(|s| devtools::pad_down(s))).map(|(g, _)| g.clone());
+            if let Some(g) = &held { if !was_down { toggle(&app, g); } }
+            was_down = held.is_some();
             std::thread::sleep(Duration::from_millis(40));
         }
     });

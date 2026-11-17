@@ -74,7 +74,7 @@
   .gbadge { font-weight: 700; }
   /* rows (the default): slate ink rows, the open one a slate pill */
   &:not([data-nav="grid"]) .nv-b { position: static; }
-  &:not([data-nav="grid"]) .nv { min-height: 0; flex-direction: row; justify-content: flex-start; text-align: left; border-radius: 999px; padding: 0 .8rem; background: transparent; color: var(--ink); box-shadow: none; animation: none; }
+  &:not([data-nav="grid"]) .nv { min-height: 0; flex-direction: row; justify-content: flex-start; text-align: left; border-radius: 1.2rem; padding: 0 .8rem; background: transparent; color: var(--ink); box-shadow: none; animation: none; }
   &:not([data-nav="grid"]) .nv .i { width: 1.2rem; height: 1.2rem; color: var(--ink); }
   &:not([data-nav="grid"]) .nv:hover:not(:disabled) { background: rgb(59 66 85 / .08); color: var(--ink); box-shadow: none; }
   &:not([data-nav="grid"]) .nv:hover:not(:disabled) .i { color: var(--ink); }
@@ -100,7 +100,6 @@
     background: var(--star) 50% 50% / .6rem no-repeat,
       radial-gradient(circle, transparent 0 44%, #d2c4aa 45% 46.5%, transparent 47.5% 60%, #dacdb6 61% 62%, transparent 63% 68%, #cfc1a6 69% 70.5%, transparent 71.5%),
       conic-gradient(from 45deg, transparent 0 8%, rgb(207 193 166 / .55) 8% 9%, transparent 9% 33%, rgb(207 193 166 / .55) 33% 34%, transparent 34% 58%, rgb(207 193 166 / .55) 58% 59%, transparent 59% 83%, rgb(207 193 166 / .55) 83% 84%, transparent 84%); border-radius: 50%; }
-  .side-deco-t { font-weight: 700; font-size: .9rem; color: #8d8372; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; }
   .side-deco-m, .side-deco .glyphs { display: none; }
 
   /* ── the Play key: a pill with a capped play icon (slate on the cream, cream on the hero) ── */
@@ -146,7 +145,7 @@
   /* command palette: the picked row is a pill in the other material */
   .palette { border-radius: 6px; }
   .palette-h { color: var(--title); font-size: .82em; letter-spacing: .04em; text-transform: none; }
-  .palette-i { border-radius: 999px; }
+  .palette-i { border-radius: 1.2rem; }
   .palette-i.on { background: var(--b-fill); color: var(--b-ink); }
   .palette-i.on > .i, .palette-i.on .palette-hint { color: inherit; }
   .palette-img { border-radius: 50%; }

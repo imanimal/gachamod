@@ -85,4 +85,5 @@ backup of that key. Without it, installed copies can't take another update.
 
 ## Licence
 
-MIT. See LICENSE.
+You can share gachamod as long as it's unchanged, whether that's the installer or this source. Sharing a changed
+version isn't allowed. The licence is [CC BY-ND 4.0](LICENSE).

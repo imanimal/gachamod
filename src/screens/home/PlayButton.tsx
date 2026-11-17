@@ -10,6 +10,8 @@ import { errorText, games, settings, xxmi, type GameState } from "../../lib/api"
 import { windowAction } from "../../lib/tauri";
 import { go, useGame } from "../../lib/store";
 import { shuffleBeforePlay } from "../library/shuffle";
+import { setKickFixDone } from "../../lib/kickFix";
+import { askKick } from "./KickWarning";
 import "./home.css";
 
 // shared by every Play button, so the sidebar's and Home's agree
@@ -31,9 +33,23 @@ function elapsed(ms: number): string {
   return h ? `${h}:${two(m)}:${two(sec)}` : `${m}:${two(sec)}`;
 }
 
-/** Start a game (with or without mods). Errors become toasts; the button shows Starting until it runs. */
+let asking = false;
+
+/** Start a game (with or without mods). Errors become toasts; the button shows Starting until it runs. Genshin
+ *  Impact with mods first warns about its "Illegal tool detected" kick until the fix is done (lib/kickFix.ts). */
 export async function play(game: GameState, vanilla = false) {
-  if (starting.has(game.id) || game.running) return;
+  if (starting.has(game.id) || game.running || asking) return;
+  if (game.id === "gi" && !vanilla) {
+    asking = true;
+    try {
+      const k = await games.kickCheck(game.id).catch(() => null);
+      if (k?.warn) {
+        const a = await askKick(k.undone);
+        if (a === "cancel") return;
+        if (a === "done") await setKickFixDone(true);
+      }
+    } finally { asking = false; }
+  }
   starting.set(game.id, Date.now());
   changed();
   try {
@@ -127,7 +143,7 @@ export function PlayButton({ big = false }: { big?: boolean }) {
             ...(game.xxmi ? [{ label: "Open XXMI Launcher", icon: "external" as const, onClick: () => {
               setMenu(false); xxmi.open().catch((e) => toast(errorText(e), true));
             } }] : []),
-            { label: "Launch options", icon: "sliders", onClick: () => { setMenu(false); go({ view: "tools", section: "launch" }); } },
+            { label: "Launch options", icon: "sliders", onClick: () => { setMenu(false); go({ view: "settings", section: "launch" }); } },
           ]} />
         </Popover>
       )}

@@ -87,7 +87,7 @@ function variants(item: QueueItem): Candidate[] {
 function install(id: number) {
   const item = items.find((i) => i.id === id);
   if (!item) return;
-  set(id, { state: "installing" });
+  set(id, { state: "installing", progress: { step: `Unpacking ${item.req.fileName || "the archive"}`, done: 0, total: 0, mods: [], placed: 0 } });
   emit();
   timers.set(id, window.setTimeout(() => {
     timers.delete(id);
@@ -108,7 +108,7 @@ function install(id: number) {
     }
     chosen.delete(id);
     const added = place(cur, keys ?? []);
-    set(id, { state: "done", modIds: added.map((m) => m.id), archive: null, staging: null });
+    set(id, { state: "done", modIds: added.map((m) => m.id), archive: null, staging: null, progress: null });
     emit();
     demoEmit(EVENTS.libraryChanged, { game: cur.req.game });
     const m = added[0];

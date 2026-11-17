@@ -42,7 +42,7 @@ function listOf(game: string): ModKeyList[] {
     .sort((a, b) => Number(b.showing) - Number(a.showing) || a.name.localeCompare(b.name));
 }
 
-const available = (game: string) => game === "zzz" || demoDb.settings.get("ui.tester") === "1";
+const available = (game: string) => game === "zzz" || game === "gi" || demoDb.settings.get("ui.testerOk") === "1";
 
 export function registerKeylistDemo() {
   registerDemo({

@@ -47,7 +47,7 @@ function demoInspect(game: string, id: string): ModInspect {
       const shared = 6 + (seed(o.name) % 9);
       return { modId: o.id, name: o.name, shared, parts: DEMO_PARTS.slice(0, shared) };
     }) : [],
-    problems: n % 4 === 0 ? [{ kind: "missing_file", detail: `${ini} needs Textures/Face.dds, which isn't in the mod folder`, ini, severity: "bad", fix: null }] : [],
+    problems: n % 4 === 0 ? [{ kind: "missing_file", detail: `${ini} needs Textures/Face.dds, which isn't in the mod folder`, ini, severity: "warn", fix: null }] : [],
     readmes: [["readme.txt", `${m.name}\n\nCtrl+Alt+J takes the jacket off and puts it back.\nCtrl+Alt+C changes the colour (4 colours).\n\nPress F10 in game after changing files.`]],
   };
 }
@@ -101,7 +101,7 @@ function demoLint(game: string): ModProblems[] {
     detail: `${v[0]}, ${v[1]}, and ${v[2]} change the same parts of the model, so they draw over each other in game. Keep one of them on`,
     fix: { kind: "keep", ini: v[0]!, from: null, to: null, inis: v },
   }]);
-  if (list[3]) add(list[3], [{ kind: "missing_file", detail: `${iniOf(list[3])} needs Textures/Face.dds, which isn't in the mod folder`, ini: iniOf(list[3]), severity: "bad", fix: null }]);
+  if (list[3]) add(list[3], [{ kind: "missing_file", detail: `${iniOf(list[3])} needs Textures/Face.dds, which isn't in the mod folder`, ini: iniOf(list[3]), severity: "warn", fix: null }]);
   if (list[4]) add(list[4], [{ kind: "no_key", detail: `[KeySwap] in ${iniOf(list[4])} has no key line, so it does nothing`, ini: iniOf(list[4]), severity: "info", fix: null }]);
   return out;
 }

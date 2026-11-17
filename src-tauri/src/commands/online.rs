@@ -1,9 +1,9 @@
 //! Download queue and local install commands. Owner: ONLINE area. The runner is in ../runner.rs.
 //! Each command changes the queue, saves the item, wakes the runner and returns (and emits) the new snapshot.
-use crate::runner::{discard_files, emit_snapshot, keep_archives, lk, persist};
+use crate::runner::{discard_files, emit_snapshot, keep_archives, lk, persist, remove_staging_later, shares_file};
 use crate::state::AppState;
 use gacha_core::install::{InstallMeta, InstallOutcome};
-use gacha_core::queue::{self, ItemState, QueueRequest, QueueSnapshot};
+use gacha_core::queue::{self, ItemState, QueueItem, QueueRequest, QueueSnapshot};
 use gacha_core::{Error, Result};
 use tauri::State;
 
@@ -30,7 +30,7 @@ pub async fn queue_add(app: tauri::AppHandle, st: State<'_, AppState>, req: Queu
 #[tauri::command]
 pub async fn queue_cancel(app: tauri::AppHandle, st: State<'_, AppState>, id: u64) -> Result<QueueSnapshot> {
     let keep = keep_archives(&st.db);
-    let item = {
+    let (item, staging) = {
         let mut q = lk(&st.queue);
         let item = q.require(id)?;
         match item.state {
@@ -40,7 +40,9 @@ pub async fn queue_cancel(app: tauri::AppHandle, st: State<'_, AppState>, id: u6
             _ => return Ok(q.snapshot()),
         }
         let was_downloading = matches!(item.state, ItemState::Downloading { .. });
-        let before = item.clone();
+        let mut before = item.clone();
+        // the unpacked files go once the lock is free: only single files are deleted here
+        let staging = before.staging.take();
         item.state = ItemState::Cancelled;
         item.finished_at = Some(gacha_core::db::now());
         item.staging = None;
@@ -48,8 +50,9 @@ pub async fn queue_cancel(app: tauri::AppHandle, st: State<'_, AppState>, id: u6
         // the download task removes its own .part when it sees the cancel
         if !was_downloading { discard_files(&st.data_dir, &before, keep); }
         if !keep && item.req.local_path.is_none() { item.archive = None; }
-        item.clone()
+        (item.clone(), if was_downloading { None } else { staging })
     };
+    remove_staging_later(staging);
     persist(&st.db, &item);
     Ok(done(&app, &st))
 }
@@ -71,24 +74,40 @@ pub async fn queue_retry(app: tauri::AppHandle, st: State<'_, AppState>, id: u64
 #[tauri::command]
 pub async fn queue_remove(app: tauri::AppHandle, st: State<'_, AppState>, id: u64) -> Result<QueueSnapshot> {
     let keep = keep_archives(&st.db);
-    let gone = {
+    let (gone, staging) = {
         let mut q = lk(&st.queue);
-        let item = q.require(id)?;
+        let item = q.require(id)?.clone();
+        let mut staging = None;
         match item.state {
             ItemState::Installing => return Err(Error::Invalid("It's being installed right now. Remove it once it's done".into())),
             ItemState::Downloading { .. } => { lk(&st.cancel).insert(id); }
-            ItemState::Waiting | ItemState::NeedsChoice { .. } => discard_files(&st.data_dir, item, keep),
+            ItemState::Waiting | ItemState::NeedsChoice { .. } => {
+                staging = item.staging.clone();
+                discard_files(&st.data_dir, &QueueItem { staging: None, ..item.clone() }, keep);
+            }
+            // a failed item keeps its archive and .part for Retry: once the row is gone nothing else would clean them
+            ItemState::Failed { .. } if !shares_file(&q, &st.data_dir, &item) => discard_files(&st.data_dir, &item, keep),
             _ => {}
         }
-        q.remove(id)
+        (q.remove(id), staging)
     };
+    remove_staging_later(staging);
     if gone.is_some() { let _ = queue::delete_item(&lk(&st.db), id); }
     Ok(done(&app, &st))
 }
 
 #[tauri::command]
 pub async fn queue_clear_finished(app: tauri::AppHandle, st: State<'_, AppState>) -> Result<QueueSnapshot> {
-    let gone = lk(&st.queue).clear_finished();
+    let keep = keep_archives(&st.db);
+    let gone = {
+        let mut q = lk(&st.queue);
+        let gone = q.clear_finished();
+        // failed items leave an archive or a .part with no row pointing at it (unless the file is queued again)
+        for i in gone.iter().filter(|i| matches!(i.state, ItemState::Failed { .. })) {
+            if !shares_file(&q, &st.data_dir, i) { discard_files(&st.data_dir, i, keep); }
+        }
+        gone
+    };
     {
         let db = lk(&st.db);
         for i in &gone { let _ = queue::delete_item(&db, i.id); }
@@ -147,5 +166,5 @@ pub async fn install_local(app: tauri::AppHandle, st: State<'_, AppState>, game:
     }
     done(&app, &st);
     let note = if added == 1 { "Installing 1 mod".to_string() } else { format!("Installing {added} mods") };
-    Ok(InstallOutcome { installed: Vec::new(), needs_choice: None, notes: vec![note] })
+    Ok(InstallOutcome { installed: Vec::new(), needs_choice: None, notes: vec![note], bundle: false })
 }

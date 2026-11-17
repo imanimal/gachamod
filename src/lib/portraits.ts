@@ -5,16 +5,22 @@
 // Anby"), the wiki's search finds the page, kept only when its title has every word of the name. Lookups go in
 // batches of up to 50 names per request, answers are kept 30 days (misses 3 days), so new characters and new
 // pictures arrive on their own, and GameBanana's icon is the fallback. A picture the user picked for a character (lib/prefs.ts portraitPref) beats both. Owner: skeleton.
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { GameId } from "./api";
 import { gameMeta } from "./games";
 import { portraitKey, portraitPref } from "./prefs";
 
-export interface PortraitHit { src: string; /** a tall picture: show its top part (the face) */ crop?: boolean }
+export interface PortraitHit {
+  src: string;
+  /** a tall picture: show its top part (the face) */
+  crop?: boolean;
+  /** the share of the picture's height that is see-through above the art, cut off when drawn */
+  top?: number;
+}
 /** v: the lookup's version. An answer from an older lookup is asked again (its picture stays up meanwhile), since a
  *  newer lookup may find a better one. */
 type Cached = { at: number; hit: PortraitHit | null; v?: number };
-const LOOKUP_VERSION = 4;
+const LOOKUP_VERSION = 5;
 
 const DAY = 86_400_000;
 const KEEP_HIT = 30 * DAY, KEEP_MISS = 3 * DAY;
@@ -168,6 +174,35 @@ async function searchTitle(api: string, name: string): Promise<string | null> {
   return null;
 }
 
+/** How much of a picture's top is see-through, as a share of its height. Remielle Dan's icon starts 37 of 278 rows
+ *  down while every other ZZZ icon's art reaches the top edge, so hers showed lower and smaller than the rest. 0 when
+ *  the strip is a sliver, fills the whole top third, or the picture can't be read. */
+async function emptyTop(src: string): Promise<number> {
+  let timer = 0;
+  try {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = src;
+    await Promise.race([img.decode(), new Promise((_, no) => { timer = window.setTimeout(() => no(new Error("timeout")), 15_000); })]);
+    const w = img.naturalWidth, h = img.naturalHeight, rows = Math.ceil(h / 3);
+    if (!w || !h) return 0;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    if (!g) return 0;
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, w, rows).data;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3]! > 40) return y / h >= 0.03 ? Math.round((y / h) * 1e4) / 1e4 : 0;
+    }
+    return 0;
+  } catch {
+    return 0; // the server doesn't allow reading the pixels, or it's slow: draw the picture as it is
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function lookup(game: GameId, names: string[]) {
   const meta = gameMeta(game).wiki;
   if (!meta) return;
@@ -186,6 +221,7 @@ async function lookup(game: GameId, names: string[]) {
       if (title && title !== n) titles.set(n, title);
     }
     if (titles.size) await pictures(api, meta.icons, titles, found);
+    await Promise.all([...found.values()].map(async (hit) => { const top = await emptyTop(hit.src); if (top) hit.top = top; }));
   } catch (e) {
     ok = false; // offline or the wiki is down: ask again next time
     console.warn("portraits:", e);
@@ -205,17 +241,28 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 /** Re-render when portraits arrive. */
 export const usePortraitsVersion = () => useSyncExternalStore(subscribe, () => version);
 
-/** The best picture for a character: the user's pick, a sharp wiki portrait, else `fallback` (GameBanana's icon). */
-export function usePortrait(game: GameId | null | undefined, name: string | null | undefined, fallback?: string | null): { src: string | null; crop: boolean; sharp: boolean } {
+/** How to draw a wiki picture: a tall one shows its top part (the face), and see-through rows above the art are cut off
+ *  so the art fills the frame like the others. */
+function framing(hit: PortraitHit): CSSProperties | undefined {
+  if (!hit.crop && !hit.top) return undefined;
+  const s: CSSProperties = {};
+  if (hit.crop) s.objectPosition = "50% 8%";
+  if (hit.top) s.objectViewBox = `inset(${(hit.top * 100).toFixed(2)}% 0% 0% 0%)`;
+  return s;
+}
+
+/** The best picture for a character: the user's pick, a sharp wiki portrait, else `fallback` (GameBanana's icon).
+ *  `style` goes on the <img> when `src` is shown. */
+export function usePortrait(game: GameId | null | undefined, name: string | null | undefined, fallback?: string | null): { src: string | null; style?: CSSProperties; sharp: boolean } {
   usePortraitsVersion();
   const custom = portraitPref.use();
   useEffect(() => { if (game && name) requestPortraits(game, [name]); }, [game, name]);
-  if (!game || !name) return { src: fallback ?? null, crop: false, sharp: false };
+  if (!game || !name) return { src: fallback ?? null, sharp: false };
   const mine = custom[portraitKey(game, name)];
-  if (mine) return { src: mine, crop: false, sharp: true };
+  if (mine) return { src: mine, sharp: true };
   const hit = cachedPortrait(game, name);
-  if (hit) return { src: hit.src, crop: !!hit.crop, sharp: true };
-  return { src: fallback ?? null, crop: false, sharp: false };
+  if (hit) return { src: hit.src, style: framing(hit), sharp: true };
+  return { src: fallback ?? null, sharp: false };
 }
 
 /** Look up many at once (a roster), so one request covers the screen. */

@@ -161,8 +161,13 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     const m = shown[idx];
     if (!m) return;
     const items = [...gridRef.current.querySelectorAll<HTMLElement>(".mod-card-hit")];
+    // cards per row, measured only for the keys that need it and only along the first row
     let cols = 1;
-    if (view === "grid") { const top = items[0]?.getBoundingClientRect().top; cols = Math.max(1, items.filter((x) => Math.abs(x.getBoundingClientRect().top - (top ?? 0)) < 2).length); }
+    if (view === "grid" && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      const top = items[0]?.getBoundingClientRect().top ?? 0;
+      const end = items.findIndex((x) => Math.abs(x.getBoundingClientRect().top - top) >= 2);
+      cols = Math.max(1, end < 0 ? items.length : end);
+    }
     const move = (to: number) => {
       e.preventDefault();
       const t = Math.max(0, Math.min(items.length - 1, to));

@@ -11,7 +11,7 @@ import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
 import { about, app, dialogs, errorText, games, integrations, settings, shell, xxmi, type GameId, type GameState, type Integration, type XxmiStatus } from "../../lib/api";
 import { gameMeta } from "../../lib/games";
-import { go, refreshGames, setGames, useGame, useGames, useOnlyGame } from "../../lib/store";
+import { refreshGames, setGames, useGames, useOnlyGame } from "../../lib/store";
 import { focusGame } from "../../shell/commands";
 import { openKofi } from "../../lib/support";
 import { Paged } from "./Paged";
@@ -22,6 +22,7 @@ import { TransferSection, UpdateRow } from "./SettingsTransfer";
 import { AppearanceSection, CustomThemesSection, GraphicsSection, LayoutSection } from "./Appearance";
 import { AdultSection, AutomaticSection, BrokenModsSection, CreatorsSection, InstallingSection, ModsSection, StorageSection } from "./Sections";
 import { AiSection } from "./AiSection";
+import { LaunchSections } from "./Launch";
 import { ExtensionsSection } from "../extensions/ExtensionsSection";
 import { PAGES, sectionOf } from "./settingsSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
@@ -42,7 +43,8 @@ export function Settings() {
         actions={<Button icon="search" onClick={() => openPalette()} title="Every setting is in the search (Ctrl+K, or just start typing)">Find a setting</Button>} />
       <Paged name="settings" label="Settings pages" pages={PAGES} fallback={sectionOf}>
         {{
-          games: <><GamesSection /><GameStartSection /><XxmiSection /></>,
+          games: <><GamesSection /><XxmiSection /></>,
+          launch: <><LaunchSections /><GameStartSection /></>,
           mods: <><ModsSection /><AdultSection /><ModFoldersSection /><InstallingSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
           creators: <CreatorsSection />,
           hotkeys: <HotkeysSection />,
@@ -105,20 +107,11 @@ function GamesSection() {
   );
 }
 
-/** How gachamod and the game start: as administrator (so keys reach games that run as one), and the current game's
- *  launch options, which live in Tools. */
+/** gachamod as administrator, so its keys reach games that run as one. On the Launch options page. */
 function GameStartSection() {
-  const current = useGame();
   return (
-    <Panel title="Administrator and launch options" icon="shield" id="game-start">
+    <Panel title="Run as administrator" icon="shield" id="game-start">
       <AdminRow id="set-admin" />
-      {current && (
-        <div className="set-rows">
-          <SetRow id="set-launch" label="Launch options" hint={`Arguments, window mode and commands for ${current.name}, the game picked in the sidebar. They are in Tools`}>
-            <Button size="sm" icon="sliders" onClick={() => go({ view: "tools", section: "launch" })} title="Opens Tools, Launch">Launch options</Button>
-          </SetRow>
-        </div>
-      )}
     </Panel>
   );
 }
@@ -411,7 +404,7 @@ function AboutSection() {
   );
 }
 
-/** gachamod's own updates: Check now, the Automatic switch, and the new version when there is one. */
+/** gachamod's own updates: the Update gachamod automatically switch, Check now, and the new version when there is one. */
 function UpdatesSection() {
   return <Panel title="gachamod updates" icon="update" id="updates"><UpdateRow /></Panel>;
 }

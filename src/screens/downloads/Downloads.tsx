@@ -2,7 +2,7 @@
 // game's downloads; "All games" (remembered, or route tab "all") shows every game's, grouped by game.
 // Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
 import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Empty, IconButton, PageHeader, Panel, Progress, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Empty, IconButton, PageHeader, Panel, Progress, Spinner, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
@@ -15,15 +15,18 @@ import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/
 import "./downloads.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { notesText } from "../../lib/notes";
+import { BatchHead, InstalledList, ModSwitch, ModsToggle, batches, modsOf, useInstalled } from "./Batches";
 
 const ALL_KEY = "gm.downloads.all";
 const readAll = () => { try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; } };
 
 const finished = (i: QueueItem) => i.state === "done" || i.state === "failed" || i.state === "cancelled";
 
-/** Bytes per second per downloading item, a moving average over the last few seconds of progress events. */
-function useSpeeds(snap: QueueSnapshot): Map<number, number> {
+/** Bytes per second per downloading item, a moving average over the last few seconds of progress events, and since
+ *  when each one has had no new bytes (for "No data for 14 s"). */
+function useSpeeds(snap: QueueSnapshot): { speeds: Map<number, number>; quietSince: Map<number, number> } {
   const samples = useRef(new Map<number, Array<{ t: number; b: number }>>());
+  const quiet = useRef(new Map<number, number>());
   const [speeds, setSpeeds] = useState<Map<number, number>>(new Map());
   useEffect(() => {
     const now = performance.now();
@@ -34,18 +37,33 @@ function useSpeeds(snap: QueueSnapshot): Map<number, number> {
       live.add(i.id);
       const list = samples.current.get(i.id) ?? [];
       const last = list[list.length - 1];
-      if (!last || last.b !== i.received) list.push({ t: now, b: i.received });
+      if (!last || last.b !== i.received) { list.push({ t: now, b: i.received }); quiet.current.set(i.id, now); }
       while (list.length > 2 && now - list[0]!.t > 6000) list.shift();
       samples.current.set(i.id, list);
       const first = list[0]!, end = list[list.length - 1]!;
       const dt = (end.t - first.t) / 1000;
       if (list.length >= 2 && dt > 0.4) next.set(i.id, Math.max(0, (end.b - first.b) / dt));
     }
-    for (const id of [...samples.current.keys()]) if (!live.has(id)) samples.current.delete(id);
-    setSpeeds(next);
+    for (const id of [...samples.current.keys()]) if (!live.has(id)) { samples.current.delete(id); quiet.current.delete(id); }
+    // the same speeds keep the same Map, so a snapshot doesn't render the page twice
+    setSpeeds((was) => (was.size === next.size && [...next].every(([id, v]) => was.get(id) === v) ? was : next));
   }, [snap]);
-  return speeds;
+  return { speeds, quietSince: quiet.current };
 }
+
+/** Re-render every second while something downloads, so a download with no new bytes counts up how long. */
+function useTicking(on: boolean) {
+  const [, setT] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const t = window.setInterval(() => setT((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [on]);
+}
+
+/** What a waiting row waits behind: the downloads ahead of it, or the install that runs now. */
+interface Ahead { downloading: number; installing: string | null }
+const MAX_DOWNLOADS = 3;
 
 function timeLeft(secs: number): string {
   if (!Number.isFinite(secs) || secs <= 0) return "";
@@ -54,18 +72,24 @@ function timeLeft(secs: number): string {
   return `${(secs / 3600).toFixed(1)} h left`;
 }
 
-function stateLine(i: QueueItem, speed: number | undefined): string {
+function stateLine(i: QueueItem, speed: number | undefined, ahead: Ahead, quietSecs = 0): string {
+  const note = i.progress?.step;
   switch (i.state) {
-    case "waiting": return i.archive || i.req.localPath ? "Waiting to install" : "Waiting to download";
+    case "waiting":
+      if (i.archive || i.req.localPath) return ahead.installing ? `Waiting for ${ahead.installing} to finish installing` : "Waiting to install";
+      return ahead.downloading >= MAX_DOWNLOADS ? `Waiting for a free slot. ${MAX_DOWNLOADS} files download at a time` : "Waiting to download";
     case "downloading": {
+      if (!i.received) return note || "Connecting to GameBanana";
       const parts = [i.total ? `${formatBytes(i.received)} of ${formatBytes(i.total)}` : formatBytes(i.received)];
       if (speed) parts.push(`${formatBytes(speed)}/s`);
       if (speed && i.total) { const left = timeLeft((i.total - i.received) / speed); if (left) parts.push(left); }
+      if (note) parts.push(note);
+      else if (quietSecs >= 10) parts.push(`No data for ${quietSecs} s. GameBanana's server may be busy; gachamod moves to another one if it stays slow`);
       return parts.join(" · ");
     }
-    case "installing": return "Installing";
+    case "installing": return i.progress?.step || "Getting ready to unpack";
     case "needsChoice": return `${plural(i.candidates.length, "mod")} inside. Pick which to install`;
-    case "done": return `Installed ${i.finishedAt ? timeAgo(i.finishedAt) : ""}`.trim();
+    case "done": return `Installed ${(i.modIds?.length ?? 0) > 1 ? `${i.modIds.length} mods ` : ""}${i.finishedAt ? timeAgo(i.finishedAt) : ""}`.trim();
     case "failed": return i.message;
     case "cancelled": return "Cancelled";
   }
@@ -76,7 +100,12 @@ export function Downloads() {
   const games = useGames();
   const route = useRoute();
   const snap = useQueue();
-  const speeds = useSpeeds(snap);
+  const { speeds, quietSince } = useSpeeds(snap);
+  useTicking(snap.items.some((i) => i.state === "downloading"));
+  const ahead: Ahead = {
+    downloading: snap.items.filter((i) => i.state === "downloading").length,
+    installing: (() => { const x = snap.items.find((i) => i.state === "installing"); return x ? x.req.meta.name || x.req.fileName || "another mod" : null; })(),
+  };
   const setup = useSetup();
   const [busy, setBusy] = useState(false);
   const [allPref, setAllPref] = useState(readAll);
@@ -92,6 +121,11 @@ export function Downloads() {
   const elsewhere = snap.items.length - mine.length;
   const active = mine.filter((i) => !finished(i));
   const done = mine.filter(finished).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
+  const installed = useInstalled(done.filter((i) => i.state === "done").map((i) => i.req.game));
+  // a row's mod list: what the user chose, else open for a bundle that finished in the last quarter hour
+  const [opened, setOpened] = useState<Map<number, boolean>>(new Map());
+  const isOpen = (i: QueueItem) => opened.get(i.id) ?? (!!i.finishedAt && Date.now() / 1000 - i.finishedAt < 15 * 60);
+  const flip = (i: QueueItem) => setOpened((m) => new Map(m).set(i.id, !isOpen(i)));
 
   const addFiles = async () => {
     if (!game) return;
@@ -113,7 +147,13 @@ export function Downloads() {
     const name = i.req.meta.name || i.req.fileName || "Mod";
     const other = !!game && i.req.game !== game.id;
     const speed = speeds.get(i.id);
-    const progress = i.state === "downloading" && i.total ? i.received / i.total : null;
+    const since = quietSince.get(i.id);
+    const quietSecs = i.state === "downloading" && i.received && since ? Math.floor((performance.now() - since) / 1000) : 0;
+    const line = stateLine(i, speed, ahead, quietSecs);
+    const p = i.state === "installing" ? i.progress : null;
+    const progress = i.state === "downloading" && i.total ? i.received / i.total : p && p.total > 0 ? p.done / p.total : null;
+    const mods = modsOf(i, installed);
+    const gone = i.state === "done" ? (i.modIds?.length ?? 0) - mods.length : 0;
     return (
       <li key={i.id} className={`dl-item is-${i.state}`}>
         <span className="dl-thumb">
@@ -129,10 +169,24 @@ export function Downloads() {
             {other && !all && <Badge title="Installs into this game">{gameName(i.req.game)}</Badge>}
             {i.req.meta.replaces && <Badge tone="accent" icon="update">Update</Badge>}
           </div>
-          <div className={`dl-line hint${i.state === "failed" ? " dl-bad" : ""}`}>{stateLine(i, speed)}</div>
-          {(i.state === "downloading" || i.state === "installing") && <Progress value={progress} label={`${name}: ${stateLine(i, speed)}`} />}
+          <div className={`dl-line hint${i.state === "failed" ? " dl-bad" : ""}`}>{line}</div>
+          {(i.state === "downloading" || i.state === "installing") && <Progress value={progress} label={`${name}: ${line}`} />}
+          {p && p.mods.length > 1 && (
+            <ul className="dl-mods" aria-label={`${plural(p.mods.length, "mod")} found inside`}>
+              {p.mods.map((m, n) => (
+                <li key={n} className={n < p.placed ? "is-in" : n === p.placed ? "is-now" : undefined}
+                  title={n < p.placed ? "Installed" : n === p.placed ? "Installing now" : "Waiting its turn"}>
+                  {n < p.placed ? <Icon name="check" /> : n === p.placed ? <Spinner size={12} /> : <span className="dl-mods-dot" />}
+                  <span>{m}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {mods.length > 1 && isOpen(i) && <InstalledList mods={mods} all={installed} gone={gone} />}
         </div>
         <div className="dl-act">
+          {mods.length > 1 && <ModsToggle mods={mods} open={isOpen(i)} onToggle={() => flip(i)} />}
+          {mods.length === 1 && <ModSwitch mod={mods[0]!} all={installed} />}
           {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)} title="This download has more than one version. Pick the ones to install">Pick</Button>}
           {i.state === "done" && i.modIds?.[0] && (
             <Button size="sm" icon="mods" onClick={() => go({ view: "library", modId: i.modIds[0] })} disabled={other}
@@ -156,15 +210,23 @@ export function Downloads() {
     );
   };
 
+  /** Finished rows in batches (downloads that ran together); a batch of one is just its row. */
+  const batched = (items: QueueItem[]) => batches(items).map((b) => b.length === 1 ? row(b[0]!) : (
+    <li key={`b${b[0]!.id}`} className="dl-batch">
+      <BatchHead items={b} all={installed} onClear={() => act(() => Promise.all(b.map((i) => queue.remove(i.id))))} />
+      <ul className="dl-list">{b.map(row)}</ul>
+    </li>
+  ));
   /** Rows, with a heading per game when showing every game. */
-  const list = (items: QueueItem[]) => {
+  const list = (items: QueueItem[], inBatches = false) => {
+    const rows = (l: QueueItem[]) => <ul className="dl-list">{inBatches ? batched(l) : l.map(row)}</ul>;
     const ids = [...new Set(items.map((i) => i.req.game))];
-    if (!all || ids.length < 2) return <ul className="dl-list">{items.map(row)}</ul>;
+    if (!all || ids.length < 2) return rows(items);
     ids.sort((a, b) => (a === game?.id ? -1 : b === game?.id ? 1 : gameName(a).localeCompare(gameName(b))));
     return ids.map((g) => (
       <div key={g} className="dl-group">
         <h4 className="dl-group-h">{games.find((x) => x.id === g)?.name ?? g}</h4>
-        <ul className="dl-list">{items.filter((i) => i.req.game === g).map(row)}</ul>
+        {rows(items.filter((i) => i.req.game === g))}
       </div>
     ));
   };
@@ -195,7 +257,7 @@ export function Downloads() {
       ) : (
         <>
           {active.length > 0 && <Panel title="In progress" icon="downloads" count={active.length} className="dl-panel">{list(active)}</Panel>}
-          {done.length > 0 && <Panel title="Finished" icon="check" count={done.length} className="dl-panel">{list(done)}</Panel>}
+          {done.length > 0 && <Panel title="Finished" icon="check" count={done.length} className="dl-panel">{list(done, true)}</Panel>}
           {!all && elsewhere > 0 && (
             <p className="hint dl-elsewhere">{plural(elsewhere, "download")} for other games. <button type="button" className="dl-more" onClick={() => setAll(true)}>Show all games</button></p>
           )}

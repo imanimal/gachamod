@@ -1,7 +1,8 @@
 # Checking a game
 
-Switching skins while playing (docs/ingame.md) has only been tried in Zenless Zone Zero. Genshin Impact, Honkai:
-Star Rail, Wuthering Waves and Arknights: Endfield use the same kind of loader, but each could differ in whether it
+Switching skins while playing (docs/ingame.md) has been tried in Zenless Zone Zero and Genshin Impact. Honkai: Star
+Rail and Honkai Impact 3rd have the drawn menu without a check, since they draw the way those two do. They, Wuthering
+Waves and Arknights: Endfield use the same kind of loader, but each could differ in whether it
 runs as administrator, whether its loader reads keys when the game isn't in front, and how it handles reloads. Players
 who have those games check them with Help, Check this game, and the results come to the developer in PostHog.
 
@@ -69,8 +70,8 @@ docs/telemetry.md lists every value. Feedback lands as `feedback` events, crashe
 
 Something to post on the GameBanana pages, the README or a Discord:
 
-> Play Genshin, Star Rail, Wuthering Waves or Endfield? gachamod's skin switching while you play has only been
-> checked in Zenless Zone Zero. If you have ten minutes, start your game, open Help, Check this game in gachamod and
+> Play Star Rail, Wuthering Waves or Endfield? gachamod's skin switching while you play has only been checked in
+> Zenless Zone Zero and Genshin Impact. If you have ten minutes, start your game, open Help, Check this game in gachamod and
 > go through the steps. It sends the answers straight to me, no account needed.
 
 ### When a game passes

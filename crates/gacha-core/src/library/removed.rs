@@ -89,6 +89,9 @@ fn exists(db: &Db, sql: &str, args: impl rusqlite::Params) -> Result<bool> {
     Ok(db.conn.query_row(sql, args, |_| Ok(())).optional()?.is_some())
 }
 
+/// A removed mod's files wait in the trash, so it can come back.
+pub fn in_trash(db: &Db, mod_id: &str) -> bool { exists(db, "SELECT 1 FROM trash WHERE mod_id = ?1", [mod_id]).unwrap_or(false) }
+
 fn alive(db: &Db, mod_id: &str) -> Result<bool> { exists(db, "SELECT 1 FROM mods WHERE id = ?1", [mod_id]) }
 
 fn has_options(db: &Db, game: &str, mod_id: &str) -> bool {

@@ -83,7 +83,6 @@
 
   /* what is left over: one line of script and a caption, never a big empty block */
   .side-deco { display: flex; flex-direction: column; justify-content: flex-end; gap: .3rem; max-height: 2.6rem; padding: 0 .2rem; color: rgb(206 185 156 / .3); }
-  .side-deco-t { display: none; }
   .side-deco-m { font-size: .6rem; font-weight: 700; letter-spacing: .18em; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
   .side-deco .glyphs { flex: none; height: .4rem; }
   .side-deco .glyphs.rev { display: none; }

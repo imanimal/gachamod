@@ -87,7 +87,7 @@
   .gb-gallery-main { border-radius: 12px; box-shadow: 0 0 0 2.5px var(--ink), 0 0 0 4px var(--rim); background: var(--dots), #0a0a0a; }
   .gb-thumb { border-radius: 7px; box-shadow: 0 0 0 2px var(--ink); }
   .gb-thumb.on { outline: 0; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4.5px var(--acc); }
-  .gb-submitter { border-radius: 999px; font-weight: 800; font-style: italic; }
+  .gb-submitter { border-radius: 1.1rem; font-weight: 800; font-style: italic; }
   .gb-stats { font-weight: 700; }
   .gb-gallery-empty { border-radius: 12px; background: var(--dots), var(--well); }
   .gb-creator-name { font-weight: 900; font-style: italic; text-transform: uppercase; }

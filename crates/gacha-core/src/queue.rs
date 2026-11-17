@@ -81,6 +81,9 @@ pub struct QueueItem {
     /// Candidate keys the user picked (NeedsChoice answered).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choose: Vec<String>,
+    /// What the install is doing while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::install::InstallProgress>,
 }
 
 impl QueueItem {
@@ -162,7 +165,7 @@ impl Queue {
         if self.next_id == 0 { self.next_id = 1; }
         let item = QueueItem {
             id: self.next_id, req, state: ItemState::Waiting, added_at: crate::db::now(), finished_at: None,
-            archive: None, staging: None, choose: Vec::new(),
+            archive: None, staging: None, choose: Vec::new(), progress: None,
         };
         self.next_id += 1;
         self.items.push(item.clone());

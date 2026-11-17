@@ -68,14 +68,27 @@ const emit = () => subs.forEach((f) => f());
 
 const visible = (items: MenuEntry[]) => items.some((i) => i && i !== "-" && !("header" in i));
 
+// A left press on the button that opened the menu closes it. The click that ends that press would open it again,
+// so that button opens nothing until the press is over: a second click on a menu button closes its menu.
+let shut: Element | null = null;
+const unshut = () => { shut = null; };
+function holdShut(el: Element) {
+  shut = el;
+  // the click comes right after mouseup, in the same task
+  window.addEventListener("mouseup", () => window.setTimeout(unshut), { capture: true, once: true });
+  window.addEventListener("keydown", unshut, { capture: true, once: true });
+}
+
 /** Show a menu at a point, or by an element (keyboard). Nothing shows when every entry is empty. `onClose` runs
  *  when it closes, picked or not (before the picked item's own onClick). */
 export function openMenu(at: { x: number; y: number } | Element, items: MenuEntry[], onClose?: () => void) {
   if (!visible(items)) return;
+  const from = at instanceof Element ? at : document.activeElement;
+  if (from && from === shut) { shut = null; return; }
   open?.onClose?.();
-  let x: number, y: number, from: Element | null = null;
-  if (at instanceof Element) { const r = at.getBoundingClientRect(); x = r.left + Math.min(24, r.width / 2); y = r.top + Math.min(r.height, 28); from = at; }
-  else { x = at.x; y = at.y; from = document.activeElement; }
+  let x: number, y: number;
+  if (at instanceof Element) { const r = at.getBoundingClientRect(); x = r.left + Math.min(24, r.width / 2); y = r.top + Math.min(r.height, 28); }
+  else { x = at.x; y = at.y; }
   open = { x, y, items, key: ++seq, from, onClose };
   emit();
 }
@@ -135,7 +148,13 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
 
   useEffect(() => {
     if (depth) return;
-    const down = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.(".ctx")) onClose(); };
+    const down = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      if (t?.closest?.(".ctx")) return;
+      const from = open?.from;
+      if (e.button === 0 && from && from !== document.body && from.contains(t)) holdShut(from);
+      onClose();
+    };
     const away = () => onClose();
     document.addEventListener("mousedown", down, true);
     window.addEventListener("blur", away);

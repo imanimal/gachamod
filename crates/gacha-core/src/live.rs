@@ -23,22 +23,34 @@ use crate::error::{Error, Result};
 use crate::keys::{ModBackup, ModSkip};
 use crate::model::{ModChange, ModEntry};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-/// Games where switching in game has been checked with the real game. In the others it is a tester option
-/// ("ui.tester"): new groups and the drawn menu need it on, and groups a tester made keep working when it goes off.
-pub const CHECKED: &[&str] = &["zzz"];
+/// Games where the menu the game draws has been checked with the real game. Switching in game is on by default
+/// there (`on_start`).
+pub const CHECKED: &[&str] = &["zzz", "gi"];
 
-/// Whether new live groups and the drawn menu can be set up for this game.
+/// Games that draw the way the checked ones do: miHoYo's Unity engine, loaded by an XXMI importer of GIMI's line in
+/// hook mode. The drawn menu is open there too; switching in game stays off until the player turns it on.
+pub const SIMILAR: &[&str] = &["hsr", "hi3"];
+
+/// The menu the game draws needs no tester options in this game. In the others it is a tester option (`TESTER`);
+/// switching in game itself and the window over the game work in every game.
+pub fn drawn_menu_open(game: &str) -> bool { CHECKED.contains(&game) || SIMILAR.contains(&game) }
+
+/// Tester options are on: "1" only once the player turned them on and confirmed the risks the app showed. The older
+/// "ui.tester" switch was set without that question and isn't read any more.
+pub const TESTER: &str = "ui.testerOk";
+
+/// Whether the menu the game draws can be used in this game: one it is open in, or tester options are on.
 pub fn allowed(db: &Db, game: &str) -> bool {
-    CHECKED.contains(&game) || db.setting("ui.tester").ok().flatten().as_deref() == Some("1")
+    drawn_menu_open(game) || db.setting(TESTER).ok().flatten().as_deref() == Some("1")
 }
 
-fn tester_only(db: &Db, game: &str) -> Result<()> {
-    if allowed(db, game) || !load(db, game).groups.is_empty() { return Ok(()); }
+fn drawn_menu_allowed(db: &Db, game: &str) -> Result<()> {
+    if allowed(db, game) { return Ok(()); }
     let name = crate::games::def(game).map_or("this game", |g| g.name);
-    Err(Error::Invalid(format!("Switching skins in game is a tester option in {name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it")))
+    Err(Error::Invalid(format!("The menu the game draws is a tester option in {name}. Turn on Tester options in Settings, Feedback, privacy and logs to try it")))
 }
 
 /// The folder under Mods that holds live.ini. The library scan skips it.
@@ -126,22 +138,93 @@ pub struct LiveInfo {
     /// The game runs as administrator and gachamod doesn't, so gachamod's keys never reach it: the game's own menu
     /// is the one that opens, and the player presses F10 after a change.
     pub blocked: bool,
-    /// New groups and the drawn menu can be set up here: a checked game, or tester options are on (`allowed`).
+    /// The menu the game draws can be used here: a game it is open in, or tester options are on (`allowed`).
     pub allowed: bool,
+    /// The drawn menu needs no tester options here (`drawn_menu_open`). Elsewhere it is marked as a tester option,
+    /// also once they are on.
+    pub checked: bool,
 }
 
 /// How the skin menu opens while playing. `style`: "window" (gachamod's menu over the game; the game draws its own
 /// when it is in exclusive fullscreen) or "game" (always the one the game draws). `key` is written like a
-/// hotkey ("F7", "Ctrl+Alt+M"). `pad`: pressing both sticks in opens it too. `fast_save`: the game saves its values
-/// every second, so a pick made in its own menu shows in the app at once (`fast_saves`).
+/// hotkey ("F7", "Ctrl+Alt+M"). `pad`: a controller works the menu too. `fast_save`: the game saves its values
+/// every second, so a pick made in its own menu shows in the app at once (`fast_saves`). `binds`: the keys of
+/// everything else the menu does (`MENU_BINDS`), each thing with its 3DMigoto bindings; a thing left out of a
+/// change keeps its keys.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct MenuSettings { pub style: String, pub key: String, pub pad: bool, #[serde(default = "yes")] pub fast_save: bool }
+pub struct MenuSettings {
+    pub style: String, pub key: String, pub pad: bool, #[serde(default = "yes")] pub fast_save: bool,
+    #[serde(default)] pub binds: BTreeMap<String, Vec<String>>,
+}
 
 fn yes() -> bool { true }
 
 impl Default for MenuSettings {
-    fn default() -> Self { MenuSettings { style: "window".into(), key: MENU_KEY.into(), pad: true, fast_save: true } }
+    fn default() -> Self { MenuSettings { style: "window".into(), key: MENU_KEY.into(), pad: true, fast_save: true, binds: default_binds() } }
+}
+
+impl MenuSettings {
+    /// The keys of one thing the menu does, a controller's left out when `pad` is off.
+    pub fn binds_of(&self, action: &str) -> Vec<String> {
+        self.binds.get(action).into_iter().flatten().filter(|b| self.pad || !is_pad(b)).cloned().collect()
+    }
+}
+
+/// What a key can do in the skin menu: its name, its keys until the player picks others (3DMigoto bindings, a
+/// keyboard key then a controller's button) and what it does, for messages. "open" holds only a controller's
+/// buttons: the keyboard key that opens the menu is `MenuSettings::key`, which the app itself listens for.
+pub const MENU_BINDS: &[(&str, &[&str], &str)] = &[
+    ("open", &["XB_LEFT_THUMB XB_RIGHT_THUMB"], "opens the menu"),
+    ("up", &["VK_UP", "XB_DPAD_UP"], "moves up"),
+    ("down", &["VK_DOWN", "XB_DPAD_DOWN"], "moves down"),
+    // Enter works too but the hints name the first key: games open their chat on Enter
+    ("show", &["VK_RIGHT", "XB_DPAD_RIGHT", "VK_RETURN", "XB_A"], "shows the row"),
+    ("back", &["VK_LEFT", "XB_DPAD_LEFT"], "goes back to the characters"),
+    ("close", &["XB_B"], "closes the menu"),
+    ("keys", &["XB_Y"], "shows the key list"),
+];
+/// Keys one thing can have.
+const MAX_BINDS: usize = 4;
+
+fn default_binds() -> BTreeMap<String, Vec<String>> {
+    MENU_BINDS.iter().map(|(a, keys, _)| (a.to_string(), keys.iter().map(|k| k.to_string()).collect())).collect()
+}
+
+fn is_pad(binding: &str) -> bool { binding.split_whitespace().any(|t| t.to_ascii_uppercase().starts_with("XB")) }
+
+/// The menu's keys after a change, checked: each written one way, no key doing two things, at most four for one.
+/// A thing `new` leaves out keeps what it had. `key` is the keyboard key that opens the menu.
+fn checked_binds(new: &BTreeMap<String, Vec<String>>, was: &BTreeMap<String, Vec<String>>, key: &str) -> Result<BTreeMap<String, Vec<String>>> {
+    let menu_key = crate::keys::clean_binding(&crate::hotkeys::migoto_form(key)).unwrap_or_default();
+    let mut seen: Vec<(String, &str)> = vec![(menu_key, "opens the menu")];
+    let mut out = BTreeMap::new();
+    for (action, _, what) in MENU_BINDS {
+        let mut clean: Vec<String> = Vec::new();
+        for b in new.get(*action).or_else(|| was.get(*action)).into_iter().flatten() {
+            let b = crate::keys::clean_binding(b)?;
+            if clean.contains(&b) { continue; }
+            let label = crate::ini::binding_label(&b);
+            if *action == "open" && !is_pad(&b) {
+                return Err(Error::Invalid(format!("{label} is a keyboard key. Set it as the key that opens the menu. This row takes a controller's buttons")));
+            }
+            if let Some((_, does)) = seen.iter().find(|(k, _)| *k == b) { return Err(Error::Invalid(format!("{label} already {does}. Pick another key"))); }
+            clean.push(b);
+        }
+        if clean.len() > MAX_BINDS { return Err(Error::Invalid(format!("One thing can have {MAX_BINDS} keys. Remove one first"))); }
+        seen.extend(clean.iter().map(|b| (b.clone(), *what)));
+        out.insert(action.to_string(), clean);
+    }
+    Ok(out)
+}
+
+/// The keys the drawn menu's hints name: each thing's first keyboard key, or its first key of any kind.
+fn hint_keys(set: &MenuSettings) -> menu::HintKeys {
+    let cap = |action: &str| {
+        let b = set.binds_of(action);
+        b.iter().find(|k| !is_pad(k)).or(b.first()).map(|k| menu::cap_name(k)).unwrap_or_default()
+    };
+    menu::HintKeys { up: cap("up"), down: cap("down"), show: cap("show"), back: cap("back"), close: set.key.clone() }
 }
 
 /// F6 and F12 are the loaders' own keys, F10 reloads.
@@ -491,7 +574,24 @@ pub fn on_start(db: &Db) {
     for g in CHECKED {
         if let Err(e) = start_on(db, g) { crate::logs::warn(format!("Couldn't turn on switching skins in game for {g}: {e}")); }
     }
+    window_menu_once(db);
     for g in crate::games::GAMES { menu_sync(db, g.id); }
+}
+
+/// Once: every game opens the window over the game again. That is the default since 0.1.1-beta.9; the menu the game
+/// draws only opens in exclusive fullscreen, or when gachamod can't hear the key. Earlier versions offered "Inside
+/// the game" as the everyday choice, and players who picked it while it was new kept a plainer menu.
+fn window_menu_once(db: &Db) {
+    const DONE: &str = "live.windowMenuSet";
+    if db.setting(DONE).ok().flatten().is_some() { return; }
+    for g in crate::games::GAMES {
+        let key = format!("{}.liveMenu", g.id);
+        if db.setting(&key).ok().flatten().as_deref() == Some("game") {
+            let _ = db.set_setting(&key, "window");
+            crate::logs::info(format!("{}: the skin menu opens over the game again", g.id));
+        }
+    }
+    let _ = db.set_setting(DONE, "1");
 }
 
 /// Once per game, the first time this version starts: switching in game goes on, also where it was off. It is on by
@@ -555,7 +655,14 @@ fn live_ini(store: &Store, set: &MenuSettings, lay: &menu::Layout, reach: bool, 
     // the game binds the key itself when it always draws the menu, and when the app's own key can't work with this
     // game: otherwise the app holds the key and decides
     let direct = set.style == "game" || !reach;
-    let keys = on.then(|| menu::Keys { open: direct.then(|| crate::hotkeys::migoto_form(&set.key)), pad_open: direct && set.pad, pad: set.pad });
+    let keys = on.then(|| {
+        let mut open = Vec::new();
+        if direct {
+            open.push(crate::hotkeys::migoto_form(&set.key));
+            open.extend(set.binds_of("open"));
+        }
+        menu::Keys { open, up: set.binds_of("up"), down: set.binds_of("down"), show: set.binds_of("show"), back: set.binds_of("back"), close: set.binds_of("close") }
+    });
     let mut menu = menu::sections(&pages, lay, keys.as_ref(), key_list);
     let waiting: Vec<&GroupRec> = store.groups.iter().filter(|g| store.waiting.contains(&g.n)).collect();
     if !waiting.is_empty() {
@@ -595,8 +702,10 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
         return Ok(had);
     }
     std::fs::create_dir_all(&dir)?;
-    let set = menu_settings(db, game);
-    let lay = menu::Layout::new(screen_height());
+    let mut set = menu_settings(db, game);
+    // where the drawn menu is a tester option and they are off, only the window over the game opens
+    if !allowed(db, game) { set.style = "off".into(); }
+    let lay = menu::Layout::for_game(screen_height(), game);
     let reach = reaches(db, game);
     let sheets = if set.style == "off" { Vec::new() } else { key_sheets(db, game, store) };
     let key_list = (!sheets.is_empty()).then(|| {
@@ -606,7 +715,7 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
             sheets: sheets.iter().map(|s| menu::IniSheet { n: s.n, slot: s.slot, h: kl.sheet_h(s.rows.len()) }).collect(),
             // the game binds the key when it always draws the list, or when the app's own key can't reach it
             key: (ks.style == "game" || !reach).then(|| crate::hotkeys::migoto_form(&ks.key)),
-            pad: set.pad,
+            menu: set.binds_of("keys"),
         }
     });
     let text = live_ini(store, &set, &lay, reach, key_list.as_ref());
@@ -632,7 +741,7 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
             menu::Row { name: m.map_or_else(|| "A mod that's gone".to_string(), |m| m.name.clone()), preview: m.and_then(|m| m.preview.clone()) }
         }).collect(),
     }).collect();
-    Ok(menu::write_assets(&dir, &pages, &lay, &set.key).unwrap_or(false) || changed)
+    Ok(menu::write_assets(&dir, &pages, &lay, &hint_keys(&set)).unwrap_or(false) || changed)
 }
 
 /// The key list's sheets: each live skin the key list shows, with its keys, in the menu's order.
@@ -651,20 +760,34 @@ fn key_sheets(db: &Db, game: &str, store: &Store) -> Vec<menu::Sheet> {
 
 pub fn menu_settings(db: &Db, game: &str) -> MenuSettings {
     let get = |k: &str| db.setting(&format!("{game}.{k}")).ok().flatten();
-    // "off" was a third choice once; the panel's one switch turns the menu off now, with everything else
-    let style = if get("liveMenu").as_deref() == Some("game") { "game" } else { "window" };
+    // "off" was a third choice once; the panel's one switch turns the menu off now, with everything else. "game" kept
+    // after tester options went off reads as the window over the game, so the key still opens a menu
+    let drawn = get("liveMenu").as_deref() == Some("game") && allowed(db, game);
+    let style = if drawn { "game" } else { "window" };
     let key = get("liveMenuKey").and_then(|k| crate::hotkeys::normalize_menu(&k).ok()).unwrap_or_else(|| MENU_KEY.into());
-    MenuSettings { style: style.into(), key, pad: get("liveMenuPad").as_deref() != Some("0"), fast_save: get("liveFastSave").as_deref() != Some("0") }
+    // only the things whose keys the player changed are saved; the rest have the keys a menu starts with
+    let saved: BTreeMap<String, Vec<String>> = get("liveMenuBinds").and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+    let binds = MENU_BINDS.iter().map(|(a, keys, _)| (a.to_string(), match saved.get(*a) {
+        Some(own) => own.iter().filter_map(|b| crate::keys::clean_binding(b).ok()).collect(),
+        None => keys.iter().map(|k| k.to_string()).collect(),
+    })).collect();
+    MenuSettings { style: style.into(), key, pad: get("liveMenuPad").as_deref() != Some("0"), fast_save: get("liveFastSave").as_deref() != Some("0"), binds }
 }
 
 /// Change how the menu opens. The game reloads once to pick it up.
 pub fn set_menu(db: &Db, game: &str, set: &MenuSettings) -> Result<MenuSettings> {
     if !["window", "game"].contains(&set.style.as_str()) { return Err(Error::Invalid("Pick Over the game or Inside the game".into())); }
-    if set.style == "game" && menu_settings(db, game).style != "game" { tester_only(db, game)?; }
+    if set.style == "game" && menu_settings(db, game).style != "game" { drawn_menu_allowed(db, game)?; }
     let key = crate::hotkeys::normalize_menu(&set.key)?;
     if crate::hotkeys::combos(db).unwrap_or_default().contains(&key) { return Err(Error::Invalid(format!("{key} already switches a profile. Pick another key"))); }
     let keys = crate::keylist::settings(db, game);
     if keys.on && keys.key == key { return Err(Error::Invalid(format!("{key} already shows the key list. Pick another key"))); }
+    let binds = checked_binds(&set.binds, &menu_settings(db, game).binds, &key)?;
+    let starts = default_binds();
+    let own: BTreeMap<&String, &Vec<String>> = binds.iter().filter(|(a, keys)| starts.get(*a) != Some(*keys)).collect();
+    if own.is_empty() { db.clear_setting(&format!("{game}.liveMenuBinds"))?; } else {
+        db.set_setting(&format!("{game}.liveMenuBinds"), &serde_json::to_string(&own).unwrap_or_default())?;
+    }
     db.set_setting(&format!("{game}.liveMenu"), &set.style)?;
     db.set_setting(&format!("{game}.liveMenuKey"), &key)?;
     db.set_setting(&format!("{game}.liveMenuPad"), if set.pad { "1" } else { "0" })?;
@@ -887,12 +1010,12 @@ pub fn info(db: &Db, game: &str) -> Result<LiveInfo> {
         .map(|(c, l)| LiveReady { character: c, mods: l.into_iter().filter(|m| !live.contains(m.id.as_str())).map(|m| live_mod(Some(m), &m.id, 0)).collect() })
         .collect();
     ready.sort_by(|a, b| a.character.to_lowercase().cmp(&b.character.to_lowercase()));
-    Ok(LiveInfo { groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game) })
+    Ok(LiveInfo { groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game), checked: drawn_menu_open(game) })
 }
 
 /// Make mods live: each joins its character's group (made when missing). Mods that are off get turned on, since
 /// every live mod has to be loaded; the one that was on stays the one showing. Takes a reload to start working.
-pub fn add(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> { tester_only(db, game)?; add_some(db, game, ids, true) }
+pub fn add(db: &Db, game: &str, ids: &[String]) -> Result<LiveChange> { add_some(db, game, ids, true) }
 
 /// `strict`: nothing could be added and something was refused is an error (the player asked for these mods). Not
 /// strict is for "every character", where mods that can't be gated are just left as they are.
@@ -983,7 +1106,6 @@ fn candidates(db: &Db, game: &str, store: &Store) -> Vec<String> {
 /// character live now (also the ones taken out by hand before). Off takes every character out, and each keeps the
 /// skin it shows.
 pub fn set_all(db: &Db, game: &str, on: bool) -> Result<LiveChange> {
-    if on { tester_only(db, game)?; }
     db.set_setting(&format!("{game}.liveAll"), if on { "1" } else { "0" })?;
     if !on {
         let ids: Vec<String> = load_synced(db, game).groups.iter().flat_map(|g| g.slots.iter().map(|s| s.mod_id.clone())).collect();
@@ -1183,7 +1305,7 @@ pub fn pick(db: &Db, game: &str, group: u32, slot: u32) -> Result<Picked> {
 
 /// Gate again every live skin whose inis lost it (an update put in new files, or someone edited them). A skin that
 /// can't be gated any more leaves its group, and its folder goes off unless it was the one showing, so the
-/// character never wears two skins. True when anything changed.
+/// character never wears two skins. A mod that's gone (deleted, not in the trash) leaves too. True when anything changed.
 pub(crate) fn regate(db: &Db, game: &str) -> bool {
     let mut store = load_synced(db, game);
     if store.groups.is_empty() { return false; }
@@ -1194,7 +1316,14 @@ pub(crate) fn regate(db: &Db, game: &str) -> bool {
         let mut keep = Vec::new();
         let raise = group_raises(g.slots.iter().filter_map(|s| by_id.get(s.mod_id.as_str()).copied()));
         for s in std::mem::take(&mut g.slots) {
-            let Some(m) = by_id.get(s.mod_id.as_str()).copied() else { keep.push(s); continue };
+            let Some(m) = by_id.get(s.mod_id.as_str()).copied() else {
+                // a mod in the trash keeps its place (it comes back live); one that's gone for good leaves the list
+                if crate::library::in_trash(db, &s.mod_id) { keep.push(s); } else {
+                    if g.active == s.slot { g.active = 0; }
+                    touched.insert(g.n);
+                }
+                continue;
+            };
             match plan(m, g.n, s.slot, &raise) {
                 Ok(edits) => {
                     // a failed write is tried again at the next scan
@@ -1466,12 +1595,53 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
     }
 
     #[test]
+    fn menu_keys_are_the_players_to_pick() {
+        let db = Db::memory().unwrap();
+        let start = menu_settings(&db, "zzz");
+        assert_eq!(start.binds, default_binds());
+        assert_eq!(start.binds_of("show"), ["VK_RIGHT", "XB_DPAD_RIGHT", "VK_RETURN", "XB_A"]);
+        // W and S move, and nothing else changes: a thing left out keeps its keys
+        let mut binds = BTreeMap::new();
+        binds.insert("up".to_string(), vec!["w".to_string(), "XB_DPAD_UP".to_string()]);
+        binds.insert("down".to_string(), vec!["no_modifiers S".to_string(), "ctrl alt vk_j".to_string()]);
+        let set = set_menu(&db, "zzz", &MenuSettings { binds, ..start.clone() }).unwrap();
+        assert_eq!(set.binds["up"], ["W", "XB_DPAD_UP"]);
+        assert_eq!(set.binds["down"], ["S", "ctrl alt J"]);
+        assert_eq!(set.binds["show"], start.binds["show"]);
+        assert_eq!(menu_settings(&db, "zzz"), set);
+        // the hints name the first keyboard key, and with the controller off its buttons are gone
+        assert_eq!(hint_keys(&set), menu::HintKeys { up: "W".into(), down: "S".into(), show: "\u{2192}".into(), back: "\u{2190}".into(), close: "F7".into() });
+        let no_pad = MenuSettings { pad: false, ..set.clone() };
+        assert_eq!(no_pad.binds_of("up"), ["W"]);
+        assert!(no_pad.binds_of("close").is_empty() && no_pad.binds_of("open").is_empty());
+        let s = Store { groups: vec![GroupRec { n: 2, character: "Ellen".into(), active: 4, next: 5, slots: vec![] }], ..Default::default() };
+        let t = live_ini(&s, &MenuSettings { style: "game".into(), ..set.clone() }, &menu::Layout::new(1080), true, None);
+        assert!(t.contains("[KeyMenuUp]\r\ncondition = $open == 1\r\nkey = W\r\nkey = XB_DPAD_UP\r\nrun = CommandListMenuUp\r\n") && !t.contains("VK_UP"));
+        // a key can do one thing, the menu key included, and F10 stays the game's
+        let two = |action: &str, key: &str| {
+            let mut b = BTreeMap::new();
+            b.insert(action.to_string(), vec![key.to_string()]);
+            set_menu(&db, "zzz", &MenuSettings { binds: b, ..set.clone() }).unwrap_err().to_string()
+        };
+        assert!(two("show", "W").contains("W already moves up"));
+        assert!(two("back", "VK_F7").contains("F7 already opens the menu"));
+        assert!(two("back", "VK_F10").contains("F10 reloads"));
+        assert!(two("open", "VK_F9").contains("keyboard key"));
+        // no key at all is allowed, and the keys a menu starts with take the saved ones away
+        let mut none = BTreeMap::new();
+        none.insert("close".to_string(), Vec::new());
+        assert!(set_menu(&db, "zzz", &MenuSettings { binds: none, ..set.clone() }).unwrap().binds["close"].is_empty());
+        assert_eq!(set_menu(&db, "zzz", &MenuSettings::default()).unwrap().binds, default_binds());
+        assert!(db.setting("zzz.liveMenuBinds").unwrap().is_none());
+    }
+
+    #[test]
     fn live_ini_reads_the_keys() {
         let s = Store { groups: vec![GroupRec { n: 2, character: "Ellen".into(), active: 4, next: 5, slots: vec![] }], ..Default::default() };
         let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, None);
         // the app's own key can open the game's menu, and the game binds no key of its own for it
         assert!(t.contains("if $cg == 0 && $cv == 1\r\n  run = CommandListMenuToggle\r\nendif\r\n$cg = 0\r\n") && !t.contains("[KeyMenuOpen]"));
-        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false, fast_save: true }, &menu::Layout::new(1080), true, None);
+        let direct = live_ini(&s, &MenuSettings { style: "game".into(), key: "Ctrl+Alt+M".into(), pad: false, ..Default::default() }, &menu::Layout::new(1080), true, None);
         assert!(direct.contains("[KeyMenuOpen]\r\nkey = ctrl alt no_shift no_windows M\r\nrun = CommandListMenuToggle"));
         let off = live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true, None);
         // a game that runs as administrator while the app doesn't: the app's key can't work, so the game binds it
@@ -1491,7 +1661,7 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
     #[test]
     fn live_ini_has_the_key_list_when_a_sheet_exists() {
         let s = Store { groups: vec![GroupRec { n: 2, character: "Ellen".into(), active: 4, next: 5, slots: vec![SlotRec { slot: 4, mod_id: "m".into() }] }], waiting: vec![2], ask: 3, ..Default::default() };
-        let kl = menu::KeyListIni { sheets: vec![menu::IniSheet { n: 2, slot: 4, h: 150 }], key: None, pad: true };
+        let kl = menu::KeyListIni { sheets: vec![menu::IniSheet { n: 2, slot: 4, h: 150 }], key: None, menu: vec!["XB_Y".into()] };
         let t = live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, Some(&kl));
         // the number 2 with no group shows or hides it
         assert!(t.contains("if $cg == 0 && $cv == 2\r\n  run = CommandListKeysToggle\r\nendif\r\n$cg = 0\r\n"));
@@ -1499,7 +1669,7 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
         // the waiting picks are still asked for first in [Present]
         assert!(t.contains("[Present]\r\nrun = CommandListGachamodAsked\r\nif $keys == 1\r\n  run = CommandListKeysFrame\r\nendif\r\n"));
         // no sheet, or the menu off: none of it
-        let none = menu::KeyListIni { sheets: vec![], key: None, pad: true };
+        let none = menu::KeyListIni { sheets: vec![], key: None, menu: vec!["XB_Y".into()] };
         assert!(!live_ini(&s, &MenuSettings::default(), &menu::Layout::new(1080), true, Some(&none)).contains("Keys"));
         assert!(!live_ini(&s, &MenuSettings { style: "off".into(), ..Default::default() }, &menu::Layout::new(1080), true, Some(&kl)).contains("Keys"));
     }

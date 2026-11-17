@@ -167,8 +167,11 @@ function Facts({ setup }: { setup: CheckSetup }) {
 
 function Start({ setup, info, hasGroup, game }: { setup: CheckSetup; info: LiveInfo | null; hasGroup: boolean; game: GameState }) {
   const [busy, setBusy] = useState(false);
-  // checking a game other than Zenless Zone Zero is testing it: the button turns tester options on first
-  const every = async () => { setBusy(true); try { if (info && !info.allowed) await setTester(true); await setAll(game.id, true); } finally { setBusy(false); } };
+  // checking a game where the drawn menu is a tester option is testing it: the button turns tester options on first
+  const every = async () => {
+    setBusy(true);
+    try { if (info && !info.allowed && !(await setTester(true))) return; await setAll(game.id, true); } finally { setBusy(false); }
+  };
   return <>
     <p>This goes through switching skins in {setup.name} while you play, then sends what worked to gachamod's developer.
       It takes about ten minutes, and every step can be skipped.</p>
@@ -328,7 +331,7 @@ function PadStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   const on = setup.menuPad && setup.menuStyle !== "off";
   useEvery(1000, () => { gameCheck.menu(setup.game, since).then((h) => { if (h) setHeard(true); }, () => {}); }, on && !heard);
   if (!on) return <>
-    <p>Opening the menu with a controller is off for {setup.name}. Turn on "Pressing both sticks in opens it too" in Tools, Switch skins in game, or skip this step.</p>
+    <p>Opening the menu with a controller is off for {setup.name}. Turn on "Use a controller in the menu" in Tools, Switch skins in game, or skip this step.</p>
     <OpenInGameTools />
   </>;
   return <>

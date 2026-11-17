@@ -5,7 +5,7 @@ members = ["crates/gacha-core", "src-tauri", "src-setup"]
 [workspace.package]
 version = "0.1.1-beta.8"
 edition = "2021"
-license = "MIT"
+license = "CC-BY-ND-4.0"
 rust-version = "1.80"
 
 [profile.release]

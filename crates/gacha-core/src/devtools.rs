@@ -426,8 +426,14 @@ pub fn raise(window: isize) { win::bring_forward(window as win::Win); }
 /// Bring the game to the front (after the skin menu over it closes).
 pub fn show_game(game: &str) -> Result<()> { focus(game, "carry on") }
 
-/// True while a program holds the screen in exclusive fullscreen, where no other window can show over it.
-pub fn exclusive_fullscreen() -> bool { win::exclusive_fullscreen() }
+/// True while `game` holds the screen in exclusive fullscreen, where no other window can show over it: its window
+/// is in front and fills its monitor, and Windows says a Direct3D program holds the screen
+/// (`SHQueryUserNotificationState`). Windowed and borderless games, and another program in exclusive fullscreen,
+/// give false, so the menu over the game opens there.
+pub fn exclusive_fullscreen(game: &str) -> bool {
+    let pids = crate::launch::game_pids(&crate::launch::processes(), game);
+    !pids.is_empty() && win::foreground_of(&pids).is_some_and(win::covers_monitor) && win::exclusive_fullscreen()
+}
 
 /// The running game's window: left, top, width and height in screen pixels.
 pub fn game_rect(game: &str) -> Option<(i32, i32, i32, i32)> {
@@ -443,8 +449,9 @@ pub fn cursor() -> Option<(i32, i32)> { win::cursor() }
 /// fenced in; the skin menu brings the game forward for a pick and then puts the cursor back where it was.
 pub fn put_cursor(at: (i32, i32)) { win::put_cursor(at.0, at.1) }
 
-/// Both sticks of a controller are pressed in (the shortcut that opens the skin menu).
-pub fn pad_sticks_down() -> bool { win::pad_sticks_down() }
+/// Every one of these controller buttons ("XB_LEFT_THUMB", "XB_A", "XB_LEFT_TRIGGER") is held on one controller: the
+/// buttons that open the skin menu. False for no buttons, and for one XInput doesn't report (the guide button).
+pub fn pad_down(buttons: &[String]) -> bool { win::pad_down(buttons) }
 
 /// Bring the game window forward and press its reload key (`reload_key`) so changed mods load without a restart.
 pub fn reload_in_game(game: &str, key: &ReloadKey) -> Result<()> {
@@ -500,6 +507,28 @@ pub(crate) mod win {
         // SAFETY: the callback only runs during this call, while `s` lives.
         unsafe { EnumWindows(Some(each), &mut s as *mut Search as LPARAM) };
         (!s.found.is_null()).then_some(s.found)
+    }
+
+    /// The window in front, when it belongs to one of these processes.
+    pub fn foreground_of(pids: &[u32]) -> Option<Win> {
+        // SAFETY: no arguments.
+        let w = unsafe { GetForegroundWindow() };
+        (!w.is_null() && pids.contains(&pid_of(w))).then_some(w)
+    }
+
+    /// The window covers the whole of its monitor (fullscreen, exclusive or borderless).
+    pub fn covers_monitor(w: Win) -> bool {
+        use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+        let Some((x, y, cw, ch)) = rect(w) else { return false };
+        // SAFETY: a window handle Windows gave us; the struct is zeroed with its size set as the API requires.
+        unsafe {
+            let mon = MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST);
+            let mut mi: MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            if mon.is_null() || GetMonitorInfoW(mon, &mut mi) == 0 { return false; }
+            let m = mi.rcMonitor;
+            x <= m.left && y <= m.top && x + cw >= m.right && y + ch >= m.bottom
+        }
     }
 
     pub fn key(vk: VIRTUAL_KEY, up: bool) -> INPUT {
@@ -617,13 +646,28 @@ pub(crate) mod win {
         unsafe { ClipCursor(std::ptr::null()); SetCursorPos(x, y); }
     }
 
-    pub fn pad_sticks_down() -> bool {
-        use windows_sys::Win32::UI::Input::XboxController::{XInputGetState, XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB, XINPUT_STATE};
-        let both = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB;
+    pub fn pad_down(buttons: &[String]) -> bool {
+        use windows_sys::Win32::UI::Input::XboxController::{XInputGetState, XINPUT_STATE};
+        if buttons.is_empty() { return false; }
+        // XInput's bits for wButtons; the triggers are two bytes of their own
+        let (mut mask, mut lt, mut rt) = (0u32, false, false);
+        for b in buttons {
+            let up = b.to_ascii_uppercase();
+            mask |= match up.split_once('_').map_or("", |(_, name)| name) {
+                "DPAD_UP" => 0x0001, "DPAD_DOWN" => 0x0002, "DPAD_LEFT" => 0x0004, "DPAD_RIGHT" => 0x0008,
+                "START" => 0x0010, "BACK" => 0x0020, "LEFT_THUMB" => 0x0040, "RIGHT_THUMB" => 0x0080,
+                "LEFT_SHOULDER" => 0x0100, "RIGHT_SHOULDER" => 0x0200, "A" => 0x1000, "B" => 0x2000, "X" => 0x4000, "Y" => 0x8000,
+                "LEFT_TRIGGER" => { lt = true; 0 }
+                "RIGHT_TRIGGER" => { rt = true; 0 }
+                _ => return false,
+            };
+        }
         (0..4).any(|i| {
             // SAFETY: XINPUT_STATE is plain data and the pointer is a live local.
             let mut st: XINPUT_STATE = unsafe { std::mem::zeroed() };
-            unsafe { XInputGetState(i, &mut st) == 0 && st.Gamepad.wButtons & both == both }
+            if unsafe { XInputGetState(i, &mut st) } != 0 { return false; }
+            let pad = st.Gamepad;
+            pad.wButtons as u32 & mask == mask && (!lt || pad.bLeftTrigger > 30) && (!rt || pad.bRightTrigger > 30)
         })
     }
 
@@ -740,6 +784,8 @@ pub(crate) mod win {
     pub fn allow_copy_data(_class: &str, _title: &str) {}
     pub fn foreground_in(_pids: &[u32]) -> bool { false }
     pub fn main_window(_pids: &[u32]) -> Option<Win> { None }
+    pub fn foreground_of(_pids: &[u32]) -> Option<Win> { None }
+    pub fn covers_monitor(_w: Win) -> bool { false }
     pub fn elevated(_pid: Option<u32>) -> bool { false }
     pub fn run_as_admin(_exe: &std::path::Path, _args: &str, _owner: isize) -> Result<(), u32> { Err(0) }
     pub fn wait_for_exit(_pid: u32, _ms: u32) {}
@@ -747,7 +793,7 @@ pub(crate) mod win {
     pub fn rect(_w: Win) -> Option<(i32, i32, i32, i32)> { None }
     pub fn cursor() -> Option<(i32, i32)> { None }
     pub fn put_cursor(_x: i32, _y: i32) {}
-    pub fn pad_sticks_down() -> bool { false }
+    pub fn pad_down(_buttons: &[String]) -> bool { false }
     pub fn press(_code: u32, _held: &[u32]) {}
     pub fn bring_forward(_w: Win) {}
 }

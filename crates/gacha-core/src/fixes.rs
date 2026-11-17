@@ -251,7 +251,7 @@ impl<'a> Who<'a> {
 
 /// The first step of a chain a mod's hash is on, and where the chain ends.
 #[derive(Debug, Clone)]
-struct Hop { new: String, version: String, character: String, part: String }
+struct Hop { new: String, version: String, rank: usize, character: String, part: String }
 
 /// Where `h` ends up after every update the data knows, for a mod of `character` (None: unknown). None when it isn't
 /// an outdated hash for this mod, or when the data can't say which way it went.
@@ -286,7 +286,7 @@ fn resolve(idx: &Index, h: &str, character: Option<&str>, who: &mut Who) -> Opti
         }
         let next = targets.into_iter().next()?.to_string();
         let step = cands.iter().map(|(_, s)| *s).find(|s| s.new == next)?;
-        first.get_or_insert_with(|| Hop { new: String::new(), version: step.version.clone(), character: step.character.clone(), part: step.part.clone() });
+        first.get_or_insert_with(|| Hop { new: String::new(), version: step.version.clone(), rank: step.rank, character: step.character.clone(), part: step.part.clone() });
         rank = Some(low);
         if !seen.contains(&next) { seen.push(next.clone()); }
         cur = next;
@@ -335,8 +335,7 @@ fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) ->
         if r.model { c.needs.insert(0, (why, tool)); } else { c.needs.push((why, tool)); }
     }
     for (_, hop) in &c.swaps {
-        let rank = idx.steps.values().flatten().find(|s| s.version == hop.version).map(|s| s.rank).unwrap_or(0);
-        if c.since_rank.as_ref().is_none_or(|(r, _)| rank < *r) { c.since_rank = Some((rank, hop.version.clone())); }
+        if c.since_rank.as_ref().is_none_or(|(r, _)| hop.rank < *r) { c.since_rank = Some((hop.rank, hop.version.clone())); }
     }
     c
 }
@@ -369,7 +368,7 @@ fn reasons(c: &Check) -> Vec<String> {
     out
 }
 
-fn health_of(m: &ModEntry, c: &Check, fixed: &HashSet<String>, tried: &HashMap<String, Tried>) -> Option<ModHealth> {
+fn health_of(m: &ModEntry, c: &Check, fixed: bool, tried: &HashMap<String, Tried>) -> Option<ModHealth> {
     let since = c.since_rank.as_ref().map(|(_, v)| v.clone());
     let base = ModHealth {
         mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, reasons: reasons(c), since, swaps: c.swaps.len() as u32,
@@ -382,7 +381,7 @@ fn health_of(m: &ModEntry, c: &Check, fixed: &HashSet<String>, tried: &HashMap<S
         return Some(ModHealth { status: "unfixable".into(), tool, ..base });
     }
     if !c.swaps.is_empty() { return Some(ModHealth { status: "broken".into(), ..base }); }
-    fixed.contains(&m.id).then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], tried: None, ..base })
+    fixed.then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], tried: None, ..base })
 }
 
 fn matcher(game: &str, mods: &[ModEntry]) -> Matcher {
@@ -421,11 +420,15 @@ pub fn info(game: &str) -> FixInfo {
 }
 
 /// Mods of a game (on or off) that a game update broke, or that gachamod fixed.
-pub fn health(db: &Db, game: &str) -> Result<Vec<ModHealth>> {
+pub fn health(shared: &crate::db::Shared, game: &str) -> Result<Vec<ModHealth>> {
     let Some(idx) = Index::get(game) else { return Ok(vec![]) };
-    let mods = mods_of(db, game)?;
-    let fixed: HashSet<String> = db.setting_json::<Vec<String>>(&fixed_key(game))?.unwrap_or_default().into_iter().collect();
-    let tried: HashMap<String, Tried> = db.setting_json(&tried_key(game))?.unwrap_or_default();
+    // the database is held for the three reads only, not while every mod's inis are read
+    let (mods, fixed, tried) = {
+        let db = shared.lock().map_err(|_| Error::Db("The local database is stuck. Restart gachamod".into()))?;
+        let fixed: HashSet<String> = db.setting_json::<Vec<String>>(&fixed_key(game))?.unwrap_or_default().into_iter().collect();
+        let tried: HashMap<String, Tried> = db.setting_json(&tried_key(game))?.unwrap_or_default();
+        (mods_of(&db, game)?, fixed, tried)
+    };
     let mt = matcher(game, &mods);
     let mut who = Who::new(&mt);
     let mut out = Vec::new();
@@ -433,7 +436,10 @@ pub fn health(db: &Db, game: &str) -> Result<Vec<ModHealth>> {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
         let c = check_dir(idx, dir, m.character.as_deref(), &mut who);
-        if let Some(h) = health_of(m, &c, &fixed, &tried) { out.push(h); }
+        // "fixed" lasts while the swapped lines are there: an update from the author or an Undo takes them away
+        let clean = c.swaps.is_empty() && c.needs.is_empty();
+        let fixed = clean && fixed.contains(&m.id) && ini_texts(dir).iter().any(|t| t.contains(MARK));
+        if let Some(h) = health_of(m, &c, fixed, &tried) { out.push(h); }
     }
     Ok(out)
 }
@@ -454,7 +460,14 @@ fn fix_dir(db: &Db, game: &str, m: &ModEntry, c: &Check) -> Result<Option<Backup
     let n = c.swaps.len();
     let label = format!("Fixed {} for the game update ({})", m.name, if n == 1 { "1 hash".into() } else { format!("{n} hashes") });
     let b = backups::take(db, game, &m.id, &dir, &files, &label)?;
-    for (_, abs, doc) in &docs { std::fs::write(abs, doc.to_bytes())?; }
+    for (_, abs, doc) in &docs {
+        if let Err(e) = std::fs::write(abs, doc.to_bytes()) {
+            // a file that can't be written (the game has it open): put the ones already changed back, so the mod
+            // is never left half swapped
+            let _ = backups::restore(db, &b.id);
+            return Err(e.into());
+        }
+    }
     Ok(Some(b))
 }
 
@@ -498,7 +511,8 @@ pub fn fix(shared: &crate::db::Shared, game: &str, ids: &[String]) -> Result<Fix
         if c.swaps.is_empty() { continue; }
         match fix_dir(&*lock()?, game, m, &c) {
             Ok(Some(backup)) => { any_on |= m.loaded(); out.changed.push(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }); }
-            Ok(None) => {}
+            // its hashes sit where a swap doesn't reach (a ShaderOverride section, a quoted value)
+            Ok(None) => out.skipped.push(skip("Its outdated hashes are written in a way gachamod can't change".into())),
             Err(e) => out.skipped.push(skip(e.to_string())),
         }
     }
@@ -529,6 +543,49 @@ mod tests {
         assert!(Index::get("ww").unwrap().pairs > 1000);
     }
 
+    /// Blocks are ranked by where their version first appears, and a chain only moves to a later rank. A block out of
+    /// order (or one with no version, which used to sit last and so counted as the newest update) sends chains to a
+    /// hash that is itself outdated.
+    #[test]
+    fn blocks_are_listed_oldest_first() {
+        for (g, text) in DATA {
+            let raw: RawFile = serde_json::from_str(text).unwrap();
+            let mut last = 0.0f64;
+            for b in &raw.versions {
+                let digits: String = b.version.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+                let n: f64 = digits.parse().unwrap_or_else(|_| panic!("{g}.json has a block with the version \"{}\", which can't be ordered", b.version));
+                assert!(n >= last, "{g}.json lists {} after a later version", b.version);
+                last = n;
+            }
+        }
+    }
+
+    #[test]
+    fn hsr_kafka_goes_to_her_3_2_hashes() {
+        let hsr = Index::get("hsr").unwrap();
+        let mt = Matcher::new("hsr", &["Kafka".to_string(), "Stelle".to_string()]);
+        let mut who = Who::new(&mt);
+        // head and hair each keep their own chain (the assets history once listed them swapped)
+        for (old, new) in [("e811b655", "07e0c801"), ("91133916", "7ee24742"), ("132595c5", "1cb6a0c8"), ("7cbe836d", "650b9edf"), ("cdda77a3", "d46f6a11")] {
+            assert_eq!(resolve(hsr, old, Some("Kafka"), &mut who).map(|h| h.new).as_deref(), Some(new), "{old}");
+        }
+        // a hash from before 1.4 carries on through the later updates
+        let end = resolve(hsr, "0a98b451", Some("Stelle"), &mut who).expect("Stelle's first body texture").new;
+        assert_ne!(end, "a19a8d2c");
+        assert!(resolve(hsr, &end, Some("Stelle"), &mut who).is_none(), "{end} is outdated too");
+    }
+
+    #[test]
+    fn every_pair_in_the_data_is_two_hashes() {
+        for (g, text) in DATA {
+            let raw: RawFile = serde_json::from_str(text).unwrap_or_else(|e| panic!("{g}.json doesn't parse: {e}"));
+            let bad: Vec<String> = raw.versions.iter().flat_map(|b| b.hashes.iter().map(move |p| (b, p)))
+                .filter(|(_, p)| hex8(&p.old).is_none() || hex8(&p.new).is_none())
+                .map(|(b, p)| format!("{} {} -> {}", b.version, p.old, p.new)).collect();
+            assert!(bad.is_empty(), "{g}.json has pairs that aren't 8 hex digits and would be dropped: {bad:?}");
+        }
+    }
+
     #[test]
     fn a_chain_ends_at_the_newest_hash_and_needs_the_character() {
         let mt = Matcher::new("zzz", &["Belle".to_string(), "Ellen Joe".to_string()]);
@@ -544,7 +601,7 @@ mod tests {
 
     #[test]
     fn swaps_keep_the_old_line_and_the_rest_of_the_file() {
-        let hop = Hop { new: "c92a17d8".into(), version: "1.1".into(), character: "Belle".into(), part: "Body Blend".into() };
+        let hop = Hop { new: "c92a17d8".into(), version: "1.1".into(), rank: 0, character: "Belle".into(), part: "Body Blend".into() };
         let plan: HashMap<&str, &Hop> = [("d7ca821f", &hop)].into_iter().collect();
         let text = "[TextureOverrideBelleBlend]\r\nhash = d7ca821f\r\nvb2 = ResourceBlend\r\n\r\n[ResourceBlend]\r\nhash = d7ca821f\r\n;hash = d7ca821f\r\n";
         let mut doc = crate::keys::Doc::from_bytes(text.as_bytes());
@@ -567,7 +624,7 @@ mod tests {
         assert!(!c.needs.is_empty(), "the stride rule should fire");
         assert!(c.needs[0].1.url.contains("github.com"));
         let m = ModEntry { id: "x".into(), ..Default::default() };
-        assert_eq!(health_of(&m, &c, &HashSet::new(), &HashMap::new()).unwrap().status, "unfixable");
+        assert_eq!(health_of(&m, &c, false, &HashMap::new()).unwrap().status, "unfixable");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -601,7 +658,7 @@ mod tests {
         assert!(c.needs_author);
         let m = ModEntry { id: "x".into(), ..Default::default() };
         let tried: HashMap<String, Tried> = [("x".to_string(), Tried { tool: "ZZZ Mod Fixer".into(), at: 1, changed: 0 })].into_iter().collect();
-        let h = health_of(&m, &c, &HashSet::new(), &tried).unwrap();
+        let h = health_of(&m, &c, false, &tried).unwrap();
         assert_eq!(h.status, "unfixable");
         assert!(h.needs_author);
         assert!(h.reasons[0].contains("needs an update from its author"), "{:?}", h.reasons);
@@ -632,9 +689,9 @@ mod real {
     #[ignore]
     fn real_library() {
         let Some(p) = std::env::var_os("GACHAMOD_REAL_DB") else { return };
-        let db = crate::db::Db::open(std::path::Path::new(&p)).unwrap();
+        let db = std::sync::Arc::new(std::sync::Mutex::new(crate::db::Db::open(std::path::Path::new(&p)).unwrap()));
         for g in ["zzz", "ww", "hsr", "gi", "ef"] {
-            let mods = super::mods_of(&db, g).map(|m| m.len()).unwrap_or(0);
+            let mods = super::mods_of(&db.lock().unwrap(), g).map(|m| m.len()).unwrap_or(0);
             let t = std::time::Instant::now();
             let h = super::health(&db, g).unwrap_or_default();
             println!("{g}: {mods} mods, {} flagged in {:?}", h.len(), t.elapsed());

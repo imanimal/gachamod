@@ -113,12 +113,12 @@ const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords
   { route: { view: "browse" }, title: () => "Browse GameBanana", keywords: "browse gamebanana online find new mods download discover store shop", icon: "browse", hint: "Ctrl+2" },
   { route: { view: "downloads" }, title: () => "Downloads", keywords: "queue downloading progress installs transfers", icon: "downloads", hint: "Ctrl+5" },
   { route: { view: "profiles" }, title: () => "Profiles", keywords: "presets loadouts sets outfits teams switch save", icon: "profiles", hint: "Ctrl+6" },
-  { route: { view: "tools" }, title: () => "Tools", keywords: "utilities fixes launch options shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
+  { route: { view: "tools" }, title: () => "Tools", keywords: "utilities fixes conflicts share shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
   { route: { view: "settings" }, title: () => "Settings", keywords: "options preferences config configuration setup", icon: "settings", hint: "Ctrl+8" },
   { route: { view: "library", tab: "archive" }, title: () => "Trash", keywords: "removed deleted trash bin recycle restore redownload archive history", icon: "trash", where: "Mods › Trash" },
   { route: { view: "settings", section: "games" }, title: () => "Game folders", keywords: "paths folders setup add game xxmi location directory", icon: "folder", where: "Settings › Games and mod loaders" },
   { route: { view: "settings", section: "appearance" }, title: () => "Appearance", keywords: "theme dark light mode colours colors accent look skin", icon: "palette", where: "Settings › Appearance" },
-  { route: { view: "tools", section: "launch" }, title: () => "Launch options", keywords: "start arguments args priority window mode exe xxmi", icon: "sliders", where: "Tools › Launch" },
+  { route: { view: "settings", section: "launch" }, title: () => "Launch options", keywords: "start arguments args priority window mode exe xxmi", icon: "sliders", where: "Settings › Launch options" },
 ];
 
 registerCommands("shell.pages", () => {

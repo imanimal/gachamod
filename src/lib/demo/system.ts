@@ -86,9 +86,11 @@ function launchConfig(game: string): LaunchConfig {
     customExe: null,
     extras: viaXxmi ? { ...(EXTRAS[game] ?? {}) } : {},
     migoto: { hunting: false, dumpShaders: false, muteWarnings: true, logLevel: viaXxmi ? "DISABLED" : "", callsLogging: false, debugLogging: false, enforceRendering: true },
+    dll: viaXxmi ? { injectMode: game === "ww" ? "DIRECT" : "HOOK", injectLibraries: false, libraries: "", unsafeMode: false } : null,
     closeOnLaunch: false,
     locked: viaXxmi
-      ? { preLaunch: signed, postLoad: signed, customExe: "Set a custom launch in XXMI Launcher", "migoto.callsLogging": "Your XXMI Launcher version doesn't have this option", "migoto.debugLogging": "Your XXMI Launcher version doesn't have this option" }
+      ? { preLaunch: signed, postLoad: signed, customExe: "Set a custom launch in XXMI Launcher", "migoto.callsLogging": "Your XXMI Launcher version doesn't have this option", "migoto.debugLogging": "Your XXMI Launcher version doesn't have this option",
+        "dll.unsafeMode": "XXMI Launcher signs this setting. Turn it on in XXMI Launcher" }
       : { via: "XXMI Launcher doesn't manage this game here", processPriority: "Only XXMI Launcher can set this", windowMode: "Only XXMI Launcher can set this", postLoad: "Only XXMI Launcher can run this", "migoto.logLevel": "Use calls and debug logging instead" },
     xxmiAvailable: viaXxmi,
   };
@@ -135,6 +137,12 @@ export function registerSystemDemo() {
     },
     game_set_shown: ({ game, shown }) => { demoDb.games = demoDb.games.map((g) => (g.id === game ? { ...g, shown: !!shown } : g)); return gamesNow(); },
     game_running: ({ game }) => running.has(String(game)),
+    // the demo's GIMI has XXMI's own d3d11.dll
+    game_kick_check: ({ game, vanilla }) => {
+      const said = game === "gi" && !!demoDb.settings.get("gi.kickFixDll");
+      return { warn: game === "gi" && !vanilla && !said, undone: false, fixed: false, said };
+    },
+    game_kick_fix_done: ({ done }) => { demoDb.settings.set("gi.kickFixDll", done ? "demo" : ""); },
     game_launch: async ({ game }) => {
       const id = String(game);
       const g = demoDb.games.find((x) => x.id === id);
@@ -163,7 +171,18 @@ export function registerSystemDemo() {
     launch_config_set: async ({ game, config }) => {
       await demoWait(150);
       const prev = launchConfig(String(game));
-      const next = { ...(config as LaunchConfig), locked: prev.locked, xxmiAvailable: prev.xxmiAvailable };
+      const sent = config as LaunchConfig;
+      // like launch.rs: the form never changes the signed settings
+      const dll = prev.dll && sent.dll ? { ...sent.dll, libraries: prev.dll.libraries, unsafeMode: prev.dll.unsafeMode } : prev.dll;
+      const next = { ...sent, dll, locked: prev.locked, xxmiAvailable: prev.xxmiAvailable };
+      configs.set(String(game), next);
+      return next;
+    },
+    launch_unsafe_off: async ({ game }) => {
+      await demoWait(150);
+      const prev = launchConfig(String(game));
+      const next: LaunchConfig = { ...prev, dll: prev.dll && { ...prev.dll, unsafeMode: false },
+        locked: { ...prev.locked, "dll.unsafeMode": "XXMI Launcher signs this setting. Turn it on in XXMI Launcher" } };
       configs.set(String(game), next);
       return next;
     },

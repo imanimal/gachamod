@@ -31,7 +31,7 @@ export async function warmUp(game: GameState): Promise<void> {
     console.warn("character list:", e);
   }
   try {
-    // Settings, Automatic updates and scans, "Rescan mods when Mods opens" off: leave the folder alone
+    // Settings, Mod update checks and rescans, "Rescan mods when Mods opens" off: leave the folder alone
     if ((await settings.get("library.autoScan").catch(() => null)) === "0") return;
     await library.scan(game.id);
     emitApp({ type: "library-refresh", game: game.id });

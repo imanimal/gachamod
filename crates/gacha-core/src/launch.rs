@@ -34,6 +34,8 @@ pub struct LaunchConfig {
     /// Game-specific XXMI switches it offers (unlock_fps, disable_wounded_fx, force_max_lod_bias ...), by key.
     pub extras: BTreeMap<String, Value>,
     pub migoto: MigotoConfig,
+    /// How XXMI loads DLLs into the game. None outside XXMI, and a form without it leaves XXMI's values alone.
+    pub dll: Option<DllConfig>,
     /// Close gachamod's window after the game starts.
     pub close_on_launch: bool,
     /// Fields that can't be changed from gachamod right now, with the reason to show beside them
@@ -64,6 +66,25 @@ pub struct MigotoConfig {
     pub enforce_rendering: bool,
 }
 
+/// XXMI's own settings for loading DLLs into the game, as its Advanced settings show them. XXMI signs Unsafe Mode and
+/// the library list so other programs can't set them, so gachamod never turns Unsafe Mode on or edits the list: it
+/// only turns Unsafe Mode off (`unsafe_off`) and switches the list on or off.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DllConfig {
+    /// XXMI's xxmi_dll_inject_mode: "HOOK", "DIRECT" or "SKIP" (XXMI leaves its d3d11.dll out).
+    pub inject_mode: String,
+    /// XXMI's Inject Libraries: also load the DLLs in `libraries`.
+    pub inject_libraries: bool,
+    /// The DLLs Inject Libraries loads, one per line. Read only.
+    pub libraries: String,
+    /// XXMI's Unsafe Mode: it loads 3DMigoto DLLs that aren't its own. Read only in the form.
+    pub unsafe_mode: bool,
+}
+
+const INJECT_MODES: &[&str] = &["HOOK", "DIRECT", "SKIP"];
+const XXMI_SIGNS_UNSAFE: &str = "XXMI Launcher signs this setting. Turn it on in XXMI Launcher";
+
 /// XXMI importer keys shown as game extras when the importer's config has them. GIMI and HIMI still carry
 /// `disable_dcr` but XXMI no longer reads it: `configure_game` is what turns dynamic character resolution off.
 pub const EXTRA_KEYS: &[&str] = &[
@@ -73,6 +94,77 @@ pub const EXTRA_KEYS: &[&str] = &[
 
 /// Importers where XXMI acts on `configure_game` (the others have the key but ignore it).
 const CONFIGURES_GAME: &[&str] = &["GIMI", "WWMI", "ZZMI"];
+
+/// Genshin Impact's FPS limit stays at or under this. Since version 7, a higher one gets the player disconnected with
+/// "Illegal tool detected" (10612-4001) or "Abnormal activity detected" (10310-4001).
+pub const GI_FPS_CAP: u64 = 120;
+
+/// For gi, an `unlock_fps_value` above GI_FPS_CAP becomes GI_FPS_CAP. True when it changed.
+pub fn cap_fps(game: &str, extras: &mut BTreeMap<String, Value>) -> bool {
+    if game != "gi" { return false; }
+    match extras.get_mut("unlock_fps_value") {
+        Some(v) if v.as_f64().is_some_and(|f| f > GI_FPS_CAP as f64) => { *v = json!(GI_FPS_CAP); true }
+        _ => false,
+    }
+}
+
+/// Setting: the SHA-256 of GIMI's d3d11.dll when the player said they did the "Illegal tool detected" fix by hand.
+pub const GI_KICK_FIX: &str = "gi.kickFixDll";
+
+/// Before Genshin Impact starts through XXMI: whether to warn that its anti-cheat may stop the game with "Illegal tool
+/// detected", since it flags XXMI's own d3d11.dll. gachamod only reads the DLLs here. The fix is a community guide the
+/// player follows by hand (docs/spec.md, "Launching"); nothing in gachamod swaps, repacks or patches a DLL.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct KickCheck {
+    pub warn: bool,
+    /// The player said they did the fix, and GIMI's d3d11.dll is XXMI's own again (an XXMI update puts it back).
+    pub undone: bool,
+    /// GIMI's d3d11.dll isn't XXMI's own, so a fix looks done.
+    pub fixed: bool,
+    /// The player said they did the fix (maybe before XXMI put its own DLL back).
+    pub said: bool,
+}
+
+fn sha_of(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    std::fs::read(path).ok().map(|b| hex::encode(Sha256::digest(b)))
+}
+
+/// GIMI's d3d11.dll and XXMI's own copy of it, as SHA-256 (None when a file can't be read).
+fn gi_dlls(db: &Db) -> (Option<String>, Option<String>) {
+    let ours = games::importer_dir(db, "gi").ok().and_then(|d| sha_of(&d.join("d3d11.dll")));
+    let root = db.setting("xxmi.root").ok().flatten();
+    let stock = crate::xxmi::find_root(root.as_deref())
+        .and_then(|r| sha_of(&r.join("Resources").join("Packages").join("XXMI").join("d3d11.dll")));
+    (ours, stock)
+}
+
+/// `dll`: GIMI's d3d11.dll, `stock`: XXMI's own, `done`: the dll saved when the player said they did the fix.
+pub fn kick_from(dll: Option<&str>, stock: Option<&str>, done: Option<&str>) -> KickCheck {
+    // a d3d11.dll that isn't XXMI's own: a fix looks done
+    let fixed = matches!((dll, stock), (Some(d), Some(s)) if d != s);
+    // or the player said so with this very DLL
+    let same = done.is_some() && done == dll;
+    KickCheck { warn: !fixed && !same, undone: !fixed && !same && done.is_some(), fixed, said: done.is_some() }
+}
+
+/// For Genshin Impact: what the Launch page shows, and `warn` only for a start with mods through XXMI.
+pub fn kick_check(db: &Db, game: &str, vanilla: bool) -> Result<KickCheck> {
+    if game != "gi" { return Ok(KickCheck::default()); }
+    let (dll, stock) = gi_dlls(db);
+    let done = db.setting(GI_KICK_FIX)?.filter(|s| !s.is_empty());
+    let mut k = kick_from(dll.as_deref(), stock.as_deref(), done.as_deref());
+    let cfg = config(db, game)?;
+    if vanilla || !cfg.xxmi_available || cfg.via != "xxmi" { k.warn = false; }
+    Ok(k)
+}
+
+/// The player says they did the fix (saves GIMI's d3d11.dll as it is now), or takes that back.
+pub fn set_kick_fix(db: &Db, done: bool) -> Result<()> {
+    let value = if done { gi_dlls(db).0.unwrap_or_else(|| "none".into()) } else { String::new() };
+    db.set_setting(GI_KICK_FIX, &value)
+}
 
 const XXMI_SIGNED: &str = "XXMI Launcher signs this command. Set it in XXMI Launcher";
 const XXMI_MISSING: &str = "Your XXMI Launcher version doesn't have this option";
@@ -88,6 +180,8 @@ pub fn config(db: &Db, game: &str) -> Result<LaunchConfig> {
     let xxmi_cfg = if g.xxmi && paths.via_xxmi { crate::xxmi::importer_config(root.as_deref(), g.importer).ok() } else { None };
     let mut c = merge_config(own, xxmi_cfg.as_ref(), close_on_launch(db, game));
     if !CONFIGURES_GAME.contains(&g.importer) { c.extras.remove("configure_game"); }
+    // what the game will get: a launch lowers a higher one first
+    cap_fps(game, &mut c.extras);
     if !c.xxmi_available {
         let text = games::importer_dir(db, game).ok().and_then(|d| std::fs::read_to_string(d.join("d3dx.ini")).ok());
         match text {
@@ -140,6 +234,7 @@ pub fn merge_config(own: LaunchConfig, xxmi: Option<&Value>, close: bool) -> Lau
         c.locked.insert("postLoad".into(), "Only XXMI Launcher can run this".into());
         c.locked.insert("migoto.logLevel".into(), "Use calls and debug logging instead".into());
         c.extras.clear();
+        c.dll = None;
         return c;
     };
     if c.via != "direct" { c.via = "xxmi".into(); }
@@ -169,6 +264,17 @@ pub fn merge_config(own: LaunchConfig, xxmi: Option<&Value>, close: bool) -> Lau
     for (field, key) in MIGOTO_KEYS {
         if mig.get(key).is_none() { c.locked.insert(format!("migoto.{field}"), XXMI_MISSING.into()); }
     }
+    let dll = DllConfig {
+        inject_mode: s(&imp["xxmi_dll_inject_mode"]),
+        inject_libraries: b(&imp["extra_libraries_enabled"]),
+        libraries: s(&imp["extra_libraries"]),
+        unsafe_mode: b(&mig["unsafe_mode"]),
+    };
+    if imp.get("xxmi_dll_inject_mode").is_none() { c.locked.insert("dll.injectMode".into(), XXMI_MISSING.into()); }
+    if imp.get("extra_libraries_enabled").is_none() { c.locked.insert("dll.injectLibraries".into(), XXMI_MISSING.into()); }
+    if mig.get("unsafe_mode").is_none() { c.locked.insert("dll.unsafeMode".into(), XXMI_MISSING.into()); }
+    else if !dll.unsafe_mode { c.locked.insert("dll.unsafeMode".into(), XXMI_SIGNS_UNSAFE.into()); }
+    c.dll = Some(dll);
     c
 }
 
@@ -207,6 +313,13 @@ pub fn xxmi_patch(cfg: &LaunchConfig, current: &Value) -> Value {
         if cur_m.get(k).is_none() || (k == "log_level" && m.log_level.is_empty()) { continue; }
         set(&mut mig, cur_m, k, v);
     }
+    // never unsafe_mode or extra_libraries: XXMI signs those (unsafe_off turns Unsafe Mode off)
+    if let Some(d) = &cfg.dll {
+        if cur_i.get("xxmi_dll_inject_mode").is_some() && INJECT_MODES.contains(&d.inject_mode.as_str()) {
+            set(&mut imp, cur_i, "xxmi_dll_inject_mode", json!(d.inject_mode));
+        }
+        if cur_i.get("extra_libraries_enabled").is_some() { set(&mut imp, cur_i, "extra_libraries_enabled", json!(d.inject_libraries)); }
+    }
     let mut out = serde_json::Map::new();
     if !imp.is_empty() { out.insert("Importer".into(), Value::Object(imp)); }
     if !mig.is_empty() { out.insert("Migoto".into(), Value::Object(mig)); }
@@ -217,6 +330,9 @@ pub fn xxmi_patch(cfg: &LaunchConfig, current: &Value) -> Value {
 /// else to gachamod's own setting. Returns the form as it now reads.
 pub fn set_config(db: &Db, game: &str, cfg: &LaunchConfig) -> Result<LaunchConfig> {
     let g = games::require_def(game)?;
+    let mut capped = cfg.clone();
+    cap_fps(game, &mut capped.extras);
+    let cfg = &capped;
     let paths = games::paths(db, game)?;
     let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
     if g.xxmi && paths.via_xxmi {
@@ -233,6 +349,18 @@ pub fn set_config(db: &Db, game: &str, cfg: &LaunchConfig) -> Result<LaunchConfi
     own.locked.clear();
     db.set_setting_json(&own_key(game), &own)?;
     db.set_setting(&format!("{game}.closeOnLaunch"), if cfg.close_on_launch { "1" } else { "0" })?;
+    config(db, game)
+}
+
+/// Turn XXMI's Unsafe Mode off for this game (its own command, so a form read before the player turned it on in XXMI
+/// can't turn it off again). Turning it on needs XXMI Launcher, which signs it. Returns the form as it now reads.
+pub fn unsafe_off(db: &Db, game: &str) -> Result<LaunchConfig> {
+    let g = games::require_def(game)?;
+    if !(g.xxmi && games::paths(db, game)?.via_xxmi) {
+        return Err(Error::Invalid("XXMI Launcher doesn't manage this game here".into()));
+    }
+    let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
+    crate::xxmi::set_importer_config(root.as_deref(), g.importer, &json!({ "Migoto": { "unsafe_mode": false } }))?;
     config(db, game)
 }
 
@@ -295,9 +423,20 @@ pub fn ini_set(text: &str, section: &str, key: &str, value: &str) -> String {
 /// an admin prompt can keep the start waiting).
 #[derive(Debug, Clone)]
 pub enum Plan {
-    /// `to_steam`: switch XXMI's Game Launch to Steam first (steam_only).
-    Xxmi { root: Option<String>, importer: &'static str, to_steam: bool },
-    Direct { exe: PathBuf, args: String, dir: PathBuf, pre_launch: Option<(Hook, PathBuf)>, loader: Option<(PathBuf, PathBuf)> },
+    /// `to_steam`: switch XXMI's Game Launch to Steam first (steam_only). `steam`: the Steam app id when XXMI starts
+    /// this copy through Steam, so Steam gets ready first.
+    Xxmi { root: Option<String>, importer: &'static str, game: &'static str, to_steam: bool, steam: Option<u32> },
+    /// `steam`: the Steam app id when `exe` is steam.exe starting it.
+    Direct { exe: PathBuf, args: String, dir: PathBuf, pre_launch: Option<(Hook, PathBuf)>, loader: Option<(PathBuf, PathBuf)>, steam: Option<u32> },
+}
+
+/// What `start` changed on the way, for the note.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Started {
+    /// Steam closed and started again to take the game's launch options.
+    pub steam_restarted: bool,
+    /// Genshin Impact's FPS limit in XXMI before it came down to GI_FPS_CAP.
+    pub fps_was: Option<f64>,
 }
 
 /// Games whose Steam copy refuses to start unless Steam starts it (it asks to be launched from Steam).
@@ -309,7 +448,7 @@ fn steam_only(g: &GameDef, game_dir: &Path) -> Option<u32> {
 }
 
 /// Start the game. `vanilla`: start without mods (direct exe, no injection).
-pub fn launch(db: &Db, game: &str, vanilla: bool) -> Result<()> { start(plan(db, game, vanilla)?) }
+pub fn launch(db: &Db, game: &str, vanilla: bool) -> Result<()> { start(plan(db, game, vanilla)?).map(|_| ()) }
 
 pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
     let g = games::require_def(game)?;
@@ -318,9 +457,11 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
     let paths = games::paths(db, game)?;
     if !vanilla && cfg.xxmi_available && cfg.via == "xxmi" {
         let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
-        let steam = paths.game_dir.as_deref().is_some_and(|d| steam_only(g, Path::new(d)).is_some());
-        let to_steam = steam && crate::xxmi::starts_exe(root.as_deref(), g.importer);
-        return Ok(Plan::Xxmi { root, importer: g.importer, to_steam });
+        let app = paths.game_dir.as_deref().and_then(|d| steam_only(g, Path::new(d)));
+        let to_steam = app.is_some() && crate::xxmi::starts_exe(root.as_deref(), g.importer);
+        let through_steam = || crate::xxmi::importer_setting(root.as_deref(), g.importer, "game_launch").as_deref() == Some("STEAM");
+        let steam = app.filter(|_| to_steam || through_steam());
+        return Ok(Plan::Xxmi { root, importer: g.importer, game: g.id, to_steam, steam });
     }
     let game_dir = paths.game_dir.map(PathBuf::from)
         .ok_or_else(|| Error::NotSetUp(format!("{}'s game folder isn't set. Pick it in Settings", g.name)))?;
@@ -352,28 +493,58 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
         None => (exe, cfg.args.trim().to_string()),
     };
     // a Steam copy that only starts from Steam: Steam starts it, with the same arguments
-    let (exe, args) = match (!custom).then(|| steam_only(g, &game_dir)).flatten().zip(games::steam_exe()) {
-        Some((app, steam_exe)) => (steam_exe, format!("-silent -applaunch {app} {args}").trim_end().to_string()),
-        None => (exe, args),
+    let (exe, args, steam) = match (!custom).then(|| steam_only(g, &game_dir)).flatten().zip(games::steam_exe()) {
+        Some((app, steam_exe)) => (steam_exe, format!("-silent -applaunch {app} {args}").trim_end().to_string(), Some(app)),
+        None => (exe, args, None),
     };
     let dir = exe.parent().map(Path::to_path_buf).unwrap_or(game_dir);
-    Ok(Plan::Direct { exe, args, dir, pre_launch, loader })
+    Ok(Plan::Direct { exe, args, dir, pre_launch, loader, steam })
 }
 
-pub fn start(plan: Plan) -> Result<()> {
+pub fn start(plan: Plan) -> Result<Started> {
+    let mut started = Started::default();
     match plan {
-        Plan::Xxmi { root, importer, to_steam } => {
-            if to_steam { crate::xxmi::launch_through_steam(root.as_deref(), importer)?; }
-            crate::xxmi::launch(root.as_deref(), importer)
+        Plan::Xxmi { root, importer, game, to_steam, steam } => {
+            let root = root.as_deref();
+            if game == "gi" { started.fps_was = cap_xxmi_fps(root, importer); }
+            if to_steam { crate::xxmi::launch_through_steam(root, importer)?; }
+            let Some(app) = steam else { crate::xxmi::launch(root, importer)?; return Ok(started) };
+            // XXMI sends its -applaunch once, right after restarting Steam when the launch options differ: settle both
+            // first, so it finds the options in place and a signed-in Steam
+            let options = crate::xxmi::steam_launch_options(root, importer, app);
+            started.steam_restarted = crate::steam::get_ready(app, options.as_deref());
+            crate::xxmi::launch(root, importer)?;
+            crate::steam::watch_restart(app, game);
         }
-        Plan::Direct { exe, args, dir, pre_launch, loader } => {
+        Plan::Direct { exe, args, dir, pre_launch, loader, steam } => {
             if let Some((hook, at)) = pre_launch { run_hook(&hook, &at)?; }
             if let Some((l, at)) = loader {
                 // one left open from the last run still waits for the game: a second copy would only get in its way
                 let name = l.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
                 if !processes().iter().any(|p| name_matches(&p.name, &name)) { shell_start(&l, "", &at)?; }
             }
-            shell_start(&exe, &args, &dir)
+            // a Steam that is still starting drops the -applaunch
+            if let Some(app) = steam { crate::steam::get_ready(app, None); }
+            shell_start(&exe, &args, &dir)?;
+        }
+    }
+    Ok(started)
+}
+
+/// Lower XXMI's FPS unlock for Genshin Impact to GI_FPS_CAP when it is on and set higher. The old value when it changed.
+fn cap_xxmi_fps(root: Option<&str>, importer: &str) -> Option<f64> {
+    let cur = crate::xxmi::importer_config(root, importer).ok()?;
+    let imp = &cur["Importer"];
+    let old = imp["unlock_fps_value"].as_f64().filter(|v| *v > GI_FPS_CAP as f64)?;
+    if imp["unlock_fps"].as_bool() != Some(true) { return None; }
+    match crate::xxmi::set_importer_config(root, importer, &json!({ "Importer": { "unlock_fps_value": GI_FPS_CAP } })) {
+        Ok(()) => {
+            crate::logs::info(format!("Lowered Genshin Impact's FPS limit in XXMI Launcher from {old} to {GI_FPS_CAP}"));
+            Some(old)
+        }
+        Err(e) => {
+            crate::logs::warn(format!("Couldn't lower Genshin Impact's FPS limit of {old} in XXMI Launcher: {e}"));
+            None
         }
     }
 }
@@ -385,15 +556,24 @@ fn opens_launcher(game: &str, plan: &Plan) -> bool {
 
 /// What to tell the player as the game starts: a community game whose loader gachamod couldn't find starts alone,
 /// so its mods only show if the player started the loader; a start without mods while that loader still runs gets
-/// mods anyway; Endfield outside Steam opens its launcher instead of the game; a Steam copy that only starts from
-/// Steam makes XXMI start it through Steam.
-pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool) -> Option<String> {
+/// mods anyway; Endfield outside Steam opens its launcher instead of the game. From `started`: XXMI now starts a Steam
+/// copy through Steam, Steam restarted for the launch options, Genshin Impact's FPS limit came down.
+pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool, started: Started) -> Option<String> {
     let g = games::def(game)?;
     if opens_launcher(game, plan) {
         return Some(format!("Opened the GRYPHLINK launcher. Press Start there: outside Steam, {} starts from its launcher", g.name));
     }
-    if matches!(plan, Plan::Xxmi { to_steam: true, .. }) {
-        return Some(format!("The Steam copy of {} only starts from Steam, so XXMI Launcher now starts it through Steam. It may restart Steam once to set the game's launch options", g.name));
+    if let Some(old) = started.fps_was {
+        return Some(format!("{}'s FPS limit was {old}, now {GI_FPS_CAP}. Above {GI_FPS_CAP} the game disconnects you with \"Illegal tool detected\"", g.name));
+    }
+    if let Plan::Xxmi { to_steam, .. } = plan {
+        let switched = format!("XXMI Launcher now starts {} through Steam, since the Steam copy only starts from there", g.name);
+        match (*to_steam, started.steam_restarted) {
+            (true, true) => return Some(format!("{switched}. Steam restarted first to set the game's launch options")),
+            (true, false) => return Some(switched),
+            (false, true) => return Some(format!("Steam restarted first to set {}'s launch options", g.name)),
+            (false, false) => {}
+        }
     }
     if vanilla && !g.xxmi {
         let loader = games::importer_dir(db, game).ok().and_then(|i| find_loader(&i))?;
@@ -441,6 +621,8 @@ pub fn shell_start(file: &Path, params: &str, dir: &Path) -> Result<()> {
     if !file.is_file() { return Err(Error::NotSetUp(format!("{} isn't there anymore", file.display()))); }
     #[cfg(windows)]
     {
+        // in a job that ends everything in it when gachamod closes, Explorer starts it so the game outlives gachamod
+        if in_closing_job() && start_from_explorer(file, params, dir).is_ok() { return Ok(()); }
         use windows_sys::Win32::UI::Shell::ShellExecuteW;
         use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
         let w = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
@@ -461,6 +643,65 @@ pub fn shell_start(file: &Path, params: &str, dir: &Path) -> Result<()> {
         std::process::Command::new(file).args(params.split_whitespace()).current_dir(dir).spawn()?;
         Ok(())
     }
+}
+
+/// gachamod runs in a Windows job that ends every process in it when the job closes. `cargo run` (so `npm run app`)
+/// puts the app in one, and a rebuild restarts the app, which would close a game it started too.
+#[cfg(windows)]
+fn in_closing_job() -> bool {
+    static IN: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *IN.get_or_init(|| {
+        use windows_sys::Win32::System::JobObjects::{
+            IsProcessInJob, JobObjectExtendedLimitInformation, QueryInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK,
+        };
+        use windows_sys::Win32::System::Threading::GetCurrentProcess;
+        // SAFETY: plain Win32 calls; a null job handle means the job this process is in, and `info` is sized for it.
+        unsafe {
+            let mut in_job = 0;
+            if IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &mut in_job) == 0 || in_job == 0 { return false; }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            let read = QueryInformationJobObject(std::ptr::null_mut(), JobObjectExtendedLimitInformation,
+                (&mut info as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(), std::mem::size_of_val(&info) as u32, std::ptr::null_mut());
+            if read == 0 { return true; }
+            let flags = info.BasicLimitInformation.LimitFlags;
+            flags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE != 0 && flags & JOB_OBJECT_LIMIT_SILENT_BREAKAWAY_OK == 0
+        }
+    })
+}
+
+/// Have Explorer start `file` the way a double click does, so it runs as Explorer's child, outside gachamod's job.
+#[cfg(windows)]
+fn start_from_explorer(file: &Path, params: &str, dir: &Path) -> windows::core::Result<()> {
+    use windows::core::{Interface, BSTR};
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, IDispatch, IServiceProvider, CLSCTX_ALL, COINIT_APARTMENTTHREADED};
+    use windows::Win32::System::Variant::VARIANT;
+    use windows::Win32::UI::Shell::{
+        IShellBrowser, IShellDispatch2, IShellFolderViewDual, IShellWindows, ShellWindows, SID_STopLevelBrowser, SVGIO_BACKGROUND,
+        SWC_DESKTOP, SWFO_NEEDDISPATCH,
+    };
+    let (file, params, dir) = (file.to_string_lossy().into_owned(), params.to_string(), dir.to_string_lossy().into_owned());
+    // a thread of its own, so its COM apartment never meets the thread pool's
+    let job = std::thread::spawn(move || {
+        // SAFETY: COM calls on this thread only; every interface is dropped inside `run`, before CoUninitialize.
+        unsafe {
+            let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let run = || -> windows::core::Result<()> {
+                let windows: IShellWindows = CoCreateInstance(&ShellWindows, None, CLSCTX_ALL)?;
+                let mut hwnd = 0i32;
+                // CSIDL_DESKTOP (0): the desktop window, which every Explorer session has
+                let desktop = windows.FindWindowSW(&VARIANT::from(0i32), &VARIANT::default(), SWC_DESKTOP, &mut hwnd, SWFO_NEEDDISPATCH)?;
+                let browser: IShellBrowser = desktop.cast::<IServiceProvider>()?.QueryService(&SID_STopLevelBrowser)?;
+                let view: IDispatch = browser.QueryActiveShellView()?.GetItemObject(SVGIO_BACKGROUND)?;
+                let shell: IShellDispatch2 = view.cast::<IShellFolderViewDual>()?.Application()?.cast()?;
+                shell.ShellExecute(&BSTR::from(file.as_str()), &VARIANT::from(params.as_str()), &VARIANT::from(dir.as_str()), &VARIANT::from("open"), &VARIANT::from(1i32))
+            };
+            let r = run();
+            if init.is_ok() { CoUninitialize(); }
+            r
+        }
+    });
+    job.join().unwrap_or_else(|_| Err(windows::core::Error::from_hresult(windows::Win32::Foundation::E_FAIL)))
 }
 
 // ── processes ──
@@ -596,6 +837,75 @@ mod tests {
         let direct = merge_config(LaunchConfig { via: "xxmi".into(), ..Default::default() }, None, false);
         assert_eq!(direct.via, "direct");
         assert!(direct.extras.is_empty());
+    }
+
+    #[test]
+    fn mirrors_xxmi_dll_settings_but_never_the_signed_ones() {
+        let x = json!({
+            "Importer": { "launch_options": "", "xxmi_dll_inject_mode": "SKIP", "extra_libraries_enabled": true,
+                "extra_libraries": "GIMI\\d3d11.dll", "extra_libraries_signature": "sig" },
+            "Migoto": { "unsafe_mode": true, "unsafe_mode_signature": "sig" }
+        });
+        let c = merge_config(LaunchConfig::default(), Some(&x), false);
+        let d = c.dll.clone().unwrap();
+        assert_eq!(d, DllConfig { inject_mode: "SKIP".into(), inject_libraries: true, libraries: "GIMI\\d3d11.dll".into(), unsafe_mode: true });
+        assert!(!c.locked.contains_key("dll.unsafeMode"), "on: it can be turned off");
+        assert_eq!(xxmi_patch(&c, &x), json!({}));
+
+        let mut want = c.clone();
+        want.dll = Some(DllConfig { inject_mode: "DIRECT".into(), inject_libraries: false, libraries: "evil.dll".into(), unsafe_mode: false });
+        assert_eq!(xxmi_patch(&want, &x), json!({ "Importer": { "xxmi_dll_inject_mode": "DIRECT", "extra_libraries_enabled": false } }));
+        want.dll.as_mut().unwrap().inject_mode = "MADE_UP".into();
+        assert_eq!(xxmi_patch(&want, &x), json!({ "Importer": { "extra_libraries_enabled": false } }));
+        // a form without the section leaves XXMI's values alone
+        want.dll = None;
+        assert_eq!(xxmi_patch(&want, &x), json!({}));
+
+        // off: only XXMI Launcher can turn it on
+        let off = json!({ "Importer": {}, "Migoto": { "unsafe_mode": false } });
+        let c = merge_config(LaunchConfig::default(), Some(&off), false);
+        assert_eq!(c.locked["dll.unsafeMode"], XXMI_SIGNS_UNSAFE);
+        assert_eq!(c.locked["dll.injectMode"], XXMI_MISSING);
+        assert!(merge_config(LaunchConfig::default(), None, false).dll.is_none());
+    }
+
+    #[test]
+    fn caps_genshin_fps_at_120() {
+        let mut ex: BTreeMap<String, Value> = [("unlock_fps".to_string(), json!(true)), ("unlock_fps_value".to_string(), json!(500))].into();
+        assert!(cap_fps("gi", &mut ex));
+        assert_eq!(ex["unlock_fps_value"], json!(120));
+        assert_eq!(ex["unlock_fps"], json!(true));
+        assert!(!cap_fps("gi", &mut ex), "120 stays");
+        let mut low: BTreeMap<String, Value> = [("unlock_fps_value".to_string(), json!(90))].into();
+        assert!(!cap_fps("gi", &mut low));
+        assert_eq!(low["unlock_fps_value"], json!(90));
+        let mut ww: BTreeMap<String, Value> = [("unlock_fps_value".to_string(), json!(500))].into();
+        assert!(!cap_fps("ww", &mut ww), "only Genshin Impact");
+        assert_eq!(ww["unlock_fps_value"], json!(500));
+
+        // what set_config sends to XXMI: never more than 120
+        let x = json!({ "Importer": { "launch_options": "", "unlock_fps": true, "unlock_fps_value": 500 }, "Migoto": {} });
+        let mut c = merge_config(LaunchConfig::default(), Some(&x), false);
+        cap_fps("gi", &mut c.extras);
+        assert_eq!(xxmi_patch(&c, &x), json!({ "Importer": { "unlock_fps_value": 120 } }));
+    }
+
+    #[test]
+    fn warns_about_the_genshin_kick_until_a_fix_shows() {
+        let warn = KickCheck { warn: true, ..Default::default() };
+        let fixed = KickCheck { fixed: true, ..Default::default() };
+        // XXMI's own DLL, never said done: warn
+        assert_eq!(kick_from(Some("a"), Some("a"), None), warn);
+        // can't read either: warn
+        assert_eq!(kick_from(None, None, None), warn);
+        // a different DLL: a fix looks done
+        assert_eq!(kick_from(Some("b"), Some("a"), None), fixed);
+        // said done with this DLL, even XXMI's own (a fix that doesn't touch it)
+        assert_eq!(kick_from(Some("a"), Some("a"), Some("a")), KickCheck { said: true, ..Default::default() });
+        // said done, then XXMI put its own back
+        assert_eq!(kick_from(Some("a"), Some("a"), Some("b")), KickCheck { warn: true, undone: true, fixed: false, said: true });
+        // said done, and the DLL changed again but still isn't XXMI's own
+        assert_eq!(kick_from(Some("c"), Some("a"), Some("b")), KickCheck { said: true, ..fixed });
     }
 
     #[test]

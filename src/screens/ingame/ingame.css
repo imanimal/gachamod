@@ -20,9 +20,21 @@
 .live-blocked { display: flex; align-items: center; gap: .7rem; margin-top: .7rem; padding: .6rem .7rem; border: 1px solid var(--warn); border-radius: var(--radius); }
 .live-blocked p { flex: 1; margin: 0; font-size: .92em; }
 .live-blocked .icon { flex: none; color: var(--warn); }
+/* another app has the key too (KeyClash.tsx): the buttons stay together and drop under the words when it gets narrow */
+.key-clash { flex-wrap: wrap; }
+.key-clash p { flex: 1 1 14rem; }
+.key-clash-b { display: flex; flex-wrap: wrap; gap: .4rem; }
 .live-all { margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
 .live-menu { display: flex; flex-direction: column; gap: .6rem; margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
 .live-menu-row { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem 1rem; }
 .live-menu-l { align-self: center; font-weight: 600; }
 .live-menu .hotkey-field { width: 14rem; }
 .live-menu .hint { margin: 0; }
+.live-binds > summary { cursor: pointer; font-weight: 600; width: fit-content; }
+.live-binds[open] > summary { margin-bottom: .4rem; }
+.live-binds-l { list-style: none; margin: 0 0 .5rem; padding: 0; display: flex; flex-direction: column; }
+.live-bind { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .9rem; padding: .35rem 0; border-bottom: 1px solid var(--line); }
+.live-bind:last-child { border-bottom: 0; }
+.live-bind-t { flex: 1 1 10rem; }
+.live-bind-k { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .3rem .6rem; }
+.live-bind-c { display: inline-flex; align-items: center; gap: .1rem; }

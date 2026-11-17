@@ -128,7 +128,9 @@ then the mod's own folder name.
 
 A mod is off when any folder on its path has a DISABLED prefix (any case, with a space, `_` or `-`). Other managers
 also turn mods off by renaming the inis (ModDeck's `DISABLED_mod.ini`, `mod.ini.disabled`): a folder whose inis are
-all renamed like that is a mod that is off, and turning it on renames them back.
+all renamed like that is a mod that is off, and turning it on renames them back. Turning on a mod inside a DISABLED
+folder (`DISABLED_old.zip/Jane Gym`) names that folder back (`old.zip`); the other mods in it get DISABLED on their own
+folders first, so only the one picked comes on.
 
 Folders another manager set up come in with what it knew (managers.rs). A new folder is adopted with that manager's
 name, character, GameBanana link, author, version, tags, notes, picture, favourite and NSFW flags; a known mod only
@@ -341,12 +343,13 @@ Rust `ini.rs`:
 - conflicts: group enabled mods by shared hashes. Ignore hashes that 5 or more enabled mods share (common shared
   buffers, often UI or effects). Include the character when all mods in a group share one.
 - lint: problems for every mod, on or off, worst first. Severity says what happens in game:
-  - "bad" (Broken): a file that a used `[Resource]` needs is missing, an ini can't be read, the mod has no ini at
-    all (inis that are only turned off don't count), or two inis change the same TextureOverride hash and
-    match_first_index with no `match_priority` and at least one of them draws without an `if` (variants left on
-    together draw over each other).
-  - "warn" (Warning): a missing file named like a remap (`*RemapBlend.buf`, made by remap fix scripts for another
-    model such as the Raiden boss), or `run = CommandListX` with no such section in the mod.
+  - "bad" (Broken): an ini can't be read, the mod has no ini at all (inis that are only turned off don't count), or
+    two inis change the same TextureOverride hash and match_first_index with no `match_priority` and at least one of
+    them draws without an `if` (variants left on together draw over each other).
+  - "warn" (Warning): a file that a used `[Resource]` needs is missing (authors often leave lines for textures they
+    didn't ship and the mod still shows fine, so it doesn't count on Tools), a missing file named like a remap
+    (`*RemapBlend.buf`, made by remap fix scripts for another model such as the Raiden boss), or
+    `run = CommandListX` with no such section in the mod.
   - "info" (Note): a missing file whose `[Resource]` nothing names (3DMigoto loads a resource's file the first time
     a command uses it, so it never loads), an empty ini next to inis that load, an ini over 16 MB gachamod didn't
     read, a `[Key]` with no key line.
@@ -436,7 +439,8 @@ UI:
   chip to rebind, plus "Toggles only while on screen for all mods", the AI helper for mods it couldn't do, and a
   list of the mods that have gachamod's check, each with "Take it out" (opens by itself after the all-mods action)),
   ProblemsPanel (ProblemsPanel.tsx: warnings and broken problems per mod, each fix as a button with Undo, "Download
-  again" from GameBanana or "Find on GameBanana" for a broken part with no fix in the files, "Ignore" per mod and
+  again" from GameBanana or "Find on GameBanana" for a missing file or broken part with no fix in the files (a quiet
+  button when nothing is broken), "Ignore" per mod and
   "Ignore all" (saved in setting "problems.ignored", listed under Ignored with "Show again"), "Fix all" for fixes
   that need no choice; Tools shows it first while something in it has a fix), HashLookupPanel (a field and results), PacksPanel (Share this game's library, Share
   every game when more than one has mods, Import a .gachamod), ImmPanel (shown when IMM is found: per game counts and "Move mods from IMM" with a Confirm,
@@ -469,8 +473,21 @@ UI:
 - Sanitise description HTML before rendering: allow p, br, b, strong, i, em, u, s, a (https only, opens with
   shell.openUrl), img (https only), ul, ol, li, h1-h4, blockquote, span, div, hr, table bits, iframe only for YouTube
   (convert to a thumbnail link). Strip everything else and all on* attributes and styles.
-Rust: `install.rs` (stage with archive::extract into `<data>/staging/<id>`; find_roots per "Finding mods" over the
-staging folder; place moves (rename, fall back to copy+delete across drives) into Mods; replace keeps the old
+Rust: `install.rs` (stage with archive::extract into `<data>/staging/<id>`, then unpack archives inside it that
+aren't inside a mod folder, up to 5 levels in all and 400 inner archives (a dropped folder gets the same); find_roots
+per "Finding mods" over the staging folder. A bundle installs each mod on its own without asking: candidates are
+separate mods when they came from different inner archives or match different characters, and the candidates of one
+inner archive for one character become one mod with parts. An inner archive that won't open is noted in the toast.
+A queue row always says what it is doing (`QueueItem.progress`, filled through `install::with_progress` and
+`download::download_noting`): what a waiting row waits behind, connecting, a dropped connection's retry countdown, a
+move to another server and why, checking the file, each archive being unpacked with its count and the size out so
+far, and for a bundle the list of mods found with a tick for each one in place. A download with no new bytes for ten
+seconds says so. Finished rows come in batches (`downloads/Batches.tsx`): a download added before the last one of a
+batch finished, or within ten minutes of it, joins that batch. A batch has Turn all on, Turn all off and Clear. A row
+that installed one mod has its switch; a row with several shows "3 of 18 on" and opens a list with a switch per mod,
+Turn all on and Turn all off (open by itself for a quarter hour after it finishes). All of these go through
+`toggleMods`, so the one-skin rule and Undo work as in Mods;
+ place moves (rename, fall back to copy+delete across drives) into Mods; replace keeps the old
 sidecar id, enabled state and folder name, moves the old folder to trash with reason "replaced" first; anything else new
 comes in off (`DISABLED <name>`): installing never turns a mod on, the user does that from its details or GameBanana
 page (which shows a switch once it is installed), so the one-skin question comes up there; preview_url
@@ -501,8 +518,9 @@ UI:
   source.modId against the library list) with infinite scroll: 50 mods a page, cards shown 36 at a time (18 on
   Home), and the next batch always loaded before it is needed, so scrolling near the end shows it at once. Skeleton
   cards only while that batch hasn't arrived yet.
-  Clicking opens the mod page in a wide Drawer: image gallery with a lightbox (arrow keys), title, submitter, stats,
-  description (sanitised HTML), files list each with size, date, download count, analysis status and an Install
+  Clicking opens the mod page in a wide Drawer: image gallery with a lightbox (arrow keys), title, submitter, stats
+  (the heart likes, the bell subscribes, the gift thanks the creator, downloads goes to the files, comments to the
+  comments; signed out they start signing in to GameBanana), description (sanitised HTML), files list each with size, date, download count, analysis status and an Install
   button (primary on the newest file; "Update" when this mod is installed with an older file; "Reinstall" when same),
   "Open on GameBanana". Opening `route.modId` opens that page; `route.character` preselects the character chip.
 - `screens/downloads/Downloads.tsx` (view "downloads"): active items with thumbnail, name, progress bar, speed and
@@ -608,8 +626,40 @@ Rust:
   Error::Conflict "Close XXMI Launcher first, it saves its settings when it closes"). launch: via XXMI (vanilla false)
   or the exe directly (vanilla true, or no XXMI). The Steam copy of ZZZ (`STEAM_ONLY`, a game folder under
   `steamapps`) only starts from Steam: a direct start runs `steam.exe -silent -applaunch <app> <args>`, and the first
-  start through XXMI while its Game Launch is "DIRECT" sets it to "STEAM" (xxmi::launch_through_steam; an XXMI
-  without `configure_platform_launch_options` is too old and the toast says to open it once so it updates). Then a
+  start through XXMI while its Game Launch is "DIRECT" sets it to "STEAM" and raises ZZMI's process_timeout to 90 s
+  (xxmi::launch_through_steam; an XXMI without `configure_platform_launch_options` is too old and the toast says to
+  open it once so it updates). A Steam that has just started drops a `-applaunch` until it is signed in, so both
+  paths get Steam ready first (`steam.rs`, `steam::get_ready`): Steam closed is started with `-silent`; then gachamod
+  waits for the sign-in (`HKCU\Software\Valve\Steam\ActiveProcess` ActiveUser non-zero with a live pid, 90 s) and 5 s
+  more. Through XXMI it also writes the launch options XXMI would (`xxmi::steam_launch_options`, research 1a) into the
+  localconfig.vdf XXMI reads, with a backup and every other byte kept. A running Steam has to close for that
+  (`-shutdown`, 30 s), so it restarts once and the toast says so; XXMI then finds the options equal and only sends its
+  `-applaunch`. If XXMI restarts Steam anyway, `steam::watch_restart` sends `-applaunch` once after that Steam signs
+  in, while XXMI still runs and Steam's `Apps\<app>` Running is 0. Every wait carries on with the launch when it runs
+  out. Genshin Impact's FPS limit (`unlock_fps_value`) never goes above `GI_FPS_CAP` (120; above it the game
+  disconnects the player with "Illegal tool detected"): the form shows and saves at most 120, and a start through XXMI
+  lowers a higher value in XXMI's config first and says so in its toast. The same kick at 120 or lower usually means
+  the anti-cheat flags XXMI's d3d11.dll. Settings › Launch options for Genshin Impact links the community guide
+  (gamebanana.com/tuts/19132: an older GIMI d3d11.dll kept in place with XXMI's Unsafe Mode) with a ban warning, and the global search finds it under "Illegal tool detected".
+  Before a start with mods through XXMI, Play warns (home/KickWarning.tsx: Cancel, I did the fix, Play anyway) unless
+  `launch::kick_check` finds the fix: GIMI's d3d11.dll differs from XXMI's own `Resources\Packages\XXMI\d3d11.dll`, or
+  it equals the SHA-256 saved in `gi.kickFixDll` when the player said they did the fix (the Launch options panel's "I did this
+  fix" switch, or the warning's button). An XXMI update that puts its own DLL back brings the warning back. gachamod
+  only reads the two DLLs and never automates any part of the fix: no swapping, repacking or patching of XXMI's DLLs,
+  and no other way of starting the game to get past the anti-cheat. For any game through XXMI, Settings › Launch options also
+  mirrors XXMI's own DLL settings under "How XXMI loads mods" (`LaunchConfig.dll`, search "How XXMI loads mods"):
+  Injection mode (`xxmi_dll_inject_mode`: Hook, Direct, Skip) and Inject libraries (`extra_libraries_enabled`) save
+  with the form; the player sets each by hand. XXMI signs Unsafe Mode and the library list (`unsafe_mode_signature`,
+  `extra_libraries_signature`; it resets an unsigned one), so gachamod never turns Unsafe Mode on or edits the list,
+  never touches either signature, and only turns Unsafe Mode off through its own command (`launch::unsafe_off`, so a
+  stale form can't). The page reads the form again whenever the window gets focus, unless an edit is still unsaved.
+  The Play warning for Genshin Impact walks through the guide's steps (`tools/KickSteps.tsx`; also under "Steps from
+  the guide" on Settings › Launch options, sharing the form there): open GIMI's v7.0 release page for
+  3dmigoto-GIMI-for-playing-mods.zip, take d3d11.dll out by hand, open the GIMI folder to paste it (keep d3dx.ini), open
+  XXMI Launcher to turn on Unsafe Mode, then Injection mode Direct and Inject libraries off as the settings themselves.
+  A step shows a check when gachamod sees it done (the DLL steps once `kick_check` says `fixed`), read again whenever
+  the window gets focus. gachamod never downloads, extracts or copies the DLL.
+  Then a
   background watcher (spawned thread) polls processes every 3
   s for up to 10 minutes and emits game-state through a callback the command passes (add a `on_state` parameter
   pattern in the command, emitting events::GAME_STATE). running: process list via `tasklist /FO CSV /NH` (no extra
@@ -648,6 +698,9 @@ UI:
   classes stay so themes still dress it). Signed out it reads "Sign in" and one click opens GameBanana's sign-in
   window (`lib/account.ts`); signed in it shows the GameBanana name and picture, and a click opens: your GameBanana
   page (in Browse), follow who you follow there, sign out. Extensions asking for "player" get the GameBanana name.
+  Signed in, "Mods for adults" follows the content settings on the GameBanana account ("Match my GameBanana
+  settings", setting `"gb.matchAdult"`, on by default; under Mods for adults and under GameBanana account;
+  command `gb_content_settings`). docs/gb-account.md, "Content settings", has when it applies and how the ratings map.
 - `screens/tools/Tools.tsx` and `screens/settings/*`: owned by SETTINGS/AI now, see "Settings, Tools and the AI
   helper" below.
 - First start (`screens/settings/Onboarding.tsx`, `lib/setup.ts`), no window and no questions:
@@ -786,14 +839,14 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 - `Settings.tsx` (view "settings"): pages listed on the left in groups (`Paged.tsx`, shared with Tools). A page
   holds the panels that belong together, so the list stays short. Page ids, with their panel ids: Games and mods has
-  "games" (games, game-start, xxmi), "mods" (mods, adult, mod-folders, installing, automatic, broken-mods, storage),
+  "games" (games, xxmi), "launch" (launch, migoto, game-start), "mods" (mods, adult, mod-folders, installing, automatic, broken-mods, storage),
   "creators" and "hotkeys"; Look has "appearance" (appearance, layout, themes, graphics) and "fun"; App has "account"
   (account, integrations, ai), "extensions", "feedback" (feedback, privacy, logs) and "about" (about, updates,
   transfer, repair). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`.
 - Names say what is inside. A page is named for its contents, not its category: "Games and mod loaders", "Mods and
   downloads", "In-game profile hotkeys", "Account, links and AI", "Feedback, privacy and logs", "About and updates"
   (updates were hard to find under a page called About). A panel holds one kind of setting under a heading that
-  names it: "Downloads and installing", "Automatic updates and scans", "Mods a game update broke", "Trash and removed
+  names it: "Downloads and installing", "Mod update checks and rescans", "Mods a game update broke", "Trash and removed
   mods", "Hardware acceleration and rendering log", "gachamod updates", "Repair, reset or uninstall". A setting that
   fits no panel gets a new panel, not a row under a vague heading. A long page name wraps to a second line in the
   list. Each page also has a hover tip listing what is on it. The ids stay short and stable; only the names change.
@@ -812,15 +865,20 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   that renders nothing is left out of the list.
 - A setting sits where people look for it, and some show twice. Mods folders (`mod-folders`, on the Mods and
   downloads page) lists each game's Mods folder with Detect again, Change and Install mod loader or Find it; the same
-  folders are under Games and their folders. Run as administrator is under Administrator and launch options (on
-  Games and mod loaders) and under In-game profile hotkeys (one shared state in `Feedback.tsx`). Automatic updates
-  has its switch under gachamod updates next to Check now as well as under Automatic updates and scans. The
-  rendering log is under Log files and next to Hardware acceleration. Administrator and launch options has a Launch
-  options row that opens Tools, Launch.
+  folders are under Games and their folders. Run as administrator is a panel on Launch options and a row under
+  In-game profile hotkeys (one shared state in `Feedback.tsx`). The rendering log is under Log files and next to
+  Hardware acceleration.
+- Settings hold settings and Tools holds tools. Launch options (`Launch.tsx`, page "launch") has the Launch options
+  and Mod maker switches panels, two views of one launch config per game (`useLaunch`) saved together 400 ms after
+  the last change; leaving the page sends an edit that is still waiting. They show the game picked in the sidebar,
+  with a game picker when more than one game shows. Any setting XXMI Launcher owns (the backend's lock message says
+  "in XXMI Launcher" or "Only XXMI Launcher") shows an "Open XXMI Launcher" button next to it. "Start with" is hidden
+  for community games. The 3DMigoto log, the shader cache and finding a hash stay in Tools › Mod makers, and each side
+  has a button to the other (View log, Log settings).
 - `lib/places.ts` gives a message that names a setting or a place a button that opens it. Toasts without a button
   of their own get it by their words, backend messages included ("has no Mods folder yet" gets "Mods folders",
   "IMM manages this mod" gets "Move from IMM"). `placeFor(text)` gives the same button to a note drawn in a page
-  (Tools uses it for a launch config that couldn't load or save).
+  (Launch options uses it for a launch config that couldn't load or save).
 - `settingsSearch.ts` registers every section and setting in the global search with the words people use
   ("recycle bin" finds Keep removed mods' files), plus "Open XXMI Launcher" and the AI jobs (only while AI shows).
 - Games: XXMI games, then community games (no XXMI support) with one plain line on what differs: they need their own
@@ -833,9 +891,10 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   themes: list, apply, delete with Undo, import/export as JSON, an editor with a stylesheet box and the list of parts
   it can style, and "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
 - What gachamod does by itself has one switch each, all prefs in `automatic.ts` that other areas read. They sit in
-  three panels of Mods and downloads: "Automatic updates and scans" (app updates, mod updates, rescans), "Downloads
+  three panels of Mods and downloads: "Mod update checks and rescans" (mod updates, rescans), "Downloads
   and installing" (archives, every mod in an archive, slow downloads, on-screen toggles for new mods) and "Mods a
-  game update broke" (new fixers, the warnings). The prefs: `appUpdateCheckPref`
+  game update broke" (new fixers, the warnings). gachamod's own updates are not a mod setting: their switch is under
+  About and updates, gachamod updates, above Check now. The prefs: `appUpdateCheckPref`
   ("app.updateCheck", shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
@@ -859,25 +918,36 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   - Chill mode ("fun.chill", html[data-chill], `styles/fun.css`): the app's own words in lower case. Content keeps
     its case (mod, character, creator and profile names, descriptions, comments, tags, paths, fields); a line that
     mixes both stays as written. Toasts and tips are lowercased whole.
-  - Pity counter ("fun.pity"): counts mods opened in Browse since the last install; at 90 a toast says hard pity
-    and it starts over.
-  - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx`): a few snowflakes from 20 December, hearts on 14 February.
-    Hidden when Animations is off.
+  - Pull button ("fun.pull", `screens/browse/Pull.tsx`), named for the game (Wish, Warp, Signal Search, Convene,
+    Headhunt): a star button in Browse's header that opens a random mod after a short flash in its star colour.
+    3 star: a page of the newest. 4 star: pages 2 to 4 of the most liked. 5 star: the 50 most liked, one pull in
+    sixteen, and every 10th pull without one ("fun.pulls" counts). Hidden mods, blocked creators and, when hidden,
+    mods for adults stay out.
+  - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx`): off, by the date (bats and pumpkins from 24 October,
+    snowflakes from 20 December, hearts on 14 February), or one season all year. Hidden when Animations is off.
   - Your year in mods: a dialog with mods installed this year, the character with the most mods, the creator of
     the most of them and hours played (`lib/playtime.ts` counts from game start to close, "stats.played").
   - Mod of the day (`lib/motd.ts`): see Browse.
 - The Konami code (arrows, B, A; keyboard or controller) reveals a hidden theme, Clay ("fun.hiddenTheme"), and
-  offers to use it. Hidden themes (`ThemeInfo.hidden`) stay out of Appearance until found.
+  offers to use it. Hidden themes (`ThemeInfo.hidden`) stay out of Appearance until found. On the keyboard, B and A
+  that continue the code don't start a search.
+- Opening screen (`src/splash`, Settings, Appearance, "Opening screen", localStorage "gm.intro": missing for the
+  theme's own, an intro id, or "0" for off): a solid screen with one tip (`splash/tips.ts`: an icon over a line, the
+  Konami tip one start in twenty) while the app renders behind it, then an intro reveals the app
+  (`splash/intros/<id>.ts`). By default it's the intro of the theme in use (a custom theme's base), so it follows the
+  game through the theme's "Game's own": New Eridu, Teyvat, Astral Express, Solaris and Talos-II have their own, the
+  rest the plain fade. index.html paints its colour before any script runs. It waits for
+  App's `splashReady()` and the first screen's loading, at most 5 s, and an intro gets at most 4 s. A click, Escape,
+  Enter, Space or a controller button skips it; the Konami code's keys don't. Animations off: the tip, then a fade.
+  "Play it" in Settings replays it. In dev, `?intro=<game>` picks one and `&hold=1` keeps the tip up.
 
 ### Tools
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
-(Problems and fixes: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "launch", "ingame" from
-INGAME, "packs" (Share and move: packs, "imm") and "migoto" (Mod makers: migoto, "dev", "hash"). The panel ids
-still work as routes. Launch and Mod maker switches are two panels over one launch config (`useLaunch`), saved
-together. A panel that renders nothing (IMM when it isn't installed) is left out. Any
-setting XXMI Launcher owns (the backend's lock message says "in XXMI Launcher" or "Only XXMI Launcher") shows an
-"Open XXMI Launcher" button next to it. "Start with" is hidden for community games.
+(Problems and fixes: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" from
+INGAME, "packs" (Share and move: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The panel ids
+still work as routes. A panel that renders nothing (IMM when it isn't installed) is left out. Tools has no settings
+pages: launch options and 3DMigoto's switches are in Settings › Launch options (see Settings).
 
 The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
 (docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
@@ -892,6 +962,16 @@ window (`skinMenu.openInApp`, event `app-go`, handled in `App.tsx`).
 The key list (`crates/gacha-core/src/keylist.rs`, `lib/api/keylist.ts`, docs/ingame.md "The key list") shows each
 mod's toggle keys while playing: the Keys tab of the window over the game (F8 by default), or a panel the game draws in
 its top right corner (`live/menu.rs`). Its settings and the pick per mod are in the Key list panel on the same Tools page.
+
+Other apps' keys (`crates/gacha-core/src/otherkeys.rs`, `lib/api/otherkeys.ts`, `screens/ingame/otherKeys.ts`,
+docs/other-app-keys.md): recorders like Medal listen for keys in every app, so Medal's screenshot key F7 fires
+together with the skin menu. gachamod reads those apps' settings and, when one of their keys is also the skin menu
+key, the key list key or a profile hotkey, says so in a toast at start and when a game starts, and in a note in the
+panel (`KeyClashNote`). "Use F9" moves gachamod's key in every game that used the old one; "Keep F7" stops the
+question. For Medal the note also has "Change Medal's key": Medal gets the free key and gachamod keeps its own. That
+writes one value in Medal's database, only while Medal is closed, after a copy of the database
+(`medal-<user id>.db.gachamod.bak` next to it). No other app's settings are written. The setting `otherKeys.ask` =
+`0` turns the toasts off.
 
 ### The AI helper
 

@@ -36,6 +36,20 @@ export function applyChange(list: ModEntry[], change: ModChange): ModEntry[] {
   return [...change.changed.filter((m) => !known.has(m.id) && !gone.has(m.id)), ...out];
 }
 
+/** A fresh list with the entries that didn't change kept as the same objects, so their cards don't render again. */
+export function reuse(prev: ModEntry[], next: ModEntry[]): ModEntry[] {
+  if (!prev.length) return next;
+  const old = new Map(prev.map((m) => [m.id, m]));
+  let same = prev.length === next.length;
+  const out = next.map((m, i) => {
+    const o = old.get(m.id);
+    const keep = o && JSON.stringify(o) === JSON.stringify(m) ? o : m;
+    if (keep !== prev[i]) same = false;
+    return keep;
+  });
+  return same ? prev : out;
+}
+
 export function useMods(game: GameId) {
   const [mods, setMods] = useState<ModEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -45,7 +59,7 @@ export function useMods(game: GameId) {
   const relist = useCallback(async () => {
     try {
       const l = await library.list(game);
-      if (alive.current) { setMods(l); setLoaded(true); }
+      if (alive.current) { setMods((was) => reuse(was, l)); setLoaded(true); }
     } catch (e) { if (alive.current) { setLoaded(true); toast(errorText(e), true); } }
   }, [game]);
 
@@ -54,7 +68,7 @@ export function useMods(game: GameId) {
     try {
       const l = await library.scan(game);
       lastScan.set(game, Date.now());
-      if (alive.current) { setMods(l); setLoaded(true); }
+      if (alive.current) { setMods((was) => reuse(was, l)); setLoaded(true); }
       if (quiet) return;
       // asked for by hand: also look for updates now, whatever the automatic check is set to
       const linked = l.filter((m) => m.source);

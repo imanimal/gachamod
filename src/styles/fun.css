@@ -53,5 +53,35 @@
   50% { transform: translate(var(--sway), 52vh) rotate(90deg); }
   to { transform: translate(0, 106vh) rotate(180deg); }
 }
+/* Halloween: bats flap their way up, every third one is a pumpkin falling */
+.season-halloween i { width: var(--s); height: calc(var(--s) * .5); animation-name: seasonRise; }
+.season-halloween i::before { content: ""; position: absolute; inset: 0; background: #9d7ae6;
+  -webkit-mask: var(--bat) center / contain no-repeat; mask: var(--bat) center / contain no-repeat;
+  --bat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 16'%3E%3Cpath d='M16 4.2 14.6 2l-.5 3.2C11 2.2 6 1.2 0 3c3 1 4 3 4 5 2-1.5 4-1 5 1 1-1.5 3-1.5 4 .5l3 2.5 3-2.5c1-2 3-2 4-.5 1-2 3-2.5 5-1 0-2 1-4 4-5-6-1.8-11-.8-14.1 2.2L17.4 2z'/%3E%3C/svg%3E");
+  animation: seasonFlap var(--flap) ease-in-out infinite alternate; }
+.season-halloween i:nth-child(3n) { height: calc(var(--s) * .6); width: calc(var(--s) * .6); animation-name: seasonFall; }
+.season-halloween i:nth-child(3n)::before { background: #f08a2c; animation: none;
+  --bat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12.6 6.3c-.1-1.9.4-3.4 1.9-4.3l.8 1c-1 .7-1.4 1.8-1.3 3.3zM12 6.6c2.2-1.3 5.2-1.3 7.2.3 2.6 2 2.9 6.6 1.3 10-1.3 2.9-3.6 4.4-6 4.4-1 0-1.8-.3-2.5-.7-.7.4-1.5.7-2.5.7-2.4 0-4.7-1.5-6-4.4-1.6-3.4-1.3-8 1.3-10 2-1.6 5-1.6 7.2-.3z'/%3E%3C/svg%3E"); }
+[data-scheme="light"] .season-halloween i::before { background: #5b3f8f; }
+[data-scheme="light"] .season-halloween i:nth-child(3n)::before { background: #e07a1c; }
+@keyframes seasonRise {
+  from { transform: translate(0, 106vh); }
+  50% { transform: translate(var(--sway), 52vh); }
+  to { transform: translate(0, -2rem); }
+}
+@keyframes seasonFlap { to { transform: scaleY(.5); } }
+/* ── the pull button (screens/browse/Pull.tsx): a short flash in the star colour before the mod opens ── */
+
+.pull-flash { position: fixed; inset: 0; z-index: 2147482000; display: grid; place-items: center; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--pull) 34%, transparent), transparent 62%), rgb(4 5 10 / .6);
+  animation: pullFlash 1.15s ease-out forwards; }
+.pull-3 { --pull: #5aa7ff; }
+.pull-4 { --pull: #b67cff; }
+.pull-5 { --pull: #ffc94a; }
+.pull-stars { font: 400 3rem/1 "Segoe UI Symbol", system-ui, sans-serif; letter-spacing: .28em; margin-right: -.28em; color: var(--pull);
+  text-shadow: 0 0 22px var(--pull); animation: pullStars 1.15s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes pullFlash { 0% { opacity: 0; } 12%, 72% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes pullStars { 0% { opacity: 0; transform: scale(.6); } 24% { opacity: 1; transform: scale(1.06); } 38% { transform: scale(1); } 74% { opacity: 1; } 100% { opacity: 0; transform: scale(1.02); } }
+
 html:is([data-motion="reduced"], [data-motion="0"]) .season { display: none; }
 @media (prefers-reduced-motion: reduce) { .season { display: none; } }

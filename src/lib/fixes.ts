@@ -4,11 +4,11 @@
 // more than a hash swap (a buffer rewrite) gets the fixer the data names: gachamod downloads it from GameBanana or
 // GitHub and runs it on that mod, with a backup and Undo per mod. Owner: FIXES area.
 // Rust: crates/gacha-core/src/fixes.rs, fixers.rs.
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { backups, errorText, fixers as fixersApi, fixes as fixesApi, type FixAll, type FixTried, type FixerFile, type FixerRun, type GameId, type ModBackup, type ModHealthRow, type ToolLink } from "./api";
 import { gbToolId, newestFile, toolPage, type GbFile } from "./gamebanana";
 import { record } from "./history";
-import { pref } from "./prefs";
+import { jsonPref, pref } from "./prefs";
 import { emitApp, go, onApp } from "./store";
 import { plural, timeAgo } from "../ui/kit";
 import { toast } from "../ui/toast";
@@ -61,17 +61,39 @@ const subs = new Set<() => void>();
 const notify = () => subs.forEach((f) => f());
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
 
-/** Check a game's mods again. Errors stay quiet: health is a hint, not something to interrupt for. */
-export function reloadHealth(game: GameId): Promise<void> {
+const queued = new Map<GameId, Promise<void>>();
+const checkFailed = new Map<GameId, unknown>();
+
+/** Check a game's mods again. Errors stay quiet: health is a hint, not something to interrupt for. `fresh` is for
+ *  after a change to the mods: a check already running may have read them before the change, so one more runs
+ *  once it is done (shared by everyone who asked meanwhile). */
+export function reloadHealth(game: GameId, fresh = false): Promise<void> {
   const busy = loading.get(game);
-  if (busy) return busy;
+  if (busy && !fresh) return busy;
+  if (busy) {
+    let next = queued.get(game);
+    if (!next) {
+      next = busy.then(() => { queued.delete(game); return reloadHealth(game); });
+      queued.set(game, next);
+    }
+    return next;
+  }
   const p = fixesApi.health(game).then((rows) => {
+    checkFailed.delete(game);
     lists.set(game, rows);
     maps.set(game, new Map(rows.map((r) => [r.modId, { status: r.status, reasons: r.reasons, since: r.since, tool: r.tool, swaps: r.swaps, needsAuthor: r.needsAuthor, tried: r.tried }])));
     notify();
-  }).catch(() => {}).finally(() => loading.delete(game));
+    healthListeners.forEach((f) => f(game, rows));
+  }).catch((e) => { checkFailed.set(game, e); }).finally(() => loading.delete(game));
   loading.set(game, p);
   return p;
+}
+
+/** Check again because someone asked: a check that fails says so, since an unchanged list would read as "all fine". */
+export async function checkHealth(game: GameId): Promise<void> {
+  await reloadHealth(game, true);
+  const e = checkFailed.get(game);
+  if (e) toast(`Couldn't check the mods: ${errorText(e)}`, true);
 }
 
 // a scan, an install or an undo changed a game's mods: check that game again (once things settle)
@@ -79,20 +101,45 @@ const timers = new Map<GameId, number>();
 onApp((e) => {
   if (e.type !== "library-refresh" || !maps.has(e.game)) return;
   clearTimeout(timers.get(e.game));
-  timers.set(e.game, window.setTimeout(() => void reloadHealth(e.game), 700));
+  timers.set(e.game, window.setTimeout(() => void reloadHealth(e.game, true), 700));
 });
 
 /** Off mutes the broken-mod warnings: mod cards, a mod's details and the Problems filter in Mods stop showing them,
  *  and Tools > Fixes folds its list away. The Mute button in Tools > Fixes and Settings > Mods a game update broke share it. */
 export const fixWarningsPref = pref<boolean>("fixes.warn", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
+// ── dead ends: broken mods no fix here will help ──
+
+/** A broken mod nothing in gachamod is likely to fix: the game changed its model, no fixer is known for it, or its
+ *  fixer already ran and left it broken. It needs an update from its author. */
+export const isDeadEnd = (h: Pick<ModHealth, "status" | "needsAuthor" | "tool" | "tried">) =>
+  h.status === "unfixable" && (!!h.needsAuthor || !h.tool || !!h.tried);
+
+/** Muted dead ends per game, as "<modId>#<what's wrong>": a mod whose problem changes (another update) shows again. */
+export const mutedPref = jsonPref<Record<string, string[]>>("fixes.muted", {});
+/** Turn off and mute dead ends as soon as a check finds them. Off by default. */
+export const autoMutePref = pref<boolean>("fixes.autoMute", false, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
+
+const sig = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+export const muteKey = (modId: string, h: Pick<ModHealth, "reasons">) => `${modId}#${sig(h.reasons.join("\n"))}`;
+export const isMuted = (muted: Record<string, string[]>, game: GameId, modId: string, h: Pick<ModHealth, "reasons">) =>
+  !!muted[game]?.includes(muteKey(modId, h));
+
+/** Called after each check with the game's rows (Tools > Fixes turns dead ends off when autoMutePref is on). */
+const healthListeners = new Set<(game: GameId, rows: ModHealthRow[]) => void>();
+export function onHealth(f: (game: GameId, rows: ModHealthRow[]) => void) { healthListeners.add(f); return () => { healthListeners.delete(f); }; }
+
 /** Health of every installed mod of a game, keyed by mod id. Updates when a scan or fix finishes. Empty while the
- *  warnings are muted. */
+ *  warnings are muted, and leaves out the mods muted one by one. */
 export function useModHealth(game: GameId | null | undefined): Map<string, ModHealth> {
   const warn = fixWarningsPref.use();
+  const muted = mutedPref.use();
   const map = useSyncExternalStore(subscribe, () => (game && warn ? maps.get(game) ?? EMPTY : EMPTY));
   useEffect(() => { if (game && warn && !maps.has(game)) void reloadHealth(game); }, [game, warn]);
-  return map;
+  return useMemo(() => {
+    if (!game || !muted[game]?.length) return map;
+    return new Map([...map].filter(([id, h]) => !isMuted(muted, game, id, h)));
+  }, [map, muted, game]);
 }
 
 /** The mods a game update broke (and the ones gachamod fixed), with their names, for Tools > Fixes. null until the
@@ -117,7 +164,7 @@ function recordFixes(game: GameId, label: string, changed: ModBackup[]) {
     }
     next = out;
     emitApp({ type: "library-refresh", game });
-    void reloadHealth(game);
+    void reloadHealth(game, true);
     if (failed) throw failed;
   };
   record({ label, undo: flip, redo: flip });
@@ -144,7 +191,9 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (!maps.has(game)) await reloadHealth(game);
   const health = healthNow(game);
   // a mod whose fixer is running already (asked twice) is left to that run
+  const asked = ids.length;
   ids = ids.filter((id) => !fixerBusy.has(`mod:${id}`));
+  if (!ids.length) { toast(asked === 1 ? "A fixer is already running on that mod" : "A fixer is already running on those mods"); return 0; }
   const needFixer = ids.filter((id) => health.get(id)?.status === "unfixable" && health.get(id)?.tool);
   const swap = ids.filter((id) => !needFixer.includes(id));
   let n = swap.length ? await swapHashes(game, swap) : 0;
@@ -165,7 +214,7 @@ async function swapHashes(game: GameId, ids: string[]): Promise<number> {
   } else {
     toast("Nothing there could be fixed automatically");
   }
-  void reloadHealth(game);
+  void reloadHealth(game, true);
   return r.changed.length;
 }
 
@@ -300,7 +349,7 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
   }
   if (!done.length) return 0;
   emitApp({ type: "library-refresh", game });
-  await reloadHealth(game);
+  await reloadHealth(game, true);
   const after = healthNow(game);
   let changed = 0;
   for (const { run: r, tool, quiet } of done) {

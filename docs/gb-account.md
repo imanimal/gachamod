@@ -91,7 +91,7 @@ Seen myself (public requests, or read from the site's scripts):
 | Call | What it does |
 | --- | --- |
 | `GET /apiv11/Member/Session` | Guest answer is `{ "_bIsLoggedIn": false }`. Signed in adds `_idMemberRow` (from Tessera's code, not seen live). |
-| `GET /Member/UiConfig?_sUrl=/` | Guest has `_bIsLoggedIn: false`. Signed in adds `_idMemberRow`, `_aSubscribedGames`, `_aPointDetails._nPoints`, `_bHasFreeThank`. Also holds `_aContentRatingBehaviors`, the member's adult-content setting (`show`, `warn` or `hide` per rating code such as `pn`, `nu`). Could seed the app's adult mode, never overwrite it silently. |
+| `GET /Member/UiConfig?_sUrl=/` | Guest has `_bIsLoggedIn: false`. Signed in adds `_idMemberRow`, `_aSubscribedGames`, `_aPointDetails._nPoints`, `_bHasFreeThank`. Also holds `_aContentRatingBehaviors`, the member's content settings (`show`, `warn` or `hide` per rating code). Guests get GameBanana's defaults there, so it answers for everyone; only `_bIsLoggedIn: true` makes it the member's own. |
 | `GET /Member/{id}/ProfilePage` | `_sName`, `_sAvatarUrl`, `_sHdAvatarUrl`. With a session, the page also reads `_bAccessorIsSubscribed`, `_idAccessorSubscriptionRow`, `_bAccessorIsBuddy` from it. |
 | `GET /Mod/{id}/ProfilePage` | With a session adds `_bAccessorHasLiked`, `_bAccessorHasThanked` (named in the site's scripts, absent for guests). |
 | `GET /Member/{id}/Subscriptions?_nPage=1&_sModelName=Content` | `_sModelName` is `Content`, `Member`, `Studio` or `Game`. 15 per page. Records are `{ _idRow, _aSubscription: { _idRow, _sModelName, _sName, _sProfileUrl, _aSubmitter, _aGame, ... } }`. Public: it answered with no cookie. Record `_idRow` is the subscription row id used to unsubscribe. |
@@ -101,7 +101,7 @@ Seen myself (public requests, or read from the site's scripts):
 | `GET /{Model}/{id}/Config` | `_aAccess` flags for what the signed-in member may do (`Like_Trash`, `Thank_Add`...), plus `_bAccessorIsSubmitter`. Good to check before showing a button. |
 | `GET /{Model}/{id}/AccessorCollections`, `POST /Collection/Add`, `POST /{Model}/{id}/AddToCollection` (`{ "_idCollectionRow": n }`), `DELETE /{Model}/{id}/RemoveFromCollection` (body `{ "_idCollectionRow": n }`) | Collections. This is the closest GameBanana has to "favourites" for mods. The first lists `_aAllCollections` (`_idRow`, `_sName`). `Collection/Add` takes `{ _bIsPrivate, _sName, _sPassword }` (from deltamod, password meaning unclear). |
 | `POST /{Model}/{id}/Post/Add` | A comment. Body `{ "_sText": "<p>..</p>", "_aImages": [], "_aImageFiles": [], "_aMentionedMemberRowIds": [] }` (from deltamod, not in the site's scripts I read). |
-| `POST /{Model}/{id}/Thank/Add` | Body `{ "_nPointsToDonate": 10 }`. Costs the member real points (10 by default, up to 1000), unless they have the daily free thank (`_bHasFreeThank`). The UI offers to "rethank" for more, so it can repeat. |
+| `POST /{Model}/{id}/Thank/Add` | Body `{ "_nPointsToDonate": 10 }`. The site's picker offers 5, 10 (default), 25, 50, 100, 250, 500 and 1000. With the daily free thank (`_bHasFreeThank`) the picker hides and it still sends 10, which GameBanana pays from its own bank. With `_bAccessorHasThanked` the button says "Rethank" and sends the same call again. The site hides like, subscribe and thank when `_bAccessorIsSubmitter`. Read from the site's `Profile.js` (Nov 2026); the response wasn't captured. |
 | `POST /Member/Buddy/{id}/Request` | Buddy request. Notifies the other person. Out of scope. |
 
 Mapping to the app:
@@ -114,6 +114,47 @@ Mapping to the app:
 - The "new from people you subscribe to" feed can be built from public `Mod/Index?_aFilters[Generic_Submitter]=`
   reads. `Member/{id}/SubFeed` is that member's own threads, not a subscription feed.
 - Mod favourites: use Like (silent) and Collections. Don't invent a favourites API.
+- The mod drawer's stats row does the mod actions (`screens/browse/ModStats.tsx`): the heart likes, the bell subscribes
+  (`Mod/{id}/Subscription/Add`, row from the apiv13 `Mod/{id}/ProfilePage`), the gift opens a small box with the cost
+  and one Thank button. `gb_mod_me` reads the accessor flags and `UiConfig` points once per opened mod, in the
+  background; until it answers, the buttons show what the app remembers (`gb.liked`, `gb.subscribed`, `gb.thanked`).
+  Counts come from the guest page read and move by the member's own clicks.
+
+## Content settings
+
+Members pick show, warn or hide for each content rating on GameBanana. `UiConfig` returns them as
+`_aContentRatingBehaviors`. Codes seen on mods (Nov 2026), with the guest default:
+
+| Code | Rating | Default |
+| --- | --- | --- |
+| `sa` | Skimpy Attire | warn |
+| `st` | Sexual Themes | warn |
+| `sc` | Sexual Content | warn |
+| `lp` | Lewd Angles & Poses | warn |
+| `pn` | Partial Nudity | hide |
+| `nu` | Full Nudity | hide |
+| `ft` | Fetishistic | hide |
+| `cp` | Crude or Profane | show |
+| `iv` | Intense Violence | hide |
+
+`bg`, `au`, `tu`, `du`, `ps` (shown) and `rp` (hidden) are in the list too but weren't seen on any gacha mod. A mod's
+`_sInitialVisibility` is the strictest behaviour among its ratings for whoever asks (`sa` + `sc` gives `warn` for a
+guest, `sa` + `nu` gives `hide`). Index records carry only that and `_bHasContentRatings`, not the codes, and the app
+reads lists without the cookie, so the cards always get the guest answer.
+
+The app's "Mods for adults" is one setting, so `gb_account::adult_pref` folds the first seven codes into it: all `show`
+gives Show, all `hide` gives Hide, anything else Blur. The others don't decide it (someone who shows every adult rating
+but hides violence still gets Show). `lib/account.ts` applies it, with Undo, when "Match my GameBanana settings"
+(`gb.matchAdult`, on by default) is on:
+
+- At sign-in, unless the seven are still GameBanana's defaults: those say nothing about what the person wants, and
+  would turn a Show picked in the app back to Blur.
+- At each start while signed in, only when the result differs from last time (`gb.adultSeen`). A change made in the
+  app stays until the setting on GameBanana changes.
+- When the switch is turned on, always.
+
+Nothing is written back to GameBanana. GameBanana's privacy settings have nothing to match in the app (it never
+publishes anything about the member beyond the follows and likes they click), so they aren't read.
 
 ## Captcha and 2FA
 
@@ -152,16 +193,15 @@ library. Not tested in WebView2 here, but it is Chromium like the Electron windo
   `Member/Authenticate` call from Rust.
 - Never act without a user click on that exact action. No auto-subscribe, auto-like, bulk subscribe on import, retries
   that repeat a write, or "sync" jobs that push local flags up.
-- Never thank (it spends points) without showing the cost on the button and a click for each one. Leave thanks out of
-  the first version.
+- Never thank (it spends points) without showing the cost on the button and a click for each one.
 - Never post a comment the user didn't write and send in the app. Leave buddy requests and messages out.
 - Never send the cookie anywhere but `gamebanana.com` and `*.gamebanana.com`, and never to the React side. The UI only
   gets `{ id, name, avatar }`.
 - Never keep signing in behind the user's back. When the session dies, say so once and wait.
 - Never run writes in a loop. One write per click, and a short pause between two clicks on the same button.
 - Every write goes through `record({ label, undo, redo })`: subscribe undoes with `DELETE Subscription/{row}`, like
-  with the matching `DELETE`, collection add with `RemoveFromCollection`. Thanks and comments can't be undone, which is
-  another reason to keep them out.
+  with the matching `DELETE`, collection add with `RemoveFromCollection`. Thanks and comments can't be undone, so a
+  thanks gets a toast instead, and the box says it can't be taken back.
 
 ## What is still unverified
 

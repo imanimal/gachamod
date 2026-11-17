@@ -77,7 +77,7 @@
   .side-game-t { font-weight: 800; font-style: italic; font-size: .95rem; line-height: 1.08; }
   .side-game-dd { color: var(--text-3); }
   .side-game-s { color: var(--yellow-ink); font-weight: 700; }
-  .side-game-add { border-radius: 999px; color: var(--acc-ink); font-weight: 800; font-style: italic; box-shadow: inset 0 0 0 2px var(--line-2); }
+  .side-game-add { border-radius: 1.4rem; color: var(--acc-ink); font-weight: 800; font-style: italic; box-shadow: inset 0 0 0 2px var(--line-2); }
   .side-games { border-radius: 999px; padding: .3rem .55rem .3rem .7rem; background: var(--dots), var(--well); box-shadow: inset 0 0 0 2px var(--ink); }
   .side-games-h { font-style: italic; font-weight: 800; }
   .side-g .gbadge { box-shadow: 0 0 0 2px var(--ink), 0 0 0 3px var(--rim); }
@@ -128,7 +128,7 @@
 
   /* the footer detail above Play: a glyph strip and a pressed-type label, one line each */
   .side-deco { display: flex; flex-direction: column; gap: .3rem; padding: .15rem .55rem; color: var(--deco); }
-  .side-deco-t, .side-deco .glyphs.rev { display: none; }
+  .side-deco .glyphs.rev { display: none; }
   .side-deco-m { font-size: .6rem; font-weight: 800; letter-spacing: .14em; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-foot { margin-top: 0; }
 
@@ -138,7 +138,7 @@
   .palette-in > .i { color: var(--acc-ink); stroke-width: 2.6; }
   .palette-list { border-radius: 12px; background: var(--dots), var(--well); box-shadow: inset 0 0 0 2px var(--ink); }
   .palette-h { color: var(--text-3); font-style: italic; }
-  .palette-i { border-radius: 999px; color: var(--well-text); font-weight: 700; }
+  .palette-i { border-radius: 1.45rem; color: var(--well-text); font-weight: 700; }
   .palette-i.on { background: var(--dots-ink), var(--acc); color: #0a0a0a; }
   .palette-i.on > .i, .palette-i.on .palette-hint { color: #0a0a0a; }
   .palette-img { border-radius: 50%; box-shadow: 0 0 0 2px var(--ink); }

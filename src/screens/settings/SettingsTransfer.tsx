@@ -172,14 +172,14 @@ export function UpdateRow() {
     : "gachamod closes, updates and opens again";
   return (
     <div className="set-rows set-update">
-      <div className="set-row">
-        <span><b>Check for updates</b><span className="hint">{auto ? "New versions download by themselves and install when you close gachamod" : "gachamod doesn't look for new versions by itself"}</span></span>
-        <span className="set-admin">
-          <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
-          <span title="gachamod looks for a new version at start and every 6 hours. The same switch is in Mods and downloads, under Automatic updates and scans">
-            <Toggle checked={auto} label="Automatic" onChange={(v) => void appUpdateCheckPref.set(v, v ? "Updating gachamod automatically" : "Stopped updating gachamod automatically")} />
-          </span>
-        </span>
+      <div className="set-row" id="set-app-updates">
+        <span><b className="set-tip" title="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now">Update gachamod automatically</b>
+          <span className="hint">New versions download in the background and install when you close gachamod</span></span>
+        <Toggle checked={auto} onChange={(v) => void appUpdateCheckPref.set(v, v ? "Updating gachamod automatically" : "Stopped updating gachamod automatically")} />
+      </div>
+      <div className="set-row" id="set-app-check">
+        <span><b>Check for updates</b><span className="hint">{auto ? "Look now instead of waiting for the next check" : "gachamod doesn't look for new versions by itself"}</span></span>
+        <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
       </div>
       {r && (
         <div className="set-row">

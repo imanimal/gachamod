@@ -19,3 +19,25 @@
 .dl-elsewhere { text-align: center; margin-top: .6rem; }
 .dl-more { color: var(--accent-ink); font-weight: 600; }
 .dl-more:hover { text-decoration: underline; }
+.dl-mods { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .15rem .9rem; font-size: .86em; color: var(--text-3); }
+.dl-mods li { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.dl-mods li > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-mods li.is-in { color: var(--text-2); }
+.dl-mods li.is-now { color: var(--text); font-weight: 600; }
+.dl-mods .i { width: 12px; height: 12px; color: var(--ok); flex: none; }
+.dl-mods-dot { flex: none; width: 12px; display: grid; place-items: center; }
+.dl-mods-dot::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.dl-mods-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .5rem; border-radius: var(--radius-xs); color: var(--text-2); font-size: .86em; white-space: nowrap; }
+.dl-mods-btn:hover, .dl-mods-btn:focus-visible { color: var(--text); background: var(--surface-3); }
+.dl-mods-btn .i { width: 12px; height: 12px; transition: transform .12s; }
+.dl-mods-btn.open .i { transform: rotate(90deg); }
+.dl-installed { margin-top: .35rem; display: flex; flex-direction: column; gap: .35rem; }
+.dl-installed-bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.dl-installed ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .2rem .9rem; }
+.dl-installed li { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.dl-installed-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.dl-installed-name:hover, .dl-installed-name:focus-visible { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+.dl-batch { display: flex; flex-direction: column; gap: .4rem; padding: .5rem; border-radius: var(--radius-sm); border: 1px solid var(--line-2); }
+.dl-batch-h { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: 0 .2rem; }
+.dl-batch-t { font-weight: 600; }
+.dl-batch-act { margin-left: auto; display: flex; align-items: center; gap: .35rem; }

@@ -1,5 +1,5 @@
-// The panels of Settings, Mods and downloads (turning mods on, mods for adults, downloads and installing, automatic
-// updates and scans, mods a game update broke, the trash) and Creators. Owner: SETTINGS/AI area.
+// The panels of Settings, Mods and downloads (turning mods on, mods for adults, downloads and installing, mod update
+// checks and rescans, mods a game update broke, the trash) and Creators. Owner: SETTINGS/AI area.
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
@@ -8,9 +8,10 @@ import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, 
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { appUpdateCheckPref, autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, trashDaysPref, useTrashDays } from "./automatic";
+import { autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
-import { fixWarningsPref } from "../../lib/fixes";
+import { MatchGbAdultRow } from "./AccountSection";
+import { autoMutePref, fixWarningsPref } from "../../lib/fixes";
 import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "../library/shuffle";
 
 /** "Keys only while the character is on screen" for new installs (the install flow reads it). Same key as
@@ -85,6 +86,7 @@ export function AdultSection() {
           <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
             options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
         </SetRow>
+        <MatchGbAdultRow id="set-gb-adult" />
       </div>
     </Panel>
   );
@@ -111,7 +113,7 @@ function PerGame({ game }: { game: GameState }) {
 
 // ── automatic ──
 
-type BoolPref = typeof appUpdateCheckPref;
+type BoolPref = typeof modUpdateCheckPref;
 
 function Switch({ p, on, off }: { p: BoolPref; on: string; off: string }) {
   const v = p.use();
@@ -144,15 +146,11 @@ export function InstallingSection() {
   );
 }
 
-/** The checks gachamod runs by itself. Each has a switch. */
+/** The checks gachamod runs on mods by itself. Each has a switch. gachamod's own updates are on About and updates. */
 export function AutomaticSection() {
   return (
-    <Panel title="Automatic updates and scans" icon="refresh" id="automatic">
+    <Panel title="Mod update checks and rescans" icon="refresh" id="automatic">
       <div className="set-rows">
-        <SetRow id="set-app-updates" label="Update gachamod automatically" hint="New versions download in the background and install when you close gachamod"
-          tip="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now in About and updates">
-          <Switch p={appUpdateCheckPref} on="Updating gachamod automatically" off="Stopped updating gachamod automatically" />
-        </SetRow>
         <SetRow id="set-mod-updates" label="Check mods for updates" hint="When you open Mods, and every 30 minutes">
           <Switch p={modUpdateCheckPref} on="Checking mods for updates" off="Stopped checking mods for updates" />
         </SetRow>
@@ -176,6 +174,10 @@ export function BrokenModsSection() {
         <SetRow id="set-fix-warn" label="Warn about broken mods" hint="On mod cards, in a mod's details and in Tools > Fixes"
           tip="Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods">
           <Switch p={fixWarningsPref} on="Showing the broken mod warnings" off="Muted the broken mod warnings" />
+        </SetRow>
+        <SetRow id="set-fix-automute" label="Turn off mods that need their author" hint="Mods no fix here can repair go off and stop warning, without asking"
+          tip="Same as Always turn off and mute mods that need their author in Tools > Fixes. Undo turns them back on, and Muted in Tools > Fixes lists them">
+          <Switch p={autoMutePref} on="Turning off mods that need their author" off="Listing mods that need their author again" />
         </SetRow>
       </div>
     </Panel>

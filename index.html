@@ -13,7 +13,8 @@
         var g = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
         var game = g("gm.game") || "";
         var pick = g("gm.theme." + game);
-        var theme = pick && pick !== "auto" ? pick : game === "zzz" ? "zzz" : "default";
+        // nothing picked: the game's own theme (games.rs: these five have one, the rest use Default)
+        var theme = pick && pick !== "auto" ? pick : /^(zzz|gi|hsr|ww|ef)$/.test(game) ? game : "default";
         var p = null;
         try { p = JSON.parse(g("gm.paint") || "null"); } catch (e) { /* no saved colours yet */ }
         var custom = p && p.game === game && p.custom && theme.indexOf("custom:") === 0 ? p.custom : null;
@@ -29,6 +30,17 @@
         r.setAttribute("data-game", game);
         r.setAttribute("data-accent", g("gm.accent." + theme) || "");
         r.setAttribute("data-motion", g("gm.motion") === "0" ? "reduced" : "full");
+        // the opening screen (src/splash): its colour from the first frame. The intro picked in Settings ("gm.intro":
+        // "0" off, missing or "theme" the theme's own, else an intro id), else the theme's. Not in the menu over a game
+        // or the kit page. ?intro=<id> shows one (for working on it)
+        var ask = /[?&]intro=(\w+)/.exec(location.search);
+        var want = g("gm.intro");
+        var meta = window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.metadata;
+        var menu = location.hash === "#overlay" || location.hash === "#kit" || !!(meta && meta.currentWindow && meta.currentWindow.label === "overlay");
+        if (!menu && (ask || want !== "0")) {
+          var own = ask ? ask[1] : want && want !== "theme" ? want : theme;
+          r.setAttribute("data-splash", /^(zzz|gi|hsr|ww|ef)$/.test(own) ? own : "plain");
+        }
         if (p && p.game === game && p.vars) for (var k in p.vars) r.style.setProperty(k, p.vars[k]);
         // the layout picked in Settings (a custom theme's own layout below wins)
         var mine = null;
@@ -51,6 +63,14 @@
       html { background: #0c0e13; }
       html[data-scheme="light"] { background: #f3f4f7; }
       html[data-theme="zzz"]:not([data-scheme="light"]) { background: #000; }
+      /* the opening screen's colour (each must match its intro's bg in src/splash/intros) */
+      html[data-splash="plain"] { background: #0c0e13; }
+      html[data-splash="plain"][data-scheme="light"] { background: #f3f4f7; }
+      html[data-splash="zzz"] { background: #000; }
+      html[data-splash="gi"] { background: #0d1328; }
+      html[data-splash="hsr"] { background: #090b18; }
+      html[data-splash="ww"] { background: #080b13; }
+      html[data-splash="ef"] { background: #1b1b1b; }
     </style>
   </head>
   <body>

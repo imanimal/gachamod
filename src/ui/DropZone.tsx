@@ -69,7 +69,7 @@ export function DropZone() {
       <div className="dropzone-card">
         <Icon name="import" />
         <strong>Drop to add</strong>
-        <span>Archives and folders install into {g?.name ?? "the current game"}. A .gachamod file opens to show what is inside.</span>
+        <span>Archives and folders install into {g?.name ?? "the current game"}, zips inside zips too. A .gachamod file opens to show what is inside.</span>
       </div>
     </div>
   );

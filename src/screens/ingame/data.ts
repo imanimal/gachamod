@@ -1,50 +1,58 @@
 // Live switching state for the Tools panel and the mod drawer: one store per game, reloaded when the library
 // changes, and the actions with their Undo. Owner: INGAME area.
 import { useEffect, useSyncExternalStore } from "react";
-import { errorText, live, settings, type GameId, type LiveChange, type LiveGroup, type LiveInfo, type MenuSettings } from "../../lib/api";
+import { errorText, games, library, live, settings, type GameId, type LiveChange, type LiveGroup, type LiveInfo, type MenuSettings } from "../../lib/api";
 import { record } from "../../lib/history";
 import { emitApp, onApp } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { onPublish } from "../library/data";
 import { sayF10Note } from "../../lib/elevation";
+import { held } from "../../lib/tauri";
+import { heldOf, modifierOf, tokenOf } from "../modtools/keyNames";
+import { askTesterRisks } from "./TesterConfirm";
 
 const infos = new Map<GameId, LiveInfo | null>();
 const subs = new Set<() => void>();
 const ping = () => subs.forEach((f) => f());
 
 export async function reloadLive(game: GameId) {
-  try { infos.set(game, await live.info(game)); } catch { infos.set(game, { groups: [], ready: [], running: false, menu: { style: "window", key: "F7", pad: true, fastSave: true }, blocked: false, all: false, allowed: false }); }
+  try { infos.set(game, await live.info(game)); } catch { infos.set(game, { groups: [], ready: [], running: false, menu: { style: "window", key: "F7", pad: true, fastSave: true, binds: {} }, blocked: false, all: false, allowed: false, checked: false }); }
   ping();
 }
 
-// ── tester options ("ui.tester"): switching in game in the games it hasn't been checked in (live.rs CHECKED) ──
+// ── tester options (live.rs TESTER): the menu the game draws, in the games that do not have it already ──
 
+/** Set only after the player confirmed the risks (TesterConfirm). The older "ui.tester" isn't read any more. */
+const TESTER = "ui.testerOk";
 let tester: boolean | null = null;
 let testerAsked = false;
 const testerSubs = new Set<() => void>();
 
-/** Whether tester options are on, shared by every place that shows the switch (Settings, Tools, Check this game). */
+/** Whether tester options are on, shared by every place that shows the switch (Settings, Check this game). */
 export function useTester(): boolean {
   useEffect(() => {
     if (testerAsked) return;
     testerAsked = true;
-    settings.get("ui.tester").then((v) => { tester = v === "1"; testerSubs.forEach((f) => f()); }).catch(() => { testerAsked = false; });
+    settings.get(TESTER).then((v) => { tester = v === "1"; testerSubs.forEach((f) => f()); }).catch(() => { testerAsked = false; });
   }, []);
   return useSyncExternalStore((f) => { testerSubs.add(f); return () => { testerSubs.delete(f); }; }, () => tester ?? false);
 }
 
-/** Turn tester options on or off. Every game's live info is read again, since what it allows changes. */
-export async function setTester(on: boolean) {
+/** Turn tester options on (after the player confirms the risks) or off. Every game's live info is read again, since
+ *  what it allows changes. True when they're on afterwards. */
+export async function setTester(on: boolean): Promise<boolean> {
+  if (on && !(await askTesterRisks())) return false;
   try {
-    await settings.set("ui.tester", on ? "1" : "0");
+    await settings.set(TESTER, on ? "1" : "0");
     tester = on;
     testerSubs.forEach((f) => f());
     await Promise.all([...infos.keys()].map((g) => reloadLive(g)));
-  } catch (e) { toast(errorText(e), true); }
+    return on;
+  } catch (e) { toast(errorText(e), true); return !!tester; }
 }
 
-/** Whether new groups can be set up in the game (null while its info hasn't loaded). */
-export const liveAllowed = (game: GameId): boolean | null => infos.get(game)?.allowed ?? null;
+/** Whether the game's live info has loaded (after an install, switching in game is offered only then). */
+export const liveReady = (game: GameId): boolean => !!infos.get(game);
 
 let wired = false;
 function wire() {
@@ -58,6 +66,9 @@ function wire() {
     t = window.setTimeout(() => void reloadLive(game), 500);
   };
   onApp((e) => { if (e.type === "library-refresh") later(e.game); });
+  // the game saved its values (a pick it took at a reload clears "Next reload"), or it started or closed
+  held(library.onChanged((p) => later(p.game)));
+  held(games.onState((p) => later(p.game)));
   onPublish((game) => later(game));
 }
 
@@ -157,11 +168,28 @@ export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSett
     await live.setMenu(game, menu);
     await reloadLive(game);
     record({
-      label: `Set the in-game menu to ${menu.style === "window" ? "open over the game" : "be drawn by the game"} with ${menu.key}`,
+      label: JSON.stringify(before.binds) !== JSON.stringify(menu.binds) ? "Changed the in-game menu's keys"
+        : `Set the in-game menu to ${menu.style === "window" ? "open over the game" : "be drawn by the game"} with ${menu.key}`,
       undo: async () => { await live.setMenu(game, before); await reloadLive(game); },
       redo: async () => { await live.setMenu(game, menu); await reloadLive(game); },
     });
   } catch (e) { toast(errorText(e), true); }
+}
+
+// ── the menu's own keys in the menu over the game ──
+
+/** Arrow keys and Enter keep what they do in a window; a key bound to them needs no help. */
+const WINDOW_KEYS = new Set(["VK_UP", "VK_DOWN", "VK_LEFT", "VK_RIGHT", "VK_RETURN"]);
+
+/** What a key press does in the skin menu by the keys the player picked (`MenuSettings.binds`): "up", "down", "show",
+ *  "back" or "close". Null for a key that isn't bound, a modifier by itself, and the arrow keys and Enter. */
+export function boundAction(e: KeyboardEvent, binds: Record<string, string[]> | undefined): string | null {
+  if (!binds || modifierOf(e)) return null;
+  const key = tokenOf(e);
+  if (!key) return null;
+  const pressed = [...heldOf(e), key].join(" ");
+  if (WINDOW_KEYS.has(pressed)) return null;
+  return ["up", "down", "show", "back", "close"].find((a) => binds[a]?.includes(pressed)) ?? null;
 }
 
 // ── skins not shown in game yet ──

@@ -262,14 +262,53 @@ fn sub_mods_go_with_their_parent() {
 fn list_rows(d: &Db) -> Vec<ModEntry> { list(d, "zzz").unwrap() }
 
 #[test]
-fn disabled_parent_is_a_conflict() {
+fn turning_on_names_a_disabled_folder_back() {
     let t = Tree::new("parent");
-    t.add("DISABLED Old/Jane Gym");
+    t.add("DISABLED_old.zip/Jane Gym");
+    t.add("DISABLED_old.zip/Jane Maid");
+    t.add("DISABLED_old.zip/DISABLED Jane Bunny");
     let db = t.db();
     let list = scan(&db, "zzz").unwrap();
     let d = db.lock().unwrap();
-    let err = set_enabled(&d, "zzz", &[list[0].id.clone()], true).unwrap_err();
-    assert!(matches!(&err, Error::Conflict(m) if m.contains("DISABLED Old")), "{err}");
+    let gym = by_name(&list, "Jane Gym").id.clone();
+    let maid = by_name(&list, "Jane Maid").id.clone();
+    let ch = set_enabled(&d, "zzz", &[gym.clone()], true).unwrap();
+
+    // the folder is named back, the mod is on, the others in it stay off on their own
+    assert!(!t.mods.join("DISABLED_old.zip").exists());
+    assert!(t.mods.join("old.zip/Jane Gym").is_dir());
+    assert!(t.mods.join("old.zip/DISABLED Jane Maid").is_dir());
+    assert!(t.mods.join("old.zip/DISABLED Jane Bunny").is_dir());
+    let rows = list_rows(&d);
+    let row = |id: &str| rows.iter().find(|r| r.id == id).unwrap().clone();
+    assert!(row(&gym).enabled);
+    assert_eq!(row(&gym).rel_path, "old.zip/Jane Gym");
+    assert_eq!(row(&gym).group.as_deref(), Some("old.zip"));
+    assert!(!row(&maid).enabled);
+    assert_eq!(row(&maid).rel_path, "old.zip/DISABLED Jane Maid");
+    assert!(ch.changed.iter().any(|c| c.id == maid && c.rel_path == "old.zip/DISABLED Jane Maid"));
+
+    // turning on the other one afterwards works from the new paths ("Keep both on": both are Jane Doe's)
+    set_enabled_with(&d, "zzz", &[maid.clone()], true, Some(false)).unwrap();
+    assert!(t.mods.join("old.zip/Jane Maid").is_dir());
+    drop(d);
+    let again = scan(&db, "zzz").unwrap();
+    assert!(by_name(&again, "Jane Gym").enabled && by_name(&again, "Jane Maid").enabled);
+    assert!(!by_name(&again, "Jane Bunny").enabled);
+}
+
+#[test]
+fn turning_on_two_mods_in_one_disabled_folder() {
+    let t = Tree::new("parent2");
+    t.add("DISABLED Old/Jane Gym");
+    t.add("DISABLED Old/Ellen Maid");
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let d = db.lock().unwrap();
+    let ids: Vec<String> = list.iter().map(|m| m.id.clone()).collect();
+    set_enabled_with(&d, "zzz", &ids, true, Some(false)).unwrap();
+    assert!(t.mods.join("Old/Jane Gym").is_dir() && t.mods.join("Old/Ellen Maid").is_dir());
+    assert!(list_rows(&d).iter().all(|r| r.enabled && r.rel_path.starts_with("Old/")));
 }
 
 #[test]
@@ -974,16 +1013,32 @@ fn the_library_follows_picks_made_in_the_game() {
 }
 
 #[test]
-fn switching_in_game_is_a_tester_option_outside_zenless() {
+fn only_the_drawn_menu_is_a_tester_option_outside_the_games_it_is_open_in() {
     let db = Db::memory().unwrap();
-    let e = crate::live::add(&db, "gi", &["x".to_string()]).unwrap_err();
+    // switching in game itself works in every game
+    if let Err(e) = crate::live::add(&db, "ww", &["x".to_string()]) { assert!(!e.to_string().contains("Tester options"), "{e}"); }
+    assert!(crate::live::set_all(&db, "ww", false).is_ok());
+    // the checked games and the ones that draw the same way have the drawn menu; the rest don't
+    for g in ["zzz", "gi", "hsr", "hi3"] { assert!(crate::live::allowed(&db, g), "{g}"); }
+    for g in ["ww", "ef", "pgr"] { assert!(!crate::live::allowed(&db, g), "{g}"); }
+    // only the checked games get switching turned on by themselves
+    crate::live::on_start(&db);
+    assert!(!crate::live::all_on(&db, "hsr") && !crate::live::all_on(&db, "hi3"));
+    db.set_setting("hsr.liveMenu", "game").unwrap();
+    assert_eq!(crate::live::menu_settings(&db, "hsr").style, "game");
+    // the menu the game draws needs tester options elsewhere
+    let game = crate::live::MenuSettings { style: "game".into(), key: "F7".into(), ..Default::default() };
+    let e = crate::live::set_menu(&db, "ww", &game).unwrap_err();
     assert!(e.to_string().contains("Tester options"), "{e}");
-    assert!(crate::live::set_all(&db, "gi", true).is_err());
-    assert!(crate::live::set_all(&db, "gi", false).is_ok());
-    assert!(crate::live::allowed(&db, "zzz"));
-    assert!(!crate::live::allowed(&db, "gi"));
+    // a saved "Inside the game" reads as the window over the game, so F7 still opens a menu
+    db.set_setting("ww.liveMenu", "game").unwrap();
+    assert_eq!(crate::live::menu_settings(&db, "ww").style, "window");
+    // the older switch, set without the question about the risks, doesn't count
     db.set_setting("ui.tester", "1").unwrap();
-    assert!(crate::live::allowed(&db, "gi"));
+    assert!(!crate::live::allowed(&db, "ww"));
+    db.set_setting(crate::live::TESTER, "1").unwrap();
+    assert!(crate::live::allowed(&db, "ww"));
+    assert_eq!(crate::live::menu_settings(&db, "ww").style, "game");
 }
 
 #[test]

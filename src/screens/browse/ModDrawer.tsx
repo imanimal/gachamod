@@ -12,7 +12,7 @@ import { likeMod, useAccount, useLiked } from "../../lib/account";
 import { useNsfw } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
 import { DescKeys } from "../../ui/DescKeys";
-import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, Toggle, formatBytes, formatCount, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Skeleton, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CategoryLink, CharLink, CreatorLink } from "../../ui/Links";
 import { menuFor, openMenu } from "../../ui/ContextMenu";
@@ -22,10 +22,10 @@ import { openCreator, openExternal, takeWantFiles } from "./actions";
 import { Comments } from "./Comments";
 import { AdultSwitch } from "./GbBrowser";
 import { Lightbox } from "./Lightbox";
+import { ModStats } from "./ModStats";
 import { openGbMod, openGbTool, useLibIndex } from "./state";
 import { useQueue } from "./useQueue";
 import { setOn } from "../library/actions";
-import { pityOpened } from "../../lib/fun";
 import { reveal, rowKeys, useSideScroll } from "./sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { LazyImg } from "../../ui/LazyImg";
@@ -34,8 +34,9 @@ import { hintClass, useHint } from "../../shell/hints";
 const activeStates = new Set(["waiting", "downloading", "installing", "needsChoice"]);
 
 export function queueLabel(i: QueueItem): string {
+  if (i.state === "downloading" && !i.received) return "Connecting";
   if (i.state === "downloading") return i.total ? `Downloading ${Math.floor((i.received / i.total) * 100)}%` : "Downloading";
-  if (i.state === "installing") return "Installing";
+  if (i.state === "installing") { const p = i.progress; return p && p.mods.length > 1 ? `Installing ${p.placed} of ${p.mods.length}` : "Installing"; }
   if (i.state === "needsChoice") return "Pick variants";
   return i.archive ? "Waiting to install" : "Waiting";
 }
@@ -67,7 +68,6 @@ export function descHandler(onImage?: (img: HTMLImageElement) => void) {
 
 /** `tool`: modId is a GameBanana tool's id (a fixer), downloaded rather than installed. */
 export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: GameState; modId: number; tool?: boolean; onClose: () => void }) {
-  useEffect(() => { if (!tool) pityOpened(); }, [modId, tool]);
   const games = useGames();
   const nsfw = useNsfw();
   const snap = useQueue();
@@ -164,17 +164,9 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             {mod.submitter && (
               <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-submitter" />
             )}
-            <div className="gb-stats">
-              <span className="gb-stat" title={`${mod.likes} likes`}><Icon name="heart" />{formatCount(mod.likes)}</span>
-              <span className="gb-stat" title={`${mod.views} views`}><Icon name="eye" />{formatCount(mod.views)}</span>
-              {mod.downloads !== null && <span className="gb-stat" title={`${mod.downloads} downloads`}><Icon name="downloads" />{formatCount(mod.downloads)}</span>}
-              {(mod.comments ?? 0) > 0 && (
-                <button type="button" className="gb-stat gb-stat-btn" title="Go to the comments" onClick={() => commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                  <Icon name="feed" />{plural(mod.comments ?? 0, "comment")}
-                </button>
-              )}
-              <span className="gb-stat" title={`Added ${new Date(mod.added * 1000).toLocaleString()}, updated ${new Date(mod.updated * 1000).toLocaleString()}`}><Icon name="clock" />{timeAgo(mod.updated)}</span>
-            </div>
+            <ModStats key={mod.id} mod={mod} act={!tool}
+              onFiles={() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              onComments={() => commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
           </div>
           <div className="gb-mod-tags">
             {mod.character && target && <CharLink game={target.id} name={mod.character} className="badge t-accent gb-tag-char" portrait />}

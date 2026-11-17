@@ -156,13 +156,13 @@ export function RenderLogRow({ id }: { id?: string }) {
   );
 }
 
-/** Tester options: switching skins in game in the games other than Zenless Zone Zero. The same switch shows in Tools,
- *  Switch skins in game, for those games. */
+/** Tester options: the menu the game draws, in the games that don't have it already (live.rs drawn_menu_open).
+ *  Switching in game with the menu over the game works in every game without them. */
 function TesterRow() {
   const on = useTester();
   return (
     <SetRow id="set-tester" label="Tester options"
-      hint="Lets you set up switching skins in game in Genshin Impact, Star Rail, Wuthering Waves, Endfield and the others, not only Zenless Zone Zero. Check this game sends what you find to the developer">
+      hint="Adds the menu the game draws itself to Switch skins in game in Wuthering Waves, Endfield and the others. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd have it without this. It opens in exclusive fullscreen, where gachamod's menu over the game can't. Check this game sends what you find to the developer">
       <Toggle checked={on} onChange={(v) => void setTester(v)} />
     </SetRow>
   );
@@ -182,7 +182,7 @@ function useAdmin(): AdminState | null {
   return useSyncExternalStore((f) => { adminSubs.add(f); return () => { adminSubs.delete(f); }; }, () => adminNow);
 }
 
-/** Settings, under Administrator and launch options and In-game profile hotkeys: start as administrator every time, or once now. `id` goes on one copy,
+/** Settings, under Launch options (Run as administrator) and In-game profile hotkeys: start as administrator every time, or once now. `id` goes on one copy,
  *  the one a route scrolls to. */
 export function AdminRow({ id }: { id?: string }) {
   const st = useAdmin();

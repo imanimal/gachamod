@@ -157,13 +157,29 @@ export function PageHeader({ title, sub, icon, actions, children }: { title: Rea
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = ref.current;
-    const view = el?.closest(".view");
+    const view = el?.closest<HTMLElement>(".view");
     if (!el || !view) return;
     let on = false;
+    // Folding takes height out of the page (a lot when every character chip is showing). The scroll moves by that
+    // height so the mods stay put, and the header only folds when that move still leaves it well past the unfold
+    // line. Otherwise fold and unfold would trigger each other and throw the page back to the top.
+    let need = 60; // scroll needed before folding: 60 plus the height the fold takes, learned on each fold
+    const set = (v: boolean) => {
+      const h = el.offsetHeight;
+      const s = view.scrollTop;
+      const anchor = view.style.overflowAnchor;
+      view.style.overflowAnchor = "none";
+      el.classList.toggle("is-stuck", v);
+      const lost = v ? h - el.offsetHeight : el.offsetHeight - h;
+      need = 60 + Math.max(0, lost);
+      if (v && s - lost < 60) el.classList.remove("is-stuck"); // not far enough yet, leave the page as it was
+      else { on = v; view.scrollTop = v ? s - lost : s + lost; }
+      view.style.overflowAnchor = anchor;
+    };
     const check = () => {
-      // on past 60px, off under 8: folding moves the page up a little, so one threshold would flicker
-      const next = (on ? view.scrollTop > 8 : view.scrollTop > 60) && getComputedStyle(el).position === "sticky";
-      if (next !== on) { on = next; el.classList.toggle("is-stuck", on); }
+      const sticky = getComputedStyle(el).position === "sticky";
+      if (on && (!sticky || view.scrollTop <= 8)) set(false);
+      else if (!on && sticky && view.scrollTop > need) set(true);
     };
     check();
     view.addEventListener("scroll", check, { passive: true });

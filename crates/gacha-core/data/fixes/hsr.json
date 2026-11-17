@@ -2,7 +2,7 @@
   "game": "hsr",
   "current_version": "unknown (latest fixer found covers 3.3)",
   "generated": "2026-11-13",
-  "note": "Pairs from petrascyll hsr_fix.py (1.4 to 3.0, GitHub copy of the 3.0C script) plus extra pairs from the SR-Model-Importer-Assets history for versions after it. The 3.2 pipeline change and the 3.3 fix are structural ini rewrites; they are described in rules but their data is not copied (CC BY-NC-ND). Pairs form chains; \"from\" is the version label of the old hash. Old hashes of HSR are character and part specific, key by character and part.",
+  "note": "Pairs from petrascyll hsr_fix.py (1.4 to 3.0, GitHub copy of the 3.0C script) plus extra pairs from the SR-Model-Importer-Assets history for versions after it. The 3.2 pipeline change and the 3.3 fix are structural ini rewrites; they are described in rules but their data is not copied (CC BY-NC-ND). The assets history before 1.4 (commits of 2023-05 and 2023-08) is the 1.2 block, first in the list: blocks are ordered oldest first and a chain only moves to a later block. The 15 Kafka pairs of commit e53e2647 (2023-08-17) are left out: they relabel her first dump (hair and head swapped, other characters' textures listed as hers) eight days after her release, so no game update is behind them. Pairs form chains; \"from\" is the version label of the old hash. Old hashes of HSR are character and part specific, key by character and part.",
   "sources": [
     {"id":"petrascyll-hsr-fix","name":"HSR Fix (hsr_fix.py, v3.0C)","author":"petrascyll (thanks to zlevir, sora_, AGMG)","url":"https://github.com/petrascyll/hsr-scripts","license":"none stated on GitHub; GameBanana tools 16203, 16717, 17977, 18607, 18925, 19559 are CC BY-NC-ND 4.0","checked":"2026-11-13","used":"hash facts and rule parameters only (no licence on GitHub, so treat as facts; tell the author)"},
     {"id":"sr-assets-history","name":"SR-Model-Importer-Assets (hash.json history)","author":"leotorrez, petrascyll, SilentNightSound and contributors","url":"https://github.com/leotorrez/SR-Model-Importer-Assets","license":"none stated","checked":"2026-11-13","used":"hash facts for versions after 3.0 and as cross-check"},
@@ -12,6 +12,18 @@
     {"id":"agungmubarak1453-universal-hsr-fixer","name":"Universal HSR Mod Fixer","author":"agungmubarak1453","url":"https://github.com/agungmubarak1453/honkai-star-rail-modding-utility","license":"none stated; tool 23752 on GameBanana is CC BY-NC-ND 4.0","checked":"2026-11-13","used":"NOT used (it repackages the 3.3 fix and loads code from GitHub at run time with exec, which we must not copy). Useful as a pointer: datas/valid_hashes.json lists known good (blend, draw, position) trios per part."}
   ],
   "versions": [
+    {
+      "version": "1.2",
+      "source": "sr-assets-history",
+      "hashes": [
+        {"old":"0a98b451","new":"a19a8d2c","character":"Stelle","part":"Body Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
+        {"old":"e4800c69","new":"fdb54553","character":"Stelle","part":"Hair Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
+        {"old":"ecad9b0e","new":"1c0a8ff8","character":"Stelle","part":"Head Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
+        {"old":"e11a5eab","new":"7f4e899b","character":"TrailblazerGirl","part":"Body blend_vb","kind":"blend","note":"assets e0916a37 2023-05-12 (version from date)"}
+      ],
+      "rules": [
+      ]
+    },
     {
       "version": "1.4",
       "source": "sr-assets-history",
@@ -1729,33 +1741,6 @@
         {"old":"b55c8431","new":"195d016d","character":"Stelle","part":"Body blend_vb","kind":"blend","note":"assets 08e7c677 2025-12-01 (version from date)"},
         {"old":"fba309df","new":"47695dd6","character":"Stelle","part":"Body ib","kind":"ib","note":"assets 08e7c677 2025-12-01 (version from date)"},
         {"old":"f00b6ded","new":"454c77a5","character":"Stelle","part":"Body texcoord_vb","kind":"texcoord","note":"assets 08e7c677 2025-12-01 (version from date)"}
-      ],
-      "rules": [
-      ]
-    },
-    {
-      "version": "unknown",
-      "source": "sr-assets-history",
-      "hashes": [
-        {"old":"e811b655","new":"91133916","character":"Kafka","part":"Hair blend_vb","kind":"blend","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"91133916","new":"e811b655","character":"Kafka","part":"Head blend_vb","kind":"blend","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"7a892b79","new":"132595c5","character":"Kafka","part":"Hair draw_vb","kind":"draw","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"132595c5","new":"48576da3","character":"Kafka","part":"Head draw_vb","kind":"draw","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"de648f58","new":"f82cf281","character":"Kafka","part":"Hair ib","kind":"ib","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"f82cf281","new":"de648f58","character":"Kafka","part":"Head ib","kind":"ib","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"7cbe836d","new":"cdda77a3","character":"Kafka","part":"Hair position_vb","kind":"position","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"cdda77a3","new":"7cbe836d","character":"Kafka","part":"Head position_vb","kind":"position","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"7a892b79","new":"cd60c900","character":"Kafka","part":"Hair texcoord_vb","kind":"texcoord","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"88ed7c17","new":"e8e2b6da","character":"Kafka","part":"Body Diffuse[1]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"c5057d7e","new":"e8e2b6da","character":"Kafka","part":"Body Diffuse[2]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"20495315","new":"1413eb22","character":"Kafka","part":"Body LightMap[1]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"b7ff7a6e","new":"1413eb22","character":"Kafka","part":"Body LightMap[2]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"bb5905b2","new":"dc6aaf17","character":"Kafka","part":"Hair LightMap[0]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"70fc453c","new":"1d74e2f5","character":"Kafka","part":"Head Diffuse[0]","kind":"texture","note":"assets e53e2647 2023-08-17 (version from date)"},
-        {"old":"0a98b451","new":"a19a8d2c","character":"Stelle","part":"Body Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
-        {"old":"e4800c69","new":"fdb54553","character":"Stelle","part":"Hair Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
-        {"old":"ecad9b0e","new":"1c0a8ff8","character":"Stelle","part":"Head Diffuse[0]","kind":"texture","note":"assets 9fcd6142 2023-08-06 (version from date)"},
-        {"old":"e11a5eab","new":"7f4e899b","character":"TrailblazerGirl","part":"Body blend_vb","kind":"blend","note":"assets e0916a37 2023-05-12 (version from date)"}
       ],
       "rules": [
       ]

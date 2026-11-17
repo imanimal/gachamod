@@ -219,7 +219,7 @@
   .menu-i.danger:hover:not(:disabled) .i { color: #0a0a0a; }
 
   /* ── toast: a black capsule with a status puck ── */
-  .toast { border-radius: 999px; padding: .45rem .5rem .45rem .5rem; gap: .6rem; background: var(--dots), #0c0c0c; border: 3px solid var(--ring-g); box-shadow: 0 0 0 1.5px var(--rim), 0 4px 0 1px #000, 0 14px 30px rgb(0 0 0 / .55); font-weight: 700; animation: zzToast var(--dur-slow) var(--ease-spring); }
+  .toast { border-radius: 1.7rem; padding: .45rem .5rem .45rem .5rem; gap: .6rem; background: var(--dots), #0c0c0c; border: 3px solid var(--ring-g); box-shadow: 0 0 0 1.5px var(--rim), 0 4px 0 1px #000, 0 14px 30px rgb(0 0 0 / .55); font-weight: 700; animation: zzToast var(--dur-slow) var(--ease-spring); }
   .toast > .i { box-sizing: content-box; width: 1.05rem; height: 1.05rem; padding: .32rem; border-radius: 50%; background: var(--green); color: #0a0a0a; stroke-width: 2.8; }
   .toast.bad > .i { background: var(--red); color: #0a0a0a; }
   .toast-act { font-style: italic; font-weight: 800; border-radius: 999px; padding: .3rem .8rem; color: #0a0a0a; background: var(--acc); }
@@ -247,7 +247,8 @@
   .stat { border-radius: 12px; border: 2.5px solid var(--ink); background: var(--dots), var(--well); box-shadow: 0 0 0 1.5px #4a4a4a; padding: .5rem .8rem; }
   .stat-v { font-weight: 900; font-style: italic; color: var(--tone, var(--yellow-ink)); }
   .stat-l { font-weight: 700; color: var(--text-3); }
-  .list-row { border-radius: 999px; padding: .3rem .7rem .3rem .35rem; font-weight: 600; }
+  .list-row { border-radius: 1.7rem; padding: .3rem .7rem .3rem .35rem; font-weight: 600; }
+  .list-row:not(:has(> .list-row-img)) { padding-left: .7rem; }
   button.list-row:hover, .list-row.click:hover { background: var(--well-hi); }
   .list-row.sel { background: var(--dots-ink), var(--acc); color: #0a0a0a; box-shadow: none; }
   .list-row.sel .list-row-sub { color: rgb(0 0 0 / .7); }
@@ -261,7 +262,7 @@
   .sec-h::before { content: "★"; font-style: normal; font-size: .9em; letter-spacing: 0; }
   .sec-h::after { height: 6px; background: var(--hatch); opacity: 1; }
   .note { border-radius: 12px; background: var(--well); border: 2px solid var(--ring-g); box-shadow: 0 0 0 1.5px var(--tone); font-weight: 600; }
-  .floatbar { border-radius: 999px; border: 3px solid var(--ring-g); background: var(--dots), #0c0c0c; box-shadow: 0 0 0 1.5px var(--acc), 0 4px 0 1px #000, 0 16px 30px rgb(0 0 0 / .6); }
+  .floatbar { border-radius: 1.8rem; border: 3px solid var(--ring-g); background: var(--dots), #0c0c0c; box-shadow: 0 0 0 1.5px var(--acc), 0 4px 0 1px #000, 0 16px 30px rgb(0 0 0 / .6); }
   .codeblock { border-radius: 10px; background: var(--well); box-shadow: inset 0 0 0 2px var(--ring-g); }
   .gallery-main { border-radius: 12px; box-shadow: 0 0 0 2.5px var(--ink), 0 0 0 4px #4a4a4a; }
   .gallery-th { border-radius: 8px; box-shadow: 0 0 0 2px var(--ink); }

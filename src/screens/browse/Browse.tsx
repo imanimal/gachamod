@@ -10,6 +10,7 @@ import { CreatorPage } from "./CreatorPage";
 import { GbBrowser } from "./GbBrowser";
 import { openGbMod, setFilters } from "./state";
 import { useMotd } from "../../lib/motd";
+import { PullButton } from "./Pull";
 import "./browse.css";
 
 export function Browse() {
@@ -34,6 +35,7 @@ export function Browse() {
     <div className="page gb-browse">
       <PageHeader title="Browse" icon="browse" sub={`Mods for ${game.name} on GameBanana`}
         actions={<>
+          <PullButton game={game} />
           {motd && <IconButton icon="gift" label={`Mod of the day, picked by animal${motd.name ? `: ${motd.name}` : ""}${motd.note ? `. ${motd.note}` : ""}`} onClick={() => openGbMod(motd.modId)} />}
           <IconButton icon="external" label="Open GameBanana in the browser"
             onClick={() => shell.openUrl(`https://gamebanana.com/games/${game.gamebananaId}`).catch((e) => toast(errorText(e), true))} />

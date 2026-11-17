@@ -76,7 +76,7 @@ pub fn migrate(db: &Db) -> Result<()> {
 mod parts;
 pub use parts::{merge, parts, parts_in, set_part, ModPart};
 mod removed;
-pub use removed::{archive_forget, archive_list, drop_removed, purge_expired, removed_by_gb, trash_days, trash_purge, ArchiveEntry, Removed};
+pub use removed::{archive_forget, archive_list, drop_removed, in_trash, purge_expired, removed_by_gb, trash_days, trash_purge, ArchiveEntry, Removed};
 
 /// IMM keeps every mod here (3DMigoto skips it because of the DISABLED prefix) ...
 pub const IMM_STORE: &str = "DISABLED - ALL MODS ARE STORED HERE (Managed by IMM)";
@@ -747,17 +747,86 @@ pub fn stash_vars(db: &Db, game: &str, id: &str, values: &[VarValue]) -> Result<
 
 // ── turning mods on and off ──
 
-/// Rename one mod's folder to turn it on or off and update its row. False when it already was.
-fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<String>) -> Result<bool> {
+/// Rows under the folder `from_rel` (the folder's own row too, when it is a mod) after that folder was renamed to
+/// `to_rel`. Saved, and added to `out`.
+fn move_rows(db: &Db, cx: &Ctx, from_rel: &str, to_rel: &str, out: &mut Vec<ModEntry>) -> Result<()> {
+    let from_dir = cx.root.join(safe_rel(from_rel).unwrap_or_default());
+    let to_dir = cx.root.join(safe_rel(to_rel).unwrap_or_default());
+    let inside = format!("{from_rel}/");
+    for mut r in list(db, &cx.game)? {
+        let rest = if r.rel_path == from_rel { String::new() } else if let Some(x) = r.rel_path.strip_prefix(&inside) { x.to_string() } else { continue };
+        r.rel_path = if rest.is_empty() { to_rel.to_string() } else { format!("{to_rel}/{rest}") };
+        let dir = match safe_rel(&rest) { Some(x) => to_dir.join(x), None => to_dir.clone() };
+        r.path = dir.to_string_lossy().into_owned();
+        if let Some(p) = &r.preview {
+            if let Ok(x) = Path::new(p).strip_prefix(&from_dir) { r.preview = Some(to_dir.join(x).to_string_lossy().into_owned()); }
+        }
+        r.folder = r.rel_path.rsplit('/').next().unwrap_or(&r.rel_path).to_string();
+        r.group = group_of(&r.rel_path);
+        save_row(db, &r)?;
+        out.push(r);
+    }
+    Ok(())
+}
+
+/// Turning on a mod inside a folder named DISABLED... (the user or another manager turned off the whole folder): name
+/// that folder back, each one above the mod. The other mods in it that were only off because of it get DISABLED on
+/// their own folder first, so they stay off. Their rows follow the new paths and go to `out`; `e` is updated in place.
+fn open_disabled_parents(db: &Db, cx: &Ctx, e: &mut ModEntry, out: &mut Vec<ModEntry>) -> Result<()> {
+    loop {
+        let parts: Vec<String> = e.rel_path.split('/').map(String::from).collect();
+        let Some(i) = parts[..parts.len().saturating_sub(1)].iter().position(|p| is_disabled_name(p)) else { return Ok(()) };
+        let folder_rel = parts[..=i].join("/");
+        let inside = format!("{folder_rel}/");
+        let own = format!("{}/", e.rel_path);
+
+        // the outermost mod of each branch, so a sub-mod inside another mod isn't renamed twice
+        let mut others: Vec<ModEntry> = list(db, &cx.game)?.into_iter()
+            .filter(|r| r.id != e.id && r.rel_path.starts_with(&inside) && !r.rel_path.starts_with(&own)).collect();
+        others.sort_by_key(|r| r.rel_path.len());
+        let mut kept_off: Vec<String> = Vec::new();
+        for r in others {
+            if rel_disabled(&r.rel_path[inside.len()..]) || kept_off.iter().any(|k| r.rel_path.starts_with(&format!("{k}/"))) { continue; }
+            let Some(rel) = safe_rel(&r.rel_path) else { continue };
+            let dir = cx.root.join(rel);
+            if !dir.is_dir() || only_off_inis(&dir) { continue; }
+            let parent = dir.parent().map(Path::to_path_buf).unwrap_or_else(|| cx.root.clone());
+            let base = match display_folder(&r.folder).trim() { "" => "Mod", b => b };
+            let new = unique_child(&parent, &format!("{DISABLED_PREFIX}{base}"));
+            rename_dir(&dir, &new)?;
+            let new_rel = match group_of(&r.rel_path) { Some(g) => format!("{g}/{}", name_of(&new)), None => name_of(&new) };
+            move_rows(db, cx, &r.rel_path, &new_rel, out)?;
+            kept_off.push(r.rel_path);
+        }
+
+        let Some(rel) = safe_rel(&folder_rel) else { return Ok(()) };
+        let old = cx.root.join(rel);
+        let parent = old.parent().map(Path::to_path_buf).unwrap_or_else(|| cx.root.clone());
+        let base = match display_folder(&parts[i]).trim() { "" => "Mods", b => b }.to_string();
+        let new = unique_child(&parent, &base);
+        rename_dir(&old, &new)?;
+        let new_rel = if i == 0 { name_of(&new) } else { format!("{}/{}", parts[..i].join("/"), name_of(&new)) };
+        let mut moved = Vec::new();
+        move_rows(db, cx, &folder_rel, &new_rel, &mut moved)?;
+        for m in moved {
+            if m.id == e.id { *e = m; } else { out.push(m); }
+        }
+    }
+}
+
+/// Rename one mod's folder to turn it on or off and update its row. False when it already was. Other rows whose
+/// folders moved on the way (a DISABLED folder above the mod named back) go to `moved`.
+fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<String>, moved: &mut Vec<ModEntry>) -> Result<bool> {
     if e.loaded() == on { return Ok(false); }
     if is_imm_rel(&e.rel_path) { return Err(imm_error()); }
     let rel = safe_rel(&e.rel_path).ok_or_else(|| Error::Invalid(format!("{}'s folder path looks wrong. Rescan to refresh the list", e.name)))?;
     let old = cx.root.join(rel);
     if !old.is_dir() { return Err(Error::Invalid(format!("{}'s folder is gone. Rescan to refresh the list", e.name))); }
+    // a DISABLED folder above it named back: with its own folder and inis live, that alone turns it on
+    let opened = on && disabled_parent(&e.rel_path).is_some();
+    if opened { open_disabled_parents(db, cx, e, moved)?; }
+    let old = cx.root.join(safe_rel(&e.rel_path).unwrap_or_default());
     if on {
-        if let Some(p) = disabled_parent(&e.rel_path) {
-            return Err(Error::Conflict(format!("{} is inside the folder \"{p}\", which keeps everything in it off. Rename that folder first.", e.name)));
-        }
         if !rel_disabled(&e.rel_path) {
             // another manager turned it off by renaming its inis ("DISABLED_mod.ini", "mod.ini.disabled"): name them back
             let mut renamed = 0;
@@ -767,7 +836,7 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
                 fs::rename(old.join(&f), old.join(&live))?;
                 renamed += 1;
             }
-            if renamed == 0 { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
+            if renamed == 0 && !opened { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
             e.enabled = true;
             e.standby = false;
             save_row(db, e)?;
@@ -962,14 +1031,20 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
     // every mod asked for goes on, several of one character included: the rule only turns off the ones not asked for
     let mut seen: HashSet<&str> = HashSet::new();
     let mut turned_on: Vec<String> = Vec::new();
+    let mut moved: Vec<ModEntry> = Vec::new();
     for (id, on) in targets {
         if !seen.insert(id.as_str()) { continue; }
         let Some(e) = rows.get_mut(id) else { continue };
         if *on { turned_on.push(id.clone()); }
-        match toggle_one(db, &cx, e, *on, &mut change.notes) {
+        match toggle_one(db, &cx, e, *on, &mut change.notes, &mut moved) {
             Ok(true) => change.changed.push(e.clone()),
             Ok(false) => {}
             Err(err) => errors.push((e.name.clone(), err)),
+        }
+        // rows another mod's change moved (a DISABLED folder named back): later targets read their new paths
+        for m in moved.drain(..) {
+            rows.insert(m.id.clone(), m.clone());
+            match change.changed.iter_mut().find(|c| c.id == m.id) { Some(c) => *c = m, None => change.changed.push(m) }
         }
     }
 
@@ -989,7 +1064,7 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
                 .map(|o| o.id.clone()).collect();
             for oid in others {
                 let Some(o) = rows.get_mut(&oid) else { continue };
-                match toggle_one(db, &cx, o, false, &mut change.notes) {
+                match toggle_one(db, &cx, o, false, &mut change.notes, &mut moved) {
                     Ok(true) => change.changed.push(o.clone()),
                     Ok(false) => {}
                     Err(err) => errors.push((o.name.clone(), err)),

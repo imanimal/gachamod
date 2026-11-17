@@ -798,6 +798,27 @@ fn canon_key(token: &str) -> Option<String> {
     Some(format!("VK_{name}"))
 }
 
+/// Keys the player pressed for one of gachamod's own menus ("ctrl VK_F6", "XB_LEFT_SHOULDER XB_A"), checked and
+/// written one way: the held modifiers in order, then the keys by the names 3DMigoto knows. Guards (`no_...`) are
+/// dropped.
+pub(crate) fn clean_binding(binding: &str) -> Result<String> {
+    const MODS: [&str; 4] = ["ctrl", "alt", "shift", "windows"];
+    let mut held = [false; 4];
+    let mut keys: Vec<String> = Vec::new();
+    for t in binding.split_whitespace() {
+        let l = t.to_ascii_lowercase();
+        if let Some(i) = MODS.iter().position(|m| *m == l) { held[i] = true; continue; }
+        if l.starts_with("no_") { continue; }
+        let k = canon_key(t).ok_or_else(|| Error::Invalid(format!("\"{t}\" isn't a key name 3DMigoto knows")))?;
+        if !keys.contains(&k) { keys.push(k); }
+    }
+    if keys.is_empty() { return Err(Error::Invalid("Pick a key. Ctrl, Alt or Shift alone can't be a key".into())); }
+    if keys.len() == 1 && keys[0] == "VK_F10" { return Err(Error::Invalid("F10 reloads mods in game. Pick another key".into())); }
+    let mut out: Vec<String> = MODS.iter().zip(held).filter(|(_, h)| *h).map(|(m, _)| m.to_string()).collect();
+    out.extend(keys);
+    Ok(out.join(" "))
+}
+
 /// The new value for a key line: the keys the user pressed (`binding`, held modifiers then keys, like "ctrl VK_F6" or
 /// "XB_LEFT_SHOULDER XB_A") written in the style of the line it replaces: the same `no_` guards (minus the modifiers
 /// now held) and the same spelling of modifiers. A pad binding gets no keyboard guards.

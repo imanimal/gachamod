@@ -345,7 +345,7 @@
     background: linear-gradient(currentColor 0 0) 0 50% / calc(100% - 4.2em) 1px no-repeat; opacity: .8; }
   .note { border-radius: 3px; background: var(--paper); color: var(--text-2); box-shadow: 0 0 0 1px rgb(0 0 0 / .1), inset 3px 0 0 var(--tone); }
   .note.t-warn, .note.t-bad { background: color-mix(in srgb, var(--tone) 12%, var(--paper)); }
-  .floatbar { border-radius: 999px; background: rgb(27 27 27 / .95); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .7), 0 14px 30px rgb(0 0 0 / .35); }
+  .floatbar { border-radius: 1.4rem; background: rgb(27 27 27 / .95); color: #f4f4f4; box-shadow: 0 0 0 1px #000, 0 0 0 3px rgb(255 238 0 / .7), 0 14px 30px rgb(0 0 0 / .35); }
   .codeblock { border-radius: 3px; background: var(--stage); color: #d8d8d8; box-shadow: inset 3px 0 0 var(--acc); }
   .gallery-main { border-radius: 4px; box-shadow: 0 0 0 1px rgb(0 0 0 / .3); background: var(--stage); }
   .gallery-th { border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / .25); }

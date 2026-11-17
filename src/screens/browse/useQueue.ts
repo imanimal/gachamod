@@ -11,8 +11,10 @@ export function useQueue(): QueueSnapshot {
   useEffect(() => {
     let live = true;
     const take = (s: QueueSnapshot) => { last = s; if (live) setSnap(s); };
-    queue.get().then(take).catch(() => {});
-    const off = held(queue.onChange(take));
+    // an event that arrives before the first answer is newer than it
+    let heard = false;
+    queue.get().then((s) => { if (!heard) take(s); }).catch(() => {});
+    const off = held(queue.onChange((s) => { heard = true; take(s); }));
     return () => { live = false; off(); };
   }, []);
   return snap;

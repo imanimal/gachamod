@@ -34,7 +34,6 @@
   .player-card { box-shadow: inset 0 0 0 1px rgb(236 229 216 / .1), 0 1px 3px rgb(4 7 14 / .3); }
   .side-game-cur:hover { background: var(--band); }
   .side-deco::before { opacity: .35; }
-  .side-deco-t { color: var(--tan-ink); }
   .side .play.running .play-btn:disabled { color: var(--lime); }
   /* the open view and the profile that's on: cream pills */
   .nv.on, .nv.on:hover:not(:disabled) { color: #3b4255; }

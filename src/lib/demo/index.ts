@@ -11,6 +11,7 @@ import { demoDb } from "./db";
 import { registerLibraryDemo } from "./library";
 import { registerModtoolsDemo } from "./modtools";
 import { registerOnlineDemo } from "./online";
+import { registerOtherKeysDemo } from "./otherkeys";
 import { registerReportDemo } from "./report";
 import { registerSystemDemo } from "./system";
 
@@ -34,6 +35,7 @@ export function installDemo() {
   registerAiDemo();
   registerIngameDemo();
   registerKeylistDemo();
+  registerOtherKeysDemo();
   registerExtensionsDemo();
   registerReportDemo();
   registerAccountDemo();

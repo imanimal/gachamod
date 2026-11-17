@@ -20,7 +20,12 @@ const PLACES: Array<[RegExp, ToastAction]> = [
     { label: "Game folders", run: settings("games") }],
   [/Hide adult mods from the chatbot/i, { label: "AI helper settings", run: settings("set-ai-adult") }],
   [/Key list in game/i, { label: "Key list settings", run: () => go({ view: "tools", section: "keylist" }) }],
+  // a key Windows wouldn't give gachamod (src-tauri hotkeys.rs): the button opens that key's setting
+  [/can't open the skin menu\. Pick another key/i, { label: "Switch skins in game", run: () => go({ view: "tools", section: "ingame" }) }],
+  [/can't show the key list\. Pick another key/i, { label: "Key list settings", run: () => go({ view: "tools", section: "keylist" }) }],
+  [/can't switch profiles\. Pick another key/i, { label: "Hotkey settings", run: settings("hotkeys") }],
   [/Tester options in Settings/i, { label: "Tester options", run: settings("set-tester") }],
+  [/exclusive fullscreen.*window mode/i, { label: "Launch options", run: settings("launch") }],
   [/Settings, Appearance/i, { label: "Appearance", run: settings("appearance") }],
   [/import it in Settings, Custom themes/i, { label: "Custom themes", run: settings("themes") }],
 ];

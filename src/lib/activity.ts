@@ -89,8 +89,11 @@ const EXACT: Record<string, Desc> = {
   games_detect: ["Looking for games and XXMI Launcher", HOLD.detect],
   games_list: ["Reading your games", HOLD.db],
   game: ["Reading this game's setup", HOLD.db],
-  game_launch: ["Starting the game", HOLD.game],
+  game_launch: ["Starting the game", "This starts the game. A Steam copy first waits up to 90 seconds for Steam to start and sign in, and Steam may close and start again to take the game's launch options. A Steam or launcher window waiting for an answer (a sign-in, an update, an error) can hold it. Check the taskbar for one."],
   game_running: ["Checking if the game runs", HOLD.game],
+  game_kick_check: ["Checking Genshin Impact's d3d11.dll", HOLD.disk],
+  launch_unsafe_off: ["Turning off Unsafe Mode in XXMI's settings", HOLD.disk],
+  game_kick_fix_done: ["Saving that you did the fix", HOLD.db],
   game_set_paths: ["Saving the game's folders", HOLD.disk],
   xxmi_status: ["Reading XXMI Launcher's settings", HOLD.xxmi],
   xxmi_open: ["Opening XXMI Launcher", HOLD.xxmi],
@@ -144,6 +147,9 @@ const EXACT: Record<string, Desc> = {
 /** By prefix, for everything not named above. */
 const PREFIX: Array<[string, Desc]> = [
   ["settings_", ["Reading settings", HOLD.db]],
+  ["gb_like", ["Sending your like to GameBanana", HOLD.gb]],
+  ["gb_subscribe", ["Subscribing on GameBanana", HOLD.gb]],
+  ["gb_thank", ["Sending your thanks to GameBanana", HOLD.gb]],
   ["gb_", ["Waiting on GameBanana", HOLD.gb]],
   ["queue_", ["Updating the download list", HOLD.db]],
   ["extensions_", ["Working on extensions", HOLD.disk]],
@@ -154,6 +160,10 @@ const PREFIX: Array<[string, Desc]> = [
   ["keylist_set", ["Saving the key list settings", HOLD.disk]],
   ["keylist_choose", ["Saving which mods the key list shows", HOLD.db]],
   ["keylist_", ["Reading mod keys", HOLD.disk]],
+  ["otherkeys_move", ["Changing gachamod's key", HOLD.disk]],
+  ["otherkeys_change", ["Changing the other app's key", "This writes one value in the other app's settings, after a copy of them. The app still closing, or an antivirus scan, can hold it."]],
+  ["otherkeys_keep", ["Saving which key stays", HOLD.db]],
+  ["otherkeys_", ["Reading other apps' keys", HOLD.disk]],
   ["live_", ["Talking to the running game", HOLD.disk]],
   ["overlay_", ["Updating the in-game menu", HOLD.disk]],
   ["mod_", ["Working on a mod", HOLD.disk]],
@@ -177,7 +187,7 @@ const PREFIX: Array<[string, Desc]> = [
 
 /** Commands that wait on the person (a file dialog, a sign-in window), or run in the background where nobody waits on
  *  them (usage counts, log lines), and so never count as slow. */
-const WAITS_ON_PERSON = new Set(["gb_sign_in", "telemetry_events", "log_write", "report_ui_error", "render_events", "game_check_saved", "game_check_menu", "save_look"]);
+const WAITS_ON_PERSON = new Set(["gb_sign_in", "gb_content_settings", "gb_mod_me","telemetry_events", "log_write", "report_ui_error", "render_events", "game_check_saved", "game_check_menu", "save_look"]);
 
 /** What a backend command does and what can hold it. */
 export function describeCall(cmd: string): Desc | null {

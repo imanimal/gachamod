@@ -13,6 +13,7 @@ A game update changes buffer and texture hashes, and sometimes buffer layouts. T
 - `versions[]` is a list of blocks `{version, source, hashes[], rules[]}`. The same version can appear more than once (one block per source, and rule-only blocks).
 - `hashes[]` entry: `old`, `new` (8 lowercase hex), `character`, `part`, `kind` (`ib|draw|position|texcoord|blend|texture|main|other`), optional `from` (version the old hash belonged to), `also` (other characters with the same pair), `current` (the new hash is in the live 3.3 table, ZZZ only), `note`.
 - Pairs chain (a to b to c). Loops exist: a hash can come back in a later version. Resolve with a visited set.
+- Blocks are listed oldest version first. A chain only moves to a block later in the list, so a block in the wrong place (or one with no version) sends chains to an outdated hash. A test checks the order.
 - The same old hash can map to different new hashes for different characters (shared textures). Match on character and part, not on the hash alone.
 - `rules[]` entry: `kind` (`duplicate_section|remap_vertex_groups|stride_change|texture_slot|other`), `character`, `detail` (exact steps), `auto` (true = our engine can do it from the data alone), `binary` (true = rewrites a `.buf` or `.dds`), `tool`. Extra fields hold the data: `pairs`, `stubs`, `map`, `old`/`new` index lists, `trigger_hash`, `texcoord_hashes`, `replacements`.
 - Back up every file before writing. Check the buffer size before converting, as the upstream tools do (they never guess).
@@ -104,6 +105,8 @@ Upstream: `https://raw.githubusercontent.com/Moonholder/Wuwa_Mod_Fixer/main/conf
 Fixer that matters: Another v3.3 HSR Fix, petrascyll, GameBanana 19559 (1788 likes, exe downloaded 78992 times, 2025-06-10, CC BY-NC-ND 4.0). No newer HSR fixer exists as of 2026-11-13. Related: Pipeline Convert Fix, Gustav0_ (19978, ND), ps-t slots to RabbitFX, solomoncyj (22998, MIT, 3 KB python), Universal HSR Mod Fixer (23752, repackages the 3.3 fix and runs code fetched from GitHub with `exec`). The GitHub copy (`petrascyll/hsr-scripts`) stops at 3.0C and has no licence.
 
 Data: petrascyll's `hsr_fix.py` 3.0C (648 pairs, 1.4 to 3.0, hash facts only) plus the SR-Model-Importer-Assets history for 3.2 and later (541 pairs for 3.2, 7 for 3.4).
+
+The assets history also has commits from before 1.4. Four of those pairs are kept as the 1.2 block (three Stelle textures from 2023-08-06, one Trailblazer blend hash from 2023-05-12). The 15 Kafka pairs of commit `e53e2647` (2023-08-17) are left out: the commit relabels her first dump eight days after her release (hair and head swapped, other characters' textures listed as hers), so no game update is behind it. Kept, they sent `e811b655` to `91133916` when 3.2 sends it to `07e0c801`.
 
 Operations:
 

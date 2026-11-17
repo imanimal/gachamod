@@ -1,0 +1,25 @@
+/* The opening screen (splash/splash.ts): a solid colour and one tip in the middle, an icon over a line of text. Each
+   game's intro styles itself under .splash[data-intro="<id>"] in splash/intros/<id>.css. html[data-splash] is "hold",
+   "play" or "out" while it shows. Owner: SHELL area. */
+
+.splash { position: fixed; inset: 0; z-index: 2147483000; display: grid; place-items: center; overflow: hidden; contain: strict;
+  background: var(--splash-bg, #0c0e13); color: var(--splash-ink, #e6e8ef); cursor: default; user-select: none; -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; font-kerning: normal; }
+
+/* the tip: .splash-tip-i (a 24px line icon) over .splash-tip-t (text with <kbd>s). [data-wait] until its fonts load */
+.splash-tip { position: relative; z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 1.15rem;
+  max-width: min(34rem, 84vw); padding: 0 1rem; text-align: center; transition: opacity .28s ease-out; }
+.splash-tip[data-wait] { opacity: 0; transition: none; }
+.splash-tip-i { width: 1.75rem; height: 1.75rem; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round;
+  opacity: .5; }
+.splash-tip-t { font-family: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; font-weight: 400; font-size: 1.06rem;
+  line-height: 1.65; letter-spacing: .005em; text-wrap: balance; opacity: .78; }
+.splash-tip kbd { display: inline-block; min-width: 1.55em; margin: 0 .12em; padding: .02em .42em; border-radius: 5px; vertical-align: .06em; text-align: center;
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-weight: 400; font-size: .8em; line-height: 1.5; letter-spacing: 0;
+  color: inherit; background: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 32%, transparent); }
+
+/* the plain one follows the scheme */
+html[data-scheme="light"] .splash[data-intro="plain"] { --splash-bg: #f3f4f7; --splash-ink: #1d2030; }
+
+/* nothing behind it takes the pointer while it shows */
+html[data-splash] .app { pointer-events: none; }

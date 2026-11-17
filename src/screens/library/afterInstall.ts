@@ -7,7 +7,7 @@ import { record } from "../../lib/history";
 import { go, currentGame, setGame } from "../../lib/store";
 import { toast, type ToastAction } from "../../ui/toast";
 import { enableNewPref } from "../settings/automatic";
-import { liveAllowed, liveCharacterOf, makeLive } from "../ingame/data";
+import { liveCharacterOf, liveReady, makeLive } from "../ingame/data";
 import { publish, restoreStates } from "./data";
 import { overlapping } from "./overlap";
 
@@ -53,7 +53,7 @@ export async function afterInstall(text: string, game: GameId, modIds: string[])
     // two skins for one character: switching them while playing is one click away
     const who = mod.character;
     const skins = who ? all.filter((m) => same(m.character, who) && !m.parent) : [];
-    if (who && skins.length > 1 && !liveCharacterOf(game, mod.id) && liveAllowed(game)) {
+    if (who && skins.length > 1 && !liveCharacterOf(game, mod.id) && liveReady(game)) {
       const lead = off.length ? `${text}. It's on, ${off.length === 1 ? off[0]!.name : `${off.length} other skins`} went off` : `${text}. It's on`;
       toast(`${lead}. Switch ${who}'s skins while you play?`, false, {
         label: "Switch in game",

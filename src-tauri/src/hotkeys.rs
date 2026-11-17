@@ -26,13 +26,14 @@ pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 /// Register every combo again from the database. Returns the combos that couldn't be had.
 pub fn sync<R: Runtime>(app: &AppHandle<R>) -> Vec<Taken> {
     let Some(st) = app.try_state::<AppState>() else { return vec![] };
-    let combos = match st.db.lock() {
+    // each combo with what it does, for the message when another app holds it
+    let combos: Vec<(String, &str)> = match st.db.lock() {
         Ok(d) => {
-            let mut c = hotkeys::combos(&d).unwrap_or_default();
+            let mut c: Vec<(String, &str)> = hotkeys::combos(&d).unwrap_or_default().into_iter().map(|k| (k, "switch profiles")).collect();
             // the key that opens the skin menu over each game (gacha_core::live, style "window")
-            for (_, set) in gacha_core::live::menu_keys(&d) { if !c.contains(&set.key) { c.push(set.key); } }
+            for (_, set) in gacha_core::live::menu_keys(&d) { if !c.iter().any(|(k, _)| *k == set.key) { c.push((set.key, "open the skin menu")); } }
             // and the key that shows the key list (gacha_core::keylist, style "window")
-            for (_, key) in gacha_core::keylist::window_keys(&d) { if !c.contains(&key) { c.push(key); } }
+            for (_, key) in gacha_core::keylist::window_keys(&d) { if !c.iter().any(|(k, _)| *k == key) { c.push((key, "show the key list")); } }
             c
         }
         Err(_) => return vec![],
@@ -44,14 +45,15 @@ pub fn sync<R: Runtime>(app: &AppHandle<R>) -> Vec<Taken> {
     let _ = gs.unregister_all();
     map.clear();
     let mut taken = Vec::new();
-    for combo in combos {
+    for (combo, job) in combos {
         let sc = match hotkeys::plugin_form(&combo).parse::<Shortcut>() {
             Ok(s) => s,
             Err(e) => { taken.push(Taken { combo, reason: e.to_string() }); continue; }
         };
         match gs.register(sc) {
             Ok(()) => { map.insert(sc.id(), combo); }
-            Err(_) => taken.push(Taken { reason: format!("{combo} is used by another app. Pick another key"), combo }),
+            // the words pick the button that opens the key's setting (src/lib/places.ts)
+            Err(_) => taken.push(Taken { reason: format!("{combo} is used by another app, so it can't {job}. Pick another key"), combo }),
         }
     }
     if launch::running_in(&launch::processes()).is_empty() {
