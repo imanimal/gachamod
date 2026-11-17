@@ -2,13 +2,14 @@
 // links, a warning with Fix when a game update broke it, a quick switch for how mods for adults show, name,
 // character, tags and notes (every edit with Undo), its parts, keys and in-game options, then the files.
 // Owner: LIBRARY area.
-import { Component, Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Component, Fragment, Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { dialogs, errorKind, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { fixLabel, stopWaiting, triedNote, useFixerBusy, useModHealth } from "../../lib/fixes";
 import { holdMods, holdOn, releaseMods, useHolds } from "../../lib/holds";
 import { gbToolId } from "../../lib/gamebanana";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
-import { trashPhrase } from "../settings/automatic";
+import { trashDaysPref } from "../settings/automatic";
+import { sentences, stops, t, tn, tx } from "../../lib/i18n";
 import { closeRoute, go, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
 import { Button, Drawer, IconButton, Row, Segmented, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
@@ -39,8 +40,9 @@ const loadViewer = () => (viewerLoad ??= import("./ModViewer").catch((e: unknown
 let ModViewer = lazy(loadViewer);
 const retryViewer = () => { if (!viewerLoad) ModViewer = lazy(loadViewer); };
 
-/** Shows the drawer for the route's modId. `mods` is the game's whole library. */
-export function ModDrawerHost({ game, mods, loaded }: { game: GameId; mods: ModEntry[]; loaded: boolean }) {
+/** Shows the drawer for the route's modId. `mods` is the game's whole library. `docked`: a pane in the page that
+ *  stays open (the "Three panes" Mods layout), saying what it's for while no mod is picked. */
+export function ModDrawerHost({ game, mods, loaded, docked }: { game: GameId; mods: ModEntry[]; loaded: boolean; docked?: boolean }) {
   const route = useRoute();
   const id = typeof route.modId === "string" ? route.modId : null;
   const mod = id ? mods.find((m) => m.id === id) : undefined;
@@ -52,11 +54,19 @@ export function ModDrawerHost({ game, mods, loaded }: { game: GameId; mods: ModE
         if (!live) return;
         closeRoute(["modId"]);
         // "invalid" is the library's answer for a mod it has no row for; anything else is a failed read, said as it is
-        if (errorKind(e) === "invalid") toast("That mod isn't installed anymore", false, { label: "View trash", run: () => go({ view: "library", tab: "archive" }) });
+        if (errorKind(e) === "invalid") toast(t("That mod isn't installed anymore"), false, { label: t("View trash"), run: () => go({ view: "library", tab: "archive" }) });
         else toast(errorText(e), true);
       });
     return () => { live = false; };
   }, [game, id, loaded, mod]);
+  if (docked) {
+    return mod ? <ModDrawer key={mod.id} game={game} mod={mod} mods={mods} docked onClose={() => closeRoute(["modId"])} /> : (
+      <aside className="drawer is-docked mod-pane is-empty" aria-label={t("Mod details")}>
+        <Icon name="mods" />
+        <p className="hint">{t("Click a mod to see its details here: its picture, toggles, conflicts and files. Enter does it from the keyboard")}</p>
+      </aside>
+    );
+  }
   return mod ? <ModDrawer game={game} mod={mod} mods={mods} onClose={() => closeRoute(["modId"])} /> : null;
 }
 
@@ -71,10 +81,10 @@ class ViewerBoundary extends Component<{ children: () => ReactNode; onClose: () 
     return (
       <div className="mod-viewer-wrap">
         <div className="mod-viewer is-wait" role="alert">
-          <span className="mod-viewer-msg">Couldn't show the 3D view. {error.message}</span>
+          <span className="mod-viewer-msg">{t("Couldn't show the 3D view. {error}", { error: error.message })}</span>
           <div className="mod-drawer-picact">
-            <Button size="sm" className="on-img" icon="refresh" onClick={() => { retryViewer(); this.setState({ error: null }); }} title="Open the 3D view again">Try again</Button>
-            <IconButton size="sm" variant="secondary" className="on-img" icon="x" label="Close the 3D view" onClick={this.props.onClose} />
+            <Button size="sm" className="on-img" icon="refresh" onClick={() => { retryViewer(); this.setState({ error: null }); }} title={t("Open the 3D view again")}>{t("Try again")}</Button>
+            <IconButton size="sm" variant="secondary" className="on-img" icon="x" label={t("Close the 3D view")} onClick={this.props.onClose} />
           </div>
         </div>
       </div>
@@ -88,7 +98,7 @@ const NSFW_OPTIONS: Array<{ value: NsfwMode; label: string; title: string }> = [
   { value: "show", label: nsfwLabel("show"), title: nsfwTip("show") },
 ];
 
-export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: ModEntry; mods: ModEntry[]; onClose: () => void }) {
+export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; mod: ModEntry; mods: ModEntry[]; onClose: () => void; docked?: boolean }) {
   const nsfw = useNsfw();
   const health = useModHealth(game).get(mod.id);
   const hold = holdOn(useHolds(game), mod);
@@ -127,10 +137,10 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
       const el = document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
       if (el || ++tries >= 16) clearDrawerSection();
       if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
-      else if (tries < 16) t = window.setTimeout(find, 200);
+      else if (tries < 16) timer = window.setTimeout(find, 200);
     };
-    let t = window.setTimeout(find, 250);
-    return () => window.clearTimeout(t);
+    let timer = window.setTimeout(find, 250);
+    return () => window.clearTimeout(timer);
   }, [mod.id]);
 
   const saveChar = () => {
@@ -139,9 +149,9 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
     void setCharacter(game, [mod], names.find((n) => n.toLowerCase() === c.toLowerCase()) ?? c);
   };
   const saveTag = () => {
-    const t = tag.trim();
+    const tg = tag.trim();
     setTag("");
-    if (t) void addTag(game, [mod], t);
+    if (tg) void addTag(game, [mod], tg);
   };
   const getPreview = async () => { setFetching(true); await previewFromGb(game, mod); setFetching(false); };
 
@@ -151,19 +161,21 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
   const broken = health && (health.status === "broken" || health.status === "unfixable");
   const fixerBusy = useFixerBusy();
   return (
-    <Drawer className="mod-drawer" title={mod.name} onClose={onClose}
-      actions={<Toggle checked={mod.enabled} onChange={(v, shift) => void setOn(game, [mod], v, mods, undefined, shift)} label={mod.enabled ? "On" : "Off"} ariaLabel={mod.name}
-        title={mod.enabled || !mod.character ? undefined : `Shift+click keeps ${mod.character}'s other mods on too`} />}
+    <Drawer className={docked ? "mod-drawer mod-pane" : "mod-drawer"} docked={docked} title={mod.name} onClose={onClose}
+      actions={<Toggle checked={mod.enabled} onChange={(v, shift) => void setOn(game, [mod], v, mods, undefined, shift)} label={mod.enabled ? t("On") : t("Off")} ariaLabel={mod.name}
+        title={mod.enabled || !mod.character ? undefined : t("Shift+click keeps {name}'s other mods on too", { name: mod.character })} />}
       footer={<>
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
-          title={`Its files ${trashPhrase()}. A short record stays in Mods, Trash so you can download it again`}>Move to trash</Button>
+          title={trashDaysPref.get() > 0
+            ? tn(trashDaysPref.get(), "Its files stay on your PC for {n} day. A short record stays in Mods, Trash so you can download it again", "Its files stay on your PC for {n} days. A short record stays in Mods, Trash so you can download it again")
+            : t("Its files are deleted right away. A short record stays in Mods, Trash so you can download it again")}>{t("Move to trash")}</Button>
         <span className="grow" />
-        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button variant="ghost" onClick={onClose}>{t("Close")}</Button>
       </>}>
       {model && !blurred ? (
         <div className="mod-drawer-hero">
           <ViewerBoundary key={mod.id} onClose={() => setModel(false)}>
-            {() => <Suspense fallback={<div className="mod-viewer-wrap"><div className="mod-viewer is-wait"><span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />Opening the 3D view</span></div></div>}>
+            {() => <Suspense fallback={<div className="mod-viewer-wrap"><div className="mod-viewer is-wait"><span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />{t("Opening the 3D view")}</span></div></div>}>
               <ModViewer game={game} modId={mod.id} onClose={() => setModel(false)} saving={pic.busy}
                 onSnapshot={(png) => void pic.fromBlob(png, "preview.png")} />
             </Suspense>}
@@ -176,25 +188,25 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="mod-drawer-picact">
           {!blurred && mod.iniCount > 0 && (
             <Button size="sm" className="on-img" icon="box" onClick={() => setModel(true)}
-              title="Turn the mod's model around, as its toggles are set now">View in 3D</Button>
+              title={t("Turn the mod's model around, as its toggles are set now")}>{t("View in 3D")}</Button>
           )}
           {!mod.preview && mod.source && (
-            <Button size="sm" className="on-img" icon="downloads" busy={fetching} onClick={() => void getPreview()} title="Download the first picture from its GameBanana page">
-              Get preview from GameBanana
+            <Button size="sm" className="on-img" icon="downloads" busy={fetching} onClick={() => void getPreview()} title={t("Download the first picture from its GameBanana page")}>
+              {t("Get preview from GameBanana")}
             </Button>
           )}
           <IconButton size="sm" variant="secondary" className="on-img" icon="edit" disabled={pic.busy} onClick={() => void pic.pick()}
-            label={`${mod.customPreview ? "Change" : "Set"} the preview: pick an image, drop one here or paste one with Ctrl+V`} />
+            label={mod.customPreview ? t("Change the preview: pick an image, drop one here or paste one with Ctrl+V") : t("Set the preview: pick an image, drop one here or paste one with Ctrl+V")} />
           {mod.customPreview && (
             <Button size="sm" className="on-img" icon="undo" disabled={pic.busy} onClick={() => void pic.clear()}
-              title="Go back to the picture the mod came with. Also in the mod's menu">Reset preview</Button>
+              title={t("Go back to the picture the mod came with. Also in the mod's menu")}>{t("Reset preview")}</Button>
           )}
         </div>
-        {pic.over && <span className="mod-drawer-drop" aria-hidden="true">Drop to use as the preview</span>}
-        {blurred && <Button size="sm" className="mod-drawer-reveal on-img" icon="eye" onClick={() => setReveal(true)} title="The picture is blurred because the mod is marked for adults">Show</Button>}
+        {pic.over && <span className="mod-drawer-drop" aria-hidden="true">{t("Drop to use as the preview")}</span>}
+        {blurred && <Button size="sm" className="mod-drawer-reveal on-img" icon="eye" onClick={() => setReveal(true)} title={t("The picture is blurred because the mod is marked for adults")}>{t("Show")}</Button>}
         {mod.updateAvailable && mod.source && (
           <div className="mod-drawer-badges">
-            <Button size="sm" variant="primary" icon="update" onClick={() => void getUpdate(game, mod)} title="Download the newest version from GameBanana">Update</Button>
+            <Button size="sm" variant="primary" icon="update" onClick={() => void getUpdate(game, mod)} title={t("Download the newest version from GameBanana")}>{t("Update")}</Button>
           </div>
         )}
       </div>
@@ -202,7 +214,9 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
 
       <p className="mod-drawer-who">
         {mod.character ? <CharLink game={game} name={mod.character} portrait /> : <KindLink mod={mod} />}
-        {mod.source?.submitter && <> <span className="hint">by</span> <CreatorLink name={mod.source.submitter} modId={mod.source.modId} /></>}
+        {mod.source?.submitter && t("by {creator}").split("{creator}").map((part, i) => (
+          <Fragment key={i}>{i > 0 && <CreatorLink name={mod.source!.submitter!} modId={mod.source!.modId} />}{part.trim() && <span className="hint">{part.trim()}</span>}</Fragment>
+        ))}
         {mod.version && <span className="hint"> · v{mod.version.replace(/^v/i, "")}</span>}
       </p>
 
@@ -210,20 +224,20 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="mod-drawer-family">
           <Icon name="link" />
           {parentMod
-            ? <span>Sub-mod of <button type="button" className="link-btn" onClick={() => openDetails(parentMod)} title={`Open ${parentMod.name}. ${mod.name} turns off with it and comes back with it`}>{parentMod.name}</button></span>
-            : <span className="hint">The mod it went with isn't installed anymore</span>}
+            ? <span>{tx("Sub-mod of {mod}", { mod: <button type="button" className="link-btn" onClick={() => openDetails(parentMod)} title={t("Open {parent}. {mod} turns off with it and comes back with it", { parent: parentMod.name, mod: mod.name })}>{parentMod.name}</button> })}</span>
+            : <span className="hint">{t("The mod it went with isn't installed anymore")}</span>}
           <Button size="sm" variant="ghost" onClick={() => void setParent(game, mod, "", mods)}
-            title="Make it a mod of its own again, so turning it on asks about the character's other mods">Unlink</Button>
+            title={t("Make it a mod of its own again, so turning it on asks about the character's other mods")}>{t("Unlink")}</Button>
         </div>
       )}
       {subs.length > 0 && (
         <div className="mod-drawer-family">
           <Icon name="link" />
-          <span className="hint" title="Add-ons that go with this mod. They turn off with it and come back when it is turned on">Sub-mods</span>
+          <span className="hint" title={t("Add-ons that go with this mod. They turn off with it and come back when it is turned on")}>{t("Sub-mods")}</span>
           {subs.map((s) => (
             <span key={s.id} className="mod-drawer-sub">
-              <Toggle size="sm" checked={s.enabled} onChange={(v, shift) => void setOn(game, [s], v, mods, undefined, shift)} label={<span className="sr-only">{s.enabled ? `${s.name} is on` : `${s.name} is off`}</span>} />
-              <button type="button" className="link-btn" onClick={() => openDetails(s)} title={`Open ${s.name}`}>{s.name}</button>
+              <Toggle size="sm" checked={s.enabled} onChange={(v, shift) => void setOn(game, [s], v, mods, undefined, shift)} label={<span className="sr-only">{s.enabled ? t("{mod} is on", { mod: s.name }) : t("{mod} is off", { mod: s.name })}</span>} />
+              <button type="button" className="link-btn" onClick={() => openDetails(s)} title={t("Open {mod}", { mod: s.name })}>{s.name}</button>
             </span>
           ))}
         </div>
@@ -233,39 +247,44 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="note t-warn mod-drawer-health" role="status">
           <Icon name="warn" />
           <div className="mod-drawer-health-t">
-            <strong>{health.needsAuthor ? "A game update broke this mod, and a fixer can't repair it"
-              : health.tried ? "A game update broke this mod, and the fixer didn't repair it"
-              : health.status === "broken" || health.tool ? "A game update broke this mod" : "A game update broke this mod, and gachamod can't fix it by itself"}</strong>
-            {health.reasons.length > 0 && <span>{health.reasons.join(". ")}</span>}
-            {triedNote(health) && <span>{triedNote(health)}.</span>}
+            <strong>{health.needsAuthor ? t("A game update broke this mod, and a fixer can't repair it")
+              : health.tried ? t("A game update broke this mod, and the fixer didn't repair it")
+              : health.status === "broken" || health.tool ? t("A game update broke this mod") : t("A game update broke this mod, and gachamod can't fix it by itself")}</strong>
+            {health.reasons.length > 0 && <span>{stops(health.reasons)}</span>}
+            {triedNote(health) && <span>{stops([triedNote(health)!], true)}</span>}
             <span className="mod-drawer-health-a">
               {health.status === "broken" && (
                 <Button size="sm" variant="primary" icon="wand" onClick={() => void fixForUpdate(game, [mod])}
-                  title="Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back">{fixLabel(health)}</Button>
+                  title={t("Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back")}>{fixLabel(health)}</Button>
               )}
               {health.status === "unfixable" && health.tool && (
                 <Button size="sm" variant={health.tried || health.needsAuthor ? undefined : "primary"} icon="wand" busy={fixerBusy.has(`mod:${mod.id}`)} onClick={() => void fixForUpdate(game, [mod])}
-                  title={`Gets ${health.tool.name} from ${gbToolId(health.tool.url) !== null ? "GameBanana" : "GitHub"} and runs it on this mod. ${health.tried ? "It gets the fixer's newest version first. " : ""}${health.needsAuthor ? "It may not help: the game changed the model, which a fixer can't redo. " : ""}A backup is kept and Undo puts it back`}>{fixLabel(health)}</Button>
+                  title={sentences([
+                    t("Gets {tool} from {site} and runs it on this mod.", { tool: health.tool.name, site: gbToolId(health.tool.url) !== null ? "GameBanana" : "GitHub" }),
+                    health.tried && t("It gets the fixer's newest version first."),
+                    health.needsAuthor && t("It may not help: the game changed the model, which a fixer can't redo."),
+                    t("A backup is kept and Undo puts it back"),
+                  ].filter((x): x is string => !!x))}>{fixLabel(health)}</Button>
               )}
               {fixerBusy.has("waiting") && fixerBusy.has(`mod:${mod.id}`) && (
                 <Button size="sm" variant="ghost" onClick={stopWaiting}
-                  title="The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far">Stop waiting</Button>
+                  title={t("The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far")}>{t("Stop waiting")}</Button>
               )}
               {(health.tried || health.needsAuthor) && mod.source && (<>
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
-                  title="Looks on GameBanana for a newer file of this mod and downloads it">Update</Button>
+                  title={t("Looks on GameBanana for a newer file of this mod and downloads it")}>{t("Update")}</Button>
                 <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
-                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Open on GameBanana</Button>
+                  title={t("Open the mod's GameBanana page. Its author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
               </>)}
               {(health.tried || health.needsAuthor) && !mod.source && (
                 <Button size="sm" icon="search" onClick={() => go({ view: "browse", search: mod.name })}
-                  title="Search GameBanana for a newer version of this mod">Search GameBanana</Button>
+                  title={t("Search GameBanana for a newer version of this mod")}>{t("Search GameBanana")}</Button>
               )}
-              <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title="Open the mod fixers in Tools">Mod fixers</Button>
+              <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title={t("Open the mod fixers in Tools")}>{t("Mod fixers")}</Button>
               <Button size="sm" variant="ghost" icon="bell-off" onClick={() => void holdMods(game, [mod], "update")}
-                title="Stops this warning until you install a newer version from its author. If that one is still broken, it warns again">Wait for an update</Button>
+                title={t("Stops this warning until you install a newer version from its author. If that one is still broken, it warns again")}>{t("Wait for an update")}</Button>
               <Button size="sm" variant="ghost" icon="hide" onClick={() => void holdMods(game, [mod], "ignore")}
-                title="Stops every warning about this mod: the red marks, the Problems filter and Tools. Its conflicts are ignored too">Ignore problems</Button>
+                title={t("Stops every warning about this mod: the red marks, the Problems filter and Tools. Its conflicts are ignored too")}>{t("Ignore problems")}</Button>
             </span>
           </div>
         </div>
@@ -275,19 +294,19 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         <div className="note mod-drawer-health" role="status">
           <Icon name={hold.kind === "update" ? "bell-off" : "hide"} />
           <div className="mod-drawer-health-t">
-            <strong>{hold.kind === "update" ? "Waiting for an update from its author" : "Ignoring this mod's problems"}</strong>
+            <strong>{hold.kind === "update" ? t("Waiting for an update from its author") : t("Ignoring this mod's problems")}</strong>
             <span>{hold.kind === "update"
-              ? "The game update warning is hidden until you install a newer version. If that one is still broken, it warns again."
-              : "No red marks, no Problems filter and nothing in Tools for this mod."}</span>
+              ? t("The game update warning is hidden until you install a newer version. If that one is still broken, it warns again.")
+              : t("No red marks, no Problems filter and nothing in Tools for this mod.")}</span>
             <span className="mod-drawer-health-a">
               {hold.kind === "update" && mod.source && (<>
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
-                  title="Looks on GameBanana for a newer file of this mod and downloads it">Update</Button>
+                  title={t("Looks on GameBanana for a newer file of this mod and downloads it")}>{t("Update")}</Button>
                 <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
-                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Open on GameBanana</Button>
+                  title={t("Open the mod's GameBanana page. Its author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
               </>)}
               <Button size="sm" variant="ghost" icon="eye" onClick={() => void releaseMods(game, [mod])}
-                title={hold.kind === "update" ? "Stop waiting and show the warning again now" : "Warn about its problems again"}>Show problems again</Button>
+                title={hold.kind === "update" ? t("Stop waiting and show the warning again now") : t("Warn about its problems again")}>{t("Show problems again")}</Button>
             </span>
           </div>
         </div>
@@ -295,48 +314,48 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
 
       {mod.nsfw && (
         <div className="mod-drawer-adult">
-          <span className="field-l" title="Applies to every mod marked for adults, everywhere in the app">Mods for adults</span>
-          <Segmented size="sm" label="Mods for adults" value={nsfw} onChange={setNsfw} options={NSFW_OPTIONS} />
+          <span className="field-l" title={t("Applies to every mod marked for adults, everywhere in the app")}>{t("Mods for adults")}</span>
+          <Segmented size="sm" label={t("Mods for adults")} value={nsfw} onChange={setNsfw} options={NSFW_OPTIONS} />
         </div>
       )}
 
       <div className="mod-drawer-fields">
-        <TextField label="Name" value={name} onChange={setName}
+        <TextField label={t("Name")} value={name} onChange={setName}
           onBlur={() => { if (name.trim() && name.trim() !== mod.name) void renameMod(game, mod, name); else setName(mod.name); }} />
         <label className="field mod-drawer-char">
-          <span className="field-l">Character</span>
-          <input list={listId} value={character} placeholder="Who it is for" spellCheck={false}
+          <span className="field-l">{t("Character")}</span>
+          <input list={listId} value={character} placeholder={t("Who it is for")} spellCheck={false}
             onChange={(e) => setChar(e.target.value)} onBlur={saveChar}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
           <datalist id={listId}>{names.map((n) => <option key={n} value={n} />)}</datalist>
         </label>
 
         <div className="field mod-drawer-tags">
-          <span className="field-l">Tags</span>
+          <span className="field-l">{t("Tags")}</span>
           <span className="mod-drawer-taglist">
-            {mod.tags.map((t) => (
-              <span key={t} className="chip mod-tag">
-                <button type="button" className="chip-t" title={`Show every mod tagged "${t}" in Mods`}
-                  onClick={() => go({ view: "library", search: t })}>{t}</button>
-                <button type="button" aria-label={`Remove the tag "${t}"`} title={`Remove the tag "${t}"`}
-                  onClick={() => void removeTag(game, [mod], t)}><Icon name="x" /></button>
+            {mod.tags.map((tag) => (
+              <span key={tag} className="chip mod-tag">
+                <button type="button" className="chip-t" title={t("Show every mod tagged \"{tag}\" in Mods", { tag })}
+                  onClick={() => go({ view: "library", search: tag })}>{tag}</button>
+                <button type="button" aria-label={t("Remove the tag \"{tag}\"", { tag })} title={t("Remove the tag \"{tag}\"", { tag })}
+                  onClick={() => void removeTag(game, [mod], tag)}><Icon name="x" /></button>
               </span>
             ))}
-            <input className="mod-drawer-tagin" list={tagListId} value={tag} placeholder="Add a tag" spellCheck={false}
+            <input className="mod-drawer-tagin" list={tagListId} value={tag} placeholder={t("Add a tag")} spellCheck={false}
               onChange={(e) => setTag(e.target.value)} onBlur={saveTag}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); saveTag(); } }} />
             <datalist id={tagListId}>
-              {libraryTags(mods).filter((t) => !mod.tags.some((x) => x.toLowerCase() === t.toLowerCase())).map((t) => <option key={t} value={t} />)}
+              {libraryTags(mods).filter((k) => !mod.tags.some((x) => x.toLowerCase() === k.toLowerCase())).map((k) => <option key={k} value={k} />)}
             </datalist>
           </span>
         </div>
 
-        <TextField label="Notes" multiline value={notes} onChange={setNotes} placeholder="Anything to remember about it"
-          onBlur={() => { if (notes.trim() !== (mod.notes ?? "")) void patchMods(game, [mod], () => ({ notes }), `Changed the notes of ${mod.name}`); }} />
+        <TextField label={t("Notes")} multiline value={notes} onChange={setNotes} placeholder={t("Anything to remember about it")}
+          onBlur={() => { if (notes.trim() !== (mod.notes ?? "")) void patchMods(game, [mod], () => ({ notes }), t("Changed the notes of {mod}", { mod: mod.name })); }} />
 
         <div className="mod-drawer-flags">
-          <Toggle checked={mod.favorite} onChange={(v) => void setFavourite(game, [mod], v)} label="Favourite" />
-          <span title="Marks it for adults, so it's hidden, blurred or shown like every other mod for adults"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
+          <Toggle checked={mod.favorite} onChange={(v) => void setFavourite(game, [mod], v)} label={t("Favourite")} />
+          <span title={t("Marks it for adults, so it's hidden, blurred or shown like every other mod for adults")}><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label={t("For adults")} /></span>
         </div>
       </div>
 
@@ -350,14 +369,14 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
       <div className="mod-drawer-facts">
         {mod.source && (
           <Row label="GameBanana">
-            <button type="button" className="link-btn" onClick={() => openOnGb(mod)} title="Open its GameBanana page">Mod {mod.source.modId} <Icon name="external" /></button>
+            <button type="button" className="link-btn" onClick={() => openOnGb(mod)} title={t("Open its GameBanana page")}>{t("Mod {id}", { id: String(mod.source.modId) })} <Icon name="external" /></button>
           </Row>
         )}
-        <Row label="Size">{formatBytes(mod.sizeBytes)}, {mod.fileCount === 1 ? "1 file" : `${mod.fileCount} files`}, {mod.iniCount === 1 ? "1 ini" : `${mod.iniCount} inis`}</Row>
-        {mod.installedAt > 0 && <Row label="Added">{timeAgo(mod.installedAt)}</Row>}
-        <Row label="Folder">
+        <Row label={t("Size")}>{t("{size}, {files}, {inis}", { size: formatBytes(mod.sizeBytes), files: tn(mod.fileCount, "{n} file", "{n} files"), inis: tn(mod.iniCount, "{n} ini", "{n} inis") })}</Row>
+        {mod.installedAt > 0 && <Row label={t("Added")}>{timeAgo(mod.installedAt)}</Row>}
+        <Row label={t("Folder")}>
           <span className="mod-drawer-path mono selectable" title={mod.path}>{mod.relPath}</span>
-          <Button size="sm" icon="folder" onClick={() => openFolder(mod)} title="Open its folder in File Explorer">Open</Button>
+          <Button size="sm" icon="folder" onClick={() => openFolder(mod)} title={t("Open its folder in File Explorer")}>{t("Open")}</Button>
         </Row>
       </div>
     </Drawer>
@@ -367,7 +386,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "gif"];
 const extOfPath = (p: string) => p.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() ?? "";
 const extOfType = (type: string) => ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[type] ?? null;
-const NOT_AN_IMAGE = "Use a PNG, JPG, WebP or GIF image";
+const NOT_AN_IMAGE = t("Use a PNG, JPG, WebP or GIF image");
 
 /** Setting the mod's own preview: pick a file, drop one on the preview (Tauri gives paths, the browser gives
  *  files) or paste one while the drawer is open. */
@@ -387,7 +406,7 @@ function usePreviewSetter(game: GameId, mod: ModEntry) {
       const own = await ownPreview(game, m);
       show(await work());
       record({
-        label: `New preview for ${m.name}`,
+        label: t("New preview for {mod}", { mod: m.name }),
         undo: async () => show(own ? await library.setPreviewData(game, m.id, own.bytes, own.ext) : await library.clearPreview(game, m.id)),
         redo: async () => show(await work()),
       });
@@ -409,7 +428,7 @@ function usePreviewSetter(game: GameId, mod: ModEntry) {
 
   const pick = async () => {
     if (inTauri()) {
-      const r = await dialogs.pickFiles({ title: "Pick a preview image", extensions: IMAGE_EXTS });
+      const r = await dialogs.pickFiles({ title: t("Pick a preview image"), extensions: IMAGE_EXTS });
       if (r?.[0]) fromPath(r[0]);
       return;
     }
@@ -432,8 +451,8 @@ function usePreviewSetter(game: GameId, mod: ModEntry) {
       const data = e.clipboardData;
       const file = Array.from(data?.items ?? []).find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
       if (!file) return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest("input, textarea, [contenteditable]") && data?.types.includes("text/plain")) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("input, textarea, [contenteditable]") && data?.types.includes("text/plain")) return;
       e.preventDefault();
       void fromBlob(file, file.name);
     };

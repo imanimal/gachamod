@@ -11,6 +11,7 @@ import { enableNewPref } from "../settings/automatic";
 import { liveCharacterOf, liveReady, makeLive } from "../ingame/data";
 import { publish, restoreStates } from "./data";
 import { overlapping } from "./overlap";
+import { t, tb, tn } from "../../lib/i18n";
 
 const ASKED_KEY = "mods.enableNew.asked";
 /** Two installs this close together share a toast. */
@@ -30,14 +31,14 @@ async function wasAsked(): Promise<boolean> {
 }
 function showOffer(text: string, first: Turned) {
   const turned = [first];
-  const id = toast(`${text}. New mods turn on by themselves`, false, {
-    label: "Keep new mods off",
+  const id = toast(t("{text}. New mods turn on by themselves", { text }), false, {
+    label: t("Keep new mods off"),
     run: async () => {
       dismissToast(id);
       await enableNewPref.set(false);
-      for (const t of turned) await restoreStates(t.game, t.before, t.ids).catch(() => {});
-      toast(turned.length > 1 ? `New mods stay off until you turn them on. ${turned.length} mods went back off` : "New mods stay off until you turn them on",
-        false, { label: "Open the setting", run: () => go({ view: "settings", section: "set-enable-new" }) });
+      for (const tu of turned) await restoreStates(tu.game, tu.before, tu.ids).catch(() => {});
+      toast(turned.length > 1 ? tn(turned.length, "New mods stay off until you turn them on. {n} mod went back off", "New mods stay off until you turn them on. {n} mods went back off") : t("New mods stay off until you turn them on"),
+        false, { label: t("Open the setting"), run: () => go({ view: "settings", section: "set-enable-new" }) });
     },
   }, undefined, {
     keep: true,
@@ -50,17 +51,20 @@ function showOffer(text: string, first: Turned) {
 type Result = { on: boolean; prefOff: boolean; off: number };
 let single: ({ id: number; at: number } & Result) | null = null;
 let burst: { id: number; n: number; on: number; prefOff: number; off: number } | null = null;
-const downloads: ToastAction = { label: "Downloads", run: () => go({ view: "downloads" }) };
+const downloads: ToastAction = { label: t("Downloads"), run: () => go({ view: "downloads" }) };
 
 async function burstText(b: NonNullable<typeof burst>): Promise<string> {
   const s = (await queue.get().catch(() => null))?.summary;
   const left = s ? s.running + s.waiting : 0;
-  let t = `Installed ${left ? `${b.n} of ${b.n + left}` : b.n} mods`;
-  if (b.on === b.n) t += " and turned them on";
-  else if (b.on) t += `, ${b.on} turned on`;
-  else if (b.prefOff === b.n) t += ". Turn them on in Mods";
-  if (b.off) t += `. ${b.off === 1 ? "1 other skin" : `${b.off} other skins`} went off`;
-  return t;
+  const p = { n: b.n, total: b.n + left, on: b.on };
+  let text = b.on === b.n
+    ? (left ? t("Installed {n} of {total} mods and turned them on", p) : tn(b.n, "Installed {n} mod and turned it on", "Installed {n} mods and turned them on"))
+    : b.on
+      ? (left ? t("Installed {n} of {total} mods, {on} turned on", p) : t("Installed {n} mods, {on} turned on", p))
+      : (left ? t("Installed {n} of {total} mods", p) : tn(b.n, "Installed {n} mod", "Installed {n} mods"));
+  if (b.on !== b.n && !b.on && b.prefOff === b.n) text = t("{text}. Turn them on in Mods", { text });
+  if (b.off) text = tn(b.off, "{text}. {n} other skin went off", "{text}. {n} other skins went off", { text });
+  return text;
 }
 
 /** Say one install finished: on its own toast, or counted into the toast of the installs just before it. */
@@ -86,10 +90,10 @@ async function say(text: string, open: ToastAction, r: Result) {
 const switches = new Map<string, { id: number; n: number }>();
 function offerSwitch(game: GameId, who: string, skins: ModEntry[], lead: string, open: ToastAction) {
   const key = `${game}:${who.toLowerCase()}`;
-  const act: ToastAction = { label: "Switch in game", run: () => makeLive(game, skins.map((m) => m.id), who) };
+  const act: ToastAction = { label: t("Switch in game"), run: () => makeLive(game, skins.map((m) => m.id), who) };
   const was = switches.get(key);
-  if (was && retoast(was.id, `Installed ${was.n + 1} skins for ${who}. Switch ${who}'s skins while you play?`, act, false, open)) { was.n++; return; }
-  switches.set(key, { id: toast(`${lead}. Switch ${who}'s skins while you play?`, false, act, open), n: 1 });
+  if (was && retoast(was.id, t("Installed {n} skins for {name}. Switch {name}'s skins while you play?", { n: was.n + 1, name: who }), act, false, open)) { was.n++; return; }
+  switches.set(key, { id: toast(t("{text}. Switch {name}'s skins while you play?", { text: lead, name: who }), false, act, open), n: 1 });
 }
 
 /** The backend's text names the mod's group when it has no character ("Installed X for NPCs & Entities"): drop that. */
@@ -105,20 +109,22 @@ function plainText(text: string, mod?: ModEntry) {
   return head.slice(0, at) + tail;
 }
 
-const wentOff = (off: ModEntry[]) => (off.length === 1 ? off[0]!.name : `${off.length} other skins`);
 /** The one way an install toast says the mod is on and what went off for it. */
-const onText = (text: string, off: ModEntry[]) => (off.length ? `${text}. It's on, and ${wentOff(off)} went off` : `${text}. It's on`);
+const onText = (text: string, off: ModEntry[]) => (!off.length ? t("{text}. It's on", { text })
+  : off.length === 1 ? t("{text}. It's on, and {mod} went off", { text, mod: off[0]!.name })
+  : tn(off.length, "{text}. It's on, and {n} other skin went off", "{text}. It's on, and {n} other skins went off", { text }));
 
 /** `text` is the backend's "Installed X for Y". `modIds[0]` is the mod to turn on (the first of several variants). */
 export async function afterInstall(rawText: string, game: GameId, modIds: string[]) {
-  const open: ToastAction = { label: "Open", run: () => { if (currentGame()?.id !== game) setGame(game); go({ view: "library", modId: modIds[0] }); } };
-  let text = rawText;
+  const open: ToastAction = { label: t("Open"), run: () => { if (currentGame()?.id !== game) setGame(game); go({ view: "library", modId: modIds[0] }); } };
+  // the backend's text in the user's language (plainText reads the English)
+  let text = tb(rawText);
   try {
     await enableNewPref.ready;
     const all = await library.list(game);
     const mod = all.find((m) => m.id === modIds[0]);
-    text = plainText(rawText, mod);
-    if (!enableNewPref.get() || !modIds.length) { await say(`${text}. Turn it on in Mods`, open, { on: false, prefOff: true, off: 0 }); return; }
+    text = tb(plainText(rawText, mod));
+    if (!enableNewPref.get() || !modIds.length) { await say(t("{text}. Turn it on in Mods", { text }), open, { on: false, prefOff: true, off: 0 }); return; }
     if (!mod || mod.enabled) { await say(text, open, { on: false, prefOff: false, off: 0 }); return; }
     const others = liveCharacterOf(game, mod.id) ? [] : overlapping(mod, all);
     const keepBoth = others.length > 0 && (await settings.get(`${game}.oneSkin`).catch(() => null)) === "0";
@@ -128,7 +134,9 @@ export async function afterInstall(rawText: string, game: GameId, modIds: string
     const ids = change.changed.map((m) => m.id);
     const off = change.changed.filter((m) => !m.enabled);
     record({
-      label: off.length ? `Turned on ${mod.name} and turned off ${off.length === 1 ? off[0]!.name : `${off.length} mods`}` : `Turned on ${mod.name}`,
+      label: !off.length ? t("Turned on {mod}", { mod: mod.name })
+        : off.length === 1 ? t("Turned on {mod} and turned off {other}", { mod: mod.name, other: off[0]!.name })
+        : tn(off.length, "Turned on {mod} and turned off {n} mod", "Turned on {mod} and turned off {n} mods", { mod: mod.name }),
       undo: () => restoreStates(game, before, ids),
       redo: async () => { publish(game, await library.setEnabled(game, [mod.id], true, others.length ? !keepBoth : undefined)); },
     }, true);
@@ -147,7 +155,7 @@ export async function afterInstall(rawText: string, game: GameId, modIds: string
     }
     await say(onText(text, off), open, { on: true, prefOff: false, off: off.length });
   } catch (e) {
-    if (!enableNewPref.get()) toast(`${text}. Turn it on in Mods`, false, open);
-    else toast(`${text}, but it couldn't be turned on: ${errorText(e)}`, true, open);
+    if (!enableNewPref.get()) toast(t("{text}. Turn it on in Mods", { text }), false, open);
+    else toast(t("{text}, but it couldn't be turned on: {error}", { text, error: errorText(e) }), true, open);
   }
 }

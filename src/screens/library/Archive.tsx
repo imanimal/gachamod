@@ -7,7 +7,8 @@ import { errorText, library, type ArchiveEntry, type GameId } from "../../lib/ap
 import { queueLatest } from "../../lib/gamebanana";
 import { record } from "../../lib/history";
 import { useNsfw } from "../../lib/prefs";
-import { trashPhrase, useTrashDays } from "../settings/automatic";
+import { useTrashDays } from "../settings/automatic";
+import { t, tn } from "../../lib/i18n";
 import { go, onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
 import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
@@ -56,8 +57,8 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
   const forgetLater = (e: ArchiveEntry) => {
     setLeaving((s) => new Set(s).add(e.key));
     pending.current.set(e.key, window.setTimeout(() => commit([e.key]), FORGET_AFTER));
-    toast(`Forgot ${e.name}`, false, {
-      label: "Undo",
+    toast(t("Forgot {mod}", { mod: e.name }), false, {
+      label: t("Undo"),
       run: () => {
         window.clearTimeout(pending.current.get(e.key));
         pending.current.delete(e.key);
@@ -75,12 +76,12 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
         publish(game, ch);
         let ids = ch.changed.map((m) => m.id);
         record({
-          label: `Put back ${e.name}`,
+          label: t("Put back {mod}", { mod: e.name }),
           undo: async () => { const c = await library.remove(game, ids); publish(game, c); },
           redo: async () => {
-            const t = (await library.trash(game)).find((x) => ids.includes(x.modId));
-            if (!t) throw new Error("Its files aren't in the trash anymore");
-            const c = await library.trashRestore(t.id);
+            const tr = (await library.trash(game)).find((x) => ids.includes(x.modId));
+            if (!tr) throw new Error(t("Its files aren't in the trash anymore"));
+            const c = await library.trashRestore(tr.id);
             publish(game, c);
             ids = c.changed.map((m) => m.id);
           },
@@ -88,10 +89,10 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
         void load();
       } else if (e.source) {
         const item = await queueLatest(game, e.source.modId);
-        if (item) toast(`Downloading ${e.name}. Its settings come back when it installs`, false, { label: "Downloads", run: () => go("downloads") });
-        else toast(`${e.name} has no files left on GameBanana`, true);
+        if (item) toast(t("Downloading {mod}. Its settings come back when it installs", { mod: e.name }), false, { label: t("Downloads"), run: () => go("downloads") });
+        else toast(t("{mod} has no files left on GameBanana", { mod: e.name }), true);
       } else {
-        toast("Its files are gone and it didn't come from GameBanana, so there's nothing to download", true);
+        toast(t("Its files are gone and it didn't come from GameBanana, so there's nothing to download"), true);
       }
     } catch (err) { toast(errorText(err), true); }
     finally { setBusy(null); }
@@ -99,13 +100,13 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
 
   const menu = (e: ArchiveEntry): MenuEntry[] => [
     { header: e.name },
-    { label: e.trashId !== null ? "Put back" : "Download again", icon: "undo", disabled: e.trashId === null && !e.source, onClick: () => void reinstall(e) },
-    !!e.character && { label: `Open ${e.character}'s page`, icon: "characters", onClick: () => go({ view: "characters", character: e.character! }) },
-    e.source && { label: "View on GameBanana", icon: "browse", onClick: () => go({ view: "browse", modId: e.source!.modId }) },
+    { label: e.trashId !== null ? t("Put back") : t("Download again"), icon: "undo", disabled: e.trashId === null && !e.source, onClick: () => void reinstall(e) },
+    !!e.character && { label: t("Open {name}'s page", { name: e.character! }), icon: "characters", onClick: () => go({ view: "characters", character: e.character! }) },
+    e.source && { label: t("View on GameBanana"), icon: "browse", onClick: () => go({ view: "browse", modId: e.source!.modId }) },
     "-",
     e.trashId !== null
-      ? { label: "Delete", icon: "trash", danger: true, title: "Deletes its files from your PC and forgets its settings", onClick: () => forget(e) }
-      : { label: "Forget", icon: "x", danger: true, title: "Deletes this record and its saved settings", onClick: () => forget(e) },
+      ? { label: t("Delete"), icon: "trash", danger: true, title: t("Deletes its files from your PC and forgets its settings"), onClick: () => forget(e) }
+      : { label: t("Forget"), icon: "x", danger: true, title: t("Deletes this record and its saved settings"), onClick: () => forget(e) },
   ];
 
   const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -117,69 +118,71 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
 
   return (
     <>
-    <PageHeader title="Mods" icon="mods" sub="Mods you removed"
-      actions={<>{tabs}<SearchField value={search} onChange={setSearch} placeholder="Search removed mods" className="library-search" /></>} />
+    <PageHeader title={t("Mods")} icon="mods" sub={t("Mods you removed")}
+      actions={<>{tabs}<SearchField value={search} onChange={setSearch} placeholder={t("Search removed mods")} className="library-search" /></>} />
     <div className="archive">
       {items !== null && items.length > 0 && (
         <div className="archive-top">
           <span className="hint archive-hint">
             {trashDays > 0
-              ? `Files of removed mods ${trashPhrase(trashDays)}, then they're deleted. `
-              : "Removing a mod deletes its files. "}
-            Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.
+              ? tn(trashDays, "Files of removed mods stay on your PC for {n} day, then they're deleted.", "Files of removed mods stay on your PC for {n} days, then they're deleted.")
+              : t("Removing a mod deletes its files.")}
+            {" "}{t("Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.")}
           </span>
-          <Button size="sm" variant="ghost" icon="trash" title="Deletes every removed mod's files and saved settings. You're asked first"
-            onClick={() => setAskAll(true)}>Empty trash</Button>
-          <Button size="sm" variant="ghost" icon="settings" title="Keep removed mods' files (Settings, Trash and removed mods)"
-            onClick={() => go({ view: "settings", section: "set-trash-days" })}>{trashDays > 0 ? "Change" : "Keep files"}</Button>
+          <Button size="sm" variant="ghost" icon="trash" title={t("Deletes every removed mod's files and saved settings. You're asked first")}
+            onClick={() => setAskAll(true)}>{t("Empty trash")}</Button>
+          <Button size="sm" variant="ghost" icon="settings" title={t("Keep removed mods' files (Settings, Trash and removed mods)")}
+            onClick={() => go({ view: "settings", section: "set-trash-days" })}>{trashDays > 0 ? t("Change") : t("Keep files")}</Button>
         </div>
       )}
       {items === null ? (
         <div className="tiles archive-grid">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}</div>
       ) : !shown.length ? (
-        <Empty icon="trash" title={items.length ? "Nothing matches" : "The trash is empty. Very tidy"}>
-          {items.length ? "Try another search." : "Mods you remove show up here, so you can put them back or download them again with their settings."}
+        <Empty icon="trash" title={items.length ? t("Nothing matches") : t("The trash is empty. Very tidy")}>
+          {items.length ? t("Try another search.") : t("Mods you remove show up here, so you can put them back or download them again with their settings.")}
         </Empty>
       ) : (
         <div ref={grid} className="tiles archive-grid" onKeyDown={(k) => moveInGrid(k, grid.current, ".archive-card")}>
           {shown.map((e) => {
             const files = e.trashId !== null;
             // what the Files on PC or Record only tag means, also on the tile so keyboard and controller users see it
-            const kept = files
-              ? `Its files are still on your PC${e.filesUntil ? ` until ${new Date(e.filesUntil * 1000).toLocaleDateString()}` : ""}. Put back restores them as they were`
-              : "Its files were deleted from your PC. Only its name, settings and GameBanana link are kept, so Download again gets it back with its settings";
+            const kept = !files
+              ? t("Its files were deleted from your PC. Only its name, settings and GameBanana link are kept, so Download again gets it back with its settings")
+              : e.filesUntil
+                ? t("Its files are still on your PC until {date}. Put back restores them as they were", { date: new Date(e.filesUntil * 1000).toLocaleDateString() })
+                : t("Its files are still on your PC. Put back restores them as they were");
             return (
               <div key={e.key} className={`tile archive-card${e.nsfw && nsfw === "blur" ? " blur" : ""}`} tabIndex={0} data-pad-x
-                title={`${e.name}. ${kept}. Enter ${files ? "puts it back" : "downloads it again"}, arrow keys move between mods`}
+                title={files ? t("{mod}. {kept}. Enter puts it back, arrow keys move between mods", { mod: e.name, kept }) : t("{mod}. {kept}. Enter downloads it again, arrow keys move between mods", { mod: e.name, kept })}
                 onKeyDown={(k) => { if (k.key === "Enter" && k.target === k.currentTarget && (files || e.source)) { k.preventDefault(); void reinstall(e); } }}
                 onContextMenu={menuHandler(() => menu(e))}>
                 <div className="tile-img">
                   <Preview className="archive-img" src={e.preview} icon="archive" alt={e.name} />
                   <span className="tile-tr">
                     <span className={`badge ${files ? "t-ok" : "t-muted"}`} title={kept}>
-                      <Icon name={files ? "folder" : "archive"} />{files ? "Files on PC" : "Record only"}
+                      <Icon name={files ? "folder" : "archive"} />{files ? t("Files on PC") : t("Record only")}
                     </span>
                   </span>
                 </div>
                 <div className="tile-body">
                   <span className="tile-t" title={e.name}>{e.name}</span>
                   <span className="tile-sub">
-                    {e.character ? <CharLink game={game} name={e.character} /> : "No character"}
+                    {e.character ? <CharLink game={game} name={e.character} /> : t("No character")}
                     {e.source?.submitter && <> · <CreatorLink name={e.source.submitter} modId={e.source.modId} /></>}
                   </span>
                   <span className="tile-meta">
-                    <span title={new Date(e.removedAt * 1000).toLocaleString()}><Icon name="clock" />{e.reason === "replaced" ? "Replaced" : "Removed"} {timeAgo(e.removedAt)}</span>
-                    {files && e.sizeBytes > 0 && <span title="Space its files take on your PC">{formatBytes(e.sizeBytes)}</span>}
-                    {e.hasOptions && <span title="Its option values are saved"><Icon name="sliders" /></span>}
+                    <span title={new Date(e.removedAt * 1000).toLocaleString()}><Icon name="clock" />{e.reason === "replaced" ? t("Replaced {when}", { when: timeAgo(e.removedAt) }) : t("Removed {when}", { when: timeAgo(e.removedAt) })}</span>
+                    {files && e.sizeBytes > 0 && <span title={t("Space its files take on your PC")}>{formatBytes(e.sizeBytes)}</span>}
+                    {e.hasOptions && <span title={t("Its option values are saved")}><Icon name="sliders" /></span>}
                   </span>
                   <span className="archive-a">
                     <Button size="sm" variant="primary" icon={files ? "undo" : "downloads"} busy={busy === e.key} disabled={!files && !e.source}
-                      title={files ? "Puts its files back in the Mods folder" : e.source ? "Downloads it from GameBanana again, with its settings" : "Its files were deleted and it has no GameBanana link"}
-                      onClick={() => void reinstall(e)}>{files ? "Put back" : "Download again"}</Button>
+                      title={files ? t("Puts its files back in the Mods folder") : e.source ? t("Downloads it from GameBanana again, with its settings") : t("Its files were deleted and it has no GameBanana link")}
+                      onClick={() => void reinstall(e)}>{files ? t("Put back") : t("Download again")}</Button>
                     {files
-                      ? <Button size="sm" variant="ghost" onClick={() => forget(e)} title="Deletes its files from your PC and forgets its settings">Delete</Button>
-                      : <Button size="sm" variant="ghost" onClick={() => forget(e)} title="Deletes this record and its saved settings">Forget</Button>}
-                    <IconButton icon="more" size="sm" label="More actions (right-click or Shift+F10)" data-pad-x-target
+                      ? <Button size="sm" variant="ghost" onClick={() => forget(e)} title={t("Deletes its files from your PC and forgets its settings")}>{t("Delete")}</Button>
+                      : <Button size="sm" variant="ghost" onClick={() => forget(e)} title={t("Deletes this record and its saved settings")}>{t("Forget")}</Button>}
+                    <IconButton icon="more" size="sm" label={t("More actions (right-click or Shift+F10)")} data-pad-x-target
                       onClick={(k) => openMenu(k.currentTarget, menu(e))} />
                   </span>
                 </div>
@@ -189,14 +192,14 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
         </div>
       )}
       {askAll && items && (
-        <Confirm danger yes="Empty trash" title={`Delete all ${items.length} removed ${items.length === 1 ? "mod" : "mods"}?`}
+        <Confirm danger yes={t("Empty trash")} title={tn(items.length, "Delete all {n} removed mod?", "Delete all {n} removed mods?")}
           onYes={() => { setLeaving(new Set(items.map((x) => x.key))); commit(items.map((x) => x.key)); }} onClose={() => setAskAll(false)}>
-          This deletes their files still on your PC and their saved settings, so Download again can't bring them back as they were. It can't be undone.
+          {t("This deletes their files still on your PC and their saved settings, so Download again can't bring them back as they were. It can't be undone.")}
         </Confirm>
       )}
       {ask && (
-        <Confirm danger yes="Delete" title={`Delete ${ask.name}?`} onYes={() => commit([ask.key])} onClose={() => setAsk(null)}>
-          Its files are still on your PC. This deletes them and its saved settings, and can't be undone.
+        <Confirm danger yes={t("Delete")} title={t("Delete {mod}?", { mod: ask.name })} onYes={() => commit([ask.key])} onClose={() => setAsk(null)}>
+          {t("Its files are still on your PC. This deletes them and its saved settings, and can't be undone.")}
         </Confirm>
       )}
     </div>

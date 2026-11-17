@@ -170,12 +170,13 @@ fn write_paths(db: &Db, id: &str, p: &GamePaths, by_user: bool) -> Result<()> {
            via_xxmi = excluded.via_xxmi, detected_at = excluded.detected_at, user_set = excluded.user_set",
         params![id, clean(&p.game_dir), clean(&p.importer_dir), mods, p.via_xxmi as i64, crate::db::now(), by_user as i64],
     )?;
+    crate::watch::resync();
     Ok(())
 }
 
 fn not_set_up(id: &str, what: &str) -> Error {
     let name = def(id).map(|g| g.name).unwrap_or(id);
-    Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games and mod loaders installs its mod loader or finds the folder"))
+    Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games installs its mod loader or finds the folder"))
 }
 
 /// The game's Mods folder. Every area uses this. A missing one is made again only when its importer folder is still
@@ -554,6 +555,7 @@ pub fn folders_from_value_names(names: &[String], exe: &str) -> Vec<PathBuf> {
 pub fn set_shown(db: &Db, id: &str, shown: bool) -> Result<()> {
     require_def(id)?;
     db.conn.execute("INSERT INTO game_paths (game, shown) VALUES (?1, ?2) ON CONFLICT(game) DO UPDATE SET shown = excluded.shown", params![id, shown as i64])?;
+    crate::watch::resync();
     Ok(())
 }
 

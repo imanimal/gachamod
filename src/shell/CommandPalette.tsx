@@ -8,13 +8,22 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { commandSources, noteRecent, recentIds, scoreCommand, type Command } from "../lib/search";
-import { onApp } from "../lib/store";
+import { currentGame, onApp } from "../lib/store";
+import { charNoun } from "../lib/games";
 import { openMenu, type MenuEntry } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { Spinner } from "../ui/kit";
 import { LazyImg } from "../ui/LazyImg";
+import { t, tx } from "../lib/i18n";
 
 const ORDER = ["Recent", "Pages", "Actions", "Characters", "Mods", "Profiles", "Settings", "Creators", "Games", "Online"];
+/** Sections are named in English in the code (lib/search.ts); this is how each heading reads. */
+const SECTION_NAMES: Record<string, string> = {
+  Recent: t("Recent"), Pages: t("Pages"), Actions: t("Actions"), Characters: t("Characters"), Mods: t("Mods"), Profiles: t("Profiles"),
+  Settings: t("Settings"), Creators: t("Creators"), Games: t("Games"), Online: t("Online"),
+};
+// characters go by the game's own word ("Agents" in Zenless Zone Zero)
+const sectionName = (s: string) => (s === "Characters" ? charNoun(currentGame()?.id) : SECTION_NAMES[s] ?? s);
 /** Settings match on many words ("update", "zzz"), so they rank below the pages, actions and games people want most. */
 const WEIGHT: Record<string, number> = { Settings: 0.6 };
 const PER_SECTION = 6;
@@ -86,7 +95,7 @@ export function CommandPalette() {
   const isOpen = useRef(false);
   useEffect(() => onApp((e) => {
     if (e.type !== "palette") return;
-    if (isOpen.current && e.typed && e.text) { const t = e.text; setText((s) => s + t); return; }
+    if (isOpen.current && e.typed && e.text) { const typed = e.text; setText((s) => s + typed); return; }
     if (!isOpen.current) { back.current = document.activeElement; base.current = seq.current; setAnswers((a) => ({ ...a, parts: new Map() })); }
     isOpen.current = true;
     setText(e.text ?? "");
@@ -189,8 +198,8 @@ export function CommandPalette() {
   }); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!pending) return;
-    const t = window.setTimeout(() => { setPending(false); setSlow(true); }, WAIT_MS);
-    return () => window.clearTimeout(t);
+    const tm = window.setTimeout(() => { setPending(false); setSlow(true); }, WAIT_MS);
+    return () => window.clearTimeout(tm);
   }, [pending]);
 
   const starts = useMemo(() => { const out: number[] = []; let n = 0; for (const g of groups) { out.push(n); n += g.items.length; } return out; }, [groups]);
@@ -239,21 +248,21 @@ export function CommandPalette() {
   let i = 0;
   return createPortal(
     <div className="overlay palette-ov" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <div className="palette" role="dialog" aria-label="Search everything" onKeyDown={onKey}>
+      <div className="palette" role="dialog" aria-label={t("Search everything")} onKeyDown={onKey}>
         <div className="palette-in">
           <Icon name="search" />
-          <input ref={input} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search pages, mods, characters, settings, actions"
-            aria-label="Search everything" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={flat[sel] ? `pc-${sel}` : undefined}
+          <input ref={input} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("Search pages, mods, characters, settings, actions")}
+            aria-label={t("Search everything")} role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={flat[sel] ? `pc-${sel}` : undefined}
             spellCheck={false} autoComplete="off"
             // the controller's menu button: the highlighted result's menu
             onContextMenu={(e) => { if (!e.nativeEvent.isTrusted && showMenu(flat[sel], null)) { e.preventDefault(); e.stopPropagation(); } }} />
-          <kbd className="kbd" title="Close (Escape)">Esc</kbd>
+          <kbd className="kbd" title={t("Close (Escape)")}>Esc</kbd>
         </div>
         <div className="palette-list" id="palette-list" ref={listRef} role="listbox">
-          {!flat.length && <div className="palette-none">{!text ? "Type to search." : ready ? `Nothing called "${text}". Try another word, like "mods" or "update".` : `Looking for "${text.trim()}"`}</div>}
+          {!flat.length && <div className="palette-none">{!text ? t("Type to search.") : ready ? t("Nothing called \"{text}\". Try another word, like \"mods\" or \"update\".", { text }) : t("Looking for \"{text}\"", { text: text.trim() })}</div>}
           {groups.map((g) => (
-            <div key={g.section} className="palette-sec" role="group" aria-label={g.section}>
-              <div className="palette-h">{g.section}</div>
+            <div key={g.section} className="palette-sec" role="group" aria-label={sectionName(g.section)}>
+              <div className="palette-h">{sectionName(g.section)}</div>
               {g.items.map((c) => {
                 const n = i++;
                 return (
@@ -273,11 +282,11 @@ export function CommandPalette() {
           ))}
         </div>
         <div className="palette-foot">
-          <span aria-hidden="true"><kbd className="kbd">↑</kbd><kbd className="kbd">↓</kbd> move</span>
-          <span aria-hidden="true"><kbd className="kbd">Enter</kbd> open</span>
-          <span aria-hidden="true"><kbd className="kbd">Tab</kbd> next section</span>
-          {pending ? <span className="palette-wait" role="status"><Spinner /><span className="palette-wait-t">Looking for "{text.trim()}"</span></span>
-            : slow && !ready ? <span className="palette-slow" role="status">Still loading some results. Enter opens the highlighted one.</span>
+          <span aria-hidden="true">{tx("{keys} move", { keys: <><kbd className="kbd">↑</kbd><kbd className="kbd">↓</kbd></> })}</span>
+          <span aria-hidden="true">{tx("{key} open", { key: <kbd className="kbd">Enter</kbd> })}</span>
+          <span aria-hidden="true">{tx("{key} next section", { key: <kbd className="kbd">Tab</kbd> })}</span>
+          {pending ? <span className="palette-wait" role="status"><Spinner /><span className="palette-wait-t">{t("Looking for \"{text}\"", { text: text.trim() })}</span></span>
+            : slow && !ready ? <span className="palette-slow" role="status">{t("Still loading some results. Enter opens the highlighted one.")}</span>
             : null}
         </div>
       </div>

@@ -68,12 +68,17 @@ pub struct VarInfo {
     pub label: String,
     /// "switch" when the only values are 0 and 1, else "list".
     pub kind: String,
+    /// Names for some values, when the mod says what they are: a merged mod's swap value -> the variant it shows
+    /// ("2" -> "Raiden Kimono").
+    #[serde(default)]
+    pub names: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Problem {
-    /// "missing_file", "bad_ini", "no_ini", "no_key", "missing_section", "overlap".
+    /// "missing_file", "bad_ini", "no_ini", "no_key", "missing_section", "overlap", "global_trigger",
+    /// "duplicate_library", "missing_library".
     pub kind: String,
     pub detail: String,
     pub ini: Option<String>,
@@ -91,6 +96,7 @@ pub struct ProblemFix {
     /// "point": in `ini`, change the `filename = <from>` lines to `<to>`, a file with the same name that is in the
     /// mod (paths relative to the ini's folder, as 3DMigoto reads them).
     /// "keep": keep `ini` on and turn off the other `inis` by renaming them DISABLED_<name>.
+    /// "off": turn off `ini` by renaming it DISABLED_<name> (a copy of a library the loader already has).
     pub kind: String,
     pub ini: Option<String>,
     pub from: Option<String>,
@@ -125,6 +131,9 @@ pub struct ModInspect {
     pub problems: Vec<Problem>,
     /// Text files a mod author left (readme.txt, instructions) with their first few KB.
     pub readmes: Vec<(String, String)>,
+    /// Set when the mod is several mods merged into one by a merge script (merged.rs).
+    #[serde(default)]
+    pub merged: Option<crate::merged::MergedInfo>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -180,7 +189,7 @@ pub(crate) fn decode(bytes: &[u8]) -> String {
 }
 
 /// Read a text file no larger than `max` bytes. Err holds a sentence for a Problem.
-fn read_text(path: &Path, max: u64) -> std::result::Result<String, String> {
+pub(crate) fn read_text(path: &Path, max: u64) -> std::result::Result<String, String> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     match std::fs::metadata(path) {
         Ok(m) if m.len() > max => return Err(format!("{name} is too large to read ({} MB)", m.len() / 1_048_576)),
@@ -193,24 +202,24 @@ fn read_text(path: &Path, max: u64) -> std::result::Result<String, String> {
 // ── the ini parser ──
 
 #[derive(Debug, Default)]
-struct Line { lkey: String, value: Option<String> }
+pub(crate) struct Line { pub(crate) lkey: String, pub(crate) value: Option<String> }
 
 #[derive(Debug, Default)]
-struct Sec { name: String, lower: String, lines: Vec<Line> }
+pub(crate) struct Sec { pub(crate) name: String, pub(crate) lower: String, pub(crate) lines: Vec<Line> }
 
 impl Sec {
-    fn get<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a str> + 'a {
+    pub(crate) fn get<'a>(&'a self, key: &'a str) -> impl Iterator<Item = &'a str> + 'a {
         self.lines.iter().filter(move |l| l.lkey == key).filter_map(|l| l.value.as_deref())
     }
-    fn first<'a>(&'a self, key: &'a str) -> Option<&'a str> { self.get(key).next() }
+    pub(crate) fn first<'a>(&'a self, key: &'a str) -> Option<&'a str> { self.get(key).next() }
 }
 
 #[derive(Debug, Default)]
-struct Ini { sections: Vec<Sec> }
+pub(crate) struct Ini { pub(crate) sections: Vec<Sec> }
 
 /// Parse 3DMigoto ini text. Section names are compared case-insensitively, `;` starts a comment line (`#` does not),
 /// a line splits on its first `=`, lines before any section go to a section named "".
-fn parse(text: &str) -> Ini {
+pub(crate) fn parse(text: &str) -> Ini {
     let mut ini = Ini { sections: vec![Sec::default()] };
     for raw in text.split('\n') {
         let line = raw.trim_end_matches('\r').trim();
@@ -243,7 +252,7 @@ fn is_override(lower: &str) -> bool { lower.starts_with("textureoverride") || lo
 
 /// The cheap part of one ini that the scan needs. `hashes` is (section, hash, does something).
 #[derive(Debug, Default)]
-struct IniFacts { has_keys: bool, hashes: Vec<(String, String, bool)> }
+struct IniFacts { has_keys: bool, hashes: Vec<(String, String, bool)>, namespace: Option<String> }
 
 /// An override that only names a hash (and how it matches) changes nothing in game. Some mods carry a block of them
 /// for other characters, which would otherwise look like conflicts with every mod that has the same block.
@@ -252,7 +261,7 @@ fn does_something(s: &Sec) -> bool {
 }
 
 fn facts_of(ini: &Ini) -> IniFacts {
-    let mut f = IniFacts::default();
+    let mut f = IniFacts { namespace: namespace_of(ini), ..Default::default() };
     for s in &ini.sections {
         if s.lower.starts_with("key") && s.first("key").is_some_and(|k| !k.is_empty()) { f.has_keys = true; }
         if is_override(&s.lower) {
@@ -294,7 +303,7 @@ fn part_names(parts: &HashMap<String, Vec<String>>, hashes: &[String]) -> Vec<St
 }
 
 const QUICK_MAX: u64 = 2 * 1024 * 1024;
-const FULL_MAX: u64 = 16 * 1024 * 1024;
+pub(crate) const FULL_MAX: u64 = 16 * 1024 * 1024;
 
 type FactsCache = HashMap<PathBuf, (SystemTime, u64, Arc<IniFacts>)>;
 static FACTS: LazyLock<Mutex<FactsCache>> = LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -658,16 +667,19 @@ fn write_user_ini(path: &Path, ini: &UserIni) -> Result<()> {
 }
 
 /// Does `rel` (backslashes) exist under `base`? Windows is case-insensitive already; elsewhere compare names.
-fn exists_ci(base: &Path, rel: &str) -> bool {
+fn exists_ci(base: &Path, rel: &str) -> bool { find_ci(base, rel).is_some() }
+
+/// The path `rel` names from `base`, matching each part in any case (3DMigoto runs on Windows). None when missing.
+pub(crate) fn find_ci(base: &Path, rel: &str) -> Option<PathBuf> {
     let direct = base.join(rel.replace('\\', "/"));
-    if direct.exists() { return true; }
+    if direct.exists() { return Some(direct); }
     let mut cur = base.to_path_buf();
     for part in rel.split(['\\', '/']).filter(|p| !p.is_empty() && *p != ".") {
         if part == ".." { cur.pop(); continue; }
-        let next = std::fs::read_dir(&cur).ok().and_then(|rd| rd.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(part)));
-        match next { Some(e) => cur = e.path(), None => return false }
+        let next = std::fs::read_dir(&cur).ok().and_then(|rd| rd.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(part)))?;
+        cur = next.path();
     }
-    cur.exists()
+    cur.exists().then_some(cur)
 }
 
 /// The saved values in d3dx_user.ini for the mod folder at `mod_rel` (path from Mods, forward slashes, as it is now).
@@ -746,11 +758,24 @@ pub(crate) fn set_user_value(importer_dir: &Path, name: &str, value: &str) -> Re
     write_user_ini(&path, &ini)
 }
 
+/// Saved values whose names start with `prefix` (lowercase, like `modmanageragl\`): (the rest of the name, value).
+pub(crate) fn user_values(importer_dir: &Path, prefix: &str) -> Vec<(String, String)> {
+    let Some(ini) = UserIni::read(&user_ini_path(importer_dir)).ok().flatten() else { return Vec::new() };
+    let prefix = prefix.to_lowercase();
+    ini.lines.iter().filter_map(|l| var_line(l)).filter_map(|(n, v)| Some((n.strip_prefix(&prefix)?.to_string(), v))).collect()
+}
+
 /// Move saved values from one mod path to another (a mod folder was renamed or moved), so they survive.
 pub fn move_user_vars(importer_dir: &Path, from_rel: &str, to_rel: &str) -> Result<()> {
-    let from = format!("{}\\", mod_namespace(importer_dir, from_rel));
-    let to = format!("{}\\", mod_namespace(importer_dir, to_rel));
-    if from == to || from_rel.trim_matches(['/', '\\']).is_empty() { return Ok(()); }
+    if from_rel.trim_matches(['/', '\\']).is_empty() { return Ok(()); }
+    move_user_prefix(importer_dir, &mod_namespace(importer_dir, from_rel), &mod_namespace(importer_dir, to_rel))
+}
+
+/// Move saved values from one namespace to another (`name_1` -> `name`), so they survive a rename.
+pub(crate) fn move_user_prefix(importer_dir: &Path, from_ns: &str, to_ns: &str) -> Result<()> {
+    let from = format!("{}\\", from_ns.trim_matches('\\').to_lowercase());
+    let to = format!("{}\\", to_ns.trim_matches('\\').to_lowercase());
+    if from == to || from == "\\" || to == "\\" { return Ok(()); }
     let _guard = USER_INI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let path = user_ini_path(importer_dir);
     let Some(mut ini) = UserIni::read(&path)? else { return Ok(()) };
@@ -873,7 +898,7 @@ fn path_from(base: &Path, target: &Path, like: &str) -> Option<String> {
 }
 
 /// Lexically resolve `.` and `..` (the file may not exist).
-fn lexical(p: &Path) -> PathBuf {
+pub(crate) fn lexical(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
@@ -981,9 +1006,166 @@ fn importer_sections(dir: &Path) -> std::sync::Arc<HashSet<String>> {
     set
 }
 
+// ── shared libraries and global triggers (the checks XXMI Launcher runs on every start) ──
+
+/// The `namespace =` line above the first section, as written.
+pub(crate) fn namespace_of(ini: &Ini) -> Option<String> {
+    ini.sections.first().filter(|s| s.name.is_empty())?.lines.iter().find(|l| l.lkey == "namespace")
+        .and_then(|l| l.value.as_deref()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// A namespace for comparing: lowercase, backslashes, no slash at either end ("Global/ORFix" -> "global\orfix").
+fn norm_ns(ns: &str) -> String { ns.trim().replace('/', "\\").trim_matches('\\').to_lowercase() }
+
+/// A library ini the loader ships (`Core\GIMI\Libraries\ORFix\ORFix.ini`).
+#[derive(Debug, Clone)]
+struct LibIni { ns: String, name: String, folder: String }
+
+/// What lint needs from outside the mod: the loader's folder (its shared libraries) and the Mods folder (namespaces
+/// other mods define). Each is read once per check, and only when a mod needs it.
+pub(crate) struct LintCtx {
+    importer: Option<PathBuf>,
+    mods: Option<PathBuf>,
+    libs: std::cell::OnceCell<Vec<LibIni>>,
+    known: std::cell::OnceCell<HashSet<String>>,
+}
+
+impl LintCtx {
+    pub(crate) fn new(importer: Option<PathBuf>, mods: Option<PathBuf>) -> Self {
+        LintCtx { importer, mods, libs: Default::default(), known: Default::default() }
+    }
+
+    /// From the mod folder up: the first folder with a d3dx.ini is the loader's, with Mods next to it.
+    #[cfg(test)]
+    fn near(dir: &Path) -> Self {
+        let root = dir.ancestors().skip(1).find(|a| a.join("d3dx.ini").is_file()).map(Path::to_path_buf);
+        let mods = root.as_ref().map(|r| r.join("Mods"));
+        Self::new(root, mods)
+    }
+
+    /// The game's loader and Mods folder from the library's settings.
+    fn of_game(db: &Db, game: &str) -> Self {
+        Self::new(crate::games::importer_dir(db, game).ok(), crate::games::mods_dir(db, game).ok())
+    }
+
+    /// Libraries in `Core\<importer>\Libraries` (XXMI ships RabbitFX, ORFix, SlotFix and others there).
+    fn libs(&self) -> &[LibIni] {
+        self.libs.get_or_init(|| {
+            let Some(root) = &self.importer else { return Vec::new() };
+            let mut out = Vec::new();
+            for core in std::fs::read_dir(root.join("Core")).into_iter().flatten().flatten().filter(|e| e.path().is_dir()) {
+                let libs = core.path().join("Libraries");
+                if !libs.is_dir() { continue; }
+                let folder = format!("Core\\{}\\Libraries", core.file_name().to_string_lossy());
+                for (abs, _) in mod_inis(&libs) {
+                    let Some(ns) = cached_facts(&abs).and_then(|f| f.namespace.clone()) else { continue };
+                    let name = abs.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                    out.push(LibIni { ns: norm_ns(&ns), name, folder: folder.clone() });
+                }
+            }
+            out
+        })
+    }
+
+    /// Every namespace that loads: the loader's own inis and every mod that is on.
+    fn known(&self) -> &HashSet<String> {
+        self.known.get_or_init(|| {
+            let mut set: HashSet<String> = HashSet::new();
+            let dirs = self.importer.iter().map(|r| r.join("Core")).chain(self.mods.iter().cloned());
+            for d in dirs {
+                for (abs, _) in mod_inis(&d) {
+                    if let Some(ns) = cached_facts(&abs).and_then(|f| f.namespace.clone()) { set.insert(norm_ns(&ns)); }
+                }
+            }
+            set
+        })
+    }
+}
+
+/// Namespaces an ini reaches into (`run = CommandList\global\ORFix\ORFix`, `Resource\RabbitFX\Mask`,
+/// `$\SlotFix\active`): (namespace as written, the reference). Path namespaces (`$\mods\x\a.ini\var`) are left out.
+fn namespace_refs(ini: &Ini) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for l in ini.sections.iter().flat_map(|s| &s.lines) {
+        let texts = [Some(l.lkey.as_str()), l.value.as_deref()];
+        for tok in texts.into_iter().flatten().flat_map(|t| t.split(|c: char| c.is_whitespace() || "=,()!&|<>+*/;\"".contains(c))) {
+            let lower = tok.to_ascii_lowercase();
+            let rest = if let Some(r) = tok.strip_prefix("$\\") { r } else if ["commandlist\\", "resource\\", "customshader\\"].iter().any(|p| lower.starts_with(p)) {
+                tok.split_once('\\').map(|(_, r)| r).unwrap_or("")
+            } else { continue };
+            let Some((ns, name)) = rest.rsplit_once('\\') else { continue };
+            if ns.is_empty() || name.is_empty() || ns.to_ascii_lowercase().contains(".ini") { continue; }
+            if !out.iter().any(|(n, _)| norm_ns(n) == norm_ns(ns)) { out.push((ns.to_string(), tok.to_string())); }
+        }
+    }
+    out
+}
+
+/// `[ShaderRegex*]` sections with no `.pattern` that run CheckTextureOverride, themselves or in a command list they
+/// run (XXMI Launcher's "global trigger"): (section as written, slots).
+fn global_triggers(ini: &Ini) -> Vec<(String, Vec<String>)> {
+    let by_name: HashMap<&str, &Sec> = ini.sections.iter().map(|s| (s.lower.as_str(), s)).collect();
+    let mut out = Vec::new();
+    for s in ini.sections.iter().filter(|s| s.lower.starts_with("shaderregex")) {
+        if by_name.contains_key(format!("{}.pattern", s.lower).as_str()) { continue; }
+        let mut slots: Vec<String> = Vec::new();
+        let runs = s.get("run").filter_map(|r| by_name.get(r.trim().to_lowercase().as_str()).copied());
+        for sec in std::iter::once(s).chain(runs) {
+            for v in sec.get("checktextureoverride").map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()) {
+                if !slots.contains(&v) { slots.push(v); }
+            }
+        }
+        if !slots.is_empty() { out.push((s.name.clone(), slots)); }
+    }
+    out
+}
+
+/// Problems from the loader's point of view: a copy of a library it already loads, a library the mod needs that
+/// isn't there, and global triggers.
+fn lint_libraries(dir: &Path, inis: &[ModIni], ctx: &LintCtx, out: &mut Vec<Problem>) {
+    let own: HashSet<String> = inis.iter().filter_map(|m| m.parsed.as_ref().ok()).filter_map(namespace_of).map(|n| norm_ns(&n)).collect();
+    for m in inis {
+        let Ok(ini) = &m.parsed else { continue };
+        if let Some(ns) = namespace_of(ini) {
+            let key = norm_ns(&ns);
+            let shipped = ctx.libs().iter().find(|l| l.ns == key);
+            // a library mod that lives in the loader's own folder is the library itself
+            if let Some(lib) = shipped.filter(|_| ctx.importer.as_ref().is_none_or(|r| !dir.starts_with(r.join("Core")))) {
+                let mut p = problem("duplicate_library", "bad", Some(&m.rel), format!(
+                    "{} is a copy of {}, which the loader already loads from {}. Two copies of a library break the mods that use it. Turn this copy off",
+                    m.rel, lib.name, lib.folder));
+                p.fix = Some(ProblemFix { kind: "off".into(), ini: Some(m.rel.clone()), from: None, to: None, inis: vec![m.rel.clone()] });
+                out.push(p);
+            }
+        }
+        if ctx.importer.is_some() {
+            for (ns, reference) in namespace_refs(ini) {
+                let key = norm_ns(&ns);
+                if own.contains(&key) || ctx.known().contains(&key) { continue; }
+                let name = ns.rsplit('\\').next().unwrap_or(&ns);
+                out.push(problem("missing_library", "warn", Some(&m.rel), format!(
+                    "{} uses {name} ({reference}), which isn't installed, so that step is skipped. {name} is a shared library or another mod",
+                    m.rel)));
+            }
+        }
+        let triggers = global_triggers(ini);
+        if !triggers.is_empty() {
+            let sections: Vec<String> = triggers.iter().map(|(s, _)| format!("[{s}]")).collect();
+            let mut slots: Vec<String> = Vec::new();
+            for s in triggers.iter().flat_map(|(_, s)| s) { if !slots.contains(s) { slots.push(s.clone()); } }
+            out.push(problem("global_trigger", "warn", Some(&m.rel), format!(
+                "{} in {} runs CheckTextureOverride on {} for every matching shader in the game, which costs FPS everywhere, not only while this mod's model is on screen",
+                oxford(&sections, 4), m.rel, oxford(&slots, 4))));
+        }
+    }
+}
+
 /// Everything that looks wrong in one mod's files, worst first, each with a fix when gachamod found one. `dir` is
-/// the mod folder.
-fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
+/// the mod folder; the loader and Mods folder are found from it.
+#[cfg(test)]
+fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> { lint_mod_ctx(dir, inis, &LintCtx::near(dir)) }
+
+fn lint_mod_ctx(dir: &Path, inis: &[ModIni], ctx: &LintCtx) -> Vec<Problem> {
     let mut out = Vec::new();
     if inis.is_empty() {
         // inis that are only turned off mean the mod (or each of its variants) is off, which is the user's choice
@@ -1097,6 +1279,7 @@ fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> {
         };
         out.push(problem("bad_ini", severity, Some(empty[0]), detail));
     }
+    lint_libraries(dir, inis, ctx, &mut out);
     for (group, plain) in overlaps(inis) {
         if !plain { continue; }
         let names: Vec<&str> = group.iter().map(|&i| inis[i].rel.as_str()).collect();
@@ -1145,10 +1328,12 @@ pub fn apply_fix(db: &Db, game: &str, id: &str, fix: &ProblemFix) -> Result<crat
             std::fs::write(&ini_abs, doc.to_bytes())?;
             b
         }
-        "keep" => {
+        "keep" | "off" => {
             if !fix.inis.iter().any(|i| i.replace('\\', "/").eq_ignore_ascii_case(&ini)) { return Err(changed()); }
+            // "keep" turns off every other ini, "off" only `ini`
+            let off_one = fix.kind == "off";
             let mut moves: Vec<(PathBuf, PathBuf, String, String)> = Vec::new();
-            for other in fix.inis.iter().map(|i| i.replace('\\', "/")).filter(|i| !i.eq_ignore_ascii_case(&ini)) {
+            for other in fix.inis.iter().map(|i| i.replace('\\', "/")).filter(|i| i.eq_ignore_ascii_case(&ini) == off_one) {
                 let abs = crate::backups::inside(&dir, &other)?;
                 let (Some(parent), Some(name)) = (abs.parent(), abs.file_name().map(|n| n.to_string_lossy().into_owned())) else { continue };
                 if !abs.is_file() { continue; }
@@ -1161,7 +1346,8 @@ pub fn apply_fix(db: &Db, game: &str, id: &str, fix: &ProblemFix) -> Result<crat
             if moves.is_empty() { return Err(changed()); }
             let files: Vec<String> = moves.iter().flat_map(|(_, _, a, b)| [a.clone(), b.clone()]).collect();
             let off = if moves.len() == 1 { moves[0].2.clone() } else { format!("{} others", moves.len()) };
-            let b = crate::backups::take(db, game, &m.id, &dir, &files, &format!("Kept {ini} on and turned off {off}"))?;
+            let label = if off_one { format!("Turned off {ini}") } else { format!("Kept {ini} on and turned off {off}") };
+            let b = crate::backups::take(db, game, &m.id, &dir, &files, &label)?;
             for (from, to, ..) in &moves { rename_retry(from, to)?; }
             b
         }
@@ -1212,7 +1398,7 @@ fn key_bindings(rel: &str, ini: &Ini) -> Vec<KeyBinding> {
 }
 
 /// Keys, options with their current values, and problems for one mod folder. `saved` are its saved values.
-fn inspect_dir(dir: &Path, saved: &[VarValue]) -> ModInspect {
+fn inspect_dir(dir: &Path, saved: &[VarValue], ctx: &LintCtx) -> ModInspect {
     let inis = read_mod(dir);
     let mut out = ModInspect { inis: inis.iter().map(|m| m.rel.clone()).collect(), ..Default::default() };
     let mut hashes = BTreeSet::new();
@@ -1242,14 +1428,21 @@ fn inspect_dir(dir: &Path, saved: &[VarValue]) -> ModInspect {
             }
             out.vars.push(VarInfo {
                 ini: m.rel.clone(), var: name, persist, default, current, values, label,
-                kind: if switch { "switch".into() } else { "list".into() },
+                kind: if switch { "switch".into() } else { "list".into() }, names: BTreeMap::new(),
             });
         }
         out.keys.extend(keys);
         for s in ini.sections.iter().filter(|s| is_override(&s.lower)) { hashes.extend(s.get("hash").filter_map(norm_hash)); }
     }
     out.hash_count = hashes.len() as u32;
-    out.problems = lint_mod(dir, &inis);
+    // a merged mod's swap values show the variant names ("Swap: Raiden Kimono", not "Swap: 2")
+    out.merged = crate::merged::info(dir);
+    if let Some(mg) = &out.merged {
+        for v in out.vars.iter_mut().filter(|v| v.ini.eq_ignore_ascii_case(&mg.ini) && v.var.eq_ignore_ascii_case(&mg.var)) {
+            v.names = mg.variants.iter().map(|x| (x.value.clone(), x.name.clone())).collect();
+        }
+    }
+    out.problems = lint_mod_ctx(dir, &inis, ctx);
     out.readmes = readmes(dir);
     out
 }
@@ -1306,7 +1499,7 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
     if saved.is_empty() && m.loaded() {
         if let Ok(imp) = crate::games::importer_dir(db, game) { saved = user_vars(&imp, &m.rel_path).unwrap_or_default(); }
     }
-    let mut out = inspect_dir(&dir, &saved);
+    let mut out = inspect_dir(&dir, &saved, &LintCtx::of_game(db, game));
     out.mod_id = m.id.clone();
     if m.enabled {
         let mods = mods_or_empty(db, game).unwrap_or_default();
@@ -1458,11 +1651,12 @@ pub fn conflicts(db: &Db, game: &str) -> Result<Vec<ConflictGroup>> {
 /// Problems for every mod, on or off. Mods without problems are left out.
 pub fn lint(db: &Db, game: &str) -> Result<Vec<ModProblems>> {
     let mods = mods_or_empty(db, game)?;
+    let ctx = LintCtx::of_game(db, game);
     let mut out = Vec::new();
     for m in &mods {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
-        let problems = lint_mod(dir, &read_mod(dir));
+        let problems = lint_mod_ctx(dir, &read_mod(dir), &ctx);
         if !problems.is_empty() {
             out.push(ModProblems { mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, source: m.source.clone(), problems });
         }
@@ -1591,7 +1785,7 @@ mod tests {
         let d = temp("inspect");
         write_mod(&d);
         let saved = vec![VarValue { ini: "mod.ini".into(), var: "swapvar".into(), value: "2.0".into() }];
-        let r = inspect_dir(&d, &saved);
+        let r = inspect_dir(&d, &saved, &LintCtx::near(&d));
         assert_eq!(r.inis, vec!["mod.ini"]);
         assert_eq!(r.keys.len(), 2);
         let swap = &r.keys[0];
@@ -1919,6 +2113,122 @@ hash = 11111111"));
         note_mods_dir(&imp, Path::new("D:\\Elsewhere\\Mods"));
         assert_eq!(mod_namespace(&imp, "A"), "mods\\a");
         fs::remove_dir_all(&imp).unwrap();
+    }
+
+    /// A loader folder with ORFix in its libraries, and a Mods folder next to it.
+    fn loader_with_libs(name: &str) -> PathBuf {
+        let root = temp(name);
+        fs::write(root.join("d3dx.ini"), "[Loader]\n").unwrap();
+        let lib = root.join("Core/GIMI/Libraries/ORFix");
+        fs::create_dir_all(&lib).unwrap();
+        fs::write(lib.join("ORFix.ini"), "; ORFix\nnamespace = global\\ORFix\n[CommandListORFix]\nps-t1 = ps-t0\n").unwrap();
+        fs::create_dir_all(root.join("Mods")).unwrap();
+        root
+    }
+
+    fn lint_kinds(dir: &Path) -> Vec<Problem> {
+        lint_mod(dir, &read_mod(dir)).into_iter().filter(|p| matches!(p.kind.as_str(), "duplicate_library" | "missing_library" | "global_trigger")).collect()
+    }
+
+    #[test]
+    fn flags_a_copy_of_a_shipped_library() {
+        let root = loader_with_libs("duplib");
+        let m = root.join("Mods/Raiden");
+        fs::create_dir_all(m.join("ORFix")).unwrap();
+        fs::write(m.join("ORFix/ORFix.ini"), "namespace = Global/ORFix\n[CommandListORFix]\n").unwrap();
+        fs::write(m.join("raiden.ini"), "[TextureOverrideBody]\nhash = 11112222\nrun = CommandList\\global\\ORFix\\ORFix\n").unwrap();
+        let p = lint_kinds(&m);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].kind, "duplicate_library");
+        assert_eq!(p[0].severity, "bad");
+        assert_eq!(p[0].detail, "ORFix/ORFix.ini is a copy of ORFix, which the loader already loads from Core\\GIMI\\Libraries. Two copies of a library break the mods that use it. Turn this copy off");
+        assert_eq!(p[0].fix, Some(ProblemFix { kind: "off".into(), ini: Some("ORFix/ORFix.ini".into()), from: None, to: None, inis: vec!["ORFix/ORFix.ini".into()] }));
+        // a mod folder outside any loader can't be checked against its libraries
+        let alone = temp("duplib-alone");
+        fs::write(alone.join("ORFix.ini"), "namespace = global\\ORFix\n[CommandListORFix]\n").unwrap();
+        assert!(lint_kinds(&alone).is_empty());
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&alone);
+    }
+
+    #[test]
+    fn flags_a_library_that_isnt_installed() {
+        let root = loader_with_libs("misslib");
+        // another mod defines SlotFix, so that one counts as installed
+        fs::create_dir_all(root.join("Mods/SlotFix")).unwrap();
+        fs::write(root.join("Mods/SlotFix/SlotFix.ini"), "namespace = SlotFix\n[CommandListRun]\n").unwrap();
+        let m = root.join("Mods/Jane");
+        fs::create_dir_all(&m).unwrap();
+        fs::write(m.join("jane.ini"), "namespace = JaneMod\n[TextureOverrideBody]\nhash = 11112222\nrun = CommandList\\global\\ORFix\\ORFix\nrun = CommandList\\RabbitFX\\Run\n\
+            run = CommandList\\SlotFix\\Run\nif $\\JaneMod\\on == 1\nps-t5 = Resource\\RabbitFX\\Mask\nendif\nx = $\\mods\\other\\a.ini\\var\n").unwrap();
+        let p = lint_kinds(&m);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].kind, "missing_library");
+        assert_eq!(p[0].severity, "warn");
+        assert_eq!(p[0].detail, "jane.ini uses RabbitFX (CommandList\\RabbitFX\\Run), which isn't installed, so that step is skipped. RabbitFX is a shared library or another mod");
+        assert!(p[0].fix.is_none());
+        // the library turned off is as good as not there
+        fs::rename(root.join("Mods/SlotFix"), root.join("Mods/DISABLED SlotFix")).unwrap();
+        assert_eq!(lint_kinds(&m).len(), 2);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn flags_global_triggers_like_xxmi() {
+        let d = temp("trigger");
+        fs::write(d.join("glow.ini"), "[ShaderRegexGlow]\nshader_model = ps_5_0\nrun = CommandListGlow\ncheckTextureOverride = ps-t0\n\
+            [CommandListGlow]\ncheckTextureOverride = ps-t1\ncheckTextureOverride = ps-t0\n\
+            [ShaderRegexOutline]\nshader_model = ps_5_0\ncheckTextureOverride = ps-t3\n[ShaderRegexOutline.pattern]\nmov o0\\.w, l\\(0\\)\n\
+            [TextureOverrideX]\nhash = 11112222\ncheckTextureOverride = ps-t0\n").unwrap();
+        let p = lint_kinds(&d);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].kind, "global_trigger");
+        assert_eq!(p[0].severity, "warn");
+        assert_eq!(p[0].detail, "[ShaderRegexGlow] in glow.ini runs CheckTextureOverride on ps-t0 and ps-t1 for every matching shader in the game, which costs FPS everywhere, not only while this mod's model is on screen");
+        assert!(p[0].fix.is_none());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn off_fix_turns_one_ini_off_and_undoes() {
+        let root = loader_with_libs("offfix");
+        let mods = root.join("Mods");
+        let m = mods.join("Raiden");
+        fs::create_dir_all(m.join("ORFix")).unwrap();
+        fs::write(m.join("ORFix/ORFix.ini"), "namespace = global\\ORFix\n[CommandListORFix]\n").unwrap();
+        fs::write(m.join("raiden.ini"), "[TextureOverrideBody]\nhash = 11112222\nhandling = skip\n").unwrap();
+        let db = crate::db::Db::open(&root.join("gachamod.db")).unwrap();
+        crate::games::save_paths(&db, "gi", &crate::games::GamePaths { mods_dir: Some(mods.to_string_lossy().into_owned()), ..Default::default() }).unwrap();
+        let shared = Arc::new(Mutex::new(db));
+        let id = library::scan(&shared, "gi").unwrap()[0].id.clone();
+        let db = shared.lock().unwrap();
+        let fix = lint(&db, "gi").unwrap().into_iter().flat_map(|m| m.problems).find_map(|p| p.fix.filter(|f| f.kind == "off")).unwrap();
+        let b = apply_fix(&db, "gi", &id, &fix).unwrap();
+        assert_eq!(b.label, "Turned off ORFix/ORFix.ini");
+        assert!(m.join("ORFix/DISABLED_ORFix.ini").is_file() && !m.join("ORFix/ORFix.ini").exists() && m.join("raiden.ini").is_file());
+        crate::backups::restore(&db, &b.id).unwrap();
+        assert!(m.join("ORFix/ORFix.ini").is_file() && !m.join("ORFix/DISABLED_ORFix.ini").exists());
+        drop(db);
+        drop(shared);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn merged_swap_values_get_names() {
+        let d = temp("mergednames");
+        for (f, ini) in [("Raiden", "Raiden.ini"), ("Raiden Kimono", "RaidenKimono.ini")] {
+            fs::create_dir_all(d.join(f)).unwrap();
+            fs::write(d.join(f).join(format!("DISABLED{ini}")), "[TextureOverrideBody]\nhash = 11112222\n").unwrap();
+        }
+        fs::write(d.join("merged.ini"), "; Merged Mod: .\\Raiden\\Raiden.ini, .\\Raiden Kimono\\RaidenKimono.ini\n\n[Constants]\nglobal persist $swapvar = 0\n\
+            [KeySwap]\nkey = 5\ntype = cycle\n$swapvar = 0,1\n").unwrap();
+        let r = inspect_dir(&d, &[], &LintCtx::near(&d));
+        let v = r.vars.iter().find(|v| v.var == "swapvar").unwrap();
+        assert_eq!(v.label, "Swap");
+        assert_eq!(v.names.get("1").map(String::as_str), Some("Raiden Kimono"));
+        assert_eq!(v.names.get("0").map(String::as_str), Some("Raiden"));
+        assert!(r.merged.is_some_and(|m| m.blocked.is_none()));
+        let _ = fs::remove_dir_all(&d);
     }
 
     #[test]

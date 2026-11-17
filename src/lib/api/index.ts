@@ -5,6 +5,7 @@ export * from "./extensions";
 export * from "./ingame";
 export * from "./keylist";
 export * from "./library";
+export * from "./migrate";
 export * from "./modtools";
 export * from "./online";
 export * from "./otherkeys";

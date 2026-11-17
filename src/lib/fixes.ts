@@ -10,7 +10,8 @@ import { gbToolId, newestFile, toolPage, type GbFile } from "./gamebanana";
 import { record } from "./history";
 import { jsonPref, pref } from "./prefs";
 import { emitApp, go, onApp } from "./store";
-import { plural, timeAgo } from "../ui/kit";
+import { timeAgo } from "../ui/kit";
+import { stops, t, tb, tn } from "./i18n";
 import { toast } from "../ui/toast";
 import { oxford } from "./notes";
 import { holdsPref, useHolds } from "./holds";
@@ -38,19 +39,20 @@ type Tried = Pick<ModHealth, "tried" | "needsAuthor">;
 export const fixerName = (tool: string) => tool.replace(/\s*\(.*$/, "").replace(/[\s!.?]+$/, "") || tool;
 const short = fixerName;
 /** What a mod most likely needs when a fixer didn't repair it. */
-const NEEDS = "It likely needs an update from its author, or a fix posted for this mod";
+const NEEDS = t("It likely needs an update from its author, or a fix posted for this mod");
 
 /** The fix button's words. Nothing is promised, and after a run that didn't help it is a retry. */
-export const fixLabel = (h: Tried) => (h.tried ? "Try again" : "Attempt fix");
+export const fixLabel = (h: Tried) => (h.tried ? t("Try again") : t("Attempt fix"));
 
 /** A mod that is still broken after a fixer ran on it: what the fixer did, and what the mod likely needs. */
 export function triedNote(h: Tried): string | null {
-  const t = h.tried;
-  if (!t) return null;
-  const did = t.changed
-    ? `${short(t.tool)} changed ${plural(t.changed, "file")} ${timeAgo(t.at)} and the mod is still broken`
-    : `${short(t.tool)} ran ${timeAgo(t.at)} and changed no files in this mod`;
-  return h.needsAuthor ? did : `${did}. ${NEEDS}`;
+  const run = h.tried;
+  if (!run) return null;
+  const p = { tool: short(run.tool), when: timeAgo(run.at) };
+  const did = run.changed
+    ? tn(run.changed, "{tool} changed {n} file {when} and the mod is still broken", "{tool} changed {n} files {when} and the mod is still broken", p)
+    : t("{tool} ran {when} and changed no files in this mod", p);
+  return h.needsAuthor ? did : t("{note}. {needs}", { note: did, needs: NEEDS });
 }
 
 const EMPTY = new Map<string, ModHealth>();
@@ -82,7 +84,7 @@ export function reloadHealth(game: GameId, fresh = false): Promise<void> {
   const p = fixesApi.health(game).then((rows) => {
     checkFailed.delete(game);
     lists.set(game, rows);
-    maps.set(game, new Map(rows.map((r) => [r.modId, { status: r.status, reasons: r.reasons, since: r.since, tool: r.tool, swaps: r.swaps, needsAuthor: r.needsAuthor, tried: r.tried }])));
+    maps.set(game, new Map(rows.map((r) => [r.modId, { status: r.status, reasons: r.reasons.map((x) => tb(x)), since: r.since, tool: r.tool, swaps: r.swaps, needsAuthor: r.needsAuthor, tried: r.tried }])));
     notify();
     healthListeners.forEach((f) => f(game, rows));
   }).catch((e) => { checkFailed.set(game, e); }).finally(() => loading.delete(game));
@@ -94,7 +96,7 @@ export function reloadHealth(game: GameId, fresh = false): Promise<void> {
 export async function checkHealth(game: GameId): Promise<void> {
   await reloadHealth(game, true);
   const e = checkFailed.get(game);
-  if (e) toast(`Couldn't check the mods: ${errorText(e)}`, true);
+  if (e) toast(t("Couldn't check the mods: {error}", { error: errorText(e) }), true);
 }
 
 // a scan, an install or an undo changed a game's mods: check that game again (once things settle)
@@ -199,7 +201,7 @@ function recordFixes(game: GameId, label: string, changed: ModBackup[]) {
   record({ label, undo: flip, redo: flip });
 }
 
-const VIEW_FIXES = { label: "View in Fixes", run: () => go({ view: "tools", section: "fixes" }) };
+const VIEW_FIXES = { label: t("View in Fixes"), run: () => go({ view: "tools", section: "fixes" }) };
 
 /** What a fix run says about the mods it left alone ("Velina: the model changed, so it needs an update from its
  *  author"). */
@@ -208,8 +210,10 @@ function skippedNote(r: FixAll): string {
   // the same reason for several mods reads once: "A, B, and C: the model changed, so it needs an update from its author"
   const byReason = new Map<string, string[]>();
   for (const s of r.skipped) byReason.set(s.reason, [...(byReason.get(s.reason) ?? []), s.name]);
-  const parts = [...byReason].map(([reason, names]) => `${oxford(names, 4)}: ${reason}`);
-  return parts.length > 3 ? `${parts.slice(0, 3).join(". ")}. And ${parts.length - 3} more reasons` : parts.join(". ");
+  const parts = [...byReason].map(([reason, names]) => t("{names}: {reason}", { names: oxford(names, 4), reason: tb(reason) }));
+  return parts.length > 3
+    ? tn(parts.length - 3, "{notes}. And {n} more reason", "{notes}. And {n} more reasons", { notes: stops(parts.slice(0, 3)) })
+    : stops(parts);
 }
 
 /** Try to fix these mods: outdated hashes are swapped here, and a mod that needs more gets its fixer run on it.
@@ -222,7 +226,7 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   // a mod whose fixer is running already (asked twice) is left to that run
   const asked = ids.length;
   ids = ids.filter((id) => !fixerBusy.has(`mod:${id}`));
-  if (!ids.length) { toast(asked === 1 ? "A fixer is already running on that mod" : "A fixer is already running on those mods"); return 0; }
+  if (!ids.length) { toast(asked === 1 ? t("A fixer is already running on that mod") : t("A fixer is already running on those mods")); return 0; }
   const needFixer = ids.filter((id) => health.get(id)?.status === "unfixable" && health.get(id)?.tool);
   const swap = ids.filter((id) => !needFixer.includes(id));
   const out: FixOutcome = { changed: [], notes: [], errors: [], untouched: 0 };
@@ -238,8 +242,12 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (changed.length) {
     const one = out.changed.length === 1 ? out.changed[0]! : null;
     const label = one
-      ? (one.tool ? (still(one.b.modId) ? `Ran ${one.tool} on ${one.b.name}` : `Fixed ${one.b.name} with ${one.tool}`) : `Fixed ${one.b.name} for the game update`)
-      : fixedN === changed.length ? `Fixed ${changed.length} mods for the game update` : `Tried to fix ${changed.length} mods`;
+      ? (one.tool
+        ? (still(one.b.modId) ? t("Ran {tool} on {name}", { tool: one.tool, name: one.b.name }) : t("Fixed {name} with {tool}", { tool: one.tool, name: one.b.name }))
+        : t("Fixed {name} for the game update", { name: one.b.name }))
+      : fixedN === changed.length
+        ? tn(changed.length, "Fixed {n} mod for the game update", "Fixed {n} mods for the game update")
+        : tn(changed.length, "Tried to fix {n} mod", "Tried to fix {n} mods");
     recordFixes(game, label, changed);
   }
   // one toast: a single mod gets its own story, several get a count and the way to the list
@@ -248,16 +256,24 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (ids.length === 1) {
     const id = ids[0]!;
     const c = out.changed.find((x) => x.b.modId === id);
-    if (c && !still(id)) lines.push(c.tool ? `Fixed ${c.b.name} with ${c.tool}` : `Fixed ${c.b.name}`);
-    else if (c) lines.push(`${c.tool ? `${c.tool} changed ${plural(c.files ?? 1, "file")} in` : "Swapped the outdated hashes in"} ${c.b.name} and it is still broken. ${NEEDS}`);
+    if (c && !still(id)) lines.push(c.tool ? t("Fixed {name} with {tool}", { tool: c.tool, name: c.b.name }) : t("Fixed {name}", { name: c.b.name }));
+    else if (c) {
+      const did = c.tool
+        ? tn(c.files ?? 1, "{tool} changed {n} file in {name} and it is still broken", "{tool} changed {n} files in {name} and it is still broken", { tool: c.tool, name: c.b.name })
+        : t("Swapped the outdated hashes in {name} and it is still broken", { name: c.b.name });
+      lines.push(t("{note}. {needs}", { note: did, needs: NEEDS }));
+    }
     lines.push(...out.notes, ...out.errors);
-    view = { label: "View mod", run: () => go({ view: "library", modId: id }) };
+    view = { label: t("View mod"), run: () => go({ view: "library", modId: id }) };
   } else {
-    if (fixedN || stillN) lines.push([fixedN && `Fixed ${plural(fixedN, "mod")}`, stillN && `${stillN} still broken`].filter(Boolean).join(", "));
+    const fixedLine = tn(fixedN, "Fixed {n} mod", "Fixed {n} mods"), stillLine = tn(stillN, "{n} still broken", "{n} still broken");
+    if (fixedN && stillN) lines.push(t("{fixed}, {still}", { fixed: fixedLine, still: stillLine }));
+    else if (fixedN) lines.push(fixedLine);
+    else if (stillN) lines.push(stillLine);
     lines.push(...out.errors);
   }
-  if (!lines.length) { lines.push("Nothing there could be fixed automatically"); view = undefined; }
-  toast(lines.join(". ") + (changed.length ? ". Undo puts the files back" : ""), !fixedN && (stillN > 0 || out.errors.length > 0), view);
+  if (!lines.length) { lines.push(t("Nothing there could be fixed automatically")); view = undefined; }
+  toast(changed.length ? t("{text}. Undo puts the files back", { text: stops(lines) }) : stops(lines), !fixedN && (stillN > 0 || out.errors.length > 0), view);
   return changed.length;
 }
 
@@ -320,7 +336,7 @@ export async function downloadFixer(game: GameId, tool: { id: number; name: stri
   try {
     const f = await fixersApi.download(game, { toolId: tool.id, fileId: file.id, tool: tool.name, file: file.name, url: file.downloadUrl, md5: file.md5 });
     fixerLists.set(game, [...(fixerLists.get(game) ?? []).filter((x) => x.fileId !== f.fileId), f]);
-    toast(`Downloaded ${tool.name}`);
+    toast(t("Downloaded {name}", { name: tool.name }));
     return f;
   } catch (e) {
     toast(errorText(e), true);
@@ -338,7 +354,7 @@ export async function downloadNewestFixer(game: GameId, toolId: number): Promise
   try {
     const tool = await toolPage(toolId);
     const file = tool && newestFile(tool);
-    if (!tool || !file) { toast(tool ? `${tool.name} has no file to download on GameBanana` : "GameBanana didn't send this fixer's page", true); return null; }
+    if (!tool || !file) { toast(tool ? t("{name} has no file to download on GameBanana", { name: tool.name }) : t("GameBanana didn't send this fixer's page"), true); return null; }
     return await downloadFixer(game, tool, file);
   } catch (e) {
     toast(errorText(e), true);
@@ -360,9 +376,9 @@ async function getFixer(game: GameId, tool: ToolLink): Promise<FixerFile> {
   } else {
     const page = await toolPage(id);
     const file = page && newestFile(page);
-    if (!page || !file) throw new Error(page ? `GameBanana has no file for ${tool.name}` : `GameBanana didn't send ${tool.name}'s page`);
-    if (file.analysis === "pending") throw new Error(`GameBanana is still checking ${tool.name}'s newest file for viruses. Try again in a few minutes`);
-    if (file.analysis && file.analysis !== "clean") throw new Error(`GameBanana's virus check flagged ${tool.name}'s newest file, so gachamod won't run it`);
+    if (!page || !file) throw new Error(page ? t("GameBanana has no file for {name}", { name: tool.name }) : t("GameBanana didn't send {name}'s page", { name: tool.name }));
+    if (file.analysis === "pending") throw new Error(t("GameBanana is still checking {name}'s newest file for viruses. Try again in a few minutes", { name: tool.name }));
+    if (file.analysis && file.analysis !== "clean") throw new Error(t("GameBanana's virus check flagged {name}'s newest file, so gachamod won't run it", { name: tool.name }));
     const have = (fixerLists.get(game) ?? (await fixersApi.list(game))).find((x) => x.fileId === file.id);
     f = have ?? await fixersApi.download(game, { toolId: id, fileId: file.id, tool: page.name || tool.name, file: file.name, url: file.downloadUrl, md5: file.md5 });
   }
@@ -385,14 +401,14 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
     ids.forEach((id) => setBusy(`mod:${id}`, true));
     try {
       let f: FixerFile;
-      try { f = await getFixer(game, tool); } catch (e) { out.errors.push(`Couldn't get ${tool.name}: ${errorText(e)}`); out.untouched += ids.length; continue; }
+      try { f = await getFixer(game, tool); } catch (e) { out.errors.push(t("Couldn't get {name}: {error}", { name: tool.name, error: errorText(e) })); out.untouched += ids.length; continue; }
       if (f.window) {
         // it opens its own window and goes through the whole Mods folder there: one run covers every mod that
         // needs it, so the window doesn't come back for each of them
         const rest = [...healthNow(game)].filter(([id, h]) => h.status === "unfixable" && h.tool?.url === tool.url && !ids.includes(id) && !fixerBusy.has(`mod:${id}`)).map(([id]) => id);
         rest.forEach((id) => setBusy(`mod:${id}`, true));
         setBusy("waiting", true);
-        toast(`${named(f.tool)} is open in its own window. Run it there. gachamod sees what it changes, so the window can stay open`, false, { label: "Stop waiting", run: stopWaiting });
+        toast(t("{tool} is open in its own window. Run it there. gachamod sees what it changes, so the window can stay open", { tool: named(f.tool) }), false, { label: t("Stop waiting"), run: stopWaiting });
         try {
           const runs = await fixersApi.runAll(game, f.fileId, [...ids, ...rest]);
           for (const run of runs) done.push({ run, tool: named(f.tool), quiet: !ids.includes(run.modId) });
@@ -414,7 +430,7 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
     if (quiet) continue;
     out.untouched++;
     out.notes.push(r.stopped
-      ? `${tool} was still running on ${r.name} after 2 minutes, so gachamod stopped it. It changed no files`
-      : `${tool} changed no files in ${r.name}. ${NEEDS}`);
+      ? t("{tool} was still running on {name} after 2 minutes, so gachamod stopped it. It changed no files", { tool, name: r.name })
+      : t("{note}. {needs}", { note: t("{tool} changed no files in {name}", { tool, name: r.name }), needs: NEEDS }));
   }
 }

@@ -6,13 +6,14 @@ import { back, forward, go, recentPages } from "../lib/store";
 import { openMenu, type MenuEntry } from "../ui/ContextMenu";
 import { toast } from "../ui/toast";
 import { openPalette } from "./state";
+import { t } from "../lib/i18n";
 
 
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 const TEXT_INPUT = /^(text|search|url|email|password|tel|number)$/;
 
-function fieldOf(t: EventTarget | null): Field | null {
-  const el = t as HTMLElement | null;
+function fieldOf(target: EventTarget | null): Field | null {
+  const el = target as HTMLElement | null;
   if (!el) return null;
   if (el instanceof HTMLTextAreaElement) return el;
   if (el instanceof HTMLInputElement && TEXT_INPUT.test(el.type)) return el;
@@ -27,27 +28,27 @@ function fieldItems(f: Field): MenuEntry[] {
   const secret = input instanceof HTMLInputElement && input.type === "password";
   const keep = () => f.focus({ preventScroll: true });
   return [
-    { label: "Cut", icon: "cut", keys: "Ctrl+X", disabled: !hasSel || readOnly || secret, onClick: () => { keep(); document.execCommand("cut"); } },
-    { label: "Copy", icon: "copy", keys: "Ctrl+C", disabled: !hasSel || secret, onClick: () => { keep(); document.execCommand("copy"); } },
-    { label: "Paste", icon: "paste", keys: "Ctrl+V", disabled: readOnly, onClick: () => {
+    { label: t("Cut"), icon: "cut", keys: "Ctrl+X", disabled: !hasSel || readOnly || secret, onClick: () => { keep(); document.execCommand("cut"); } },
+    { label: t("Copy"), icon: "copy", keys: "Ctrl+C", disabled: !hasSel || secret, onClick: () => { keep(); document.execCommand("copy"); } },
+    { label: t("Paste"), icon: "paste", keys: "Ctrl+V", disabled: readOnly, onClick: () => {
       keep();
-      navigator.clipboard?.readText().then((t) => { keep(); document.execCommand("insertText", false, t); })
-        .catch(() => toast("Paste with Ctrl+V here"));
+      navigator.clipboard?.readText().then((txt) => { keep(); document.execCommand("insertText", false, txt); })
+        .catch(() => toast(t("Paste with Ctrl+V here")));
     } },
-    { label: "Select all", icon: "select", keys: "Ctrl+A", onClick: () => { keep(); if (input) input.select(); else document.execCommand("selectAll"); } },
+    { label: t("Select all"), icon: "select", keys: "Ctrl+A", onClick: () => { keep(); if (input) input.select(); else document.execCommand("selectAll"); } },
   ];
 }
 
 function pageItems(): MenuEntry[] {
   return [
-    { label: "Back", icon: "left", keys: "Alt+Left", disabled: !recentPages(-1, 1).length, onClick: () => back() },
-    { label: "Forward", icon: "right", keys: "Alt+Right", disabled: !recentPages(1, 1).length, onClick: () => forward() },
+    { label: t("Back"), icon: "left", keys: "Alt+Left", disabled: !recentPages(-1, 1).length, onClick: () => back() },
+    { label: t("Forward"), icon: "right", keys: "Alt+Right", disabled: !recentPages(1, 1).length, onClick: () => forward() },
     "-",
-    { label: "Search", icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
-    { label: "Undo", icon: "undo", keys: "Ctrl+Z", disabled: !canUndo(), onClick: () => void undo() },
-    { label: "Redo", icon: "redo", keys: "Ctrl+Y", disabled: !canRedo(), onClick: () => void redo() },
+    { label: t("Search"), icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
+    { label: t("Undo"), icon: "undo", keys: "Ctrl+Z", disabled: !canUndo(), onClick: () => void undo() },
+    { label: t("Redo"), icon: "redo", keys: "Ctrl+Y", disabled: !canRedo(), onClick: () => void redo() },
     "-",
-    { label: "Settings", icon: "settings", keys: "Ctrl+8", onClick: () => go("settings") },
+    { label: t("Settings"), icon: "settings", keys: "Ctrl+8", onClick: () => go("settings") },
   ];
 }
 
@@ -63,8 +64,8 @@ export function installGlobalInput(): () => void {
     if (sel) {
       const short = sel.length > 28 ? `${sel.slice(0, 26)}...` : sel;
       openMenu(where, [
-        { label: "Copy", icon: "copy", keys: "Ctrl+C", onClick: () => { navigator.clipboard?.writeText(sel).catch(() => document.execCommand("copy")); } },
-        { label: `Search for "${short}"`, icon: "search", onClick: () => openPalette(sel.slice(0, 80)) },
+        { label: t("Copy"), icon: "copy", keys: "Ctrl+C", onClick: () => { navigator.clipboard?.writeText(sel).catch(() => document.execCommand("copy")); } },
+        { label: t("Search for \"{text}\"", { text: short }), icon: "search", onClick: () => openPalette(sel.slice(0, 80)) },
         "-",
         ...pageItems(),
       ]);

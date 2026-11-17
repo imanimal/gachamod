@@ -738,6 +738,65 @@ fn other_managers_folders_come_in_with_their_details() {
     assert_eq!((k.name.as_str(), k.source.is_none()), ("Kimono", true));
 }
 
+/// A mod of No Reload Mod Manager's: its slot gate and name.
+fn nrmm_mod(t: &Tree, rel: &str, slot: u32, name: &str) -> PathBuf {
+    let d = t.add(rel);
+    let group = rel.split('/').nth(1).unwrap();
+    fs::write(d.join("mod.ini"), format!("[Constants]\nglobal $managed_slot_id = {slot}\n\n[TextureOverrideBody]\nhash = 0011aabb\nif $managed_slot_id == $\\modmanageragl\\{group}\\active_slot\n    ib = Body\nendif\n")).unwrap();
+    fs::write(d.join("modname"), name).unwrap();
+    d
+}
+
+#[test]
+fn other_managers_layouts_scan_right() {
+    let t = Tree::new("layouts");
+    // No Reload Mod Manager: its own inis sit in _MANAGED_ and in each group folder, next to the mods
+    let managed = t.mods.join("_MANAGED_");
+    fs::create_dir_all(managed.join("group_1")).unwrap();
+    fs::write(managed.join("manager_group.ini"), "namespace = modmanageragl\\group_manager\n").unwrap();
+    fs::write(managed.join("nrmm_include.ini"), "[IncludeKeypress]\ninclude = nrmm_keypress.txt").unwrap();
+    fs::write(managed.join("group_1/group_1.ini"), "namespace = modmanageragl\\group_1\n[Constants]\npersist global $active_slot = 0\n").unwrap();
+    fs::write(managed.join("group_1/groupname"), "Ellen").unwrap();
+    nrmm_mod(&t, "_MANAGED_/group_1/Maid", 1, "Maid Ellen");
+    nrmm_mod(&t, "_MANAGED_/group_1/Bunny", 2, "Bunny Ellen");
+    // slot 2 is the one showing
+    fs::write(t.root.join("ZZMI/d3dx_user.ini"), "[Constants]\r\n$\\modmanageragl\\group_1\\active_slot = 2\r\n").unwrap();
+    // SkinSelectImpact's KeyViewer output and Fairy's Secret Folder's in-game menu are tools, not mods
+    t.add("SkinSelectImpact/AdditionalFiles_SSI/KeyViewer");
+    t.add("zzzzzz_ZZZModManagerUI");
+    t.add("Playable Characters/zzzzzz_ZZZModManagerUI");
+    // Hestia turns a mod off by moving its files into DISABLED_BY_HESTIA inside the mod's folder
+    t.add("Jane Gym/DISABLED_BY_HESTIA");
+    fs::create_dir_all(t.mods.join("Jane Gym/\u{2b22}HESTIA")).unwrap();
+    fs::write(t.mods.join("Jane Gym/\u{2b22}HESTIA/metadata.json"), "{}").unwrap();
+    // Hestia's details folder holds a hestia.ini that only keeps saved values, in each mod and in Mods
+    fs::write(t.mods.join("Jane Gym/\u{2b22}HESTIA/hestia.ini"), "[Constants]\n").unwrap();
+    fs::create_dir_all(t.mods.join("\u{2b22}HESTIA")).unwrap();
+    fs::write(t.mods.join("\u{2b22}HESTIA/hestia.ini"), "[Constants]\n").unwrap();
+
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    assert_eq!(list.len(), 3, "{:?}", list.iter().map(|m| &m.rel_path).collect::<Vec<_>>());
+    let maid = by_name(&list, "Maid Ellen");
+    assert_eq!((maid.enabled, maid.character.as_deref()), (false, Some("Ellen Joe")));
+    assert!(by_name(&list, "Bunny Ellen").enabled);
+    assert_eq!(list.iter().filter(|m| m.conflicts > 0).count(), 0);
+    let gym = by_name(&list, "Jane Gym");
+    assert_eq!((gym.rel_path.as_str(), gym.enabled), ("Jane Gym", false));
+    // the same with gachamod's sidecar in the folder
+    assert!(!by_name(&scan(&db, "zzz").unwrap(), "Jane Gym").enabled);
+
+    // No Reload Mod Manager picks which mod of a group shows
+    let err = set_enabled(&db.lock().unwrap(), "zzz", &[maid.id.clone()], true).err().unwrap();
+    assert!(err.to_string().contains("No Reload Mod Manager"), "{err}");
+    // turning the Hestia mod on puts its files back
+    let id = gym.id.clone();
+    let ch = set_enabled(&db.lock().unwrap(), "zzz", &[id.clone()], true).unwrap();
+    assert!(ch.changed.iter().any(|m| m.id == id && m.enabled));
+    assert!(t.mods.join("Jane Gym/mod.ini").is_file() && !t.mods.join("Jane Gym/DISABLED_BY_HESTIA").exists());
+    assert!(by_name(&scan(&db, "zzz").unwrap(), "Jane Gym").enabled);
+}
+
 /// Scan a copy of a real Mods folder and print what each mod became. Not run by default: set GACHAMOD_SCAN_DIR (a
 /// scratch copy, the scan writes .gachamod.json files into it), GACHAMOD_SCAN_GAME and GACHAMOD_ROSTERS (a folder
 /// with "<game>.json" GameBanana rosters). Run with `cargo test -p gacha-core scan_a_real_copy -- --ignored --nocapture`.

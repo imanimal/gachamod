@@ -11,6 +11,7 @@ import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type Feed
 import { currentGame, currentRoute } from "../../lib/store";
 import { SetRow } from "./parts";
 import { setTester, useTester } from "../ingame/data";
+import { t, tn } from "../../lib/i18n";
 
 // ── the form ──
 
@@ -23,9 +24,9 @@ export function FeedbackHost() {
 }
 
 const PLACEHOLDER: Record<FeedbackKind, string> = {
-  problem: "What happened, and what did you expect? For example: a skin didn't change after I picked it in the game's menu.",
-  idea: "What would you like gachamod to do?",
-  other: "Anything you'd like the developer to know.",
+  problem: t("What happened, and what did you expect? For example: a skin didn't change after I picked it in the game's menu."),
+  idea: t("What would you like gachamod to do?"),
+  other: t("Anything you'd like the developer to know."),
 };
 
 /** What was typed into the form, kept for the rest of the session so closing it (Esc, Cancel) loses nothing. Cleared on send. */
@@ -45,26 +46,26 @@ function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => vo
     setBusy(true);
     try {
       await report.feedback({ kind, text, contact: contact.trim() || undefined, logs, screen: currentRoute().view, game: currentGame()?.id });
-      toast("Thanks. Your feedback was sent");
+      toast(t("Thanks. Your feedback was sent"));
       draft.kind = null; draft.text = "";
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }
   };
   const keys = (e: KeyboardEvent) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } };
   return (
-    <Dialog title="Send feedback" icon="help" onClose={onClose} locked={busy ? "Sending your feedback" : undefined} footer={<>
-      <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+    <Dialog title={t("Send feedback")} icon="help" onClose={onClose} locked={busy ? t("Sending your feedback") : undefined} footer={<>
+      <Button variant="ghost" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
       <Button variant="primary" icon="upload" busy={busy} disabled={busy || !text.trim()} onClick={() => void send()} data-t="feedback-send"
-        title="Sends it to gachamod's developer (Ctrl+Enter)">Send</Button>
+        title={t("Sends it to gachamod's developer (Ctrl+Enter)")}>{t("Send")}</Button>
     </>}>
       <div className="feedback" onKeyDown={keys}>
-        <Segmented label="What it is" value={kind} onChange={pick} options={[
-          { value: "problem", label: "Something's wrong" }, { value: "idea", label: "An idea" }, { value: "other", label: "Something else" },
+        <Segmented label={t("What it is")} value={kind} onChange={pick} options={[
+          { value: "problem", label: t("Something's wrong") }, { value: "idea", label: t("An idea") }, { value: "other", label: t("Something else") },
         ]} />
-        <TextField multiline rows={6} autoFocus label="Message" value={text} onChange={setText} placeholder={PLACEHOLDER[kind]} />
-        <TextField label="How to reach you (optional)" value={contact} onChange={setContact} placeholder="A Discord name or an email, if you'd like an answer" />
-        <span title="The end of gachamod.log and of the rendering log: what the app did, the errors it hit, your graphics card and screens. Your user folder's name is taken out first">
-          <Checkbox checked={logs} onChange={setLogs} label="Attach gachamod's logs" />
+        <TextField multiline rows={6} autoFocus label={t("Message")} value={text} onChange={setText} placeholder={PLACEHOLDER[kind]} />
+        <TextField label={t("How to reach you (optional)")} value={contact} onChange={setContact} placeholder={t("A Discord name or an email, if you'd like an answer")} />
+        <span title={t("The end of gachamod.log and of the rendering log: what the app did, the errors it hit, your graphics card and screens. Your user folder's name is taken out first")}>
+          <Checkbox checked={logs} onChange={setLogs} label={t("Attach gachamod's logs")} />
         </span>
       </div>
     </Dialog>
@@ -88,13 +89,13 @@ function useReport(): ReportState | null {
 /** Feedback and testing: the form, Check this game and the tester options. */
 export function FeedbackSection() {
   return (
-    <Panel title="Feedback and testing" icon="help" id="feedback">
+    <Panel title={t("Feedback and testing")} icon="help" id="feedback">
       <div className="set-rows">
-        <SetRow id="set-feedback" label="Send feedback" hint="Tell the developer about a problem or an idea. It goes straight from here, no account needed">
-          <Button size="sm" icon="help" onClick={() => openFeedback()} data-t="feedback-open" title="Opens a short form">Send feedback</Button>
+        <SetRow id="set-feedback" label={t("Send feedback")} hint={t("Tell the developer about a problem or an idea. It goes straight from here, no account needed")}>
+          <Button size="sm" icon="help" onClick={() => openFeedback()} data-t="feedback-open" title={t("Opens a short form")}>{t("Send feedback")}</Button>
         </SetRow>
-        <SetRow id="set-gamecheck" label="Check this game" hint="Walks through switching skins while you play, one step at a time, then sends what worked. About ten minutes with the game open">
-          <Button size="sm" icon="check" onClick={openGameCheck} data-t="gamecheck-open" title="Checks the game picked in the sidebar">Check this game</Button>
+        <SetRow id="set-gamecheck" label={t("Check this game")} hint={t("Walks through switching skins while you play, one step at a time, then sends what worked. About ten minutes with the game open")}>
+          <Button size="sm" icon="check" onClick={openGameCheck} data-t="gamecheck-open" title={t("Checks the game picked in the sidebar")}>{t("Check this game")}</Button>
         </SetRow>
         <TesterRow />
       </div>
@@ -111,17 +112,17 @@ export function PrivacySection() {
     report.set(p).then(setReport).catch((e) => toast(errorText(e), true));
   };
   return (
-    <Panel title="Usage counts and crash reports" icon="eye" id="privacy">
+    <Panel title={t("Usage counts and crash reports")} icon="eye" id="privacy">
       <div className="set-rows">
-        <SetRow id="set-usage" label="Usage counts" hint="Sends anonymous counts of which screens and buttons get used, so the developer knows what to work on. No mod names, file paths or account details"
-          tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. The list of counts names every one">
+        <SetRow id="set-usage" label={t("Usage counts")} hint={t("Sends anonymous counts of which screens and buttons get used, so the developer knows what to work on. No mod names, file paths or account details")}
+          tip={t("Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. The list of counts names every one")}>
           <span className="set-admin">
             <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(TELEMETRY_DOC).catch((e) => toast(errorText(e), true))}
-              title="Opens docs/telemetry.md in gachamod's source, which lists every count">List of counts</Button>
+              title={t("Opens docs/telemetry.md in gachamod's source, which lists every count")}>{t("List of counts")}</Button>
             <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
           </span>
         </SetRow>
-        <SetRow id="set-crashes" label="Crash reports" hint="When gachamod crashes or its window goes black, sends what went wrong and the end of its log, with your user folder's name taken out">
+        <SetRow id="set-crashes" label={t("Crash reports")} hint={t("When gachamod crashes or its window goes black, sends what went wrong and the end of its log, with your user folder's name taken out")}>
           <Toggle checked={st?.crashes ?? true} disabled={!st} onChange={(v) => set({ crashes: v })} />
         </SetRow>
       </div>
@@ -133,11 +134,11 @@ export function PrivacySection() {
 export function LogsSection() {
   const st = useReport();
   return (
-    <Panel title="Log files" icon="file" id="logs">
+    <Panel title={t("Log files")} icon="file" id="logs">
       <div className="set-rows">
-        <SetRow id="set-logs" label="Logs" hint="gachamod.log lists what the app did and the errors it hit. Crash files sit next to it">
+        <SetRow id="set-logs" label={t("Logs")} hint={t("gachamod.log lists what the app did and the errors it hit. Crash files sit next to it")}>
           <Button size="sm" icon="folder" disabled={!st?.logsDir} title={st?.logsDir ?? undefined}
-            onClick={() => { if (st?.logsDir) shell.openPath(st.logsDir).catch((e) => toast(errorText(e), true)); }}>Open logs folder</Button>
+            onClick={() => { if (st?.logsDir) shell.openPath(st.logsDir).catch((e) => toast(errorText(e), true)); }}>{t("Open logs folder")}</Button>
         </SetRow>
         <RenderLogRow id="set-render-log" />
       </div>
@@ -145,9 +146,8 @@ export function LogsSection() {
   );
 }
 
-const RENDER_TIP = "Each problem gets an incident file with your graphics card, driver, screens and what the window showed. "
-  + "Attach gachamod's logs when you send feedback to include the newest one. "
-  + String.raw`If the window is black, press Win+R and open %APPDATA%\app.gachamod.desktop\logs\rendering`;
+const RENDER_TIP = t("Each problem gets an incident file with your graphics card, driver, screens and what the window showed. Attach gachamod's logs when you send feedback to include the newest one. If the window is black, press Win+R and open {folder}",
+  { folder: String.raw`%APPDATA%\app.gachamod.desktop\logs\rendering` });
 
 /** Settings, under Log files and under Appearance (with Hardware acceleration): the rendering log and its folder. Both copies share the setting.
  *  `id` goes on one copy, the one a route scrolls to. */
@@ -157,12 +157,13 @@ export function RenderLogRow({ id }: { id?: string }) {
   useEffect(() => { rendering.state().then(setSt).catch(() => {}); }, []);
   const n = st?.incidents ?? 0;
   return (
-    <SetRow id={id} label="Rendering log" tip={RENDER_TIP}
-      hint={`Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary${n ? `. ${n} problem${n === 1 ? "" : "s"} noted so far` : ""}`}>
+    <SetRow id={id} label={t("Rendering log")} tip={RENDER_TIP}
+      hint={n ? tn(n, "Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary. {n} problem noted so far", "Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary. {n} problems noted so far")
+        : t("Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary")}>
       <span className="set-admin">
         <Button size="sm" icon="folder" disabled={!st?.dir} title={st?.dir ?? undefined}
-          onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>Open folder</Button>
-        <Toggle checked={on} ariaLabel="Rendering log" onChange={(v) => void renderLogPref.set(v)} />
+          onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>{t("Open folder")}</Button>
+        <Toggle checked={on} ariaLabel={t("Rendering log")} onChange={(v) => void renderLogPref.set(v)} />
       </span>
     </SetRow>
   );
@@ -173,16 +174,14 @@ export function RenderLogRow({ id }: { id?: string }) {
 function TesterRow() {
   const on = useTester();
   return (
-    <SetRow id="set-tester" label="Tester options"
-      hint="Adds the menu the game draws itself to Switch skins in game in Wuthering Waves, Endfield and the others. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd have it without this. It opens in exclusive fullscreen, where gachamod's menu over the game can't. Check this game sends what you find to the developer">
+    <SetRow id="set-tester" label={t("Tester options")}
+      hint={t("Adds the menu the game draws itself to Switch skins in game in Wuthering Waves, Endfield and the others. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd have it without this. It opens in exclusive fullscreen, where gachamod's menu over the game can't. Check this game sends what you find to the developer")}>
       <Toggle checked={on} onChange={(v) => void setTester(v)} />
     </SetRow>
   );
 }
 
-const ADMIN_TIP = "Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. "
-  + "As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. "
-  + "Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way";
+const ADMIN_TIP = t("Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way");
 
 // the row shows on two pages (Games and mod loaders, In-game profile hotkeys), so its state is shared and both copies agree
 let adminNow: AdminState | null = null;
@@ -201,17 +200,17 @@ export function AdminRow({ id }: { id?: string }) {
   const always = (on: boolean) => {
     admin.setAlways(on).then((s) => {
       setAdmin(s);
-      if (on && !s.elevated) toast("gachamod starts as administrator from now on", false, { label: "Restart now", run: restartAsAdmin });
+      if (on && !s.elevated) toast(t("gachamod starts as administrator from now on"), false, { label: t("Restart now"), run: restartAsAdmin });
     }).catch((e) => toast(errorText(e), true));
   };
   if (!st) return null;
   return (
     <div className="set-rows">
-      <SetRow id={id} label="Run as administrator" tip={ADMIN_TIP}
-        hint={st.elevated ? "gachamod runs as administrator now, so it can send keys to games that do too" : "Lets gachamod send keys to games that run as administrator, like Zenless Zone Zero"}>
+      <SetRow id={id} label={t("Run as administrator")} tip={ADMIN_TIP}
+        hint={st.elevated ? t("gachamod runs as administrator now, so it can send keys to games that do too") : t("Lets gachamod send keys to games that run as administrator, like Zenless Zone Zero")}>
         <span className="set-admin">
-          {!st.elevated && <Button size="sm" onClick={restartAsAdmin} data-t="admin-restart" title="Closes gachamod and opens it again as administrator. Windows asks you first">Restart as administrator</Button>}
-          <Toggle checked={st.always} onChange={always} label="Always" />
+          {!st.elevated && <Button size="sm" onClick={restartAsAdmin} data-t="admin-restart" title={t("Closes gachamod and opens it again as administrator. Windows asks you first")}>{t("Restart as administrator")}</Button>}
+          <Toggle checked={st.always} onChange={always} label={t("Always")} />
         </span>
       </SetRow>
     </div>

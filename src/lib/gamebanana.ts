@@ -9,6 +9,7 @@ import { currentGame } from "./store";
 import { toast } from "../ui/toast";
 import { HOLD, track } from "./activity";
 import { doneHint } from "../shell/hints";
+import { t } from "./i18n";
 
 export const GB = "https://gamebanana.com/apiv11";
 
@@ -111,7 +112,7 @@ export interface ListResult { items: GbCard[]; total: number; complete: boolean 
 
 // ── requests: at most 4 at once, one retry on a server error or a dropped connection, abortable ──
 
-const OFFLINE = "GameBanana didn't answer. Check your connection and try again.";
+const OFFLINE = t("GameBanana didn't answer. Check your connection and try again.");
 type Json = Record<string, unknown>;
 
 let inFlight = 0;
@@ -137,8 +138,8 @@ function release() { inFlight--; waiting.shift()?.(); }
 function pause(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(abortError()); return; }
-    const t = setTimeout(() => { signal?.removeEventListener("abort", stop); resolve(); }, ms);
-    const stop = () => { clearTimeout(t); reject(abortError()); };
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", stop); resolve(); }, ms);
+    const stop = () => { clearTimeout(timer); reject(abortError()); };
     signal?.addEventListener("abort", stop, { once: true });
   });
 }
@@ -152,22 +153,22 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
         // a connection that goes quiet fails after 30 seconds instead of waiting forever
         const quiet = AbortSignal.timeout(30_000);
         r = await track(fetch(url, { signal: signal ? AbortSignal.any([signal, quiet]) : quiet, headers: { Accept: "application/json" } }),
-          "Waiting on GameBanana", HOLD.gb);
+          t("Waiting on GameBanana"), HOLD.gb);
       } catch (e) {
         if (signal?.aborted) throw abortError();
         if (isAbort(e) || (e instanceof DOMException && e.name === "TimeoutError")) {
-          throw new Error("GameBanana didn't answer for 30 seconds. Check your connection, or try again in a minute.");
+          throw new Error(t("GameBanana didn't answer for 30 seconds. Check your connection, or try again in a minute."));
         }
         if (attempt === 0) { await pause(800, signal); continue; }
         throw new Error(OFFLINE);
       }
       if (r.status >= 500 && attempt === 0) { await pause(800, signal); continue; }
-      if (r.status === 404) throw Object.assign(new Error("GameBanana doesn't have that page. It may have been removed."), { notFound: true });
-      if (!r.ok) throw new Error(`GameBanana answered with an error (${r.status}). Try again in a minute.`);
+      if (r.status === 404) throw Object.assign(new Error(t("GameBanana doesn't have that page. It may have been removed.")), { notFound: true });
+      if (!r.ok) throw new Error(t("GameBanana answered with an error ({status}). Try again in a minute.", { status: String(r.status) }));
       let body: unknown;
-      try { body = await r.json(); } catch { throw new Error("GameBanana sent something gachamod couldn't read. Try again in a minute."); }
+      try { body = await r.json(); } catch { throw new Error(t("GameBanana sent something gachamod couldn't read. Try again in a minute.")); }
       if (body && typeof body === "object" && "_sErrorCode" in body) {
-        throw new Error(`GameBanana didn't accept the request (${String((body as Json)._sErrorCode)}).`);
+        throw new Error(t("GameBanana didn't accept the request ({code}).", { code: String((body as Json)._sErrorCode) }));
       }
       return body;
     }
@@ -297,16 +298,16 @@ export function kindOf(m: { name: string; root: string | null; category: string 
   for (const w of cat.split(/\s+/)) if (w.length > 2) rest = rest.replace(new RegExp(`\\b${escapeRe(w)}\\b`, "gi"), " ");
   if (K_SOFT.test(rest) || K_HUED.test(rest)) return "texture";
   const sw = m.software ?? [];
-  if (sw.length && sw.some((t) => K_PAINT.test(t)) && sw.every((t) => K_PAINT.test(t) || /notepad|sublime|text|code/i.test(t))) return "texture";
+  if (sw.length && sw.some((tag) => K_PAINT.test(tag)) && sw.every((tag) => K_PAINT.test(tag) || /notepad|sublime|text|code/i.test(tag))) return "texture";
   return "outfit";
 }
 
 /** The "Software Used" tags of a record (strings like "Software Used: Blender", or {_sTitle, _sValue}). */
 function softwareTags(raw: unknown): string[] {
   const out: string[] = [];
-  for (const t of arr(raw)) {
-    const o = obj(t);
-    const text = typeof t === "string" ? t : o ? `${str(o._sTitle) ?? ""}: ${str(o._sValue) ?? ""}` : "";
+  for (const item of arr(raw)) {
+    const o = obj(item);
+    const text = typeof item === "string" ? item : o ? `${str(o._sTitle) ?? ""}: ${str(o._sValue) ?? ""}` : "";
     const m = /^\s*software used\s*:\s*(.+)$/i.exec(text);
     if (m) out.push(m[1]!.trim());
   }
@@ -347,7 +348,7 @@ function parseCard(raw: unknown, chars: GbCategoryRef[]): GbCard | null {
   };
 }
 
-const WARNING_WORDS: Record<string, string> = { contains_exe: "Has program files", contains_dll: "Has program libraries", contains_script: "Has scripts" };
+const WARNING_WORDS: Record<string, string> = { contains_exe: t("Has program files"), contains_dll: t("Has program libraries"), contains_script: t("Has scripts") };
 
 function parseFile(raw: unknown, archived: boolean): GbFile | null {
   const o = obj(raw);
@@ -481,7 +482,7 @@ export async function gameInfo(gbGameId: number): Promise<GbGameInfo | null> {
       const o = obj(await getJson(`${GB}/Game/${gbGameId}/ProfilePage`));
       if (!o) return null;
       const media = arr(obj(o._aPreviewMedia)?._aImages).map(obj);
-      const ofType = (t: string) => https(str(media.find((m) => m?._sType === t)?._sUrl));
+      const ofType = (kind: string) => https(str(media.find((m) => m?._sType === kind)?._sUrl));
       const info: GbGameInfo = { id: gbGameId, name: str(o._sName) ?? "", icon: ofType("icon") ?? https(str(o._sIconUrl)), banner: ofType("banner") ?? https(str(o._sBannerUrl)) };
       storeSet("session", key, info);
       return info;
@@ -682,7 +683,7 @@ export async function modUpdates(id: number, model: GbModel = "Mod"): Promise<Gb
       if (!u || uid === null) return null;
       const changes = arr(u._aChangeLog).map(obj).filter((c): c is Json => !!c)
         .map((c) => ({ cat: str(c.cat) ?? "", text: str(c.text) ?? "" })).filter((c) => c.text);
-      return { id: uid, name: str(u._sName) ?? "Update", version: str(u._sVersion), added: num(u._tsDateAdded) ?? 0, changes, text: str(u._sText) ?? "" };
+      return { id: uid, name: str(u._sName) ?? t("Update"), version: str(u._sVersion), added: num(u._tsDateAdded) ?? 0, changes, text: str(u._sText) ?? "" };
     }).filter((u): u is GbUpdate => !!u).sort((a, b) => b.added - a.added);
   });
 }
@@ -757,11 +758,11 @@ export function useCharacterListOrNull(game: GameId | null | undefined): GbCateg
     setList(now);
     if (!game || (now && !charCatFor(game))) return;
     let live = true;
-    const t = now ? 0 : window.setTimeout(() => { if (live) setList((l) => l ?? []); }, CHAR_WAIT_MS);
+    const timer = now ? 0 : window.setTimeout(() => { if (live) setList((l) => l ?? []); }, CHAR_WAIT_MS);
     const load = () => characterList(game).then((l) => { if (live) setList(l); });
     void load();
     const off = onCharacters((g) => { if (g === game) void load(); });
-    return () => { live = false; window.clearTimeout(t); off(); };
+    return () => { live = false; window.clearTimeout(timer); off(); };
   }, [game]);
   return list;
 }
@@ -810,20 +811,20 @@ function statsTable(): KeptStats {
   return keptStats;
 }
 function saveStats() {
-  const t = statsTable();
-  const ids = Object.keys(t);
-  if (ids.length > 4000) for (const id of ids.sort((a, b) => t[a]!.at - t[b]!.at).slice(0, ids.length - 3000)) delete t[id];
-  storeSet("local", MEMBER_KEY, t);
+  const table = statsTable();
+  const ids = Object.keys(table);
+  if (ids.length > 4000) for (const id of ids.sort((a, b) => table[a]!.at - table[b]!.at).slice(0, ids.length - 3000)) delete table[id];
+  storeSet("local", MEMBER_KEY, table);
 }
 
 /** Points and subscriber counts for members, kept 3 days (Member/Multi, 50 a request). Missing ones are left out. */
 export async function memberStats(ids: number[], signal?: AbortSignal): Promise<Map<number, GbMemberStats>> {
-  const t = statsTable();
+  const table = statsTable();
   const now = Date.now();
   const out = new Map<number, GbMemberStats>();
   const need: number[] = [];
   for (const id of new Set(ids.filter((i) => i > 0))) {
-    const k = t[String(id)];
+    const k = table[String(id)];
     if (k && now - k.at < MEMBER_TTL) out.set(id, { id, points: k.p, subs: k.s });
     else need.push(id);
   }
@@ -836,7 +837,7 @@ export async function memberStats(ids: number[], signal?: AbortSignal): Promise<
         if (!o || id === null) continue;
         const s = { id, points: Math.max(0, num(o._nPoints) ?? 0), subs: Math.max(0, num(o._nSubscriberCount) ?? 0) };
         out.set(id, s);
-        t[String(id)] = { p: s.points, s: s.subs, at: now };
+        table[String(id)] = { p: s.points, s: s.subs, at: now };
       }
     } catch (e) {
       if (isAbort(e)) throw e;
@@ -856,8 +857,8 @@ export async function modThumbs(ids: number[], signal?: AbortSignal): Promise<Ma
   const need: number[] = [];
   for (const id of new Set(ids.filter((i) => i > 0))) {
     if (!thumbCache.has(id)) need.push(id);
-    const t = thumbCache.get(id);
-    if (t) out.set(id, t);
+    const thumb = thumbCache.get(id);
+    if (thumb) out.set(id, thumb);
   }
   for (let i = 0; i < need.length; i += 50) {
     try {
@@ -1119,11 +1120,11 @@ export async function creatorRecord(gbGameId: number, memberId: number, signal?:
     const now = Date.now() / 1000;
     const xs = r.items.filter((c) => ageDays(c, now) >= 3).map((c) => hqOnTrack(c, now));
     const v = xs.length >= 2 ? pct(xs, 0.5) : null;
-    const t = recordTable();
-    t[k] = { r: v, at: Date.now() };
-    const keys = Object.keys(t);
-    if (keys.length > 3000) for (const old of keys.sort((a, b) => t[a]!.at - t[b]!.at).slice(0, keys.length - 2500)) delete t[old];
-    storeSet("local", RECORD_KEY, t);
+    const table = recordTable();
+    table[k] = { r: v, at: Date.now() };
+    const keys = Object.keys(table);
+    if (keys.length > 3000) for (const old of keys.sort((a, b) => table[a]!.at - table[b]!.at).slice(0, keys.length - 2500)) delete table[old];
+    storeSet("local", RECORD_KEY, table);
     return v;
   });
 }
@@ -1245,7 +1246,7 @@ export async function queueModFile(game: GameId, mod: GbMod, file: GbFile, repla
   const snap = await queue.add(buildRequest(game, mod, file, replaces));
   doneHint("install");
   const waiting = snap.items.filter((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled").length;
-  if (waiting === 25) toast("25 mods queued. Your drive has been notified");
+  if (waiting === 25) toast(t("25 mods queued. Your drive has been notified"));
   const mine = snap.items.filter((i) => i.req.game === game && i.req.fileId === file.id);
   return mine.find((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled") ?? mine[mine.length - 1] ?? null;
 }
@@ -1361,7 +1362,7 @@ export function sanitizeHtml(html: string): string {
         const a = doc.createElement("span");
         a.setAttribute("data-href", `https://www.youtube.com/watch?v=${id}`);
         a.setAttribute("class", "gb-yt");
-        a.setAttribute("title", "Watch on YouTube");
+        a.setAttribute("title", t("Watch on YouTube"));
         a.setAttribute("role", "link");
         a.setAttribute("tabindex", "0");
         const img = doc.createElement("img");
@@ -1371,7 +1372,7 @@ export function sanitizeHtml(html: string): string {
         img.setAttribute("decoding", "async");
         const label = doc.createElement("span");
         label.setAttribute("class", "gb-yt-t");
-        label.textContent = "Watch on YouTube";
+        label.textContent = t("Watch on YouTube");
         a.append(img, label);
         to.appendChild(a);
         continue;
@@ -1394,7 +1395,7 @@ export function sanitizeHtml(html: string): string {
       const classes: string[] = [];
       const cls = ` ${el.getAttribute("class") ?? ""} `;
       if (raw === "center" || (el.getAttribute("align") ?? "").toLowerCase() === "center") classes.push("gb-center");
-      if (/\sSpoiler\s/.test(cls)) { classes.push("gb-spoiler"); clean.setAttribute("tabindex", "0"); clean.setAttribute("role", "button"); clean.setAttribute("title", "Spoiler: click to show"); }
+      if (/\sSpoiler\s/.test(cls)) { classes.push("gb-spoiler"); clean.setAttribute("tabindex", "0"); clean.setAttribute("role", "button"); clean.setAttribute("title", t("Spoiler: click to show")); }
       // a colour: <font color>, style="color: ...", or GameBanana's colour classes
       const styleColor = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(el.getAttribute("style") ?? "")?.[1];
       const classColor = /\s([A-Z][a-z]+)Color\s/.exec(cls)?.[1];

@@ -6,7 +6,8 @@
 // Owner: SHELL area.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { errorText, queue, type GameState, type Profile } from "../lib/api";
-import { charNoun } from "../lib/games";
+import { charNoun, gameName, gameShort } from "../lib/games";
+import { stops, t, tn } from "../lib/i18n";
 import { extensionPages, useExtensions } from "../lib/extensions";
 import { allGames, currentGame, go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
 import { Icon } from "../ui/Icon";
@@ -39,11 +40,11 @@ export function Sidebar() {
   const ready = useGames().some((g) => g.modsDir);
   const collapsed = useSideCollapsed();
   return (
-    <aside className="side" aria-label="Sidebar" data-collapsed={collapsed ? "" : undefined}>
+    <aside className="side" aria-label={t("Sidebar")} data-collapsed={collapsed ? "" : undefined}>
       <div className="side-top">
         {collapsed ? <MiniAccount /> : <AccountCard />}
-        <button type="button" className="side-fold" onClick={toggleSide} aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
-          title={collapsed ? "Expand the sidebar (Ctrl+B)" : "Collapse the sidebar (Ctrl+B)"}>
+        <button type="button" className="side-fold" onClick={toggleSide} aria-label={collapsed ? t("Expand the sidebar") : t("Collapse the sidebar")}
+          title={collapsed ? t("Expand the sidebar (Ctrl+B)") : t("Collapse the sidebar (Ctrl+B)")}>
           <Icon name={collapsed ? "expand" : "collapse"} />
         </button>
       </div>
@@ -63,9 +64,9 @@ export function switchEntries(cur: GameState | null, daily: GameState[], shown: 
   const rest = shown.filter((g) => !daily.some((d) => d.id === g.id));
   if (daily.length < 2 && !rest.length) return [];
   return [
-    { header: "Switch game" },
-    ...(daily.length > 1 ? daily : []).map((g) => ({ label: g.name, img: gameIconNow(g.id), checked: g.id === cur?.id, onClick: () => setGame(g.id) })),
-    rest.length > 0 && { label: "Other games", icon: "swap", title: cur ? `One-game mode keeps these out of the way. Untick "Only show ${cur.short}" below to bring them back` : "One-game mode keeps these out of the way", items: rest.map((g) => ({ label: g.name, img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
+    { header: t("Switch game") },
+    ...(daily.length > 1 ? daily : []).map((g) => ({ label: gameName(g), img: gameIconNow(g.id), checked: g.id === cur?.id, onClick: () => setGame(g.id) })),
+    rest.length > 0 && { label: t("Other games"), icon: "swap", title: cur ? t("One-game mode keeps these out of the way. Untick \"Only show {game}\" below to bring them back", { game: gameShort(cur) }) : t("One-game mode keeps these out of the way"), items: rest.map((g) => ({ label: gameName(g), img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
   ];
 }
 
@@ -77,26 +78,26 @@ function GameHeader() {
   if (!game) {
     return (
       <div className="side-game">
-        <button type="button" className="side-game-add" onClick={() => go({ view: "settings", section: "games" })} title="Set up a game in Settings">
-          <Icon name="plus" /><span className="side-game-t">Set up a game</span>
+        <button type="button" className="side-game-add" onClick={() => go({ view: "settings", section: "games" })} title={t("Set up a game in Settings")}>
+          <Icon name="plus" /><span className="side-game-t">{t("Set up a game")}</span>
         </button>
       </div>
     );
   }
   const many = daily.length > 1;
   const sw = switchEntries(game, daily, shown);
-  const menu = (): MenuEntry[] => [...sw, sw.length > 0 && "-", ...menuFor("game", { id: game.id }), "-", { label: "Add or show a game", icon: "plus", onClick: () => go({ view: "settings", section: "games" }) }];
+  const menu = (): MenuEntry[] => [...sw, sw.length > 0 && "-", ...menuFor("game", { id: game.id }), "-", { label: t("Add or show a game"), icon: "plus", onClick: () => go({ view: "settings", section: "games" }) }];
   const others = daily.filter((g) => g.id !== game.id);
 
   return (
     <div className={`side-game${sw.length ? " has-switch" : ""}`} style={{ "--g-accent": game.accent } as CSSProperties}>
       <button type="button" className="side-game-cur" onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu({ x: e.clientX, y: e.clientY }, menu()); }}
-        title={many ? `${game.name}. Click to switch games (Ctrl+Tab) and more` : `${game.name}. Click for more`}
+        title={many ? t("{game}. Click to switch games (Ctrl+Tab) and more", { game: gameName(game) }) : t("{game}. Click for more", { game: gameName(game) })}
         onClick={(e) => openMenu(collapsed ? beside(e.currentTarget) : below(e.currentTarget), menu())}>
         <GameBadge game={game} size={collapsed ? 40 : 34} />
         <span className="side-game-text">
-          <span className="side-game-t">{game.name}</span>
-          <span className="side-game-s">{game.running ? "Running" : game.modCount ? `${game.enabledCount} of ${game.modCount} mods on` : game.importer}</span>
+          <span className="side-game-t">{gameName(game)}</span>
+          <span className="side-game-s">{game.running ? t("Running") : game.modCount ? tn(game.modCount, "{on} of {n} mod on", "{on} of {n} mods on", { on: game.enabledCount }) : game.importer}</span>
         </span>
         <Icon name="down" className="side-game-dd" />
       </button>
@@ -131,16 +132,16 @@ function GameStrip({ others, next, more }: { others: GameState[]; next?: string;
   const rest = others.length - list.length;
   const ctx = (g: GameState) => (e: ReactMouseEvent) => { e.preventDefault(); e.stopPropagation(); openMenu({ x: e.clientX, y: e.clientY }, menuFor("game", { id: g.id })); };
   return (
-    <div className="side-games" role="group" aria-label="Other games" ref={ref}>
-      <span className="side-games-h" aria-hidden="true"><Icon name="swap" />Switch</span>
+    <div className="side-games" role="group" aria-label={t("Other games")} ref={ref}>
+      <span className="side-games-h" aria-hidden="true"><Icon name="swap" />{t("Switch")}</span>
       {list.map((g) => (
-        <button key={g.id} type="button" className={`side-g${g.running ? " running" : ""}`} title={`Switch to ${g.name}${g.id === next ? " (Ctrl+Tab)" : ""}`} aria-label={`Switch to ${g.name}`}
+        <button key={g.id} type="button" className={`side-g${g.running ? " running" : ""}`} title={g.id === next ? t("Switch to {game} (Ctrl+Tab)", { game: gameName(g) }) : t("Switch to {game}", { game: gameName(g) })} aria-label={t("Switch to {game}", { game: gameName(g) })}
           onClick={() => setGame(g.id)} onContextMenu={ctx(g)} style={{ "--g-accent": g.accent } as CSSProperties}>
           <GameBadge game={g} size={26} />
         </button>
       ))}
       {rest > 0 && (
-        <button type="button" className="side-g side-g-more" title={`${rest} more: ${others.slice(list.length).map((g) => g.short).join(", ")}`} aria-label={`${rest} more games`}
+        <button type="button" className="side-g side-g-more" title={t("{n} more: {games}", { n: rest, games: others.slice(list.length).map((g) => gameShort(g)).join(", ") })} aria-label={tn(rest, "{n} more game", "{n} more games")}
           onClick={(e) => more(e.currentTarget)}>+{rest}</button>
       )}
     </div>
@@ -159,17 +160,17 @@ const navMenu = (v: View) => {
       const g = currentGame();
       if (!g) return;
       openMenu(at, [
-        { label: "Check for updates", icon: "update", onClick: () => void checkModUpdates(g) },
-        { label: "Rescan mods", icon: "refresh", title: "Reads the Mods folder again, then checks every mod for updates on GameBanana", disabled: !g.modsDir, onClick: () => void rescan(g) },
-        { label: "Open Mods folder", icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
+        { label: t("Check for updates"), icon: "update", onClick: () => void checkModUpdates(g) },
+        { label: t("Rescan mods"), icon: "refresh", title: t("Reads the Mods folder again, then checks every mod for updates on GameBanana"), disabled: !g.modsDir, onClick: () => void rescan(g) },
+        { label: t("Open Mods folder"), icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
       ]);
       return;
     }
     void queue.get().then((s) => {
       const failed = s.items.filter((i) => i.state === "failed" && allGames().find((g) => g.id === i.req.game)?.modsDir);
       openMenu(at, [
-        { label: "Open Downloads", icon: "downloads", keys: `Ctrl+${KEY_VIEWS.indexOf("downloads") + 1}`, onClick: () => go("downloads") },
-        failed.length > 0 && { label: `Retry failed (${failed.length})`, icon: "refresh", title: "Try every failed download again",
+        { label: t("Open Downloads"), icon: "downloads", keys: `Ctrl+${KEY_VIEWS.indexOf("downloads") + 1}`, onClick: () => go("downloads") },
+        failed.length > 0 && { label: t("Retry failed ({n})", { n: failed.length }), icon: "refresh", title: t("Try every failed download again"),
           onClick: () => void Promise.all(failed.map((i) => queue.retry(i.id))).catch((err) => toast(errorText(err), true)) },
       ]);
     }).catch((err) => toast(errorText(err), true));
@@ -194,16 +195,18 @@ function Nav({ disabled }: { disabled: boolean }) {
     if (bg && bg !== "transparent" && !/,\s*0\)$/.test(bg)) nav.style.setProperty("--nv-on-bg", bg);
   });
   return (
-    <nav className="side-nav" aria-label="Views" ref={navRef}>
+    <nav className="side-nav" aria-label={t("Views")} ref={navRef}>
       {NAV.map((v) => {
         const b = badges[v];
         const label = v === "characters" ? charNoun(game?.id) : VIEW_INFO[v].label;
         const key = KEY_VIEWS.indexOf(v) + 1;
         const ring = (v === "browse" && ringBrowse) || (v === "downloads" && ringDownloads);
         const off = disabled && v !== "settings";
-        const count = v === "downloads" ? (b?.count ? downloadsTipText(dl) : "") : b?.count ? `${b.count} ${v === "library" ? "with updates" : "to look at"}` : "";
-        const tip = `${label} (Ctrl+${key})${count ? `. ${count}` : ""}`
-          + (ring ? (v === "browse" ? ". Find mods on GameBanana and install them in one click" : ". See how your downloads are going") : "");
+        const count = v === "downloads" ? (b?.count ? downloadsTipText(dl) : "") : b?.count ? (v === "library" ? t("{n} with updates", { n: b.count }) : t("{n} to look at", { n: b.count })) : "";
+        // each part is a whole sentence of its own
+        const tip = stops([t("{page} (Ctrl+{key})", { page: label, key }), count,
+          ring ? (v === "browse" ? t("Find mods on GameBanana and install them in one click") : t("See how your downloads are going")) : ""]
+          .filter(Boolean));
         // Extensions opens from Settings, so Settings stays marked there
         const on = route.view === v || (v === "settings" && route.view === "extensions" && !route.ext);
         return (
@@ -219,7 +222,7 @@ function Nav({ disabled }: { disabled: boolean }) {
         const on = route.view === "extensions" && route.ext === e.id;
         return (
           <button key={e.id} type="button" className={`nv nv-ext${on ? " on" : ""}`} aria-current={on ? "page" : undefined} disabled={disabled}
-            onClick={() => go({ view: "extensions", ext: e.id })} title={p.title === e.manifest!.name ? p.title : `${p.title}, from ${e.manifest!.name}`} data-view="extensions">
+            onClick={() => go({ view: "extensions", ext: e.id })} title={p.title === e.manifest!.name ? p.title : t("{page}, from {extension}", { page: p.title, extension: e.manifest!.name })} data-view="extensions">
             <Icon name={extIcon(p.icon)} /><span className="nv-t">{p.title}</span>
           </button>
         );
@@ -248,18 +251,18 @@ function ProfileList({ game }: { game: GameState }) {
   const ctx = (p: Profile) => (e: ReactMouseEvent) => {
     const items = withoutKeys(menuFor("profile", { game: game.id, id: p.id }));
     const fallback: MenuEntry[] = [
-      { label: p.active ? "Active" : `Switch to ${p.name}`, icon: "swap", disabled: p.active, onClick: () => void pick(p) },
-      { label: "Manage profiles", icon: "profiles", onClick: () => go("profiles") },
+      { label: p.active ? t("Active") : t("Switch to {name}", { name: p.name }), icon: "swap", disabled: p.active, onClick: () => void pick(p) },
+      { label: t("Manage profiles"), icon: "profiles", onClick: () => go("profiles") },
     ];
     e.preventDefault(); e.stopPropagation();
     openMenu({ x: e.clientX, y: e.clientY }, items.length ? items : fallback);
   };
 
   return (
-    <section className="side-prof" aria-label="Profiles">
+    <section className="side-prof" aria-label={t("Profiles")}>
       <div className="side-prof-h">
-        <span className="side-h">Profiles</span>
-        <button type="button" className="side-hk" onClick={() => go("profiles")} aria-label="Manage profiles" title="Manage profiles (Ctrl+6)"><Icon name="sliders" /></button>
+        <span className="side-h">{t("Profiles")}</span>
+        <button type="button" className="side-hk" onClick={() => go("profiles")} aria-label={t("Manage profiles")} title={t("Manage profiles (Ctrl+6)")}><Icon name="sliders" /></button>
       </div>
       <div className="side-prof-list" role="list">
         {list === null && <span className="side-prof-wait" aria-hidden="true" />}
@@ -268,7 +271,9 @@ function ProfileList({ game }: { game: GameState }) {
           <div key={p.id} role="listitem" style={{ display: "contents" }}>
             <button type="button" className={`side-p${p.active ? " on" : ""}`} aria-current={p.active ? "true" : undefined}
               style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
-              title={busy === p.id ? `Switching to ${p.name}` : p.active ? `${p.name} is on${p.hotkey ? ` (${p.hotkey} in game)` : ""}. Click to see its mods` :`Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
+              title={busy === p.id ? t("Switching to {name}", { name: p.name })
+                : p.active ? (p.hotkey ? t("{name} is on ({key} in game). Click to see its mods", { name: p.name, key: p.hotkey }) : t("{name} is on. Click to see its mods", { name: p.name }))
+                : p.hotkey ? t("Switch to {name} ({key} in game)", { name: p.name, key: p.hotkey }) : t("Switch to {name}", { name: p.name })}
               onClick={() => void pick(p)} onContextMenu={ctx(p)}>
               <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={collapsed ? 34 : 28} />
               <span className="side-p-t">{p.name}</span>
@@ -279,9 +284,9 @@ function ProfileList({ game }: { game: GameState }) {
         {list !== null && (
           <div role="listitem" style={{ display: "contents" }}>
             <button type="button" className="side-p side-p-add" onClick={create} onContextMenu={createMenu}
-              title="New profile from the mods on now. Right-click for one with no mods, or to pick its name and icon first">
+              title={t("New profile from the mods on now. Right-click for one with no mods, or to pick its name and icon first")}>
               <span className="side-p-plus"><Icon name="plus" /></span>
-              <span className="side-p-t">New profile</span>
+              <span className="side-p-t">{t("New profile")}</span>
             </button>
           </div>
         )}

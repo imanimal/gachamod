@@ -1,7 +1,9 @@
-//! Mod internals, .gachamod and IMM commands. Owner: MODTOOLS area.
+//! Mod internals, .gachamod, IMM and No Reload Mod Manager commands. Owner: MODTOOLS area.
 use crate::runner::{emit_snapshot, lk, persist};
 use crate::state::{blocking, AppState};
 use gacha_core::imm::{self, ImmInfo};
+use gacha_core::merged::{self, SplitResult};
+use gacha_core::nrmm::{self, NrmmInfo};
 use gacha_core::mesh::{self, ModMesh};
 use gacha_core::keys::{self, DrawRef, IniOutline, KeyClash, KeyEdit, KeyTarget, ModKeys, OnScreenAll, OnScreenMod};
 use gacha_core::backups::Backup;
@@ -65,6 +67,13 @@ pub async fn lint_scan(st: State<'_, AppState>, game: String) -> Result<Vec<ModP
 pub async fn lint_fix(st: State<'_, AppState>, game: String, id: String, fix: ProblemFix) -> Result<Backup> {
     let db = st.db.clone();
     blocking(move || ini::apply_fix(&db.lock().unwrap(), &game, &id, &fix)).await
+}
+
+/// Split a mod made by GIMI's merge script into separate mods; the backup undoes it (rescan after).
+#[tauri::command]
+pub async fn merged_split(st: State<'_, AppState>, game: String, id: String) -> Result<SplitResult> {
+    let db = st.db.clone();
+    blocking(move || merged::split(&db, &game, &id)).await
 }
 
 /// The fix data and fixers known for a game (Tools > Fixes).
@@ -183,6 +192,18 @@ pub async fn imm_detect(st: State<'_, AppState>) -> Result<ImmInfo> {
 pub async fn imm_takeover(st: State<'_, AppState>, game: String) -> Result<ImportResult> {
     let db = st.db.clone();
     blocking(move || imm::takeover(&db, &game)).await
+}
+
+#[tauri::command]
+pub async fn nrmm_detect(st: State<'_, AppState>) -> Result<NrmmInfo> {
+    let db = st.db.clone();
+    blocking(move || nrmm::detect(&db.lock().unwrap())).await
+}
+
+#[tauri::command]
+pub async fn nrmm_takeover(st: State<'_, AppState>, game: String) -> Result<ImportResult> {
+    let db = st.db.clone();
+    blocking(move || nrmm::takeover(&db, &game)).await
 }
 
 // ── keys: rebinding, turning keys off, "only while on screen" and clashes ──

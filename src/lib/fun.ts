@@ -2,6 +2,7 @@
 // descriptions and anything people wrote stay as written), the pull button in Browse and seasonal touches. Also
 // the Konami code (keyboard or controller), which reveals a hidden theme. Owner: SETTINGS/AI area.
 import { pref } from "./prefs";
+import { t } from "./i18n";
 
 const flag = (key: string, fallback: boolean) =>
   pref<boolean>(key, fallback, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
@@ -22,8 +23,8 @@ export const pullsSince = count("fun.pulls");
 export const PULL_PITY = 10;
 
 /** What each game calls a pull. */
-const PULL_WORD: Record<string, string> = { gi: "Wish", hsr: "Warp", zzz: "Signal Search", ww: "Convene", ef: "Headhunt", hi3: "Supply" };
-export const pullWord = (game: string | null | undefined) => PULL_WORD[game ?? ""] ?? "Pull";
+const PULL_WORD: Record<string, string> = { gi: t("Wish"), hsr: t("Warp"), zzz: t("Signal Search"), ww: t("Convene"), ef: t("Headhunt"), hi3: t("Supply") };
+export const pullWord = (game: string | null | undefined) => PULL_WORD[game ?? ""] ?? t("Pull");
 
 // ── seasonal touches (ui/Seasonal.tsx) ──
 
@@ -80,8 +81,8 @@ export function watchKonamiKeys(): () => void {
   const h = (e: KeyboardEvent) => {
     const k = map[e.key];
     if (!k || e.ctrlKey || e.altKey || e.metaKey) return;
-    const t = e.target as HTMLElement | null;
-    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+    const el = e.target as HTMLElement | null;
+    if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
     // B and A after the arrows belong to the code: they don't start a search (lib/keys.ts skips handled keys)
     if ((k === "b" || k === "a") && k === CODE[at]) e.preventDefault();
     konamiPress(k);

@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import type { ModEntry } from "../../lib/api";
 import { go } from "../../lib/store";
 import { Button, Confirm } from "../../ui/kit";
+import { t, tn } from "../../lib/i18n";
 
 interface Ask { lost: ModEntry[]; total: number; answer: (yes: boolean) => void }
 
@@ -32,17 +33,19 @@ function Host() {
   const a = useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => current);
   if (!a) return null;
   const one = a.lost.length === 1;
-  const names = a.lost.slice(0, 5).map((m) => m.name).join(", ") + (a.lost.length > 5 ? ` and ${a.lost.length - 5} more` : "");
-  const title = a.total === 1 ? `Delete ${a.lost[0]!.name}?` : `Delete ${a.total} mods?`;
+  const first = a.lost.slice(0, 5).map((m) => m.name).join(", ");
+  const names = a.lost.length > 5 ? t("{names} and {n} more", { names: first, n: a.lost.length - 5 }) : first;
+  const title = a.total === 1 ? t("Delete {mod}?", { mod: a.lost[0]!.name }) : tn(a.total, "Delete {n} mod?", "Delete {n} mods?");
   return (
-    <Confirm danger yes="Delete" title={title} onYes={() => done(true)} onClose={() => done(false)}>
+    <Confirm danger yes={t("Delete")} title={title} onYes={() => done(true)} onClose={() => done(false)}>
       <p>
-        Removed mods' files are deleted right away, and {a.total === 1 ? "this one has" : one ? `${names} has` : `${names} have`} no
-        GameBanana link to download {one ? "it" : "them"} again, so Undo can't bring {one ? "it" : "them"} back.
+        {a.total === 1 ? t("Removed mods' files are deleted right away, and this one has no GameBanana link to download it again, so Undo can't bring it back.")
+          : one ? t("Removed mods' files are deleted right away, and {names} has no GameBanana link to download it again, so Undo can't bring it back.", { names })
+          : t("Removed mods' files are deleted right away, and {names} have no GameBanana link to download them again, so Undo can't bring them back.", { names })}
       </p>
-      <Button size="sm" variant="ghost" icon="settings" title="Settings, Trash and removed mods: keep removed files for a while so Undo and Put back work"
+      <Button size="sm" variant="ghost" icon="settings" title={t("Settings, Trash and removed mods: keep removed files for a while so Undo and Put back work")}
         onClick={() => { done(false); go({ view: "settings", section: "set-trash-days" }); }}>
-        Trash settings
+        {t("Trash settings")}
       </Button>
     </Confirm>
   );

@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { characters, errorText, library, profiles, type Character, type GameId, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
+import { stops, t, tb } from "../../lib/i18n";
 import { held } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
 import { publish, summarize } from "../library/data";
@@ -100,12 +101,12 @@ async function switchNow(game: GameId, to: Profile, from: Profile | null): Promi
     return r;
   };
   const r = await go(to);
-  const parts = [`Switched to ${to.name}`, r.change.changed.length ? summarize(r.change) : "No mods needed changing"];
-  if (r.varsPending) parts.push("Mod options apply after you close the game");
-  parts.push(...sayF10(r.change.notes));
+  const parts = [t("Switched to {name}", { name: to.name }), r.change.changed.length ? summarize(r.change) : t("No mods needed changing")];
+  if (r.varsPending) parts.push(t("Mod options apply after you close the game"));
+  parts.push(...sayF10(r.change.notes).map(tb));
   if (from && from.id !== to.id) {
-    record({ label: parts.join(". "), undo: () => go(from), redo: () => go(to) });
+    record({ label: stops(parts), undo: () => go(from), redo: () => go(to) });
   } else {
-    toast(`${parts.join(". ")}.`);
+    toast(stops(parts, true));
   }
 }

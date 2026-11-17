@@ -7,6 +7,7 @@ import { library, type ArchiveEntry, type GameId, type ModEntry } from "../../li
 import { type GbCategoryRef, type GbKind, type GbSort } from "../../lib/gamebanana";
 import { closeRoute, currentRoute, go, onApp } from "../../lib/store";
 import { onPublish } from "../library/data";
+import { t } from "../../lib/i18n";
 
 // ── filters ──
 
@@ -32,30 +33,31 @@ export interface BrowseFilters {
 }
 
 export const SORTS: Array<{ value: BrowseSort; label: string; title: string }> = [
-  { value: "relevance", label: "Relevance", title: "Best match for the search first" },
-  { value: "foryou", label: "For you", title: "Mods you don't have that fit the characters and creators in your library" },
-  { value: "newest", label: "New", title: "Newest first" },
-  { value: "updated", label: "Updated", title: "Recently updated mods" },
-  { value: "week", label: "Popular this week", title: "Most liked of the mods added in the last 7 days" },
-  { value: "month", label: "Popular this month", title: "Most liked of the mods added in the last 30 days" },
-  { value: "popular", label: "Most downloaded", title: "Most downloaded of all time" },
-  { value: "likes", label: "Most liked", title: "Most liked of all time" },
-  { value: "views", label: "Most viewed", title: "Most viewed of all time" },
+  { value: "relevance", label: t("Relevance"), title: t("Best match for the search first") },
+  { value: "foryou", label: t("For you"), title: t("Mods you don't have that fit the characters and creators in your library") },
+  { value: "newest", label: t("New"), title: t("Newest first") },
+  { value: "updated", label: t("Updated"), title: t("Recently updated mods") },
+  { value: "week", label: t("Popular this week"), title: t("Most liked of the mods added in the last 7 days") },
+  { value: "month", label: t("Popular this month"), title: t("Most liked of the mods added in the last 30 days") },
+  { value: "popular", label: t("Most downloaded"), title: t("Most downloaded of all time") },
+  { value: "likes", label: t("Most liked"), title: t("Most liked of all time") },
+  { value: "views", label: t("Most viewed"), title: t("Most viewed of all time") },
 ];
-export const sortLabel = (s: BrowseSort) => SORTS.find((x) => x.value === s)?.label ?? "Most downloaded";
+export const sortLabel = (s: BrowseSort) => SORTS.find((x) => x.value === s)?.label ?? t("Most downloaded");
 
-export const KINDS: Array<{ value: GbKind; label: string; title: string }> = [
-  { value: "outfit", label: "Outfits", title: "Character outfits and model edits" },
-  { value: "texture", label: "Recolors and textures", title: "Recolors, makeup, face and texture edits" },
-  { value: "weapon", label: "Weapons", title: "Weapon models" },
-  { value: "tool", label: "Tools and fixes", title: "Shaders, effect removers, camera mods and other fixes" },
-  { value: "ui", label: "UI", title: "Menus, icons and loading screens" },
-  { value: "other", label: "Other", title: "NPCs, objects and the rest" },
+/** `en`: the English label, to match GameBanana's category names. */
+export const KINDS: Array<{ value: GbKind; en: string; label: string; title: string }> = [
+  { value: "outfit", en: "Outfits", label: t("Outfits"), title: t("Character outfits and model edits") },
+  { value: "texture", en: "Recolors and textures", label: t("Recolors and textures"), title: t("Recolors, makeup, face and texture edits") },
+  { value: "weapon", en: "Weapons", label: t("Weapons"), title: t("Weapon models") },
+  { value: "tool", en: "Tools and fixes", label: t("Tools and fixes"), title: t("Shaders, effect removers, camera mods and other fixes") },
+  { value: "ui", en: "UI", label: t("UI"), title: t("Menus, icons and loading screens") },
+  { value: "other", en: "Other", label: t("Other"), title: t("NPCs, objects and the rest") },
 ];
 /** A type's tip for one game (Other names Bangboo in Zenless Zone Zero). */
 export const kindTitle = (k: { value: GbKind; title: string }, game: GameId) =>
-  k.value === "other" && game === "zzz" ? "NPCs, Bangboo, objects and the rest" : k.title;
-export const kindLabel = (k: GbKind | null) => (k ? KINDS.find((x) => x.value === k)?.label ?? "All types" : "All types");
+  k.value === "other" && game === "zzz" ? t("NPCs, Bangboo, objects and the rest") : k.title;
+export const kindLabel = (k: GbKind | null) => (k ? KINDS.find((x) => x.value === k)?.label ?? t("All types") : t("All types"));
 
 /** What a visit starts with: newest mods first, nothing filtered. */
 export const DEFAULTS: BrowseFilters = { sort: "newest", kind: null, category: null, character: null, hq: false, hideInstalled: false, followed: false, search: "" };

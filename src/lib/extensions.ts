@@ -9,6 +9,8 @@ import { currentGame } from "./store";
 import { accountState } from "./account";
 import { applyCustomTheme, customThemesPref, setThemePick, themePick, validateCustomTheme, type CustomTheme } from "./theme";
 import { toast } from "../ui/toast";
+import { gameName } from "./games";
+import { t } from "./i18n";
 
 function store<T>(initial: T) {
   let value = initial;
@@ -113,13 +115,13 @@ async function syncThemes(id: string, on: boolean) {
   let mine: CustomTheme[] = [];
   if (on) {
     const raw = await api.themes(id).catch(() => [] as unknown[]);
-    mine = raw.map((r) => validateCustomTheme(r).theme).filter((t): t is CustomTheme => !!t)
-      .map((t, i) => ({ ...t, id: i === 0 ? `custom:${id}` : `custom:${id.slice(0, 36)}-${i + 1}`, pkg: id }));
+    mine = raw.map((r) => validateCustomTheme(r).theme).filter((th): th is CustomTheme => !!th)
+      .map((th, i) => ({ ...th, id: i === 0 ? `custom:${id}` : `custom:${id.slice(0, 36)}-${i + 1}`, pkg: id }));
   }
-  const old = before.filter((t) => t.pkg === id);
+  const old = before.filter((th) => th.pkg === id);
   if (JSON.stringify(old) === JSON.stringify(mine)) return;
-  const at = before.findIndex((t) => t.pkg === id);
-  const rest = before.filter((t) => t.pkg !== id);
+  const at = before.findIndex((th) => th.pkg === id);
+  const rest = before.filter((th) => th.pkg !== id);
   const after = at < 0 ? [...rest, ...mine] : [...rest.slice(0, at), ...mine, ...rest.slice(at)];
   await customThemesPref.set(after);
   applyCustomTheme(null);
@@ -128,7 +130,7 @@ async function syncThemes(id: string, on: boolean) {
 /** Once a session: themes of packages that are gone come out, and installed theme packages' themes are there. */
 async function syncAllThemes(list: InstalledExt[]) {
   await customThemesPref.ready;
-  const gone = new Set(customThemesPref.get().map((t) => t.pkg).filter((p): p is string => !!p && !list.some((e) => e.id === p)));
+  const gone = new Set(customThemesPref.get().map((th) => th.pkg).filter((p): p is string => !!p && !list.some((e) => e.id === p)));
   for (const id of gone) await syncThemes(id, false);
   for (const e of list) if (e.manifest?.themes.length) await syncThemes(e.id, e.enabled);
 }
@@ -146,14 +148,14 @@ async function after(id: string | null) {
 function useThemeAction(id: string) {
   const e = installed.get()?.find((x) => x.id === id);
   const game = currentGame();
-  const theme = customThemesPref.get().find((t) => t.pkg === id);
+  const theme = customThemesPref.get().find((th) => th.pkg === id);
   if (!e?.enabled || !e.manifest?.themes.length || !game || !theme || themePick(game.id) === theme.id) return undefined;
   return {
-    label: `Use for ${game.name}`,
+    label: t("Use for {game}", { game: gameName(game) }),
     run: () => {
       const before = themePick(game.id);
       setThemePick(game, theme.id);
-      record({ label: `Used the theme ${theme.name} for ${game.name}`, undo: async () => setThemePick(game, before), redo: async () => setThemePick(game, theme.id) });
+      record({ label: t("Used the theme {theme} for {game}", { theme: theme.name, game: gameName(game) }), undo: async () => setThemePick(game, before), redo: async () => setThemePick(game, theme.id) });
     },
   };
 }
@@ -177,7 +179,7 @@ function recordInstall(r: ExtInstallResult, label: string) {
       await after(id);
     },
   }, !!use);
-  if (use) toast(`${label}.`, false, use, { label: "Undo", run: () => void undo(entry) });
+  if (use) toast(t("{label}.", { label }), false, use, { label: t("Undo"), run: () => void undo(entry) });
 }
 
 export async function installListed(p: Listed): Promise<boolean> {
@@ -185,7 +187,9 @@ export async function installListed(p: Listed): Promise<boolean> {
   try {
     const r = await api.install(p.source, p);
     await after(p.id);
-    const verb = had?.manifest ? (compareVersions(p.version, had.manifest.version) > 0 ? `Updated ${p.name} to ${p.version}` : `Reinstalled ${p.name}`) : `Installed ${p.name}`;
+    const verb = had?.manifest
+      ? (compareVersions(p.version, had.manifest.version) > 0 ? t("Updated {name} to {version}", { name: p.name, version: p.version }) : t("Reinstalled {name}", { name: p.name }))
+      : t("Installed {name}", { name: p.name });
     recordInstall(r, verb);
     return true;
   } catch (e) { toast(errorText(e), true); return false; }
@@ -193,24 +197,24 @@ export async function installListed(p: Listed): Promise<boolean> {
 
 /** Install a package .zip, or a copy of a package folder (`folder`). */
 export async function installFromDisk(folder = false) {
-  const picked = folder ? await dialogs.pickFolder("Pick the package folder (the one with extension.json)")
-    : (await dialogs.pickFiles({ title: "Pick a package", extensions: ["zip"] }))?.[0];
-  if (!picked) { if (!("__TAURI_INTERNALS__" in window)) toast("Installing from a file works in the app", true); return; }
+  const picked = folder ? await dialogs.pickFolder(t("Pick the package folder (the one with extension.json)"))
+    : (await dialogs.pickFiles({ title: t("Pick a package"), extensions: ["zip"] }))?.[0];
+  if (!picked) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Installing from a file works in the app"), true); return; }
   try {
     const r = await api.installFile(picked);
     await after(r.extension.id);
-    recordInstall(r, `Installed ${extName(r.extension)}`);
+    recordInstall(r, t("Installed {name}", { name: extName(r.extension) }));
   } catch (e) { toast(errorText(e), true); }
 }
 
 /** For making a package: use a folder where it is, so edits show after a reload. */
 export async function linkFolder() {
-  const picked = await dialogs.pickFolder("Pick the folder you're making the package in");
-  if (!picked) { if (!("__TAURI_INTERNALS__" in window)) toast("Linking a folder works in the app", true); return; }
+  const picked = await dialogs.pickFolder(t("Pick the folder you're making the package in"));
+  if (!picked) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Linking a folder works in the app"), true); return; }
   try {
     const e = await api.linkFolder(picked);
     await after(e.id);
-    record({ label: `Linked ${extName(e)}`, undo: async () => { await api.remove(e.id); await after(e.id); }, redo: async () => { await api.linkFolder(picked); await after(e.id); } });
+    record({ label: t("Linked {name}", { name: extName(e) }), undo: async () => { await api.remove(e.id); await after(e.id); }, redo: async () => { await api.linkFolder(picked); await after(e.id); } });
   } catch (err) { toast(errorText(err), true); }
 }
 
@@ -219,7 +223,7 @@ export async function removeExtension(e: InstalledExt) {
     let key = await api.remove(e.id);
     await after(e.id);
     record({
-      label: e.linked ? `Unlinked ${extName(e)}` : `Removed ${extName(e)}`,
+      label: e.linked ? t("Unlinked {name}", { name: extName(e) }) : t("Removed {name}", { name: extName(e) }),
       undo: async () => {
         if (key) key = (await api.restore(key)).replaced ?? null;
         else await api.linkFolder(e.dir);
@@ -235,7 +239,7 @@ export async function setExtensionEnabled(e: InstalledExt, on: boolean) {
   const set = async (v: boolean) => { await api.setEnabled(e.id, v); await after(e.id); };
   try {
     await set(on);
-    record({ label: `${on ? "Turned on" : "Turned off"} ${extName(e)}`, undo: () => set(!on), redo: () => set(on) });
+    record({ label: on ? t("Turned on {name}", { name: extName(e) }) : t("Turned off {name}", { name: extName(e) }), undo: () => set(!on), redo: () => set(on) });
   } catch (err) { toast(errorText(err), true); }
 }
 
@@ -247,31 +251,32 @@ export function submitUrl(repos: ExtRepo[] | null): string {
 }
 
 function shared(p: Packed, repos: ExtRepo[] | null) {
-  toast(`Saved ${p.name} ${p.version}. Attach the zip on the page that just opened`, false, { label: "Show file", run: () => { void shell.revealPath(p.path); } });
+  toast(t("Saved {name} {version}. Attach the zip on the page that just opened", { name: p.name, version: p.version }), false, { label: t("Show file"), run: () => { void shell.revealPath(p.path); } });
   void shell.openUrl(submitUrl(repos)).catch(() => {});
 }
 
 /** Zip a package folder for the repo and open the page to send it in. */
 export async function sharePackage(repos: ExtRepo[] | null) {
-  const folder = await dialogs.pickFolder("Pick the package folder (the one with extension.json)");
-  if (!folder) { if (!("__TAURI_INTERNALS__" in window)) toast("Making a package works in the app", true); return; }
+  const folder = await dialogs.pickFolder(t("Pick the package folder (the one with extension.json)"));
+  if (!folder) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Making a package works in the app"), true); return; }
   const name = folder.split(/[\\/]/).filter(Boolean).pop() ?? "package";
-  const out = await dialogs.saveFile({ title: "Save the package", defaultPath: `${name}.zip`, extensions: ["zip"] });
+  const out = await dialogs.saveFile({ title: t("Save the package"), defaultPath: `${name}.zip`, extensions: ["zip"] });
   if (!out) return;
   try { shared(await api.packFolder(folder, out), repos); } catch (e) { toast(errorText(e), true); }
 }
 
 /** Package one custom theme for the repo and open the page to send it in. The author is the GameBanana name when
  *  signed in (or the name an older version kept for its player card). */
-export async function shareTheme(t: CustomTheme) {
-  const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "theme";
+export async function shareTheme(ct: CustomTheme) {
+  const slug = ct.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "theme";
   const id = slug.length < 2 ? `${slug}-theme` : slug;
-  const out = await dialogs.saveFile({ title: "Save the theme package", defaultPath: `${id}.zip`, extensions: ["zip"] });
-  if (!out) { if (!("__TAURI_INTERNALS__" in window)) toast("Saving a package works in the app", true); return; }
+  const out = await dialogs.saveFile({ title: t("Save the theme package"), defaultPath: `${id}.zip`, extensions: ["zip"] });
+  if (!out) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Saving a package works in the app"), true); return; }
   const player = await settings.getJson<{ name?: string }>("player", {});
   const author = accountState().user?.name || player.name?.trim() || "Anonymous";
-  const theme = { name: t.name, base: t.base, scheme: t.scheme, tokens: t.tokens, layout: t.layout, ...(t.css ? { css: t.css } : {}) };
-  try { shared(await api.packTheme(theme, { id, name: t.name, author, description: `A ${t.scheme === "light" ? "light" : "dark"} theme on top of ${t.base === "default" ? "Default" : t.base}.` }, out), repoStore.get().repos); }
+  const theme = { name: ct.name, base: ct.base, scheme: ct.scheme, tokens: ct.tokens, layout: ct.layout, ...(ct.css ? { css: ct.css } : {}) };
+  // the package's description is published in the repo's list, so it stays English
+  try { shared(await api.packTheme(theme, { id, name: ct.name, author, description: `A ${ct.scheme === "light" ? "light" : "dark"} theme on top of ${ct.base === "default" ? "Default" : ct.base}.` }, out), repoStore.get().repos); }
   catch (e) { toast(errorText(e), true); }
 }
 

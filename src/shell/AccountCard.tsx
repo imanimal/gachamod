@@ -6,6 +6,7 @@ import { importFollowing, signIn, signOut, useAccount } from "../lib/account";
 import { go, useGame } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { openMenu, type MenuEntry } from "../ui/ContextMenu";
+import { t } from "../lib/i18n";
 
 const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
 const beside = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.right + 6, y: r.top }; };
@@ -16,20 +17,20 @@ function useAccountCard() {
   const menu = (): MenuEntry[] => u
     ? [
         { header: u.name },
-        { label: "Your GameBanana page", icon: "user", title: "Your mods and uploads, in Browse", onClick: () => go({ view: "browse", user: u.id }) },
-        { label: "Follow who you follow there", icon: "feed", title: "Follows here everyone you follow on GameBanana", onClick: () => void importFollowing() },
+        { label: t("Your GameBanana page"), icon: "user", title: t("Your mods and uploads, in Browse"), onClick: () => go({ view: "browse", user: u.id }) },
+        { label: t("Follow who you follow there"), icon: "feed", title: t("Follows here everyone you follow on GameBanana"), onClick: () => void importFollowing() },
         "-",
-        { label: "Sign out", icon: "power", title: "Forgets the session on this PC. Your follows in gachamod stay", onClick: () => void signOut() },
+        { label: t("Sign out"), icon: "power", title: t("Forgets the session on this PC. Your follows in gachamod stay"), onClick: () => void signOut() },
       ]
-    : [{ label: "Sign in to GameBanana", icon: "user", onClick: () => void signIn() }];
+    : [{ label: t("Sign in to GameBanana"), icon: "user", onClick: () => void signIn() }];
   const click = (e: ReactMouseEvent<HTMLElement>, side: boolean) => {
     if (!u) { void signIn(); return; }
     openMenu(side ? beside(e.currentTarget) : below(e.currentTarget), menu());
   };
   const ctx = (e: ReactMouseEvent) => { e.preventDefault(); e.stopPropagation(); openMenu({ x: e.clientX, y: e.clientY }, menu()); };
-  const tip = u ? `Signed in to GameBanana as ${u.name}. Click for more`
-    : acc.signing ? "GameBanana's sign-in page is open. Click to bring it back"
-    : "Sign in to GameBanana to follow creators and like mods from here";
+  const tip = u ? t("Signed in to GameBanana as {name}. Click for more", { name: u.name })
+    : acc.signing ? t("GameBanana's sign-in page is open. Click to bring it back")
+    : t("Sign in to GameBanana to follow creators and like mods from here");
   return { acc, u, click, ctx, tip };
 }
 
@@ -47,7 +48,7 @@ export function AccountCard() {
       <span className="player-banner" aria-hidden="true" />
       <span className="player-av"><Picture src={u?.avatar} /></span>
       <span className="player-text">
-        <span className="player-name">{u ? u.name : acc.signing ? "Signing in" : "Sign in"}</span>
+        <span className="player-name">{u ? u.name : acc.signing ? t("Signing in") : t("Sign in")}</span>
         <span className="player-title">{acc.signing && <span className="spin" aria-hidden="true" />}GameBanana</span>
       </span>
     </button>
@@ -58,7 +59,7 @@ export function AccountCard() {
 export function MiniAccount() {
   const { u, click, ctx, tip } = useAccountCard();
   return (
-    <button type="button" className="side-me" title={tip} aria-label={u ? `GameBanana: ${u.name}` : "Sign in to GameBanana"}
+    <button type="button" className="side-me" title={tip} aria-label={u ? t("GameBanana: {name}", { name: u.name }) : t("Sign in to GameBanana")}
       onClick={(e) => click(e, true)} onContextMenu={ctx}>
       <Picture src={u?.avatar} />
     </button>

@@ -83,10 +83,13 @@ impl Db {
     }
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         self.conn.execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value", params![key, value])?;
+        // watching Mods folders turned on or off, wherever it was written (Settings, an import, its undo)
+        if key == crate::watch::SETTING { crate::watch::resync(); }
         Ok(())
     }
     pub fn clear_setting(&self, key: &str) -> Result<()> {
         self.conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        if key == crate::watch::SETTING { crate::watch::resync(); }
         Ok(())
     }
     /// A JSON setting, or `None` when missing or unreadable.

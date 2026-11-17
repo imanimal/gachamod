@@ -11,11 +11,12 @@ import type { GameId } from "./api";
 import { call } from "./tauri";
 import { emitApp } from "./store";
 import { pref } from "./prefs";
+import { t } from "./i18n";
 
 export type AiShow = "off" | "useful" | "all";
 export const aiShowPref = pref<AiShow>("ai.show", "useful", (r) => (r === "off" || r === "useful" || r === "all" ? r : undefined), (v) => v);
 export const useAiShow = () => aiShowPref.use();
-export const AI_SHOW_LABEL: Record<AiShow, string> = { off: "Off", useful: "Most useful", all: "Everything" };
+export const AI_SHOW_LABEL: Record<AiShow, string> = { off: t("Off"), useful: t("Most useful"), all: t("Everything") };
 
 /** Whether an AI entry point shows. "useful" ones (fix my keys, rename these mods) show unless AI is off; "extra"
  *  ones (write a description, suggest tags) only when the user picked "all". */
@@ -37,7 +38,7 @@ const ADULT_WORDS = /(^|[^a-z])(nsfw|r-?18|18\+|nude|nudity|naked|lewd|hentai|po
  *  Always false when the user turned hiding off. */
 export function hideFromAi(m: { name: string; folder?: string | null; tags?: string[]; nsfw?: boolean }): boolean {
   if (!aiHideAdultPref.get()) return false;
-  return !!m.nsfw || ADULT_WORDS.test(m.name) || ADULT_WORDS.test(m.folder ?? "") || (m.tags ?? []).some((t) => ADULT_WORDS.test(t));
+  return !!m.nsfw || ADULT_WORDS.test(m.name) || ADULT_WORDS.test(m.folder ?? "") || (m.tags ?? []).some((tag) => ADULT_WORDS.test(tag));
 }
 
 /** Explicit words inside ini file and section names ("BelleNudeBody"), matched anywhere since names run together. */
@@ -48,7 +49,9 @@ export const neutralName = (s: string) => (aiHideAdultPref.get() ? s.replace(ADU
 /** Why a request can't be made when every mod in it stays out of prompts. Names the setting, so lib/places.ts adds
  *  its button. */
 export const nothingToSendNote = (n: number) =>
-  `Nothing to send: "Hide adult mods from the chatbot" keeps ${n === 1 ? "this mod" : "these mods"} out of prompts.`;
+  n === 1
+    ? t("Nothing to send: \"Hide adult mods from the chatbot\" keeps this mod out of prompts.")
+    : t("Nothing to send: \"Hide adult mods from the chatbot\" keeps these mods out of prompts.");
 
 /** "done" once the first-run suggestion was answered or dismissed. */
 export const aiIntroPref = pref<string>("ai.intro", "", (r) => r, (v) => v);
@@ -68,16 +71,16 @@ export const CHATBOTS: Chatbot[] = [
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/app" },
   { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/" },
   { id: "grok", name: "Grok", url: "https://grok.com/", prefill: (q) => `https://grok.com/?q=${encodeURIComponent(q)}` },
-  { id: "other", name: "Another one", url: "" },
+  { id: "other", name: t("Another one"), url: "" },
 ];
 export const chatbotOf = (id: ChatbotId | "" | null | undefined): Chatbot | undefined => CHATBOTS.find((c) => c.id === id);
 
 /** A chatbot's hover tip: where it opens and whether the prompt is typed in for you. */
 export function chatbotTip(bot: Chatbot, installed: boolean): string {
-  if (bot.id === "other") return "Any other chatbot. The prompt is copied for you to paste";
+  if (bot.id === "other") return t("Any other chatbot. The prompt is copied for you to paste");
   const site = new URL(bot.url).host;
-  const how = bot.prefill ? `Opens ${site} with the prompt typed in` : `Opens ${site} and copies the prompt for you to paste`;
-  return installed ? `${how}. The helper uses the website, not the app on this PC` : how;
+  const how = bot.prefill ? t("Opens {site} with the prompt typed in", { site }) : t("Opens {site} and copies the prompt for you to paste", { site });
+  return installed ? t("{how}. The helper uses the website, not the app on this PC", { how }) : how;
 }
 
 /** Links longer than this don't carry the prompt (browsers and sites cut them); the user pastes it instead. */

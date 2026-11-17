@@ -8,6 +8,7 @@ import { library, settings, type GameId, type ModEntry } from "../../lib/api";
 import { record } from "../../lib/history";
 import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { liveCharacterOf } from "../ingame/data";
+import { t, tn } from "../../lib/i18n";
 
 /** The user's answer. `turnOffOthers` goes to library.setEnabled; `parent` makes the mod a sub-mod of that one. */
 export interface OnChoice { turnOffOthers?: boolean; parent?: string }
@@ -45,8 +46,8 @@ async function stopAsking(game: GameId, rule: "auto" | "0") {
   await settings.set(key, rule).catch(() => {});
   record({
     label: rule === "auto"
-      ? "Turning on a mod turns off the other ones of its character without asking now. Settings changes it back"
-      : "Mods of one character turn on together without asking now. Settings changes it back",
+      ? t("Turning on a mod turns off the other ones of its character without asking now. Settings changes it back")
+      : t("Mods of one character turn on together without asking now. Settings changes it back"),
     undo: async () => { await settings.set(key, before ?? "ask"); },
     redo: async () => { await settings.set(key, rule); },
   });
@@ -79,7 +80,7 @@ export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all:
   const many = going.length > 1;
   const whoOf = (m: ModEntry) => m.character ?? all.find((x) => x.id === m.parent)?.character ?? "";
   const names = [...new Set(going.map(whoOf).filter(Boolean))];
-  const who = names.length === 1 ? names[0]! : "their characters";
+  const who = names.length === 1 ? names[0]! : null;
   const one = others.length === 1 ? others[0]! : null;
   const hasSubs = all.some((m) => m.parent === mod.id);
   const anchor = (at && at !== document.body && shown(at) ? at : null)
@@ -89,21 +90,24 @@ export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all:
     let done = false;
     const pick = (c: OnChoice | null) => { if (!done) { done = true; resolve(c); } };
     const items: MenuEntry[] = [
-      { header: one ? `Another ${who} mod is on` : `${others.length} other ${who} mods are on` },
-      { label: one ? `Turn off ${one.name}` : `Turn off the other ${others.length}`, icon: "power",
-        title: many ? `Only the ${going.length} you picked stay on for ${who}` : `Only ${mod.name} stays on for ${who}`, onClick: () => pick({ turnOffOthers: true }) },
-      { label: one ? "Keep both on" : "Keep them all on", icon: "layers",
-        title: "For mods that go together, like a hair recolour and an outfit. Shift+click on a switch does this without asking. If they change the same parts, the Conflict tag shows which one wins",
+      { header: who === null ? tn(others.length, "{n} other mod of their characters is on", "{n} other mods of their characters are on")
+        : one ? t("Another {name} mod is on", { name: who }) : tn(others.length, "{n} other {name} mod is on", "{n} other {name} mods are on", { name: who }) },
+      { label: one ? t("Turn off {mod}", { mod: one.name }) : t("Turn off the other {n}", { n: others.length }), icon: "power",
+        title: who === null ? (many ? t("Only the {n} you picked stay on for their characters", { n: going.length }) : t("Only {mod} stays on for its character", { mod: mod.name }))
+          : many ? t("Only the {n} you picked stay on for {name}", { n: going.length, name: who }) : t("Only {mod} stays on for {name}", { mod: mod.name, name: who }),
+        onClick: () => pick({ turnOffOthers: true }) },
+      { label: one ? t("Keep both on") : t("Keep them all on"), icon: "layers",
+        title: t("For mods that go together, like a hair recolour and an outfit. Shift+click on a switch does this without asking. If they change the same parts, the Conflict tag shows which one wins"),
         onClick: () => pick({ turnOffOthers: false }) },
-      one && !many && !hasSubs && { label: `Make it a sub-mod of ${one.name}`, icon: "link",
-        title: `For an add-on that goes with ${one.name}. It turns off with ${one.name}, comes back with it, and this question won't come up for the two again`,
+      one && !many && !hasSubs && { label: t("Make it a sub-mod of {mod}", { mod: one.name }), icon: "link",
+        title: t("For an add-on that goes with {mod}. It turns off with {mod}, comes back with it, and this question won't come up for the two again", { mod: one.name }),
         onClick: () => pick({ turnOffOthers: false, parent: rootOf(one) }) },
       "-",
-      { label: one ? "Turn off the other and don't ask again" : "Turn off the others and don't ask again", icon: "check",
-        title: "From now on turning on a mod turns off the character's other mods that change the same parts, without this question. Settings has it as Another skin already on",
+      { label: one ? t("Turn off the other and don't ask again") : t("Turn off the others and don't ask again"), icon: "check",
+        title: t("From now on turning on a mod turns off the character's other mods that change the same parts, without this question. Settings has it as Another skin already on"),
         onClick: () => { void stopAsking(game, "auto"); pick({ turnOffOthers: true }); } },
-      { label: one ? "Keep both on and don't ask again" : "Keep them all on and don't ask again", icon: "check",
-        title: "From now on a mod turns on next to the others of its character without this question. Settings has it as Another skin already on",
+      { label: one ? t("Keep both on and don't ask again") : t("Keep them all on and don't ask again"), icon: "check",
+        title: t("From now on a mod turns on next to the others of its character without this question. Settings has it as Another skin already on"),
         onClick: () => { void stopAsking(game, "0"); pick({ turnOffOthers: false }); } },
     ];
     // the menu closes before a picked item runs: wait a tick so the pick wins

@@ -5,6 +5,7 @@
 // removed (the trash) for days, so a removal can be put back after a restart too.
 import { useEffect, useState } from "react";
 import { retoast, toast } from "../ui/toast";
+import { t, tb } from "./i18n";
 
 export interface Op {
   /** Past tense, sentence case: "Turned off 3 mods". */
@@ -25,8 +26,8 @@ let running = false;
 const changed = () => subs.forEach((f) => f());
 
 function errText(e: unknown): string {
-  if (e && typeof e === "object" && "message" in e) return String((e as { message: unknown }).message);
-  return String(e);
+  if (e && typeof e === "object" && "message" in e) return tb(String((e as { message: unknown }).message));
+  return tb(String(e));
 }
 
 /** Record a finished operation and offer Undo. */
@@ -48,25 +49,25 @@ export function record(op: Omit<Op, "at">, quiet = false): Entry {
 const toastOf = new Map<number, number>();
 function show(e: Entry, text: string, label: "Undo" | "Redo", toastId?: number) {
   let id = toastId ?? toastOf.get(e.id) ?? 0;
-  const action = { label, run: () => void (label === "Undo" ? undo(e, id) : redo(e, id)) };
+  const action = { label: label === "Undo" ? t("Undo") : t("Redo"), run: () => void (label === "Undo" ? undo(e, id) : redo(e, id)) };
   if (!id || !retoast(id, text, action)) id = toast(text, false, action);
   toastOf.set(e.id, id);
 }
-function offerUndo(e: Entry, toastId?: number) { show(e, `${e.label}.`, "Undo", toastId); }
+function offerUndo(e: Entry, toastId?: number) { show(e, t("{label}.", { label: e.label }), "Undo", toastId); }
 // "Turned off 3 mods" reads "Undone: turned off 3 mods", but a label that opens with a name ("Beach Walk Camellya: Kept
 // ...") keeps its capitals: only a plain first word followed by a lowercase word is lowered.
 function lowerFirst(label: string): string {
   const [first = "", second = ""] = label.split(" ");
-  if (!/^[A-Z][a-z]+$/.test(first) || /^[A-Z]/.test(second)) return label;
+  if (!/^\p{Lu}\p{Ll}+$/u.test(first) || /^\p{Lu}/u.test(second)) return label;
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
-function offerRedo(e: Entry, toastId?: number) { show(e, `Undone: ${lowerFirst(e.label)}.`, "Redo", toastId); }
+function offerRedo(e: Entry, toastId?: number) { show(e, t("Undone: {label}.", { label: lowerFirst(e.label) }), "Redo", toastId); }
 
 /** Undo the newest operation, or the one given (it must be the newest still done). */
 export async function undo(target?: Entry, toastId?: number): Promise<boolean> {
   if (running) return false;
   const e = target ?? past[past.length - 1];
-  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast("Nothing to undo. You haven't broken anything yet"); return false; }
+  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast(t("Nothing to undo. You haven't broken anything yet")); return false; }
   // undoing an older one first undoes what came after it, so the inverse runs on the state it expects
   while (past.length && past[past.length - 1] !== e) { const later = past[past.length - 1]; if (!(await undoOne(later))) return false; }
   const ok = await undoOne(e);
@@ -81,14 +82,14 @@ async function undoOne(e: Entry): Promise<boolean> {
     e.state = "undone";
     future.push(e);
     return true;
-  } catch (err) { toast(`Couldn't undo. ${errText(err)}`, true); return false; }
+  } catch (err) { toast(t("Couldn't undo. {error}", { error: errText(err) }), true); return false; }
   finally { running = false; changed(); }
 }
 
 export async function redo(target?: Entry, toastId?: number): Promise<boolean> {
   if (running) return false;
   const e = target ?? future[future.length - 1];
-  if (!e || e.state !== "undone" || !future.includes(e)) { if (!target) toast("Nothing to redo"); return false; }
+  if (!e || e.state !== "undone" || !future.includes(e)) { if (!target) toast(t("Nothing to redo")); return false; }
   while (future.length && future[future.length - 1] !== e) { const later = future[future.length - 1]; if (!(await redoOne(later))) return false; }
   const ok = await redoOne(e);
   if (ok) offerUndo(e, toastId);
@@ -102,7 +103,7 @@ async function redoOne(e: Entry): Promise<boolean> {
     e.state = "done";
     past.push(e);
     return true;
-  } catch (err) { toast(`Couldn't redo. ${errText(err)}`, true); return false; }
+  } catch (err) { toast(t("Couldn't redo. {error}", { error: errText(err) }), true); return false; }
   finally { running = false; changed(); }
 }
 
@@ -121,8 +122,8 @@ export function useHistory(): { entries: Entry[]; canUndo: boolean; canRedo: boo
 export function installUndoKeys(): () => void {
   const h = (ev: KeyboardEvent) => {
     if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
-    const t = ev.target as HTMLElement | null;
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) && (t as HTMLInputElement).type !== "checkbox") return;
+    const el = ev.target as HTMLElement | null;
+    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) && (el as HTMLInputElement).type !== "checkbox") return;
     const k = ev.key.toLowerCase();
     if (k === "z" && !ev.shiftKey) { ev.preventDefault(); void undo(); }
     else if (k === "y" || (k === "z" && ev.shiftKey)) { ev.preventDefault(); void redo(); }

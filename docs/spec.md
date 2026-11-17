@@ -43,8 +43,8 @@ The code is split into six areas. Each owns the files below.
 
 | Area | Rust (crates/gacha-core/src) | Tauri (src-tauri/src) | UI (src) |
 |---|---|---|---|
-| LIBRARY | library.rs, profiles.rs | commands/library.rs, commands/profiles.rs | lib/api/library.ts, lib/demo/library.ts, screens/library/*, screens/characters/*, screens/profiles/* |
-| MODTOOLS | ini.rs, pack.rs, imm.rs | commands/modtools.rs | lib/api/modtools.ts, lib/demo/modtools.ts, screens/modtools/* |
+| LIBRARY | library.rs, profiles.rs, watch.rs | commands/library.rs, commands/profiles.rs | lib/api/library.ts, lib/demo/library.ts, screens/library/*, screens/characters/*, screens/profiles/* |
+| MODTOOLS | ini.rs, pack.rs, imm.rs, nrmm.rs, merged.rs, migrate.rs | commands/modtools.rs, commands/migrate.rs | lib/api/modtools.ts, lib/demo/modtools.ts, lib/api/migrate.ts, lib/demo/migrate.ts, screens/modtools/* |
 | ONLINE | install.rs, queue.rs | commands/online.rs, runner.rs | lib/api/online.ts, lib/demo/online.ts, lib/gamebanana.ts, screens/browse/*, screens/downloads/* |
 | SYSTEM | games.rs, xxmi.rs, launch.rs, devtools.rs, platform.rs | commands/system.rs | lib/api/system.ts, lib/demo/system.ts, screens/home/*, screens/tools/*, screens/settings/* |
 | THEME | none | none | styles/** (fonts, base, kit, shell, themes), lib/theme.ts, ui/GameBadge.tsx markup, public/ assets for themes |
@@ -115,7 +115,9 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
 ### Finding mods (library::scan, install::find_roots)
 
 Walk the tree from the root (Mods, or a staging folder). Skip `desktop.ini`, `.git`, `ShaderFixes`, `ShaderCache`,
-and folders gachamod or IMM manage for themselves only as noted below.
+other tools' own folders at any depth (SkinSelectImpact's `AdditionalFiles_SSI`, Fairy's Secret Folder's
+`zzzzzz_ZZZModManagerUI` and `000_ZzzManager_UI`, Hestia's `⬢HESTIA` details folder), and folders gachamod or IMM
+manage for themselves only as noted below.
 1. A folder with `.gachamod.json` is a mod. Stop there.
 2. A folder that directly holds at least one `*.ini` file (not `desktop.ini`) is a mod. Stop there. (A mod may hold
    sub-mods; they belong to it.)
@@ -128,6 +130,12 @@ At the Mods root, IMM's own folders "DISABLED - ALL MODS ARE STORED HERE (Manage
 (Managed by IMM)" are groups (their mods count; MODTOOLS offers to move them out). A mod's `group` is its parent
 folder relative to Mods (None at the top level). A group's name that matches a character makes that the mod's
 character when the sidecar has none.
+
+No Reload Mod Manager's `_MANAGED_` folder and its `group_<N>` folders hold its own inis beside the mods, so they
+are groups, never mods (nrmm.rs). A mod in a group that NRMM gated (`global $managed_slot_id = k`) is on only when
+`$\modmanageragl\group_<N>\active_slot` in d3dx_user.ini is k; gachamod won't turn those on or off ("No Reload Mod
+Manager picks which mod of this group shows ...", with the move offered). Hestia turns a mod off by moving its files
+into `DISABLED_BY_HESTIA` inside the mod's folder: that folder is the mod, off, and turning it on moves them back up.
 
 Installs (install::place) first move files that have a fixed place: anything in a `ShaderFixes` folder goes to the
 importer's ShaderFixes, anything in a `BufferValues` folder to `Mods/BufferValues` (LeoTools' FixDash.ini), and with
@@ -151,14 +159,40 @@ folders first, so only the one picked comes on.
 Folders another manager set up come in with what it knew (managers.rs). A new folder is adopted with that manager's
 name, character, GameBanana link, author, version, tags, notes, picture, favourite and NSFW flags; a known mod only
 gets the gaps filled (Characters view: "Bring them in", with Undo). Files read, never changed:
-- JASM: `.JASM_ModConfig.json` and `.JASM_Cover.<ext>` (`Mods/<category>/<character>/<mod>`).
-- XX Mod Manager and FlairX: `mod.json` (FlairX keeps previews as `preview001.jpg`).
-- EMMM: `info.json` and `preview_custom.<ext>`.
+- JASM and JASM+: `.JASM_ModConfig.json` and `.JASM_Cover.<ext>` (`Mods/<category>/<character>/<mod>`), including
+  the date added, the skin it replaces, and JASM+ variants and add-ons (read, not yet turned into parts).
+- SkinSelectImpact: `SSI.txt` (link and notes), older `SkinSelectImpact.txt` and `Url.txt`, `preview.png`; the
+  character is the folder in `Mods/SkinSelectImpact/<Character>/<mod>`.
+- `mod.json`, told apart by its keys: XX Mod Manager, FlairX (previews as `preview001.jpg`), ZZZ Mod Manager
+  (`imagePath`, `keyswap`) and WuWa Mod Manager (`category` is the character, picture `thumbnail.png`). Placeholders
+  like "Unknown" and "no description" are skipped.
+- Peaky Mod Manager: `modinfo.json` (title, source, coverImage, character; other mod types become a tag).
+- Hestia: `⬢HESTIA/metadata.json` and `⬢HESTIA/Personal Note.txt`; a mod it turned off has its files in
+  `<mod>/DISABLED_BY_HESTIA`.
+- EMMM: `info.json` and `preview_custom.<ext>` (pinned counts as favourite, `is_safe: false` as NSFW).
+- d3dxSkinManage-Plus: `.d3dxmeta/info.json` and its `previews` folder (age rating R or X is NSFW).
 - Fairy's Secret Folder: `.zmm-meta.json`, and `category.json` in the `<Character> - <Skin>` folder above.
-- No Reload Mod Manager: `modname` and the group folder's `groupname` (`Mods/_MANAGED_/group_3/<mod>`).
+- No Reload Mod Manager: `modname`, `modlink`, `icon.png`, `fav` and the group folder's `groupname`
+  (`Mods/_MANAGED_/group_3/<mod>`).
 - WZMM `modmeta.json`, GIMM `GIMM.json(c)`.
+A name that is a link becomes the mod's page. uyujkk's Integrated Mod Manager and HoyoModManagerGo keep nothing per
+mod (their details are in their own databases).
 
 ## Library (LIBRARY)
+
+Mods layouts (layout pref "format" in `gm.layout`, `lib/theme.ts` `ModsFormat`; picked in Settings, Appearance,
+Mods layout, on the setup page and on a first-start card, `screens/settings/FormatPicker.tsx`). Custom themes can't
+set it. Every layout has the same features, keys and controller moves:
+- Cards ("cards", default): the chip row over the grid, details in a drawer. Closest to SkinSelectImpact.
+- Character list ("chars"): the same chips as a list down the left (with "All mods"), the mods beside it; a character's
+  page puts its strip of the others there. Like JASM and ARG Mod Manager.
+- Three panes ("panes"): the list, the mods, and the details docked on the right (kit `Drawer docked`), with a hint
+  while no mod is picked. Picking another mod replaces the route instead of pushing one. Like Integrated Mod Manager
+  and XX Mod Manager.
+- Compact list ("rows"): every grid as dense rows, switch first, name, character and size in columns. The grid/list
+  switch on Mods hides (the per-game choice is kept).
+The first start picks the layout resembling a manager found on this PC (Integrated Mod Manager's folders: Three panes;
+JASM's files: Character list; XX Mod Manager's: Three panes) unless one was picked already, and says so.
 
 Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
 - scan: walk, adopt, upsert the `mods` table (data = ModEntry JSON), delete rows whose folders are gone, fill
@@ -166,6 +200,17 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
   returns defaults until then; compute conflicts by counting other enabled mods sharing any hash from quick_facts).
   Emits nothing itself (commands return the list). Must handle 1,000+ mods in under 2 seconds on an SSD: don't hash
   files, read inis only through quick_facts.
+- watch.rs watches each set-up, shown game's Mods folder (notify, ReadDirectoryChangesW; recursive) and the folder
+  above it (not recursive, so the Mods folder deleted and made again gets its watch back; the folder going away
+  starts no scan, so its rows stay). A burst of changes settles
+  per game into one scan: 700 ms after the last change, at most 4 s after the first. The scan is `library::scan`, the
+  one Rescan runs, and `library-changed {game}` goes out only when the list differs. Ignored: paths the scan never
+  reads (dot files such as sidecars, `gachamod live`, shader caches, d3dx_user.ini, logs, temp files) and a folder's
+  own "modified" (its child's change comes as its own event). Installs, pack imports, IMM moves, toggles, moves,
+  removes and scans `watch::hold` their game; a settled change waits until they let go. Scans write only what changed,
+  so the scan after one finds nothing; a writer that answers every scan is ignored after two rounds. A folder that
+  can't be watched is logged once and tried again on `watch::resync`, which runs when a game's folders, its shown
+  flag or the setting "library.watch" ("0" is off) change.
 - set_enabled: rename `X` to `DISABLED X` and back; if the target name exists, add " (2)". Move the saved variables
   (ini::move_user_vars) so turning a mod off and on keeps its options. One skin per character: when turning on a mod
   with a character, turn off the other enabled mods with the same character and say so in `notes` ("Turned off Coca
@@ -174,7 +219,7 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
 - Asking (UI, `screens/library/overlap.ts`): turning one mod on from its switch, its details or its menu while its
   character has another mod on opens a small menu by the switch: "Turn off Coca Cola", "Keep both on", "Make it a
   sub-mod of Coca Cola". Closing it leaves the mod off. `"<game>.oneSkin"` "auto" turns the other off without asking,
-  "0" keeps both; "ask" (default, and the old "1") asks. Settings, Mods and downloads: "Another skin already on" per game. Bulk
+  "0" keeps both; "ask" (default, and the old "1") asks. Settings, Mods: "Another skin already on" per game. Bulk
   turn-ons, profiles and hotkeys don't ask (the last one of each character wins, as before).
 - Sub-mods: `Sidecar.parent` (an id; `ModEntry.parent`) marks an add-on that goes with another mod (a hair recolour
   for one outfit). Set through update_meta `parent` ("" unlinks); a sub-mod's parent stands in when picked as a parent,
@@ -213,7 +258,7 @@ UI:
   and ignores its conflicts on both sides until "Show problems again"; "Wait for an update" hides the game update
   warning until the mod's file, version or install time changes, and its card says "Waiting for update". Tools >
   Fixes lists both under Muted, and its "Turn off and mute" waits for an update. "Rescan" button and an automatic scan when the screen opens if the
-  last scan is over 30 seconds old. Empty state explains where mods come from (Browse, or drop an archive).
+  last scan is over 30 seconds old; while Mods folders are watched, only the session's first visit scans. Empty state explains where mods come from (Browse, or drop an archive).
 - Mod drawer (`Drawer` from the kit) on card click: big preview, name (editable inline), character picker (combobox
   over characters), tags, notes, source link, version, size, folder path with Open, then `<ModInsides mod={mod} />`
   from `screens/modtools/ModInsides.tsx` (MODTOOLS fills it), then Remove. Opens directly for `route.modId`.
@@ -374,15 +419,33 @@ Rust `ini.rs`:
   - "warn" (Warning): a file that a used `[Resource]` needs is missing (authors often leave lines for textures they
     didn't ship and the mod still shows fine, so it doesn't count on Tools), a missing file named like a remap
     (`*RemapBlend.buf`, made by remap fix scripts for another model such as the Raiden boss), or
-    `run = CommandListX` with no such section in the mod.
+    `run = CommandListX` with no such section in the mod, a namespace the mod uses that nothing installed defines
+    (`run = CommandList\RabbitFX\Run` with no RabbitFX in Core or Mods: "missing_library"), and a `[ShaderRegex*]`
+    with no `.pattern` section that runs CheckTextureOverride itself or in a command list it runs ("global_trigger",
+    an FPS cost in every scene; XXMI Launcher asks about these on start).
+  - "bad" also: an ini whose `namespace` is one the loader already loads from `Core\<importer>\Libraries`
+    (ORFix, RabbitFX, SlotFix): "duplicate_library", fixed by "off".
   - "info" (Note): a missing file whose `[Resource]` nothing names (3DMigoto loads a resource's file the first time
     a command uses it, so it never loads), an empty ini next to inis that load, an ini over 16 MB gachamod didn't
     read, a `[Key]` with no key line.
   A problem carries a fix when one is certain: "point" (the same file name is elsewhere in the mod: the one whose
   folder name starts like the wanted folder, the only one, or any when all copies are identical; the `filename =`
-  lines change to its path from the ini's folder) and "keep" (rename the other overlapping inis DISABLED_<name>).
+  lines change to its path from the ini's folder), "keep" (rename the other overlapping inis DISABLED_<name>) and
+  "off" (rename `ini` DISABLED_<name>). The loader and Mods folder come from the game's paths (lint, inspect), else
+  from the first folder above the mod with a d3dx.ini.
   lint_fix applies one after taking a backup (backups.rs), so it can be undone.
 - hash_lookup: which mods (on or off) mention a hash, any case, with or without 0x.
+`merged.rs`: mods made by GIMI's merge script (`genshin_merge_mods.py`): an ini (any name, `-n` renames it) whose
+first line is `; Merged Mod: <ini>, <ini>...` in swap order, or whose footer names the "mod merger script" (then the
+`[Resource<name>.<n>]` folders give the variants). Each listed ini is found as `DISABLED<name>.ini` (or live, `-s`).
+inspect sets `merged` (variants named after their folder, the folder path or ini name when two match) and
+`VarInfo.names` on the swap var ("1" -> "Raiden Kimono"). merged_split makes each variant folder a mod of its own:
+the variant the swap value shows gets its ini name back and the mod's sidecar (same id), the others get new
+sidecars and stay off (`DISABLED...ini`), the merged ini and the old sidecar go; character from the sidecar, else
+from the ini name. Files a `-c` merge kept only in another variant's folder are copied in (`copyFiles`,
+`copyBytes`). Refused, with the reason in `blocked`: a listed ini is gone, a variant sits in the main folder or
+shares a folder, an ini that isn't part of the merge, a shared file whose kept copy is gone. One backup (mod id
+`<id>-split`) undoes it; rescan after.
 `pack.rs` (.gachamod): a zip (deflate, level 6; zip64 on) with `gachamod.json` (Manifest) first. Format 2 holds
 `games: [{game, mods, profiles}]`; format 1 (`game`, `mods`, `profile`) is still read. Each PackedMod carries its
 sidecar (name, character, tags, notes, GameBanana source), rel_path without `DISABLED`, on or off, picked option
@@ -408,10 +471,96 @@ A mod whose files go in sits under `mods/<n>/`; one with an empty `dir` is only 
   .zip/.7z of mods is not a .gachamod; that goes through ONLINE's install_local.
 `imm.rs`: detect IMM's config folder (%LOCALAPPDATA%\Integrated Mod Manager (IMM)), map its game codes (WW, ZZ, GI,
 SR, EF) to ours, count mods in IMM's two managed folders inside each game's Mods; takeover moves them to
-`Mods/<Character>/<mod>` (character = the first path part of IMM's `data` key), DISABLED prefix for mods from the
-DISABLED store, writes sidecars with `source` from IMM's `data[...].source` (GameBanana URL -> mod id), moves saved
-vars (ini::move_user_vars), removes IMM's now-empty folders, rescans. Refuse while IMM runs
-("integrated-mod-manager.exe").
+`Mods/<Category>/<mod>` (the first path part of IMM's `data` key; it becomes the sidecar's character only when it
+names a roster character, so "Uncategorized" or "UI" don't), DISABLED prefix for mods from the DISABLED store, writes
+sidecars from IMM's `data[...]` (`source` GameBanana URL -> mod id, `tags`, `note`, `installedAt` or `addedAt` ->
+installed time, `updatedAt` -> `remoteUpdated`; ms or s by size), moves saved vars (ini::move_user_vars), removes
+IMM's now-empty folders, rescans. IMM's own folders are never mods: restore points (`<store>\RESTORE\RESTORE-<date>`,
+also `DISABLED_RESTORE`) and `IGNORE` stay where they are (the result's notes say how many restore points were left),
+and `<links>\.USER_PREFS\<Category>\<mod>.ini` (the values IMM sets at load) is read, its values plus
+`data[...].vars[<ini>][<var>].pref` written for the moved mods where d3dx_user.ini has none (kept values for mods
+that are off), then sent to the Recycle Bin. Each IMM preset becomes a profile (" (IMM)" on a name clash) with its
+mods on and the other moved mods off, and its hotkey when hotkeys::normalize takes it and no profile of the game
+has it. IMM's `<mod>\DISABLED_IMM_INI_BACKUP\default\...` copies go to originals::adopt, so "Put back original
+files" undoes IMM's key edits too (only put back uses them). Refuse while IMM runs ("integrated-mod-manager.exe").
+`nrmm.rs` ("Moving from No Reload Mod Manager"): `nrmm_detect` lists each game whose Mods folder has `_MANAGED_`
+(groups, mods, how many show) and whether NRMM's settings file is there (%APPDATA%\com.aglg\No Reload Mod
+Manager\shared_preferences.json). `nrmm_takeover` refuses while No_Reload_Mod_Manager.exe or the game runs, then for
+each mod: writes each ini back from its `.ini_managed_backup` (gates, `;-;` marks, `match_priority` and
+`allow_duplicate_hash` gone), keeps the user's NRMM key choices as gachamod's key changes (a rebind keeps the author's
+line above it, a `;+;` key becomes "turned this key off"; originals.rs keeps the author's copy), gives a renamed
+namespace (`name_1`) its own name back unless another moved mod has it, moves the mod to `Mods/<Character>/<modname>`
+(the group's `groupname` matched to the roster; " (2)" when the name is taken; DISABLED unless it is its group's
+active slot), moves saved values to the new path and namespace, and writes a sidecar with the name, `modlink`
+(GameBanana id), `icon.png` and favourite. A mod with a gated ini and no copy stays where it is, with a note, and then
+NRMM's folders stay too. NRMM's files (the inis as it left them, its copies, `modname` and the like, and the rest of
+`_MANAGED_`) go to `<data>/trash/nrmm/<game>~<time>`. Returns an ImportResult; rescans.
+
+### Moving from other managers (migrate.rs)
+
+Switching from another manager is one click and loses nothing. managers.rs already reads what other managers leave in
+each mod folder; migrate.rs covers the rest: mods they keep outside Mods (gachamod only sees the ones turned on),
+their presets, and details kept in their own databases.
+
+`detect(game, picked)` reads only (SQLite files open read-only) and lists each manager found: name, settings file,
+its own folder, mods gachamod already sees (`inside`), mods outside Mods it can't see (`outside`) with the disk space
+a copy takes, presets, and whether it is open. `picked` is a folder or file the user chose, for programs with no fixed
+place. `import(game, manager, {mode, picked})` refuses while that manager or the game runs, then:
+1. Places the outside mods in Mods at their path inside the manager's folder (`<Character>/<mod>` for managers that
+   sort by character), turned off unless the manager had them on, " (2)" on a name clash.
+2. Rescans. New folders are adopted with what other managers left in them (managers.rs).
+3. Fills names, notes, tags, GameBanana links and favourites the manager kept elsewhere, only where the sidecar has
+   nothing (or just the folder name). Option values JASM kept for mods that are off become their kept values.
+4. Turns off mods the manager had off without renaming them (GB Mod Manager).
+5. Makes a profile from each preset with exactly its mods on (and its option values, from JASM). A name already taken
+   gets " (<Manager>)". A preset whose mods are all missing is skipped with a note.
+
+`mode` is "copy" (default) or "move". Copy leaves the manager working: its links in Mods stay and are adopted (the
+files stay in its folder; turning one off in gachamod renames the link), and only the mods it has off are copied in,
+so the UI shows the disk cost first. Move is for leaving the other manager for good: each link is removed (only the
+link, never what it points to) and the real folder moves into its place, and the off mods move in too. Copies a
+manager made itself (GIMM, HoyoModManagerGo) are already real folders; their library copies stay where they are.
+
+The result has the new mod ids, the profile names, notes and `undo`. `undo` deletes the profiles, puts details and
+on/off states back, sends copies to the app's trash, and moves moved folders back where they came from with a link in
+their place again.
+
+What is read, per manager:
+- JASM and JASM+: `%LOCALAPPDATA%\JASM\ApplicationData_<Genshin|Honkai|WuWa|ZZZ|Endfield>` (old Genshin:
+  `ApplicationData`), `LocalSettings.json` (`ModManagerOptions`, JSON in a string, `ModsFolderPath`), presets
+  `Presets\<name>.json` (`Mods: [{ModId, FullPath, Preferences}]`; ModId is the `Id` in the mod's
+  `.JASM_ModConfig.json`, FullPath the fallback), and each mod's `Preferences` (`"<ini>\<var>": "<value>"`).
+- XX Mod Manager: `%APPDATA%\xx-mod-manager\config.json` (`modSourcePath`, `modTargetPath` = Mods, `presetPath`);
+  presets `{name, modIds}` where ids are the `id` in each mod's mod.json (or folder names), older ones an array.
+- ZZZ ModManager: settings sit in localStorage, so its folder is found from its links in Mods; presets
+  `<Mods>\..\presets\<name>.json` (arrays of folder names).
+- Peaky Mod Manager: `%APPDATA%\peakymodmanager-v3\config.json` (`libraryPath`, `targetPath`); presets from its newest
+  `<library>\Presets_Backup_<date>.json` (`{name: [folder names]}`), since the live ones are in localStorage.
+- WZMM: `%APPDATA%\wzmm\settings.json` (`xxmiPath`), off mods in `<ZZMI>\dismods`, groups
+  `%APPDATA%\wzmm\groups\<id>.json` (`{name, mods}`). Other variants in `modvars` stay where they are.
+- GMM: `%APPDATA%\GenshinModManager\app_data*.sqlite` whose `settings.mods_folder_path` is this Mods folder; `assets`
+  (name, description, author, category_tag by `folder_name`), `presets` and `preset_assets` (`is_enabled`).
+- GIMM: `%APPDATA%\gimm\config.json` (`modFolder`, `gimiFolder`); a mod is on when its copy is in Mods.
+- HoyoModManagerGo: `%LOCALAPPDATA%\HoyoModManagerGo\cache\hmm.db` (`mod`, `playlist`, `playlist_mod_cross_ref`), the
+  store root from `root_mod_dir` in its rosedb files, mods at `<root>\<Genshin|StarRail|ZZZ|WuWa>\<character>\<folder>`,
+  copies in Mods as `<id>_<folder>`.
+- SkinSelectImpact: a portable folder with `Data\App_Settings.json` (`<GS|SR|WW|ZZ|AE>_Mods_Path`), found where the
+  user picked or one level under Desktop, Downloads, Documents, `%LOCALAPPDATA%` and the game's folders (two levels
+  when the folder name has "skin"). Presets in `Data\<prefix>_Presets.json`: items with `FolderName` (character) and
+  `SubFolderName` (mod) under `Mods\SkinSelectImpact`. No sample file was available, so the reader takes the preset
+  name from the item or the object around it; check it against a real file.
+- EMMM: `%APPDATA%\com.reynalivan.emmm\app.db` (`games.mods_path`, `collections`, `collection_mods.mod_path`).
+- Fairy's Secret Folder: its Settings > Backup file, picked by the user (`keys.mod_profiles`: JSON text of
+  `[{name, tab, enabledModRelativePaths}]`, paths from `Mods\<tab's folder>`; `keys.favoriteMods`).
+- WuWa Mod Manager: `<Mods>\presets.json` (`{presets: {id: {name, enabled_mods}}}`, ids from each mod.json).
+- GB Mod Manager: `%USERPROFILE%\.gb-mod-manager\store.json` (`mods: {name, gbId, installPath, enabled}`).
+- Integrated Mod Manager: presets in `config<CODE>.json` (`[{name, data: ["Character\\Mod"]}]`), found before and
+  after imm.rs moves its mods.
+- Any other link in Mods to a folder outside it: that folder is offered as "Another mod manager" (uyujkk's
+  Integrated Mod Manager, for one).
+
+A new manager is a reader function added to `READERS` in migrate.rs. Not brought over: Hestia's profiles (full
+copies of Mods), MIMM's slot groups (it rewrites inis), WZMM's variants and FlairX's own XXMI folder.
 
 Keys, `keys.rs` (KEYBINDS; tests in `keys/tests.rs`). Every edit changes the ini in place: comments, order, line
 endings, BOM and encoding (UTF-8, UTF-16, other bytes) stay as they were, takes a `backups::take` first and returns
@@ -448,7 +597,9 @@ UI:
   description when one of its keys matches, else the section name), each key a chip: click, Enter or A, then press
   the new keys, mouse button or controller buttons (Esc or B alone cancels). A toggle per key turns it off; "Toggles
   only while on screen" and "Put back original files" act on the whole mod. Each change records Undo with its backup.
-- `screens/modtools/ModInsides.tsx`: sections "Options" (each persist var as a Segmented or Select over its values, current value selected,
+- `screens/modtools/ModInsides.tsx`: sections "Options" (each persist var as a Segmented or Select over its values, shown by `names`
+  when given ("Raiden Kimono", not "2"), current value selected; a merged mod adds "Split into separate mods" with
+  Undo, saying what copying shared files costs, or the `blocked` reason,
   change calls modtools.setVar; when the game runs show a note and disable), "Problems", "Conflicts" (with "Keep this
   one" that turns the others off through library.setEnabled), "Readme" (collapsible, monospace).
 - `screens/modtools/ModtoolsOverlays.tsx`: listens to onApp: `open-pack` -> PackImport dialog (preview list with
@@ -468,8 +619,12 @@ UI:
   button when nothing is broken), "Ignore" per mod and
   "Ignore all" (saved in setting "problems.ignored", listed under Ignored with "Show again"), "Fix all" for fixes
   that need no choice; Tools shows it first while something in it has a fix), HashLookupPanel (a field and results), PacksPanel (Share this game's library, Share
-  every game when more than one has mods, Import a .gachamod), ImmPanel (shown when IMM is found: per game counts and "Move mods from IMM" with a Confirm,
-  since it moves folders). Set the "tools" nav badge.
+  every game when more than one has mods, Import a .gachamod), MovePanel ("Mods from other managers", Tools > Sharing,
+  section "others": a row per manager with mods for the current game. IMM and No Reload Mod Manager get "Move mods"
+  with a Confirm, since they move folders; the rest from migrate.detect get "Bring in" (copy, one click, Undo in the
+  toast) and "Move instead" with a Confirm when they keep mods outside Mods; a manager that is open shows "Check
+  again"; "Choose a folder" and "Choose a backup file" pass `picked` for SkinSelectImpact and Fairy's Secret Folder).
+  The first start (Onboarding) names the managers found (lib/otherManagers.ts) and links there. Set the "tools" nav badge.
 - Demo handlers with believable data for every command.
 
 ## Downloads and Browse (ONLINE)
@@ -670,14 +825,14 @@ Rust:
   out. Genshin Impact's FPS limit (`unlock_fps_value`) never goes above `GI_FPS_CAP` (120; above it the game
   disconnects the player with "Illegal tool detected"): the form shows and saves at most 120, and a start through XXMI
   lowers a higher value in XXMI's config first and says so in its toast. The same kick at 120 or lower usually means
-  the anti-cheat flags XXMI's d3d11.dll. Settings › Launch options for Genshin Impact links the community guide
+  the anti-cheat flags XXMI's d3d11.dll. Settings › Launch for Genshin Impact links the community guide
   (gamebanana.com/tuts/19132: an older GIMI d3d11.dll kept in place with XXMI's Unsafe Mode) with a ban warning, and the global search finds it under "Illegal tool detected".
   Before a start with mods through XXMI, Play warns (home/KickWarning.tsx: Cancel, I did the fix, Play anyway) unless
   `launch::kick_check` finds the fix: GIMI's d3d11.dll differs from XXMI's own `Resources\Packages\XXMI\d3d11.dll`, or
   it equals the SHA-256 saved in `gi.kickFixDll` when the player said they did the fix (the Launch options panel's "I did this
   fix" switch, or the warning's button). An XXMI update that puts its own DLL back brings the warning back. gachamod
   only reads the two DLLs and never automates any part of the fix: no swapping, repacking or patching of XXMI's DLLs,
-  and no other way of starting the game to get past the anti-cheat. For any game through XXMI, Settings › Launch options also
+  and no other way of starting the game to get past the anti-cheat. For any game through XXMI, Settings › Launch also
   mirrors XXMI's own DLL settings under "How XXMI loads mods" (`LaunchConfig.dll`, search "How XXMI loads mods"):
   Injection mode (`xxmi_dll_inject_mode`: Hook, Direct, Skip) and Inject libraries (`extra_libraries_enabled`) save
   with the form; the player sets each by hand. XXMI signs Unsafe Mode and the library list (`unsafe_mode_signature`,
@@ -685,7 +840,7 @@ Rust:
   never touches either signature, and only turns Unsafe Mode off through its own command (`launch::unsafe_off`, so a
   stale form can't). The page reads the form again whenever the window gets focus, unless an edit is still unsaved.
   The Play warning for Genshin Impact walks through the guide's steps (`tools/KickSteps.tsx`; also under "Steps from
-  the guide" on Settings › Launch options, sharing the form there): open GIMI's v7.0 release page for
+  the guide" on Settings › Launch, sharing the form there): open GIMI's v7.0 release page for
   3dmigoto-GIMI-for-playing-mods.zip, take d3d11.dll out by hand, open the GIMI folder to paste it (keep d3dx.ini), open
   XXMI Launcher to turn on Unsafe Mode, then Injection mode Direct and Inject libraries off as the settings themselves.
   A step shows a check when gachamod sees it done (the DLL steps once `kick_check` says `fixed`), read again whenever
@@ -737,16 +892,17 @@ UI:
 - First start (`screens/settings/Onboarding.tsx`, `lib/setup.ts`), no window and no questions:
   - When XXMI Launcher already has a game with a Mods folder, the app opens on it. One toast says what was found and
     that usage counts and crash reports are sent ("Turn those off"); others offer loaders for other games on this PC
-    and moving mods Integrated Mod Manager keeps.
+    and moving mods Integrated Mod Manager keeps. A card bottom left (not a window) offers the Mods layouts, with the
+    one resembling a manager found already picked; the setup page has the same picker. See "Library".
   - When no game has a Mods folder, the main view is the setup page: the games found and one button, "Install mod
     loaders", which downloads XXMI Launcher and each game's loader from GitHub and sets them up
     (`xxmi_install`, gacha-core `xxmi_setup.rs`; progress on "xxmi-setup"). No game found: "Look again". The page
     looks again every 10 seconds and on focus, and `watchSetup` keeps looking (focus, every 30 s) while a shown game
     has no Mods folder. Settings and Extensions stay reachable.
-  - Everywhere a Mods folder is missing (Settings, Games and mod loaders, the Play button's Set up, a failed download and its toast),
+  - Everywhere a Mods folder is missing (Settings, Games, the Play button's Set up, a failed download and its toast),
     the first button installs the loader or looks again (`getReady`), and picking a folder by hand comes second
     (`pickModsFolder`).
-  - Uninstalling (`xxmi_uninstall`, `xxmi_setup::uninstall`): Settings, Games and mod loaders has "Uninstall mod loader" per XXMI game
+  - Uninstalling (`xxmi_uninstall`, `xxmi_setup::uninstall`): Settings, Games has "Uninstall mod loader" per XXMI game
     and "Uninstall XXMI Launcher" (asks first). Files go to the Recycle Bin (`recycle.rs`); each Mods folder and
     d3dx_user.ini stay. One loader also comes out of XXMI's config (enabled importers, deployed version) so XXMI
     sees it as gone; all of them also takes the shortcuts that point into the XXMI folder. It refuses while XXMI
@@ -769,7 +925,7 @@ UI:
   makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
   WebView2 won't start a second window in the same folder with other flags. Starting `gachamod.exe --disable-gpu`
   saves it off first; a copy already running saves it and restarts.
-- Rendering log ("render.log", default on; Settings, Feedback, privacy and logs, and under Hardware acceleration in
+- Rendering log ("render.log", default on; Settings, Feedback, and under Hardware acceleration in
   Appearance). `gacha-core render_log.rs` keeps the files in `<data folder>/logs/rendering`, `src-tauri render.rs`
   feeds it and `lib/renderWatch.ts` reports from the page. It logs window focus, moves, size and scale, screens
   changing, sleep gaps, WebView2 processes exiting (`ProcessFailed`), the page's frames stopping or slowing, long
@@ -785,11 +941,11 @@ UI:
   `--enable-logging --v=0` to every window's flags and makes WebView2 open a console window. While crash reports are
   on, a summary of each incident goes to the developer as a `render` crash report (docs/telemetry.md). Feedback with logs
   attached sends the newest incident too.
-- New mods turn on when they install ("mods.enableNew", default on; Settings, Mods and downloads, and the Downloads header). The
+- New mods turn on when they install ("mods.enableNew", default on; Settings, Mods, and the Downloads header). The
   runner's install toast lists the new ids (`installed`) and `library/afterInstall.ts` turns them on with the one-skin
   rule and one quiet Undo step. The first time it says so with "Keep new mods off". When the character now has two or
   more skins and isn't switched in game yet, the toast offers "Switch in game" (live switching).
-- One-game mode (Settings, Games and mod loaders, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
+- One-game mode (Settings, Games, or "Only show X" in a game's menu; "gm.onlyGame"): only that game shows in the
   sidebar, its switcher and Ctrl+Tab. The other games stay set up, the switch menu lists them under "Other games",
   and search still finds them.
 - Logs, crash reports, usage counts and feedback (`logs.rs`, `telemetry.rs`, `commands/report.rs`,
@@ -797,7 +953,7 @@ UI:
   Usage counts and crash reports go to PostHog when they're on (both are on by default, with switches in Settings,
   Feedback, privacy and logs, and a line in onboarding). Feedback is sent from a form opened from Settings, the title bar's
   Help menu, the search ("Send feedback") and a screen that hit an error.
-- Running as administrator: Settings, Games and mod loaders has "Restart as administrator" and an "Always" switch (Windows'
+- Running as administrator: Settings, Games has "Restart as administrator" and an "Always" switch (Windows'
   RUNASADMIN flag for gachamod.exe under HKCU AppCompatFlags\Layers, which the installer also sets when the player
   says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
@@ -815,7 +971,7 @@ UI:
   version quietly and toasts "gachamod X is ready" with Restart now; at quit (`RunEvent::Exit`) it runs the installer
   without reopening gachamod. Set to "tell" (Only tell me), it checks on the same schedule, downloads nothing and
   emits `app-update-found` once per version, which toasts "gachamod X is out" with Update now. "0" never checks by
-  itself. Settings, About and updates shows the state (`app_update_status`) with Check now and Update now or
+  itself. Settings, About shows the state (`app_update_status`) with Check now and Update now or
   Restart to update. The NSIS installer runs passive (a small progress window), per user, no administrator.
 - `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
   builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
@@ -876,13 +1032,22 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   "creators" and "hotkeys"; Look has "appearance" (appearance, layout, themes, graphics) and "fun"; App has "account"
   (account, integrations, ai), "extensions", "feedback" (feedback, privacy, logs) and "about" (about, updates,
   transfer, repair). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`.
-- Names say what is inside. A page is named for its contents, not its category: "Games and mod loaders", "Mods and
-  downloads", "In-game profile hotkeys", "Account, links and AI", "Feedback, privacy and logs", "About and updates"
-  (updates were hard to find under a page called About). A panel holds one kind of setting under a heading that
-  names it: "Downloads and installing", "Mod update checks and rescans", "Mods a game update broke", "Trash and removed
-  mods", "Hardware acceleration and rendering log", "gachamod updates", "Repair, reset or uninstall". A setting that
-  fits no panel gets a new panel, not a row under a vague heading. A long page name wraps to a second line in the
-  list. Each page also has a hover tip listing what is on it. The ids stay short and stable; only the names change.
+- Page names are a word or two: Games, Launch, Mods, Creators, Hotkeys, Appearance, Fun, Account, Extensions,
+  Feedback, About. Each page's hover tip lists everything on it, and its `keywords` keep the older long names
+  ("Mods and downloads", "About and updates") so the search still finds them. A panel holds one kind of setting under
+  a heading that names it: "Downloads and installing", "Mod update checks and rescans", "Mods a game update broke",
+  "Trash and removed mods", "Hardware acceleration and rendering log", "gachamod updates", "Repair, reset or
+  uninstall". A setting that fits no panel gets a new panel, not a row under a vague heading. The ids stay short and
+  stable; only the names change.
+- A search field sits above the page list in Settings and in Tools ("Search settings and tools"). It searches both
+  menus at once: Settings' pages, panels and single settings (`settingsSearch.ts`) and Tools' pages and panels
+  (`tools/toolsSearch.ts`), with `scoreCommand` from the global search, so keywords and translated names both match
+  (`settings/menuSearch.ts`). While it has text, the page area shows the matching panels themselves, live, in the menu
+  the search ran in (`SearchResults.tsx`): a Settings panel found from Tools works right there. Each page's panels sit
+  under "In Settings, Appearance" with an Open button that goes to that page, and single settings that matched are lit.
+  With no match it says so and offers the global search with the same words. Ctrl+F and / focus the field, Escape
+  clears it and then leaves it for the page list, Arrow Down goes to the first result, and clearing it or picking a
+  page brings the page back. Each screen registers its panels by route id (`registerPanels`) for this.
 - A panel on a page has no fill
   or theme frame, only a thin outline in the theme's line colour, so a short page isn't a card floating over an
   empty screen. New Eridu blurs its background lettering behind these panels (`themes/zzz-screens.css`).
@@ -912,23 +1077,24 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   of their own get it by their words, backend messages included ("has no Mods folder yet" gets "Mods folders",
   "IMM manages this mod" gets "Move from IMM"). `placeFor(text)` gives the same button to a note drawn in a page
   (Launch options uses it for a launch config that couldn't load or save).
-- `settingsSearch.ts` registers every section and setting in the global search with the words people use
+- `settingsSearch.ts` also registers every section and setting in the global search with the words people use
   ("recycle bin" finds Keep removed mods' files), plus "Open XXMI Launcher" and the AI jobs (only while AI shows).
 - Games: XXMI games, then community games (no XXMI support) with one plain line on what differs: they need their own
   3DMigoto loader (a link to it), and games without a GameBanana character category say so once.
 - Appearance: theme per game with previews, light or dark for every theme at once ("Game's own" keeps each game's
   look: Teyvat and Talos-II light, the rest dark; or all dark, all light, follow the system; pref "gm.schemeMode"),
-  with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); layout (density, sidebar
-  side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
+  with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); Mods layout (four drawn
+  previews), layout (density, sidebar side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
   hardware acceleration with a copy of the rendering log row ("Hardware acceleration and rendering log"). Custom
   themes: list, apply, delete with Undo, import/export as JSON, an editor with a stylesheet box and the list of parts
   it can style, and "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
 - What gachamod does by itself has one switch each, all prefs in `automatic.ts` that other areas read. They sit in
-  three panels of Mods and downloads: "Mod update checks and rescans" (mod updates, rescans), "Downloads
+  three panels of Mods and downloads: "Mod update checks and rescans" (mod updates, watching Mods folders, rescans), "Downloads
   and installing" (archives, every mod in an archive, slow downloads, on-screen toggles for new mods) and "Mods a
   game update broke" (new fixers, the warnings). gachamod's own updates are not a mod setting: their control is under
   About and updates, gachamod updates, above Check now. The prefs: `appUpdateModePref`
-  ("app.updateCheck": Install, Only tell me or Off, shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
+  ("app.updateCheck": Install, Only tell me or Off, shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `watchModsPref` ("library.watch", default on, shown as "Watch Mods
+  folders for changes"; the backend reads it), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
@@ -977,10 +1143,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 ### Tools
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
-(Problems and fixes: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" from
-INGAME, "packs" (Share and move: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The panel ids
-still work as routes. A panel that renders nothing (IMM when it isn't installed) is left out. Tools has no settings
-pages: launch options and 3DMigoto's switches are in Settings › Launch options (see Settings).
+(Problems: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" (In-game menu, from
+INGAME: ingame, "keylist"), "packs" (Sharing: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The pages and
+panels with their search words are in `toolsSearch.ts`. The panel ids still work as routes. A panel that renders
+nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
+switches are in Settings › Launch (see Settings), and the search above the page list finds them from Tools too.
 
 The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
 (docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,

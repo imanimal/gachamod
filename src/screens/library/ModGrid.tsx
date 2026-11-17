@@ -22,6 +22,8 @@ import { toggleMods } from "./data";
 import { askLib } from "./LibDialogs";
 import { getUpdates, isBroken, noteLibrary, profileItems } from "./menus";
 import { ModCard } from "./ModCard";
+import { t } from "../../lib/i18n";
+import { useModsFormat } from "../../lib/theme";
 
 export interface ModGridProps {
   game: GameId;
@@ -51,7 +53,10 @@ function scroller(el: HTMLElement): HTMLElement | null {
   return null;
 }
 
-export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icons, showCharacter = true, empty }: ModGridProps) {
+export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loading, icons, showCharacter = true, empty }: ModGridProps) {
+  // the Compact list layout (Settings, Appearance) shows every grid as dense rows, whatever the page asked for
+  const dense = useModsFormat() === "rows";
+  const view = dense ? "list" : asked;
   const nsfw = useNsfw();
   const health = useModHealth(game);
   const holds = useHolds(game);
@@ -194,9 +199,9 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     const inSel = sel.some((x) => x.id === m.id);
     const every = shownRef.current;
     const selecting: MenuEntry[] = [
-      { label: inSel ? "Unselect" : "Select", icon: "select", keys: "Ctrl+Space", onClick: () => flip(m.id) },
-      every.length > 1 && sel.length < every.length && { label: "Select all shown", icon: "select", keys: "Ctrl+A", onClick: () => setSelected(new Set(shownRef.current.map((x) => x.id))) },
-      sel.length > 0 && { label: "Clear the selection", icon: "x", keys: "Esc", onClick: () => setSelected(new Set()) },
+      { label: inSel ? t("Unselect") : t("Select"), icon: "select", keys: "Ctrl+Space", onClick: () => flip(m.id) },
+      every.length > 1 && sel.length < every.length && { label: t("Select all shown"), icon: "select", keys: "Ctrl+A", onClick: () => setSelected(new Set(shownRef.current.map((x) => x.id))) },
+      sel.length > 0 && { label: t("Clear the selection"), icon: "x", keys: "Esc", onClick: () => setSelected(new Set()) },
     ];
     const rest = menuFor("mod", { game, mod: m, selection: inSel && sel.length > 1 ? sel : undefined });
     const cut = rest.indexOf("-");
@@ -232,14 +237,14 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     }
     const move = (to: number) => {
       e.preventDefault();
-      const t = Math.max(0, Math.min(shown.length - 1, to));
-      if (t < items.length) items[t]?.focus();
+      const at = Math.max(0, Math.min(shown.length - 1, to));
+      if (at < items.length) items[at]?.focus();
       else {
         // past the cards drawn so far: draw up to it, then focus it
-        setLimit((l) => Math.max(l, t + 1 + BATCH / 2));
-        requestAnimationFrame(() => gridRef.current?.querySelector<HTMLElement>(`.mod-card-hit[data-idx="${t}"]`)?.focus());
+        setLimit((l) => Math.max(l, at + 1 + BATCH / 2));
+        requestAnimationFrame(() => gridRef.current?.querySelector<HTMLElement>(`.mod-card-hit[data-idx="${at}"]`)?.focus());
       }
-      const target = shown[t];
+      const target = shown[at];
       if (e.shiftKey && target) { if (!anchor.current) anchor.current = m.id; selectRange(target.id, false); }
     };
     const k = e.key;
@@ -267,9 +272,9 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     if (!selected.size) return;
     const h = (e: globalThis.KeyboardEvent) => {
       if ((e.key !== "Delete" && e.key !== "Escape") || document.querySelector(".overlay, .ctx")) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
-      if (t?.closest?.(".mod-grid")) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
+      if (el?.closest?.(".mod-grid")) return;
       e.preventDefault();
       if (e.key === "Escape") setSelected(new Set());
       else void trash(pickedRef.current);
@@ -282,7 +287,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
 
   if (loading) {
     return (
-      <Waiting what="Reading your mods">
+      <Waiting what={t("Reading your mods")}>
         <div className="mod-grid is-loading">
           {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
         </div>
@@ -297,7 +302,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
   const onScreen = onlyOnScreenFn();
   return (
     <div className="mod-grid-wrap">
-      <div ref={gridRef} className={`mod-grid ${view === "list" ? "is-list" : "cards"}`} onKeyDown={onKey} onContextMenu={onContextMenu}
+      <div ref={gridRef} className={`mod-grid ${view === "list" ? "is-list" : "cards"}${dense ? " is-dense" : ""}`} onKeyDown={onKey} onContextMenu={onContextMenu}
         onKeyUp={(e) => { if (e.key === " " && (e.target as HTMLElement).closest(".mod-card-hit")) e.preventDefault(); }}>
         {(more ? shown.slice(0, limit) : shown).map((m, i) => (
           <ModCard key={m.id} game={game} mod={m} index={i} row={view === "list"} selected={selected.has(m.id)} nsfw={nsfw}
@@ -309,38 +314,38 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
       {more && <div ref={sentinel} className="mod-grid-more" style={{ height: 1 }} aria-hidden="true" />}
 
       {picked.length > 0 && (
-        <div className="floatbar mod-bulk" role="toolbar" aria-label="Selected mods">
-          <span className="floatbar-n">{picked.length} selected</span>
-          <Button size="sm" icon="power" onClick={() => void toggle(picked, true)}>Turn on</Button>
-          <Button size="sm" icon="power" variant="ghost" onClick={() => void toggle(picked, false)}>Turn off</Button>
-          <Button size="sm" variant="ghost" icon="profiles" iconRight="down" title="Add them to a profile, or take them out"
-            onClick={(e) => openMenu(e.currentTarget, profileItems(game, picked))}>Profile</Button>
-          <Button size="sm" variant="ghost" icon="characters" onClick={() => askLib({ kind: "character", game, mods: picked })} title="Set which character these mods are for">Character</Button>
-          <Button size="sm" variant="ghost" icon="tag" onClick={() => askLib({ kind: "tags", game, mods: picked })} title="Add or remove tags on these mods">Tags</Button>
-          <IconButton size="sm" icon="star" on={allFav} label={allFav ? "Remove from favourites" : "Add to favourites"} onClick={() => void setFavourite(game, picked, !allFav)} />
+        <div className="floatbar mod-bulk" role="toolbar" aria-label={t("Selected mods")}>
+          <span className="floatbar-n">{t("{n} selected", { n: picked.length })}</span>
+          <Button size="sm" icon="power" onClick={() => void toggle(picked, true)}>{t("Turn on")}</Button>
+          <Button size="sm" icon="power" variant="ghost" onClick={() => void toggle(picked, false)}>{t("Turn off")}</Button>
+          <Button size="sm" variant="ghost" icon="profiles" iconRight="down" title={t("Add them to a profile, or take them out")}
+            onClick={(e) => openMenu(e.currentTarget, profileItems(game, picked))}>{t("Profile")}</Button>
+          <Button size="sm" variant="ghost" icon="characters" onClick={() => askLib({ kind: "character", game, mods: picked })} title={t("Set which character these mods are for")}>{t("Character")}</Button>
+          <Button size="sm" variant="ghost" icon="tag" onClick={() => askLib({ kind: "tags", game, mods: picked })} title={t("Add or remove tags on these mods")}>{t("Tags")}</Button>
+          <IconButton size="sm" icon="star" on={allFav} label={allFav ? t("Remove from favourites") : t("Add to favourites")} onClick={() => void setFavourite(game, picked, !allFav)} />
           {broken.length > 0 && (
-            <Button size="sm" variant="ghost" icon="wand" title="A game update broke these. Swaps their outdated hashes, or runs the fixer they need. A backup is kept and Undo puts them back" onClick={() => void fixForUpdate(game, broken)}>
-              Attempt fix{broken.length === picked.length ? "" : ` on ${broken.length}`}
+            <Button size="sm" variant="ghost" icon="wand" title={t("A game update broke these. Swaps their outdated hashes, or runs the fixer they need. A backup is kept and Undo puts them back")} onClick={() => void fixForUpdate(game, broken)}>
+              {broken.length === picked.length ? t("Attempt fix") : t("Attempt fix on {n}", { n: broken.length })}
             </Button>
           )}
           {due.length > 0 && (
-            <Button size="sm" variant="ghost" icon="downloads" title={due.length === 1 ? `Download the newest version of ${due[0]!.name}` : "Download the newest version of each"}
-              onClick={() => void getUpdates(game, due)}>Update{due.length === picked.length ? "" : ` ${due.length}`}</Button>
+            <Button size="sm" variant="ghost" icon="downloads" title={due.length === 1 ? t("Download the newest version of {mod}", { mod: due[0]!.name }) : t("Download the newest version of each")}
+              onClick={() => void getUpdates(game, due)}>{due.length === picked.length ? t("Update") : t("Update {n}", { n: due.length })}</Button>
           )}
           {onScreen && picked.some((m) => m.hasKeys) && (
-            <IconButton size="sm" icon="keyboard" label="Toggles only while on screen: their toggles only work while their character is on screen"
+            <IconButton size="sm" icon="keyboard" label={t("Toggles only while on screen: their toggles only work while their character is on screen")}
               onClick={() => void keysOnlyOnScreen(game, picked.filter((m) => m.hasKeys))} />
           )}
           {/* sharing is in the menu already; the AI helper joins it, so the bar fits a small window */}
-          <IconButton size="sm" icon="more" label="More actions" onClick={(e) => openMenu(e.currentTarget, [
+          <IconButton size="sm" icon="more" label={t("More actions")} onClick={(e) => openMenu(e.currentTarget, [
             ...menuFor("mod", { game, mod: picked[0]!, selection: picked }),
             aiShown("useful", aiShow) && "-",
-            aiShown("useful", aiShow) && { label: "Ask the AI helper", icon: "ai", title: "Rename, tag or sort these", onClick: () => askAi({ kind: "mods", game, modIds: picked.map((m) => m.id) }) },
+            aiShown("useful", aiShow) && { label: t("Ask the AI helper"), icon: "ai", title: t("Rename, tag or sort these"), onClick: () => askAi({ kind: "mods", game, modIds: picked.map((m) => m.id) }) },
           ])} />
           {trashDays > 0
-            ? <Button size="sm" variant="danger" icon="trash" title="Move to trash (Delete). Undo puts them back" onClick={() => void trash(picked)}>Trash</Button>
-            : <Button size="sm" variant="danger" icon="trash" title="Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest are asked about first" onClick={() => void trash(picked)}>Delete</Button>}
-          <IconButton size="sm" icon="x" label="Clear the selection (Esc)" onClick={() => setSelected(new Set())} />
+            ? <Button size="sm" variant="danger" icon="trash" title={t("Move to trash (Delete). Undo puts them back")} onClick={() => void trash(picked)}>{t("Trash")}</Button>
+            : <Button size="sm" variant="danger" icon="trash" title={t("Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest are asked about first")} onClick={() => void trash(picked)}>{t("Delete")}</Button>}
+          <IconButton size="sm" icon="x" label={t("Clear the selection (Esc)")} onClick={() => setSelected(new Set())} />
         </div>
       )}
     </div>

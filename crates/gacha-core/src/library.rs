@@ -171,7 +171,7 @@ pub fn is_imm_rel(rel: &str) -> bool {
 }
 
 fn imm_error() -> Error {
-    Error::Conflict("IMM manages this mod. Move your mods out of IMM first (Tools, Move mods from IMM).".into())
+    Error::Conflict("IMM manages this mod. Move your mods out of IMM first (Tools, Sharing).".into())
 }
 
 fn name_of(p: &Path) -> String { p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() }
@@ -295,6 +295,8 @@ fn only_off_inis(dir: &Path) -> bool {
             let name = e.file_name().to_string_lossy().into_owned();
             let Ok(ft) = e.file_type() else { continue };
             if ft.is_dir() {
+                // Hestia's box of a mod's files
+                if depth == 0 && name.eq_ignore_ascii_case(HESTIA_OFF) { *off = true; continue; }
                 if !is_disabled_name(&name) && !skip_dir(&name) && !walk(&e.path(), off, depth + 1) { return false; }
             } else if is_off_ini(&name) { *off = true; }
             else if is_ini(&name) { return false; }
@@ -310,10 +312,19 @@ fn is_image(name: &str) -> bool {
     [".png", ".jpg", ".jpeg", ".webp", ".gif"].iter().any(|x| l.ends_with(x))
 }
 
+/// Hestia turns a mod off by moving its files into this folder inside the mod's own folder.
+pub(crate) const HESTIA_OFF: &str = "DISABLED_BY_HESTIA";
+
+/// Folders other tools write into Mods for themselves, on or off: SkinSelectImpact's KeyViewer, Fairy's Secret
+/// Folder's in-game menu (old and new names), and Hestia's details folder in each mod and in Mods (its hestia.ini
+/// only keeps saved values).
+const TOOL_DIRS: &[&str] = &["additionalfiles_ssi", "zzzzzz_zzzmodmanagerui", "000_zzzmanager_ui", "\u{2b22}hestia"];
+
 /// Folders that are never mods or groups.
-fn skip_dir(name: &str) -> bool {
+pub(crate) fn skip_dir(name: &str) -> bool {
     let l = name.to_ascii_lowercase();
     l.starts_with('.') || l == "shaderfixes" || l == "shadercache" || l == "__macosx" || l == crate::live::DIR
+        || TOOL_DIRS.contains(&display_folder(&l))
 }
 
 const GENERIC: &[&str] = &["mod", "mods", "files", "file", "data", "content", "mod files", "modfiles"];
@@ -500,7 +511,10 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
             has_ini = true;
         }
     }
-    if !rel.is_empty() && (has_side || has_ini || off_ini) {
+    // No Reload Mod Manager's own folder and its group folders hold its inis next to the mods: groups, never mods
+    let scaffold = crate::nrmm::is_scaffold(rel);
+    let hestia_off = kids.iter().any(|(_, n)| n.eq_ignore_ascii_case(HESTIA_OFF));
+    if !rel.is_empty() && !scaffold && (has_side || has_ini || off_ini || hestia_off) {
         let folder = name_of(dir);
         let own = display_folder(&folder);
         let name_hint = match outer {
@@ -508,13 +522,13 @@ fn walk_dir(w: &mut Walk, dir: &Path, rel: &str, outer: Option<&str>, depth: u32
             _ => own.to_string(),
         };
         // only turned-off inis here: off, unless a sub-folder still has a live one
-        let ini_off = off_ini && !has_ini && only_off_inis(dir);
+        let ini_off = (off_ini || hestia_off) && !has_ini && only_off_inis(dir);
         w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint, ini_off });
         return;
     }
     // one folder holds the ini and loads files from the folders beside it ("resources/Roxy.ini" loading
     // "../toggles/Menu.dds"): this folder is the mod
-    if !rel.is_empty() && kids.len() >= 2 {
+    if !rel.is_empty() && !scaffold && kids.len() >= 2 {
         let with_ini: Vec<&PathBuf> = kids.iter().map(|(p, _)| p).filter(|p| fs::read_dir(p).into_iter().flatten().flatten().any(|e| is_ini(&e.file_name().to_string_lossy()))).collect();
         if with_ini.len() == 1 && crate::install::reaches_out(with_ini[0], dir) {
             w.found.push(Found { dir: dir.to_path_buf(), rel: rel.to_string(), name_hint: display_folder(&name_of(dir)).to_string(), ini_off: false });
@@ -592,12 +606,15 @@ fn lock(db: &Shared) -> Result<std::sync::MutexGuard<'_, Db>> {
 /// Walk the game's Mods folder, adopt new mod folders (write a sidecar), drop rows for folders that are gone, refresh
 /// the `mods` table, and return every mod. Rules for what counts as a mod are in docs/spec.md ("Finding mods").
 pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
-    let (root, prev, chars, thumbs) = {
+    let _hold = crate::watch::hold(game);
+    let (root, prev, chars, thumbs, slots) = {
         let d = lock(db)?;
         parts::merge_split_installs(&d, game);
         let root = games::mods_dir(&d, game)?;
         let prev: HashMap<String, ModEntry> = list(&d, game)?.into_iter().map(|m| (m.id.clone(), m)).collect();
-        (root, prev, matcher(&d, game)?, thumbs_dir(&d))
+        // which mod of each No Reload Mod Manager group shows
+        let slots = games::importer_dir(&d, game).map(|i| crate::nrmm::active_slots(&i)).unwrap_or_default();
+        (root, prev, matcher(&d, game)?, thumbs_dir(&d), slots)
     };
 
     // a Mods folder that can't be read lists nothing, and saving that would forget every mod's row
@@ -643,7 +660,7 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         if write { let _ = write_sidecar(&f.dir, &sc); }
         let enabled = if f.rel.split('/').next().is_some_and(|p| p.eq_ignore_ascii_case(IMM_STORE)) {
             fs::canonicalize(&f.dir).is_ok_and(|c| w.links.contains(&c))
-        } else { !rel_disabled(&f.rel) && !f.ini_off };
+        } else { !rel_disabled(&f.rel) && !f.ini_off && crate::nrmm::shows(&f.rel, &f.dir, &slots) };
         let qf = ini::quick_facts(&f.dir);
         let mut e = build_entry(game, &root, &f.rel, enabled, &sc, &qf, &chars);
         if let Some(p) = prev.get(&e.id) { e.update_available = p.update_available; }
@@ -870,6 +887,7 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
     let rel = safe_rel(&e.rel_path).ok_or_else(|| Error::Invalid(format!("{}'s folder path looks wrong. Rescan to refresh the list", e.name)))?;
     let old = cx.root.join(rel);
     if !old.is_dir() { return Err(Error::Invalid(format!("{}'s folder is gone. Rescan to refresh the list", e.name))); }
+    if crate::nrmm::gated(&e.rel_path, &old) { return Err(crate::nrmm::managed_error()); }
     // a DISABLED folder above it named back: with its own folder and inis live, that alone turns it on
     let opened = on && disabled_parent(&e.rel_path).is_some();
     if opened { open_disabled_parents(db, cx, e, moved)?; }
@@ -884,6 +902,8 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
                 fs::rename(old.join(&f), old.join(&live))?;
                 renamed += 1;
             }
+            // Hestia's box: its files go back up into the mod's folder
+            renamed += open_hestia_box(&old)?;
             if renamed == 0 && !opened { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
             e.enabled = true;
             e.standby = false;
@@ -919,6 +939,20 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
     Ok(true)
 }
 
+/// Move the files Hestia put in DISABLED_BY_HESTIA back up into the mod folder. How many moved.
+fn open_hestia_box(dir: &Path) -> Result<u32> {
+    let Some(b) = fs::read_dir(dir)?.flatten().find(|e| e.file_name().to_string_lossy().eq_ignore_ascii_case(HESTIA_OFF) && e.path().is_dir()) else { return Ok(0) };
+    let b = b.path();
+    let items: Vec<PathBuf> = fs::read_dir(&b)?.flatten().map(|e| e.path()).collect();
+    // check every name first, so a clash moves nothing
+    if let Some(taken) = items.iter().map(|p| dir.join(name_of(p))).find(|t| t.exists()) {
+        return Err(Error::Conflict(format!("\"{}\" is in the mod's folder twice: once in {HESTIA_OFF} and once beside it. Remove one, then try again", name_of(&taken))));
+    }
+    for p in &items { rename_dir(p, &dir.join(name_of(p)))?; }
+    let _ = fs::remove_dir(&b);
+    Ok(items.len() as u32)
+}
+
 fn finish(db: &Db, game: &str, change: &ModChange) {
     if change.changed.is_empty() && change.removed.is_empty() { return; }
     devtools::mark_changed(game);
@@ -937,6 +971,7 @@ pub fn set_enabled(db: &Db, game: &str, ids: &[String], on: bool) -> Result<ModC
 /// Sub-mods go with their parent: turning a sub-mod on turns its parent on, turning a parent off turns its sub-mods
 /// off, and turning it on again brings back the ones that were on.
 pub fn set_enabled_with(db: &Db, game: &str, ids: &[String], on: bool, turn_off_others: Option<bool>) -> Result<ModChange> {
+    let _hold = crate::watch::hold(game);
     let one_skin = on && match turn_off_others {
         Some(v) => v,
         None => db.setting(&format!("{game}.oneSkin"))?.map(|v| v != "0").unwrap_or(true),
@@ -1340,6 +1375,7 @@ fn clean_group(g: &str) -> Option<String> {
 
 /// Move a mod into a group folder under Mods (a character's folder), or to the top level with `None`.
 pub fn move_to_group(db: &Db, game: &str, id: &str, group: Option<&str>) -> Result<ModEntry> {
+    let _hold = crate::watch::hold(game);
     let cx = ctx(db, game)?;
     let mut e = get(db, game, id)?;
     if is_imm_rel(&e.rel_path) { return Err(imm_error()); }
@@ -1428,6 +1464,7 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
 
 /// Move mods to the app's trash folder (`<data>/trash/<game>/<trash id>`), kept "trash.days" days (removed.rs).
 pub fn remove(db: &Db, data_dir: &Path, game: &str, ids: &[String], reason: &str) -> Result<ModChange> {
+    let _hold = crate::watch::hold(game);
     let cx = ctx(db, game)?;
     let mut change = ModChange::default();
     let mut errors: Vec<Error> = Vec::new();

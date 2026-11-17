@@ -9,6 +9,7 @@ import { oxford } from "../../lib/notes";
 import { jsonPref } from "../../lib/prefs";
 import { currentGame, currentRoute, emitApp, setBadge } from "../../lib/store";
 import { record } from "../../lib/history";
+import { t, tb, tn } from "../../lib/i18n";
 
 type Part = "conflicts" | "problems" | "fixes";
 const parts: Record<Part, string[]> = { conflicts: [], problems: [], fixes: [] };
@@ -91,7 +92,7 @@ export async function turnOff(game: GameId, ids: string[], names: string[]) {
   if (!ids.length) return;
   const set = async (on: boolean) => { await library.setEnabled(game, ids, on); emitApp({ type: "library-refresh", game }); };
   await set(false);
-  const label = names.length === 1 ? `Turned off ${names[0]}` : `Turned off ${names.length} mods`;
+  const label = names.length === 1 ? t("Turned off {name}", { name: names[0]! }) : tn(names.length, "Turned off {n} mod", "Turned off {n} mods");
   record({ label, undo: () => set(true), redo: () => set(false) });
 }
 
@@ -99,7 +100,7 @@ export async function turnOff(game: GameId, ids: string[], names: string[]) {
 export async function ignoreConflict(game: GameId, ids: string[], names: string[], on = true) {
   const set = async (v: boolean) => { await modtools.ignoreConflict(game, ids, v); emitApp({ type: "library-refresh", game }); };
   await set(on);
-  record({ label: on ? `Ignored the conflict between ${oxford(names)}` : `Stopped ignoring ${oxford(names)}`, undo: () => set(!on), redo: () => set(on) });
+  record({ label: on ? t("Ignored the conflict between {names}", { names: oxford(names) }) : t("Stopped ignoring {names}", { names: oxford(names) }), undo: () => set(!on), redo: () => set(on) });
 }
 
 /** Take the shared parts out of one mod, so the other mods show them. With Undo (the backup puts them back). */
@@ -107,11 +108,11 @@ export async function dropShared(game: GameId, id: string, hashes: string[]) {
   let backup = await modtools.dropShared(game, id, hashes);
   emitApp({ type: "library-refresh", game });
   const flip = async () => { backup = await backups.restore(backup.id); emitApp({ type: "library-refresh", game }); };
-  record({ label: backup.label, undo: flip, redo: flip });
+  record({ label: tb(backup.label), undo: flip, redo: flip });
 }
 
 /** A file name Windows accepts ("Ellen: skins?" -> "Ellen skins"). */
 export function fileName(s: string): string {
-  const t = s.replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "");
-  return t || "mods";
+  const clean = s.replace(/[<>:"/\\|?*\u0000-\u001f]+/g, " ").replace(/\s+/g, " ").trim().replace(/[. ]+$/, "");
+  return clean || "mods";
 }

@@ -15,9 +15,12 @@ export interface KeyBinding {
 export interface VarInfo { ini: string; var: string; persist: boolean; default: string | null; current: string | null; values: string[]; label: string;
   /** "switch" when the only values are 0 and 1. */
   kind: "switch" | "list" | string;
+  /** Names for some values: a merged mod's swap value -> the variant it shows ("2" -> "Raiden Kimono"). */
+  names?: Record<string, string>;
 }
 export interface Problem {
-  kind: "missing_file" | "bad_ini" | "no_ini" | "no_key" | "missing_section" | "overlap" | string;
+  kind: "missing_file" | "bad_ini" | "no_ini" | "no_key" | "missing_section" | "overlap" | "global_trigger"
+    | "duplicate_library" | "missing_library" | string;
   detail: string; ini: string | null;
   /** "bad": part of the mod won't show or shows wrong. "warn": may not work, or only in a corner case (a boss, another
    *  skin). "info": harmless, or gachamod couldn't check it. */
@@ -26,14 +29,34 @@ export interface Problem {
   fix: ProblemFix | null;
 }
 /** "point": in `ini`, the `filename = <from>` lines change to `<to>`, the same file found elsewhere in the mod.
- *  "keep": `ini` stays on and the other `inis` are renamed DISABLED_<name>. Set `ini` to the one to keep. */
-export interface ProblemFix { kind: "point" | "keep" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
+ *  "keep": `ini` stays on and the other `inis` are renamed DISABLED_<name>. Set `ini` to the one to keep.
+ *  "off": `ini` is renamed DISABLED_<name> (a copy of a library the loader already loads). */
+export interface ProblemFix { kind: "point" | "keep" | "off" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
 /** `parts`: the shared parts by their section names ("ZhuYuan.Body.IB (6619364f)"), at most 40. */
 /** In a mod's details, `hashes` are the ones it shares with this mod (a group lists them once instead). */
 export interface ConflictRef { modId: string; name: string; shared: number; parts?: string[]; hashes?: string[] }
 export interface ModInspect {
   modId: string; inis: string[]; keys: KeyBinding[]; vars: VarInfo[]; hashCount: number;
   conflicts: ConflictRef[]; problems: Problem[]; readmes: Array<[string, string]>;
+  /** Set when the mod is several mods merged into one by GIMI's merge script. */
+  merged?: MergedInfo | null;
+}
+/** One mod inside a merged mod: the swap value that shows it, its name (its folder) and its ini as it is now. */
+export interface MergedVariant { value: string; name: string; ini: string | null }
+export interface MergedInfo {
+  /** The merged ini ("merged.ini") and the variable its key cycles ("swapvar"). */
+  ini: string; var: string; variants: MergedVariant[];
+  /** Files a split copies into a variant's folder because the merge kept one copy for several variants. */
+  copyFiles: number; copyBytes: number;
+  /** Why it can't be split, when it can't. */
+  blocked: string | null;
+}
+export interface SplitResult {
+  /** Restoring it (backups.restore) puts the merged mod back; rescan the library after. */
+  backup: Backup;
+  /** The new mods' names in swap order, and the one left on (null when the merged mod was off). */
+  mods: string[]; on: string | null;
+  copiedFiles: number; copiedBytes: number;
 }
 export interface ConflictGroup { mods: ConflictRef[]; hashes: string[]; character: string | null; ignored?: boolean }
 export interface ModProblems { modId: string; name: string; enabled: boolean; source: ModSource | null; problems: Problem[] }
@@ -85,6 +108,9 @@ export interface ImportResult {
 
 export interface ImmGame { game: GameId; config: string; mods: number; enabled: number; withSource: number }
 export interface ImmInfo { found: boolean; dir: string | null; games: ImmGame[] }
+/** No Reload Mod Manager's layout in one game's Mods folder. `showing`: mods its picks show now. */
+export interface NrmmGame { game: GameId; groups: number; mods: number; showing: number }
+export interface NrmmInfo { found: boolean; settings: string | null; games: NrmmGame[] }
 
 /** One vertex buffer of a mod's model: little-endian f32 arrays in base64. */
 export interface MeshBuffer { name: string; count: number; positions: string; normals: string | null; uvs: string | null }
@@ -117,6 +143,8 @@ export const modtools = {
   /** Make a fix lint offered. The backup undoes it (backups.restore). */
   fix: (game: GameId, id: string, fix: ProblemFix) => call<Backup>("lint_fix", { game, id, fix }),
   hashLookup: (game: GameId, hash: string) => call<HashHit[]>("hash_lookup", { game, hash }),
+  /** Split a merged mod into separate mods (the library is rescanned). The backup undoes it. */
+  splitMerged: (game: GameId, id: string) => call<SplitResult>("merged_split", { game, id }),
 };
 
 // ── mod fixes after a game update (crates/gacha-core/src/fixes.rs) ──
@@ -272,4 +300,9 @@ export const packs = {
 export const imm = {
   detect: () => call<ImmInfo>("imm_detect"),
   takeover: (game: GameId) => call<ImportResult>("imm_takeover", { game }),
+};
+
+export const nrmm = {
+  detect: () => call<NrmmInfo>("nrmm_detect"),
+  takeover: (game: GameId) => call<ImportResult>("nrmm_takeover", { game }),
 };

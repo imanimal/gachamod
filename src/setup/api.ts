@@ -2,6 +2,7 @@
 // are faked so every screen can be seen: ?mode=install|maintain|uninstall|repair, ?theme=zzz, ?scheme=light,
 // ?installed=0.1.0 (a version, or "none"), ?latest=0.1.2 (the newest on GitHub), ?offline=1, ?running=1, ?fail=1.
 import type { Look } from "./look";
+import { t } from "../lib/i18n";
 
 export type Mode = "install" | "maintain" | "uninstall" | "repair";
 export interface SetupInfo {
@@ -52,7 +53,7 @@ export const api = {
   async pickFolder(current: string): Promise<string | null> {
     if (!inTauri()) return window.prompt("Install folder", current);
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const r = await open({ directory: true, defaultPath: current, title: "Install gachamod in" });
+    const r = await open({ directory: true, defaultPath: current, title: t("Install gachamod in") });
     return typeof r === "string" ? r : null;
   },
   async win(action: "show" | "minimize" | "close") {

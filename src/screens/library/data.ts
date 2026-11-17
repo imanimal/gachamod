@@ -1,5 +1,7 @@
 // The library's data for the screens that show mods (Mods, Characters): the list at once, a scan when the last one
-// is older than 30 seconds, re-lists on backend and app events, and changes from actions applied in place.
+// is older than 30 seconds (only the first one each session while Mods folders are watched: the backend rescans a
+// folder when it changes and sends library-changed), re-lists on backend and app events, and changes from actions
+// applied in place.
 // Owner: LIBRARY area.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorKind, errorText, library, type GameId, type ModChange, type ModEntry } from "../../lib/api";
@@ -8,13 +10,13 @@ import { checkUpdates, queueLatest } from "../../lib/gamebanana";
 import { go, onApp, recountMods } from "../../lib/store";
 import { record, undo } from "../../lib/history";
 import { toast } from "../../ui/toast";
-import { plural } from "../../ui/kit";
+import { t, tn } from "../../lib/i18n";
 import { notesText } from "../../lib/notes";
-import { autoRescanPref, trashDaysPref } from "../settings/automatic";
+import { autoRescanPref, trashDaysPref, watchModsPref } from "../settings/automatic";
 import { confirmDelete } from "./confirmDelete";
 import { sayF10 } from "../../lib/elevation";
 
-const count = (n: number) => (n === 1 ? "1 mod" : `${n} mods`);
+const count = (n: number) => tn(n, "{n} mod", "{n} mods");
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -107,16 +109,18 @@ export function useMods(game: GameId, { showsErrors = false }: { showsErrors?: b
       if (quiet) return;
       // asked for by hand: also look for updates now, whatever the automatic check is set to
       const linked = l.filter((m) => m.source);
-      if (!linked.length) { toast(`Found ${count(l.length)}`); return; }
-      toast(`Found ${count(l.length)}. Checking ${linked.length === l.length ? "them" : count(linked.length)} for updates on GameBanana`);
+      if (!linked.length) { toast(tn(l.length, "Found {n} mod", "Found {n} mods")); return; }
+      toast(linked.length === l.length
+        ? tn(l.length, "Found {n} mod. Checking it for updates on GameBanana", "Found {n} mods. Checking them for updates on GameBanana")
+        : t("Found {found}. Checking {linked} for updates on GameBanana", { found: count(l.length), linked: count(linked.length) }));
       try {
         const ids = await checkUpdates(l);
         await library.markUpdates(game, ids);
         const want = new Set(ids);
         if (mine()) setMods((now) => now.map((m) => (m.updateAvailable === want.has(m.id) ? m : { ...m, updateAvailable: want.has(m.id) })));
         recountMods(game);
-        toast(ids.length ? `${ids.length === 1 ? "1 mod has" : `${ids.length} mods have`} an update` : "Every mod is up to date");
-      } catch (e) { toast(`Couldn't check for updates: ${errorText(e)}`, true); }
+        toast(ids.length ? tn(ids.length, "{n} mod has an update", "{n} mods have an update") : t("Every mod is up to date"));
+      } catch (e) { toast(t("Couldn't check for updates: {error}", { error: errorText(e) }), true); }
     } catch (e) {
       if (alive.current && gameRef.current === game) fail(e);
       else toast(errorText(e), true);
@@ -132,7 +136,14 @@ export function useMods(game: GameId, { showsErrors = false }: { showsErrors?: b
       setError(null);
       // an empty list waits for the scan below, so a first visit doesn't flash "No mods yet"
       setLoaded(l.length > 0);
-      if (Date.now() - (lastScan.get(game) ?? 0) > SCAN_AGE) void autoRescanPref.ready.then(() => { if (!live) return; if (autoRescanPref.get() || !l.length) void rescan(true); else setLoaded(true); });
+      // a watched Mods folder is scanned by the backend when it changes: only the session's first visit scans here
+      const stale = Date.now() - (lastScan.get(game) ?? 0) > SCAN_AGE;
+      if (stale) void Promise.all([autoRescanPref.ready, watchModsPref.ready]).then(() => {
+        if (!live) return;
+        if (watchModsPref.get() && lastScan.has(game) && l.length) setLoaded(true);
+        else if (autoRescanPref.get() || !l.length) void rescan(true);
+        else setLoaded(true);
+      });
       else setLoaded(true);
     }).catch((e) => { if (live) fail(e); });
     if (!purged) { purged = true; library.trashPurge(null).catch(() => {}); }
@@ -154,16 +165,15 @@ export function useMods(game: GameId, { showsErrors = false }: { showsErrors?: b
 
 // ── actions with Undo ──
 
-const nameOf = (list: ModEntry[], what: string) => (list.length === 1 ? list[0]!.name : `${list.length} ${what}`);
+const nameOf = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : count(list.length));
 
 /** "Turned on 2, turned off Coca Cola" style summary of a change. */
 export function summarize(change: ModChange): string {
   const on = change.changed.filter((m) => m.enabled), off = change.changed.filter((m) => !m.enabled);
-  const parts: string[] = [];
-  if (on.length) parts.push(`turned on ${nameOf(on, "mods")}`);
-  if (off.length) parts.push(`turned off ${nameOf(off, "mods")}`);
-  const s = parts.join(", ");
-  return s ? s[0]!.toUpperCase() + s.slice(1) : "Nothing changed";
+  if (on.length && off.length) return t("Turned on {on}, turned off {off}", { on: nameOf(on), off: nameOf(off) });
+  if (on.length) return t("Turned on {mods}", { mods: nameOf(on) });
+  if (off.length) return t("Turned off {mods}", { mods: nameOf(off) });
+  return t("Nothing changed");
 }
 
 /** Put mods back to earlier on/off states (undo). Offs first so the one-skin rule never undoes the ons. */
@@ -211,7 +221,7 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
   const changedIds = merged.changed.map((m) => m.id);
   if (!changedIds.length) {
     const rest = sayF10(merged.notes);
-    if (rest.length || !merged.notes.length) toast(rest.length ? notesText(rest) : "Nothing to change");
+    if (rest.length || !merged.notes.length) toast(rest.length ? notesText(rest) : t("Nothing to change"));
     return merged;
   }
   record({
@@ -239,16 +249,16 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
   let gone = change.removed;
   const many = removedNames.length >= 50;
   const entry = record({
-    label: `Removed ${nameOf(removedNames, "mods")}`,
+    label: t("Removed {mods}", { mods: nameOf(removedNames) }),
     undo: async () => {
       const trash = await library.trash(game);
       const back: string[] = [];
       const fetch: number[] = [];
       const stuck: string[] = [];
       for (const id of gone) {
-        const t = trash.find((x) => x.modId === id);
-        if (t) {
-          const ch = await library.trashRestore(t.id);
+        const tr = trash.find((x) => x.modId === id);
+        if (tr) {
+          const ch = await library.trashRestore(tr.id);
           publish(game, ch);
           back.push(...ch.changed.map((m) => m.id));
           continue;
@@ -259,9 +269,13 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
         else stuck.push(m?.name ?? id);
       }
       for (const gb of fetch) await queueLatest(game, gb);
-      if (fetch.length) toast(`Downloading ${plural(fetch.length, "mod")} again. Settings come back when they install`, false, { label: "Downloads", run: () => go("downloads") });
+      if (fetch.length) toast(tn(fetch.length, "Downloading {n} mod again. Settings come back when they install", "Downloading {n} mods again. Settings come back when they install"), false, { label: t("Downloads"), run: () => go("downloads") });
       if (stuck.length) {
-        toast(`Couldn't bring back ${stuck.slice(0, 3).join(", ")}${stuck.length > 3 ? ` and ${stuck.length - 3} more` : ""}. ${stuck.length === 1 ? "Its files were" : "Their files were"} deleted and ${stuck.length === 1 ? "it has" : "they have"} no GameBanana link`, true);
+        const first = stuck.slice(0, 3).join(", ");
+        const names = stuck.length > 3 ? t("{names} and {n} more", { names: first, n: stuck.length - 3 }) : first;
+        toast(stuck.length === 1
+          ? t("Couldn't bring back {names}. Its files were deleted and it has no GameBanana link", { names })
+          : t("Couldn't bring back {names}. Their files were deleted and they have no GameBanana link", { names }), true);
       }
       gone = back;
     },
@@ -271,6 +285,6 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
       gone = ch.removed;
     },
   }, many);
-  if (many) toast(`Removed ${removedNames.length} mods. Fresh start?`, false, { label: "Undo", run: () => void undo(entry) });
+  if (many) toast(t("Removed {n} mods. Fresh start?", { n: removedNames.length }), false, { label: t("Undo"), run: () => void undo(entry) });
   return change;
 }

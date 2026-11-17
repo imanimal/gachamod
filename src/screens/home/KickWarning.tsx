@@ -7,6 +7,8 @@ import { toast } from "../../ui/toast";
 import { errorText, launchConfig, type DllConfig, type LaunchConfig } from "../../lib/api";
 import { GI_KICK_GUIDE, openKickGuide } from "../../lib/kickFix";
 import { KickSteps } from "../tools/KickSteps";
+import { gameName } from "../../lib/games";
+import { t } from "../../lib/i18n";
 
 /** play: start this once. done: the player did the fix, so start and stop warning. */
 export type KickAnswer = "play" | "done" | "cancel";
@@ -36,26 +38,25 @@ const done = (a: KickAnswer) => { const f = answer; answer = null; emit(); f?.(a
 function Host() {
   const open = useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => answer !== null);
   if (!open) return null;
+  const gi = gameName({ name: "Genshin Impact" });
   return (
-    <Dialog title="Before you play Genshin Impact" icon="warn" size="md" onClose={() => done("cancel")} footer={<>
-      <Button variant="ghost" onClick={() => done("cancel")}>Cancel</Button>
-      <Button onClick={() => done("done")} title="Start the game and stop warning, until XXMI puts its own d3d11.dll back">I did the fix</Button>
-      <Button variant="primary" autoFocus onClick={() => done("play")} title="Start the game. gachamod warns again next time">Play anyway</Button>
+    <Dialog title={t("Before you play {game}", { game: gi })} icon="warn" size="md" onClose={() => done("cancel")} footer={<>
+      <Button variant="ghost" onClick={() => done("cancel")}>{t("Cancel")}</Button>
+      <Button onClick={() => done("done")} title={t("Start the game and stop warning, until XXMI puts its own d3d11.dll back")}>{t("I did the fix")}</Button>
+      <Button variant="primary" autoFocus onClick={() => done("play")} title={t("Start the game. gachamod warns again next time")}>{t("Play anyway")}</Button>
     </>}>
       {undone ? (
         <p>
-          You did the fix before, but XXMI has put its own d3d11.dll back, most likely in an update. Genshin Impact's
-          anti-cheat flags that one and can stop the game with "Illegal tool detected" (10612-4001).
+          {t("You did the fix before, but XXMI has put its own d3d11.dll back, most likely in an update. {game}'s anti-cheat flags that one and can stop the game with \"Illegal tool detected\" (10612-4001).", { game: gi })}
         </p>
       ) : (
         <p>
-          Genshin Impact's anti-cheat flags the d3d11.dll that XXMI loads mods with. It can stop the game with "Illegal
-          tool detected" (10612-4001) and flag your account.
+          {t("{game}'s anti-cheat flags the d3d11.dll that XXMI loads mods with. It can stop the game with \"Illegal tool detected\" (10612-4001) and flag your account.", { game: gi })}
         </p>
       )}
-      <p>A GameBanana guide shows a fix you do by hand. That fix goes against the game's terms too.</p>
+      <p>{t("A GameBanana guide shows a fix you do by hand. That fix goes against the game's terms too.")}</p>
       <p>
-        <Button size="sm" variant="ghost" icon="external" onClick={openKickGuide} title={`Open ${GI_KICK_GUIDE} in your browser`}>Open the guide</Button>
+        <Button size="sm" variant="ghost" icon="external" onClick={openKickGuide} title={t("Open {url} in your browser", { url: GI_KICK_GUIDE })}>{t("Open the guide")}</Button>
       </p>
       <GuideSteps />
     </Dialog>
@@ -76,7 +77,7 @@ function GuideSteps() {
     return () => { on = false; window.removeEventListener("focus", back); };
   }, []);
   if (failed) return null;
-  if (!cfg) return <Waiting what="Reading XXMI's settings" />;
+  if (!cfg) return <Waiting what={t("Reading XXMI's settings")} />;
   if (!cfg.dll || cfg.via !== "xxmi") return null;
 
   const change = (d: Partial<DllConfig>) => {
@@ -85,5 +86,5 @@ function GuideSteps() {
     setCfg(next);
     launchConfig.set("gi", next).then(setCfg).catch((e) => { setCfg(before); toast(errorText(e), true); });
   };
-  return <><h3 className="sub-h">Steps from the guide</h3><KickSteps dll={cfg.dll} locked={cfg.locked} onChange={change} /></>;
+  return <><h3 className="sub-h">{t("Steps from the guide")}</h3><KickSteps dll={cfg.dll} locked={cfg.locked} onChange={change} /></>;
 }

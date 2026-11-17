@@ -7,10 +7,12 @@
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 static DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
 static WRITING: Mutex<()> = Mutex::new(());
+/// Hears every line as it's written (the app sends it to the window's console). Set once at startup.
+static SINK: OnceLock<Box<dyn Fn(Level, &str) + Send + Sync>> = OnceLock::new();
 const LOG: &str = "gachamod.log";
 const OLD: &str = "gachamod.old.log";
 const MAX: u64 = 1_000_000;
@@ -32,11 +34,23 @@ pub enum Level { Info, Warn, Error }
 
 impl Level {
     fn tag(self) -> &'static str { match self { Level::Info => "info ", Level::Warn => "warn ", Level::Error => "error" } }
+    pub fn name(self) -> &'static str { self.tag().trim_end() }
     pub fn parse(s: &str) -> Level { match s { "error" => Level::Error, "warn" => Level::Warn, _ => Level::Info } }
 }
 
+/// Pass every line written from now on to `f` too (once; later calls are ignored).
+pub fn set_sink(f: impl Fn(Level, &str) + Send + Sync + 'static) { let _ = SINK.set(Box::new(f)); }
+
 /// Add to the log. Lines after the first are indented, so one entry stays one block.
 pub fn write(level: Level, text: &str) {
+    write_file(level, text);
+    if let Some(f) = SINK.get() { f(level, text); }
+}
+
+/// Add lines that came from the window: its console already shows them, so the sink doesn't hear them.
+pub fn write_from_window(level: Level, text: &str) { write_file(level, text) }
+
+fn write_file(level: Level, text: &str) {
     let Some(dir) = dir() else { return };
     let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
     let file = dir.join(LOG);

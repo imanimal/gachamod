@@ -11,6 +11,7 @@ import { go, VIEWS, type Route, type View } from "../../lib/store";
 import { subscribeTheme, THEME_TOKENS } from "../../lib/theme";
 import { Button, Empty, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
+import { t } from "../../lib/i18n";
 
 export type ExtSlotName = "characterTab" | "page";
 
@@ -102,23 +103,23 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
   const way = (retry: string, retryTip: string) => (
     <>
       <Button icon="refresh" onClick={() => setAttempt((n) => n + 1)} title={retryTip}>{retry}</Button>
-      <Button icon="power" onClick={() => void setExtensionEnabled(ext, false)} title={`Turns ${m.name} off. Undo turns it back on`}>Turn off</Button>
-      {m.homepage && <Button icon="external" onClick={() => void shell.openUrl(m.homepage!)} title={m.homepage}>Author's page</Button>}
+      <Button icon="power" onClick={() => void setExtensionEnabled(ext, false)} title={t("Turns {name} off. Undo turns it back on", { name: m.name })}>{t("Turn off")}</Button>
+      {m.homepage && <Button icon="external" onClick={() => void shell.openUrl(m.homepage!)} title={m.homepage}>{t("Author's page")}</Button>}
     </>
   );
   if (error) {
     return (
-      <Empty icon="puzzle" title={`${m.name} couldn't load its page`} actions={way("Try again", "Reads the page's files again")}>
+      <Empty icon="puzzle" title={t("{name} couldn't load its page", { name: m.name })} actions={way(t("Try again"), t("Reads the page's files again"))}>
         {error}
       </Empty>
     );
   }
-  if (!src) return <Waiting className="ext-frame-wait" what={`Loading ${m.name}`} />;
+  if (!src) return <Waiting className="ext-frame-wait" what={t("Loading {name}", { name: m.name })} />;
   return (
     <>
       {stuck && (
-        <Empty icon="puzzle" title={`${m.name} isn't answering`} actions={way("Reload page", "Starts the page again")}>
-          Its page hasn't started after 10 seconds. It may be waiting on a site that's down, or it has a fault its author can fix.
+        <Empty icon="puzzle" title={t("{name} isn't answering", { name: m.name })} actions={way(t("Reload page"), t("Starts the page again"))}>
+          {t("Its page hasn't started after 10 seconds. It may be waiting on a site that's down, or it has a fault its author can fix.")}
         </Empty>
       )}
       <iframe ref={ref} className="ext-frame" data-ext={ext.id} title={`${m.name}: ${(slot === "page" ? m.page : m.characterTab)?.title ?? ""}`}
@@ -199,8 +200,8 @@ export function NeedsNote({ ext }: { ext: InstalledExt }) {
     <div className="ext-needs" role="note">
       {missing.map((a) => (
         <p key={a.name}>
-          <span>{ext.manifest!.name} works with {a.name}, which isn't on this PC yet. Install it, then come back to this page.</span>
-          {a.url && <Button size="sm" icon="external" onClick={() => void shell.openUrl(a.url!)} title={a.url}>Get {a.name}</Button>}
+          <span>{t("{name} works with {app}, which isn't on this PC yet. Install it, then come back to this page.", { name: ext.manifest!.name, app: a.name })}</span>
+          {a.url && <Button size="sm" icon="external" onClick={() => void shell.openUrl(a.url!)} title={a.url}>{t("Get {app}", { app: a.name })}</Button>}
         </p>
       ))}
     </div>

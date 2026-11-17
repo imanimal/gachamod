@@ -3,6 +3,7 @@
 // The row gets the class `is-all` while open (kit.css).
 import { useSyncExternalStore } from "react";
 import { IconButton } from "./kit";
+import { t } from "../lib/i18n";
 
 const KEY = "gm.rowsOpen";
 const subs = new Set<() => void>();
@@ -34,5 +35,5 @@ export function useRowOpen(id: string): [boolean, () => void] {
 /** The button. Shown while the row doesn't fit on one line, and while it is open so it can go back. */
 export function ShowAll({ open, onToggle, fits, label }: { open: boolean; onToggle: () => void; fits: boolean; label: string }) {
   if (fits && !open) return null;
-  return <IconButton size="sm" className="show-all" icon={open ? "collapse" : "grid"} on={open} label={open ? "Show in one row" : label} onClick={onToggle} />;
+  return <IconButton size="sm" className="show-all" icon={open ? "collapse" : "grid"} on={open} label={open ? t("Show in one row") : label} onClick={onToggle} />;
 }

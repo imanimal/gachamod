@@ -2,10 +2,11 @@
 // Keys and options are made up from each mod's name, so every mod in the demo library has something to show.
 import { demoEmit, registerDemo } from "../tauri";
 import { demoDb, demoId, demoNow, demoWait } from "./db";
+import { demoLog, onDemoReset, scenario } from "./scenario";
 import type {
-  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, FixerFile, FixerRequest, FixerRun, ModHealthRow, ExportRequest, HashHit, ImmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
+  Backup, ClashKey, ConflictGroup, DrawRef, ExportPlan, FixAll, FixInfo, FixerFile, FixerRequest, FixerRun, ModHealthRow, ExportRequest, HashHit, ImmInfo, NrmmInfo, ImportOptions, ImportResult, IniOutline, KeyBinding,
   KeyClash, KeyEdit, KeyEntry, KeyLine, KeyTarget, ModEntry, ModInspect, ModKeys, ModProblems, OnScreenAll, OnScreenMod, PackFiles, PackPreview, PackPreviewMod, PreviewGame, PreviewProfile, ProblemFix,
-  ModMesh, VarInfo, VarValue,
+  MergedInfo, ModMesh, SplitResult, VarInfo, VarValue,
 } from "../api";
 import { queue } from "../api/online";
 import { bindingLabel } from "../../screens/modtools/keyNames";
@@ -20,6 +21,8 @@ const iniOf = (m: ModEntry) => `${m.name.replace(/[^\w ]+/g, "").trim().replace(
 
 /** A small number from a string, so each mod gets the same made-up insides every time. */
 function seed(s: string): number { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+/** The demo mods of a game that are merges of three outfits (for the test console). */
+export const demoMergedMods = (game: string): ModEntry[] => modsOf(game).filter((m) => seed(m.name) % 5 === 0);
 
 function demoInspect(game: string, id: string): ModInspect {
   const m = findMod(game, id);
@@ -36,6 +39,17 @@ function demoInspect(game: string, id: string): ModInspect {
     { ini, var: "jacket", persist: true, default: "1", current: cur("jacket", "1"), values: ["0", "1"], label: "Jacket", kind: "switch" },
     { ini, var: "color", persist: true, default: "0", current: cur("color", "0"), values: ["0", "1", "2", "3"], label: "Color", kind: "list" },
   ];
+  // every fifth mod is a merge of three outfits (GIMI's merge script)
+  const merged: MergedInfo | null = n % 5 === 0 ? {
+    ini: "merged.ini", var: "swapvar", copyFiles: n % 2 ? 2 : 0, copyBytes: n % 2 ? 6_291_456 : 0,
+    blocked: scenario().blockedSplit ? `${m.character ?? "Raiden"} Kimono sits in the mod's main folder, so it can't be a mod of its own` : null,
+    variants: ["Regular", "Kimono", "Swimsuit"].map((v, i) => ({ value: String(i), name: `${m.character ?? "Raiden"} ${v}`, ini: `${m.character ?? "Raiden"} ${v}/DISABLED${v}.ini` })),
+  } : null;
+  if (merged) {
+    keys.push({ ...key("KeySwap", ["5"], ["5"], "cycle", [{ var: "swapvar", values: ["0", "1", "2"] }]), ini: "merged.ini" });
+    vars.push({ ini: "merged.ini", var: "swapvar", persist: true, default: "0", current: saved.get(savedKey(game, id, "merged.ini", "swapvar")) ?? "0",
+      values: ["0", "1", "2"], label: "Swap", kind: "list", names: Object.fromEntries(merged.variants.map((v) => [v.value, v.name])) });
+  }
   if (n % 3 === 0) {
     keys.push(key("KeyHair", ["VK_NUMPAD1"], ["Num 1"], "cycle", [{ var: "hairvar", values: ["0", "1", "2", "3", "4", "5", "6"] }]));
     vars.push({ ini, var: "hairvar", persist: true, default: "0", current: cur("hairvar", "0"), values: ["0", "1", "2", "3", "4", "5", "6"], label: "Hair", kind: "list" });
@@ -49,6 +63,7 @@ function demoInspect(game: string, id: string): ModInspect {
     }) : [],
     problems: n % 4 === 0 ? [{ kind: "missing_file", detail: `${ini} needs Textures/Face.dds, which isn't in the mod folder`, ini, severity: "warn", fix: null }] : [],
     readmes: [["readme.txt", `${m.name}\n\nCtrl+Alt+J takes the jacket off and puts it back.\nCtrl+Alt+C changes the colour (4 colours).\n\nPress F10 in game after changing files.`]],
+    merged,
   };
 }
 
@@ -102,6 +117,15 @@ function demoLint(game: string): ModProblems[] {
     fix: { kind: "keep", ini: v[0]!, from: null, to: null, inis: v },
   }]);
   if (list[3]) add(list[3], [{ kind: "missing_file", detail: `${iniOf(list[3])} needs Textures/Face.dds, which isn't in the mod folder`, ini: iniOf(list[3]), severity: "warn", fix: null }]);
+  if (scenario().newChecks) {
+    if (list[5]) add(list[5], [{ kind: "duplicate_library", severity: "bad", ini: "ORFix.ini",
+      detail: "ORFix.ini is a copy of ORFix, which the loader already loads from Core\\GIMI\\Libraries. Two copies of a library break the mods that use it. Turn this copy off",
+      fix: { kind: "off", ini: "ORFix.ini", from: null, to: null, inis: [] } }]);
+    if (list[8]) add(list[8], [{ kind: "missing_library", severity: "warn", ini: iniOf(list[8]),
+      detail: `${iniOf(list[8])} uses RabbitFX (CommandList\\RabbitFX\\Run), which isn't installed, so that step is skipped. RabbitFX is a shared library or another mod`, fix: null }]);
+    if (list[9]) add(list[9], [{ kind: "global_trigger", severity: "warn", ini: iniOf(list[9]),
+      detail: `[ShaderRegexBody] in ${iniOf(list[9])} runs CheckTextureOverride on ps-t0 for every matching shader in the game, which costs FPS everywhere, not only while this mod's model is on screen`, fix: null }]);
+  }
   if (list[4]) add(list[4], [{ kind: "no_key", detail: `[KeySwap] in ${iniOf(list[4])} has no key line, so it does nothing`, ini: iniOf(list[4]), severity: "info", fix: null }]);
   return out;
 }
@@ -161,6 +185,8 @@ async function fakeProgress(total: number, ms = 1600) {
 }
 
 const immMoved = new Set<string>();
+const nrmmMoved = new Set<string>();
+onDemoReset(() => { immMoved.clear(); nrmmMoved.clear(); });
 
 /** Packs saved in this demo session, by path, so opening one shows what went in. */
 interface DemoPack { title: string; kind: string; files: PackFiles; parts: Array<{ game: string; mods: ModEntry[]; profiles: string[] }> }
@@ -582,6 +608,20 @@ export function registerModtoolsDemo() {
       return { id: bid, game: String(game), modId: m.id, modDir: m.path, files: [f.ini ?? ""], created: [], label, at: demoNow() };
     },
     hash_lookup: async ({ game, hash }) => { await demoWait(200); return demoHash(String(game), String(hash)); },
+    merged_split: async ({ game, id }): Promise<SplitResult> => {
+      await demoWait(400);
+      const g = String(game);
+      const merged = demoInspect(g, String(id)).merged;
+      const m = findMod(g, String(id));
+      if (!merged) fail("invalid", `${m.name} isn't a merged mod`);
+      if (merged!.blocked) fail("invalid", merged!.blocked!);
+      const value = saved.get(savedKey(g, m.id, "merged.ini", "swapvar")) ?? "0";
+      const on = merged!.variants.find((v) => v.value === value) ?? merged!.variants[0]!;
+      return {
+        backup: { id: `split-${demoId()}`, game: g, modId: `${m.id}-split`, modDir: m.path, files: ["merged.ini", ".gachamod.json"], created: [], label: `Split ${m.name} into ${merged!.variants.length} mods`, at: demoNow() },
+        mods: merged!.variants.map((v) => v.name), on: m.enabled ? on.name : null, copiedFiles: merged!.copyFiles, copiedBytes: merged!.copyBytes,
+      };
+    },
     fixes_info: async ({ game }): Promise<FixInfo> => {
       await demoWait(80);
       const f = FIXERS[String(game)];
@@ -654,14 +694,27 @@ export function registerModtoolsDemo() {
         games: [
           { game: "zzz", config: "configZZ.json", mods: 23, enabled: 9, withSource: 18 },
           { game: "gi", config: "configGI.json", mods: 7, enabled: 3, withSource: 7 },
-        ].filter((g) => !immMoved.has(g.game)),
+        ].filter((g) => scenario().imm && !immMoved.has(g.game)),
       };
     },
     imm_takeover: async ({ game }): Promise<ImportResult> => {
       await demoWait(1400);
       immMoved.add(String(game));
+      demoLog(`IMM takeover (${String(game)}): moved its mods to Mods/<Character>/<mod>, 2 restore points left`);
       const n = game === "gi" ? 7 : 23;
       return { added: Array.from({ length: n }, demoId), replaced: [], skipped: 0, profileId: null, profiles: [], queued: 0, missing: [], notes: [`Moved ${n} mods from Integrated Mod Manager`] };
+    },
+    nrmm_detect: async (): Promise<NrmmInfo> => {
+      await demoWait(150);
+      const games = [{ game: "zzz" as const, groups: 4, mods: 15, showing: 3 }].filter((g) => scenario().nrmm && !nrmmMoved.has(g.game));
+      return { found: true, settings: "%APPDATA%\\com.aglg\\No Reload Mod Manager\\shared_preferences.json", games };
+    },
+    nrmm_takeover: async ({ game }): Promise<ImportResult> => {
+      await demoWait(1400);
+      nrmmMoved.add(String(game));
+      demoLog(`NRMM takeover (${String(game)}): 4 groups, inis put back from .ini_managed_backup, _MANAGED_ sent to the trash`);
+      const n = 15;
+      return { added: Array.from({ length: n }, demoId), replaced: [], skipped: 0, profileId: null, profiles: [], queued: 0, missing: [], notes: [`Moved ${n} mods from No Reload Mod Manager`] };
     },
   });
 }

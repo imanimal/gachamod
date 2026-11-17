@@ -66,6 +66,11 @@ The rewrite is idempotent: lines it added earlier are recognised and stripped, t
 8. The key editor disables a key by putting `;+;` in front of its section header and every line of the section.
 9. A Restorer strips the manager lines again (pattern based, not from the backup) so mods can be shared.
 
+The backup is made before the first rewrite only, but duplicate namespaces are renamed before it, so a mod's
+`.ini_managed_backup` can hold either the author's namespace or NRMM's `name_1`. Key rebinds and `;+;` are only in the
+rewritten file. gachamod reads this layout (the scan treats `_MANAGED_` and `group_<N>` as groups and reads each
+group's active slot) and moves mods out of it (nrmm.rs, docs/spec.md "Moving from No Reload Mod Manager").
+
 ### 2.3 The group file and how a pick reaches the game
 
 Each `group_N.ini` has an explicit `namespace` (`modmanageragl\group_N`) and one persisted variable, `$active_slot`.

@@ -19,6 +19,7 @@ import { characterList, hqBar, hqScore, isAbort, listByCreators, listMods, type 
 import { creatorsPref, hiddenModsPref, nsfwPref } from "./prefs";
 import { allGames, currentGame, currentRoute, go } from "./store";
 import { toast } from "../ui/toast";
+import { t } from "./i18n";
 
 interface Taste {
   /** Character (lower case) to weight. */
@@ -38,14 +39,14 @@ async function taste(game: GameId): Promise<Taste> {
     library.list(game).catch(() => [] as ModEntry[]),
     library.archive(game).catch(() => []),
   ]);
-  const t: Taste = { chars: new Map(), makers: new Set(), have: new Set(), gone: new Set(), mods };
+  const me: Taste = { chars: new Map(), makers: new Set(), have: new Set(), gone: new Set(), mods };
   for (const m of mods) {
-    if (m.character) { const k = m.character.toLowerCase(); t.chars.set(k, (t.chars.get(k) ?? 0) + (m.enabled ? 2 : 1) + (m.favorite ? 1 : 0)); }
-    if (m.source?.submitter) t.makers.add(m.source.submitter.toLowerCase());
-    if (m.source?.modId) t.have.add(m.source.modId);
+    if (m.character) { const k = m.character.toLowerCase(); me.chars.set(k, (me.chars.get(k) ?? 0) + (m.enabled ? 2 : 1) + (m.favorite ? 1 : 0)); }
+    if (m.source?.submitter) me.makers.add(m.source.submitter.toLowerCase());
+    if (m.source?.modId) me.have.add(m.source.modId);
   }
-  for (const a of Array.isArray(archived) ? archived : []) if (a?.source?.modId) t.gone.add(a.source.modId);
-  return t;
+  for (const a of Array.isArray(archived) ? archived : []) if (a?.source?.modId) me.gone.add(a.source.modId);
+  return me;
 }
 
 /** Mods you don't have that fit your library, best first. Throws only when GameBanana can't be reached at all. */
@@ -53,10 +54,10 @@ export async function recommend(game: GameId, opts: { limit?: number; signal?: A
   const gs = allGames().find((g) => g.id === game);
   if (!gs?.gamebananaId) return [];
   const gbGameId = gs.gamebananaId, signal = opts.signal;
-  const t = await taste(game);
+  const me = await taste(game);
   const creators = creatorsPref.get();
   const liked = Object.values(creators).filter((c) => (c.sub || c.fav || c.prio) && !c.blocked).map((c) => c.id);
-  const top = [...t.chars.entries()].sort((a, b) => b[1] - a[1]);
+  const top = [...me.chars.entries()].sort((a, b) => b[1] - a[1]);
   const maxChar = top[0]?.[1] ?? 1;
   const cats = await characterList(game).catch(() => []);
 
@@ -82,7 +83,7 @@ export async function recommend(game: GameId, opts: { limit?: number; signal?: A
   const cards = got.flatMap((g) => (g.status === "fulfilled" ? g.value : [])).filter((c) => {
     if (seen.has(c.id)) return false;
     seen.add(c.id);
-    if (t.have.has(c.id) || t.gone.has(c.id) || hidden.has(c.id)) return false;
+    if (me.have.has(c.id) || me.gone.has(c.id) || hidden.has(c.id)) return false;
     if (c.submitter && creators[String(c.submitter.id)]?.blocked) return false;
     return !(hideAdult && c.nsfw);
   });
@@ -90,9 +91,9 @@ export async function recommend(game: GameId, opts: { limit?: number; signal?: A
   const now = Date.now() / 1000;
   const scored = cards.map((c) => {
     const quality = Math.min(2.5, hqScore(c, bar, null, now));
-    const character = c.character ? (t.chars.get(c.character.toLowerCase()) ?? 0) / maxChar : 0;
+    const character = c.character ? (me.chars.get(c.character.toLowerCase()) ?? 0) / maxChar : 0;
     const who = c.submitter;
-    const creator = who && liked.includes(who.id) ? 1 : who && t.makers.has(who.name.toLowerCase()) ? 0.6 : 0;
+    const creator = who && liked.includes(who.id) ? 1 : who && me.makers.has(who.name.toLowerCase()) ? 0.6 : 0;
     return { c, score: quality * (0.5 + character) * (1 + 0.6 * creator) * KIND_WEIGHT[c.kind ?? "outfit"] };
   }).sort((a, b) => b.score - a.score);
 
@@ -126,12 +127,12 @@ export async function surpriseMe(game?: GameId | null): Promise<GbCard | null> {
   if (!g) return null;
   let recs: GbCard[];
   try { recs = await recommend(g, { limit: 40 }); } catch (e) {
-    toast(`Couldn't reach GameBanana: ${errorText(e)}`, true, { label: "Try again", run: () => void surpriseMe(g) });
+    toast(t("Couldn't reach GameBanana: {error}", { error: errorText(e) }), true, { label: t("Try again"), run: () => void surpriseMe(g) });
     return null;
   }
   let pool = recs.filter((c) => !surprised.includes(c.id)).slice(0, 25);
   if (!pool.length && recs.length) { surprised.length = 0; pool = recs.slice(0, 25); }
-  if (!pool.length) { toast("Nothing new to suggest right now"); return null; }
+  if (!pool.length) { toast(t("Nothing new to suggest right now")); return null; }
   const weights = pool.map((_, i) => 1 / (1 + i * 0.15));
   let r = Math.random() * weights.reduce((a, b) => a + b, 0);
   let pick = pool[pool.length - 1]!;
@@ -144,16 +145,16 @@ export async function surpriseMe(game?: GameId | null): Promise<GbCard | null> {
 
 /** A task for the chatbot: suggest mods from what the library holds (AiHost builds the prompt). */
 export async function ideasTask(game: GameId): Promise<AiTask> {
-  const t = await taste(game);
-  const chars = [...t.chars.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
-    .map(([k, n]) => `${t.mods.find((m) => m.character?.toLowerCase() === k)?.character ?? k} (${n})`);
-  const makers = [...t.makers].slice(0, 15);
+  const me = await taste(game);
+  const chars = [...me.chars.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
+    .map(([k, n]) => `${me.mods.find((m) => m.character?.toLowerCase() === k)?.character ?? k} (${n})`);
+  const makers = [...me.makers].slice(0, 15);
   // adult mods' names stay out (lib/ai.ts)
-  const names = t.mods.filter((m) => !hideFromAi(m)).slice(0, 40).map((m) => m.name);
+  const names = me.mods.filter((m) => !hideFromAi(m)).slice(0, 40).map((m) => m.name);
   const detail = [
     chars.length ? `Characters I have the most mods for (weight): ${chars.join(", ")}.` : "I don't have any mods yet.",
     makers.length ? `Creators whose mods I keep: ${makers.join(", ")}.` : "",
     names.length ? `Some of my mods: ${names.join("; ")}.` : "",
   ].filter(Boolean).join("\n");
-  return { kind: "recommend", title: "Mod ideas", game, detail };
+  return { kind: "recommend", title: t("Mod ideas"), game, detail };
 }

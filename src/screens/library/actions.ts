@@ -7,7 +7,8 @@ import type { MetaPatch } from "../../lib/api/library";
 import { checkUpdates, modPage, queueLatest } from "../../lib/gamebanana";
 import { fixMods } from "../../lib/fixes";
 import { record } from "../../lib/history";
-import { currentRoute, emitApp, go } from "../../lib/store";
+import { currentRoute, emitApp, go, replaceRoute } from "../../lib/store";
+import { layoutPick } from "../../lib/theme";
 import { useSyncExternalStore } from "react";
 import { retoast, toast } from "../../ui/toast";
 import { profilesChanged } from "../profiles/data";
@@ -15,9 +16,10 @@ import { changeStates, publish, removeMods, toggleMods } from "./data";
 import { previewChanged } from "./Preview";
 import { askOverlap } from "./overlap";
 import { notesText } from "../../lib/notes";
+import { t, tn } from "../../lib/i18n";
 
 /** "Ellen hoodie" or "3 mods". */
-export const modsName = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : `${list.length} mods`);
+export const modsName = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : tn(list.length, "{n} mod", "{n} mods"));
 
 const fail = (e: unknown) => toast(errorText(e), true);
 
@@ -29,7 +31,7 @@ const fail = (e: unknown) => toast(errorText(e), true);
  *  asking. False when nothing changed (the question was closed). */
 export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?: ModEntry[], at?: Element | null, keep = false): Promise<boolean> {
   const ids = list.filter((m) => m.enabled !== on).map((m) => m.id);
-  if (!ids.length) { toast(on ? "They're already on" : "They're already off"); return false; }
+  if (!ids.length) { toast(on ? t("They're already on") : t("They're already off")); return false; }
   const from = at ?? document.activeElement;
   try {
     const all = prior ?? await library.list(game);
@@ -54,12 +56,12 @@ export async function setParent(game: GameId, mod: ModEntry, parent: string, all
   const before = mod.parent ?? "";
   if (before === parent) return true;
   const list = all ?? await library.list(game).catch(() => [] as ModEntry[]);
-  const name = (id: string) => list.find((m) => m.id === id)?.name ?? "the other mod";
+  const name = (id: string) => list.find((m) => m.id === id)?.name ?? t("the other mod");
   try {
     const run = async (p: string) => publish(game, { changed: [await library.updateMeta(game, mod.id, { parent: p })], removed: [], notes: [] });
     await run(parent);
     record({
-      label: parent ? `Made ${mod.name} a sub-mod of ${name(parent)}` : `${mod.name} is a mod of its own again`,
+      label: parent ? t("Made {mod} a sub-mod of {parent}", { mod: mod.name, parent: name(parent) }) : t("{mod} is a mod of its own again", { mod: mod.name }),
       undo: () => run(before),
       redo: () => run(parent),
     });
@@ -107,37 +109,37 @@ export async function patchMods(game: GameId, list: ModEntry[], patchOf: (m: Mod
 export function renameMod(game: GameId, m: ModEntry, name: string) {
   const n = name.trim();
   if (!n || n === m.name) return Promise.resolve(false);
-  return patchMods(game, [m], () => ({ name: n }), `Renamed ${m.name} to ${n}`);
+  return patchMods(game, [m], () => ({ name: n }), t("Renamed {old} to {name}", { old: m.name, name: n }));
 }
 
 export function setCharacter(game: GameId, list: ModEntry[], name: string) {
   const n = name.trim();
   const same = (m: ModEntry) => (m.character ?? "").toLowerCase() === n.toLowerCase();
   return patchMods(game, list, (m) => (same(m) ? null : { character: n }),
-    n ? `Set ${modsName(list)} to ${n}` : `Cleared the character of ${modsName(list)}`);
+    n ? t("Set {mods} to {name}", { mods: modsName(list), name: n }) : t("Cleared the character of {mods}", { mods: modsName(list) }));
 }
 
 export function addTag(game: GameId, list: ModEntry[], tag: string) {
-  const t = tag.trim();
-  if (!t) return Promise.resolve(false);
-  return patchMods(game, list, (m) => (m.tags.some((x) => x.toLowerCase() === t.toLowerCase()) ? null : { tags: [...m.tags, t] }),
-    `Tagged ${modsName(list)} "${t}"`);
+  const tg = tag.trim();
+  if (!tg) return Promise.resolve(false);
+  return patchMods(game, list, (m) => (m.tags.some((x) => x.toLowerCase() === tg.toLowerCase()) ? null : { tags: [...m.tags, tg] }),
+    t("Tagged {mods} \"{tag}\"", { mods: modsName(list), tag: tg }));
 }
 
 export function removeTag(game: GameId, list: ModEntry[], tag: string) {
-  const t = tag.toLowerCase();
-  return patchMods(game, list, (m) => (m.tags.some((x) => x.toLowerCase() === t) ? { tags: m.tags.filter((x) => x.toLowerCase() !== t) } : null),
-    `Removed the tag "${tag}" from ${modsName(list)}`);
+  const low = tag.toLowerCase();
+  return patchMods(game, list, (m) => (m.tags.some((x) => x.toLowerCase() === low) ? { tags: m.tags.filter((x) => x.toLowerCase() !== low) } : null),
+    t("Removed the tag \"{tag}\" from {mods}", { tag, mods: modsName(list) }));
 }
 
 export function setFavourite(game: GameId, list: ModEntry[], on: boolean) {
   return patchMods(game, list, (m) => (m.favorite === on ? null : { favorite: on }),
-    on ? `Added ${modsName(list)} to favourites` : `Removed ${modsName(list)} from favourites`);
+    on ? t("Added {mods} to favourites", { mods: modsName(list) }) : t("Removed {mods} from favourites", { mods: modsName(list) }));
 }
 
 export function setAdult(game: GameId, list: ModEntry[], on: boolean) {
   return patchMods(game, list, (m) => (m.nsfw === on ? null : { nsfw: on }),
-    on ? `Marked ${modsName(list)} as for adults` : `Marked ${modsName(list)} as fine for everyone`);
+    on ? t("Marked {mods} as for adults", { mods: modsName(list) }) : t("Marked {mods} as fine for everyone", { mods: modsName(list) }));
 }
 
 // ── trash, export, files and links ──
@@ -153,7 +155,7 @@ export async function combineMods(game: GameId, list: ModEntry[]) {
   try {
     const c = await library.merge(game, list.map((m) => m.id));
     publish(game, c);
-    toast(notesText(c.notes), false, c.changed[0] ? { label: "View parts", run: () => openDetails(c.changed[0]!, "parts") } : undefined);
+    toast(notesText(c.notes), false, c.changed[0] ? { label: t("View parts"), run: () => openDetails(c.changed[0]!, "parts") } : undefined);
   } catch (e) { fail(e); }
 }
 
@@ -168,7 +170,10 @@ export function openOnGb(m: ModEntry) { if (m.source) shell.openUrl(m.source.url
 export function openDetails(m: Pick<ModEntry, "id">, section?: DrawerSection) {
   drawerSection = section ? { id: m.id, section } : null;
   const r = currentRoute();
-  if (r.view === "library" || (r.view === "characters" && r.character) || (r.view === "profiles" && r.profile !== undefined)) go({ ...r, modId: m.id });
+  // with the details docked beside the mods (Three panes), picking another mod swaps it in place, so Back leaves the page
+  // instead of stepping through every mod looked at
+  if (r.modId && r.view !== "profiles" && layoutPick().format === "panes") replaceRoute({ ...r, modId: m.id });
+  else if (r.view === "library" || (r.view === "characters" && r.character) || (r.view === "profiles" && r.profile !== undefined)) go({ ...r, modId: m.id });
   else go({ view: "library", modId: m.id });
 }
 /** A part of the drawer to scroll to when it opens: its parts, toggles, conflicts, files and size, or its 3D view. It stays until
@@ -187,11 +192,11 @@ export async function previewFromGb(game: GameId, m: ModEntry) {
     const page = await modPage(m.source.modId);
     const img = page?.images[0];
     const url = img ? img.s800 ?? img.full ?? img.s530 : null;
-    if (!url) { toast(`${m.name} has no pictures on GameBanana`); return; }
+    if (!url) { toast(t("{mod} has no pictures on GameBanana", { mod: m.name })); return; }
     const e = await library.fetchPreview(game, m.id, url);
     publish(game, { changed: [e], removed: [], notes: [] });
-    toast(`Got a preview for ${m.name}`);
-  } catch (e) { toast(`Couldn't get a preview. ${errorText(e)}`, true); }
+    toast(t("Got a preview for {mod}", { mod: m.name }));
+  } catch (e) { toast(t("Couldn't get a preview. {error}", { error: errorText(e) }), true); }
 }
 
 /** A mod's preview changed: every screen shows the new picture. */
@@ -213,22 +218,22 @@ export async function resetPreview(game: GameId, m: ModEntry) {
   try {
     const own = await ownPreview(game, m);
     previewSaved(game, await library.clearPreview(game, m.id));
-    const label = `Reset the preview of ${m.name}`;
+    const label = t("Reset the preview of {mod}", { mod: m.name });
     if (!own) { toast(label); return; }
     record({
       label,
       undo: async () => previewSaved(game, await library.setPreviewData(game, m.id, own.bytes, own.ext)),
       redo: async () => previewSaved(game, await library.clearPreview(game, m.id)),
     });
-  } catch (e) { toast(`Couldn't reset the preview. ${errorText(e)}`, true); }
+  } catch (e) { toast(t("Couldn't reset the preview. {error}", { error: errorText(e) }), true); }
 }
 
 /** Check some mods for updates now, keeping the marks on the others. A toast says what it's waiting on, and the
  *  result replaces it. */
 export async function checkForUpdates(game: GameId, list: ModEntry[]) {
   const withSource = list.filter((m) => m.source);
-  if (!withSource.length) { toast("Only mods from GameBanana can be checked"); return; }
-  const waitText = withSource.length === 1 ? `Checking ${withSource[0]!.name} on GameBanana` : `Checking ${withSource.length} mods on GameBanana`;
+  if (!withSource.length) { toast(t("Only mods from GameBanana can be checked")); return; }
+  const waitText = withSource.length === 1 ? t("Checking {mod} on GameBanana", { mod: withSource[0]!.name }) : tn(withSource.length, "Checking {n} mod on GameBanana", "Checking {n} mods on GameBanana");
   let waitId = toast(waitText);
   // keep the wait showing until the answer comes (a toast times out by itself)
   const hold = window.setInterval(() => { if (!retoast(waitId, waitText)) waitId = toast(waitText); }, 4000);
@@ -242,9 +247,9 @@ export async function checkForUpdates(game: GameId, list: ModEntry[]) {
     emitApp({ type: "library-refresh", game });
     const hits = withSource.filter((m) => found.has(m.id));
     window.clearInterval(hold);
-    if (!hits.length) say(withSource.length === 1 ? `${withSource[0]!.name} is up to date` : "They're all up to date");
-    else say(`${hits.length === 1 ? `${hits[0]!.name} has` : `${hits.length} mods have`} an update`,
-      { label: "Get it", run: () => void Promise.all(hits.map((m) => getUpdate(game, m))) });
+    if (!hits.length) say(withSource.length === 1 ? t("{mod} is up to date", { mod: withSource[0]!.name }) : t("They're all up to date"));
+    else say(hits.length === 1 ? t("{mod} has an update", { mod: hits[0]!.name }) : tn(hits.length, "{n} mod has an update", "{n} mods have an update"),
+      { label: t("Get it"), run: () => void Promise.all(hits.map((m) => getUpdate(game, m))) });
   } catch (e) {
     window.clearInterval(hold);
     if (!retoast(waitId, errorText(e), undefined, true)) fail(e);
@@ -268,8 +273,8 @@ export async function getUpdate(game: GameId, m: ModEntry) {
   setUpdating(m.id, true);
   try {
     const item = await queueLatest(game, m.source.modId, m.id);
-    if (item) toast(`Downloading the update for ${m.name}`, false, { label: "Downloads", run: () => go("downloads") });
-    else toast(`Couldn't find a newer file for ${m.name} on GameBanana`, true);
+    if (item) toast(t("Downloading the update for {mod}", { mod: m.name }), false, { label: t("Downloads"), run: () => go("downloads") });
+    else toast(t("Couldn't find a newer file for {mod} on GameBanana", { mod: m.name }), true);
   } catch (e) { fail(e); }
   finally { setUpdating(m.id, false); }
 }
@@ -300,7 +305,7 @@ export async function keysOnlyOnScreen(game: GameId, list: ModEntry[]) {
  *  them on or off. Another profile is switched to and back (each switch saves the profile it leaves, so nothing on
  *  screen or in any profile is lost). */
 export async function setInProfile(game: GameId, p: Profile, list: ModEntry[], on: boolean) {
-  const label = on ? `Added ${modsName(list)} to ${p.name}` : `Took ${modsName(list)} out of ${p.name}`;
+  const label = on ? t("Added {mods} to {profile}", { mods: modsName(list), profile: p.name }) : t("Took {mods} out of {profile}", { mods: modsName(list), profile: p.name });
   try {
     if (p.active) {
       const ids = list.map((m) => m.id);
@@ -310,7 +315,7 @@ export async function setInProfile(game: GameId, p: Profile, list: ModEntry[], o
     }
     const members = new Set(await profiles.members(p.id));
     const ids = list.filter((m) => members.has(m.id) !== on).map((m) => m.id);
-    if (!ids.length) { toast(on ? `Already in ${p.name}` : `Not in ${p.name}`); return; }
+    if (!ids.length) { toast(on ? t("Already in {profile}", { profile: p.name }) : t("Not in {profile}", { profile: p.name })); return; }
     const inside = async (states: Array<[string[], boolean]>) => {
       const from = (await profiles.list(game)).find((x) => x.active);
       await profiles.activate(p.id);

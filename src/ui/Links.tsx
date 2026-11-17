@@ -10,6 +10,7 @@ import { go } from "../lib/store";
 import { menuFor, menuHandler } from "./ContextMenu";
 import { Portrait } from "./Portrait";
 import { LazyImg } from "./LazyImg";
+import { t } from "../lib/i18n";
 
 const stop = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); };
 
@@ -17,7 +18,7 @@ const stop = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); };
 export function CharLink({ game, name, icon, children, className, portrait, tabIndex = 0 }:
   { game: GameId; name: string; icon?: string | null; children?: ReactNode; className?: string; portrait?: boolean; tabIndex?: number }) {
   return (
-    <span role="link" tabIndex={tabIndex} className={`qlink qlink-char${className ? ` ${className}` : ""}`} title={`Open ${name}'s page`}
+    <span role="link" tabIndex={tabIndex} className={`qlink qlink-char${className ? ` ${className}` : ""}`} title={t("Open {name}'s page", { name })}
       onClick={(e) => { stop(e); e.preventDefault(); go({ view: "characters", character: name }); }}
       onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); go({ view: "characters", character: name }); } }}
       onMouseDown={stop} onContextMenu={menuHandler(() => menuFor("character", { game, name }))}>
@@ -35,7 +36,7 @@ export function CreatorLink({ id, name, avatar, modId, children, className, tabI
     else window.dispatchEvent(new CustomEvent("gm-find-creator", { detail: { name, modId } }));
   };
   return (
-    <span role="link" tabIndex={tabIndex} className={`qlink qlink-user${className ? ` ${className}` : ""}`} title={`Mods by ${name}`}
+    <span role="link" tabIndex={tabIndex} className={`qlink qlink-user${className ? ` ${className}` : ""}`} title={t("Mods by {name}", { name })}
       onClick={(e) => { stop(e); e.preventDefault(); open(); }}
       onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); open(); } }}
       onMouseDown={stop} onContextMenu={menuHandler(() => menuFor("creator", { id, name, avatar, modId }))}>
@@ -50,10 +51,10 @@ export function CategoryLink({ game, category, children, className, tabIndex = 0
   { game: GameId; category: GbCategoryRef; children?: ReactNode; className?: string; tabIndex?: number }) {
   const open = () => { openWithFilters(game, { category, character: null }); go({ view: "browse" }); };
   return (
-    <span role="link" tabIndex={tabIndex} className={`qlink qlink-cat${className ? ` ${className}` : ""}`} title={`Browse ${category.name} mods`}
+    <span role="link" tabIndex={tabIndex} className={`qlink qlink-cat${className ? ` ${className}` : ""}`} title={t("Browse {category} mods", { category: category.name })}
       onClick={(e) => { stop(e); e.preventDefault(); open(); }}
       onKeyDown={(e) => { if (e.key === "Enter") { stop(e); e.preventDefault(); open(); } }}
-      onMouseDown={stop} onContextMenu={menuHandler(() => [{ label: `Browse ${category.name} mods`, icon: "browse", onClick: open }])}>
+      onMouseDown={stop} onContextMenu={menuHandler(() => [{ label: t("Browse {category} mods", { category: category.name }), icon: "browse", onClick: open }])}>
       {children ?? category.name}
     </span>
   );

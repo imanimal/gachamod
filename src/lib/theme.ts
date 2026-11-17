@@ -10,6 +10,7 @@
 import { useSyncExternalStore } from "react";
 import { about, type GameState } from "./api";
 import { jsonPref } from "./prefs";
+import { t } from "./i18n";
 import { BRAND_ACCENT, darkShade, onColor, rgb, THEMES, type Scheme, type SchemeChoice } from "./theme-info";
 export { BRAND_ACCENT, darkShade, onColor, THEMES } from "./theme-info";
 export type { AccentInfo, Scheme, SchemeChoice, ThemeInfo } from "./theme-info";
@@ -30,7 +31,7 @@ export const useTheme = () => useSyncExternalStore(subscribeTheme, themeState);
 export function themeFor(game: Pick<GameState, "id" | "theme"> | null): string {
   if (!game) return "default";
   const pick = read(K.perGame(game.id));
-  if (pick && pick !== "auto" && (THEMES.some((t) => t.id === pick) || findCustom(pick))) return pick;
+  if (pick && pick !== "auto" && (THEMES.some((th) => th.id === pick) || findCustom(pick))) return pick;
   return game.theme || "default";
 }
 export const themePick = (gameId: string): string => read(K.perGame(gameId)) ?? "auto";
@@ -43,7 +44,7 @@ export function setThemePicks(picks: Record<string, string>, current: GameState 
 
 /** The accent picked for a theme that offers several (its first one when nothing is picked). */
 export function accentPick(themeId: string): string {
-  const list = THEMES.find((t) => t.id === themeId)?.accents ?? [];
+  const list = THEMES.find((th) => th.id === themeId)?.accents ?? [];
   const pick = read(K.accent(themeId));
   return list.find((a) => a.id === pick)?.id ?? list[0]?.id ?? "";
 }
@@ -63,7 +64,7 @@ export function setSchemeMode(mode: SchemeMode, game: GameState | null) { write(
 /** A theme's own scheme choice, ignoring the all-themes mode: the user's pick for it, else its native scheme. The old
     global pick still counts for the Default theme. */
 export function ownSchemeChoice(themeId: string): SchemeChoice {
-  const info = THEMES.find((t) => t.id === themeId);
+  const info = THEMES.find((th) => th.id === themeId);
   const v = read(K.schemeOf(themeId)) ?? (themeId === "default" ? read(K.scheme) : null);
   return v === "dark" || v === "light" || v === "system" ? v : info?.native ?? "dark";
 }
@@ -87,7 +88,7 @@ function newStyle(id: string): HTMLStyleElement {
 /** Attributes that show theme `id` inside one element, e.g. `<div {...themeAttrs("zzz")}>` for a preview. Without a
     scheme it shows the one the user would see for that theme. */
 export function themeAttrs(id: string, scheme?: Scheme): { "data-theme": string; "data-scheme": Scheme } {
-  const info = THEMES.find((t) => t.id === id) ?? THEMES[0]!;
+  const info = THEMES.find((th) => th.id === id) ?? THEMES[0]!;
   const want = scheme ?? resolve(schemeChoiceFor(info.id));
   return { "data-theme": info.id, "data-scheme": info.schemes.includes(want) ? want : info.native };
 }
@@ -99,7 +100,7 @@ export function applyGameTheme(game: GameState | null) {
   watchCustom();
   const pickId = themeFor(game);
   const custom = findCustom(pickId);
-  const info = THEMES.find((t) => t.id === (custom ? custom.base : pickId)) ?? THEMES[0]!;
+  const info = THEMES.find((th) => th.id === (custom ? custom.base : pickId)) ?? THEMES[0]!;
   const choice = custom ? custom.scheme : schemeChoiceFor(info.id);
   const want = resolve(choice);
   const scheme = info.schemes.includes(want) ? want : info.native;
@@ -148,7 +149,7 @@ export function setScheme(choice: SchemeChoice, game: GameState | null) {
   const pickId = themeFor(game);
   const custom = findCustom(pickId);
   if (custom) {
-    const list = customThemesPref.get().map((t) => (t.id === custom.id ? { ...t, scheme: choice } : t));
+    const list = customThemesPref.get().map((th) => (th.id === custom.id ? { ...th, scheme: choice } : th));
     customCache = null;
     void customThemesPref.set(list).then(() => { customCache = null; });
   } else write(K.schemeOf(pickId), choice);
@@ -172,13 +173,19 @@ export type NavStyle = "list" | "grid";
 export type Corners = "sharp" | "soft" | "round";
 /** What buttons show: an icon and their name, the icon alone (the name becomes its tip) or the name alone. */
 export type ButtonStyle = "both" | "icons" | "text";
-/** How the window is laid out. Missing fields mean the default (cozy, left, list, soft, both). */
-export interface LayoutPrefs { density?: Density; sidebar?: SidebarSide; nav?: NavStyle; corners?: Corners; buttons?: ButtonStyle }
-export const LAYOUT_DEFAULTS: Required<LayoutPrefs> = { density: "cozy", sidebar: "left", nav: "list", corners: "soft", buttons: "both" };
+/** How Mods and a character's page are laid out, to feel like the mod manager someone used before:
+ *  "cards" gachamod's own (filter chips over the cards, details slide in), "chars" a list of characters down the left,
+ *  "panes" that list plus the picked mod's details always open on the right, "rows" one dense line per mod. */
+export type ModsFormat = "cards" | "chars" | "panes" | "rows";
+/** How the window is laid out. Missing fields mean the default (cozy, left, list, soft, both, cards). */
+export interface LayoutPrefs { density?: Density; sidebar?: SidebarSide; nav?: NavStyle; corners?: Corners; buttons?: ButtonStyle; format?: ModsFormat }
+export const LAYOUT_DEFAULTS: Required<LayoutPrefs> = { density: "cozy", sidebar: "left", nav: "list", corners: "soft", buttons: "both", format: "cards" };
 const LAYOUT_VALUES: Record<keyof LayoutPrefs, readonly string[]> = {
   density: ["compact", "cozy", "roomy"], sidebar: ["left", "right"], nav: ["list", "grid"], corners: ["sharp", "soft", "round"],
-  buttons: ["both", "icons", "text"],
+  buttons: ["both", "icons", "text"], format: ["cards", "chars", "panes", "rows"],
 };
+/** Layout fields only the user sets: a custom theme can't carry them, so a theme never changes how Mods is laid out. */
+const USER_ONLY: ReadonlyArray<keyof LayoutPrefs> = ["format"];
 
 /** The layout the user picked in Settings (localStorage "gm.layout"), defaults filled in. */
 export function layoutPick(): Required<LayoutPrefs> {
@@ -196,7 +203,7 @@ export function layoutPick(): Required<LayoutPrefs> {
     theme sets, and its name. */
 export function currentLayout(game: GameState | null): { layout: Required<LayoutPrefs>; fromTheme: Array<keyof LayoutPrefs>; themeName: string | null } {
   const custom = findCustom(themeFor(game));
-  const own = custom?.layout ?? {};
+  const own = Object.fromEntries(Object.entries(custom?.layout ?? {}).filter(([k]) => !USER_ONLY.includes(k as keyof LayoutPrefs))) as LayoutPrefs;
   return { layout: { ...layoutPick(), ...own }, fromTheme: Object.keys(own) as Array<keyof LayoutPrefs>, themeName: custom?.name ?? null };
 }
 
@@ -207,28 +214,36 @@ export function setLayout(patch: LayoutPrefs, game: GameState | null) {
   const theirs: Record<string, string> = { ...(custom?.layout ?? {}) };
   for (const [k, v] of Object.entries(patch)) {
     if (typeof v !== "string") continue;
-    if (custom && k in theirs) theirs[k] = v; else mine[k] = v;
+    if (custom && k in theirs && !USER_ONLY.includes(k as keyof LayoutPrefs)) theirs[k] = v; else mine[k] = v;
   }
   const keep = Object.fromEntries(Object.entries(mine).filter(([k, v]) => LAYOUT_DEFAULTS[k as keyof LayoutPrefs] !== v));
   write(K.layout, Object.keys(keep).length ? JSON.stringify(keep) : null);
   if (custom && JSON.stringify(theirs) !== JSON.stringify(custom.layout)) {
-    const list = customThemesPref.get().map((t) => (t.id === custom.id ? { ...t, layout: theirs as LayoutPrefs } : t));
+    const list = customThemesPref.get().map((th) => (th.id === custom.id ? { ...th, layout: theirs as LayoutPrefs } : th));
     customCache = null;
     void customThemesPref.set(list).then(() => { customCache = null; applyGameTheme(lastGame); });
   }
   applyGameTheme(game);
 }
 
-/** Set data-density, data-sidebar, data-nav, data-corners and data-buttons on <html> (null clears them, which means
- *  the defaults). */
+/** Set data-density, data-sidebar, data-nav, data-corners, data-buttons and data-format on <html> (null clears them,
+ *  which means the defaults). The format is always the user's own pick. */
 export function applyLayout(layout: LayoutPrefs | null) {
   const r = document.documentElement;
   for (const k of Object.keys(LAYOUT_VALUES) as Array<keyof LayoutPrefs>) {
-    const v = layout?.[k];
+    const v = USER_ONLY.includes(k) ? layoutPick()[k] : layout?.[k];
     if (v && v !== LAYOUT_DEFAULTS[k] && LAYOUT_VALUES[k].includes(v)) r.setAttribute(`data-${k}`, v);
     else r.removeAttribute(`data-${k}`);
   }
 }
+
+/** The Mods layout picked in Settings, Appearance (or at the first start). Follows changes. */
+export function useModsFormat(): ModsFormat {
+  useTheme();
+  return layoutPick().format;
+}
+/** Pick the Mods layout. */
+export function setModsFormat(format: ModsFormat) { setLayout({ format }, lastGame); }
 
 // ── custom themes ──
 
@@ -310,8 +325,8 @@ function watchCustom() {
 }
 function findCustom(id: string): CustomTheme | null {
   if (!id.startsWith("custom:")) return null;
-  customCache ??= customThemesPref.get().map((t) => validateCustomTheme(t).theme).filter((t): t is CustomTheme => !!t);
-  return customCache.find((t) => t.id === id) ?? null;
+  customCache ??= customThemesPref.get().map((th) => validateCustomTheme(th).theme).filter((th): th is CustomTheme => !!th);
+  return customCache.find((th) => th.id === id) ?? null;
 }
 
 // never allowed in a token value or custom CSS: other files, scripts, old IE tricks, closing the style tag
@@ -333,11 +348,11 @@ function normalise(css: string): string {
 /** Why a piece of CSS is not allowed, or null when it is fine. url() may only hold an inline image or font. */
 function cssProblem(css: string): string | null {
   const n = normalise(css);
-  for (const [re, what] of BANNED) if (re.test(n)) return `uses ${what}`;
+  for (const [re, what] of BANNED) if (re.test(n)) return t("uses {what}", { what });
   for (const m of n.matchAll(/url\s*\(\s*(['"]?)([^'")]*)/g)) {
     const target = (m[2] ?? "").trim();
     if (!/^data:(image\/(png|jpe?g|gif|webp|svg\+xml|avif)|font\/(woff2?|ttf|otf))[;,]/.test(target) && !target.startsWith("#")) {
-      return `loads ${target.slice(0, 40) || "a file"} (only inline data: images and fonts are allowed)`;
+      return target ? t("loads {file} (only inline data: images and fonts are allowed)", { file: target.slice(0, 40) }) : t("loads a file (only inline data: images and fonts are allowed)");
     }
   }
   return null;
@@ -379,20 +394,20 @@ const PLAIN = /^[\w\s#%.,()/-]+$/;
 
 function tokenProblem(name: string, raw: unknown): string | null {
   const spec = THEME_TOKENS[name];
-  if (!spec) return `${name} is not a theme token`;
-  if (typeof raw !== "string" || !raw.trim()) return `${name} has no value`;
+  if (!spec) return t("{name} is not a theme token", { name });
+  if (typeof raw !== "string" || !raw.trim()) return t("{name} has no value", { name });
   const v = raw.trim();
-  if (v.length > 400 || /[;{}<>\\]/.test(v)) return `${name}: the value has characters a token can't hold`;
+  if (v.length > 400 || /[;{}<>\\]/.test(v)) return t("{name}: the value has characters a token can't hold", { name });
   const bad = cssProblem(v);
-  if (bad) return `${name} ${bad}`;
+  if (bad) return t("{name} {problem}", { name, problem: bad });
   switch (spec.kind) {
-    case "color": return isColor(v) ? null : `${name}: "${v.slice(0, 40)}" is not a colour`;
-    case "length": return /^(?:0|\d+(?:\.\d+)?(?:px|rem|em|%))$/.test(v) ? null : `${name}: use a size like 8px or .5rem`;
-    case "time": return /^\d+(?:\.\d+)?m?s$/.test(v) ? null : `${name}: use a time like 180ms`;
-    case "ease": return /^(?:linear|ease|ease-in|ease-out|ease-in-out|cubic-bezier\(\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*\))$/.test(v) ? null : `${name}: use cubic-bezier(a, b, c, d)`;
-    case "font": return /^[\w\s"',.-]+$/.test(v) ? null : `${name}: use a list of font names`;
-    case "shadow": return PLAIN.test(v) && supports("box-shadow", v) ? null : `${name}: not a box-shadow`;
-    case "image": return v === "none" || (/^(?:repeating-)?(?:linear|radial|conic)-gradient\(/.test(v) && PLAIN.test(v) && supports("background-image", v)) ? null : `${name}: use none or a CSS gradient`;
+    case "color": return isColor(v) ? null : t("{name}: \"{value}\" is not a colour", { name, value: v.slice(0, 40) });
+    case "length": return /^(?:0|\d+(?:\.\d+)?(?:px|rem|em|%))$/.test(v) ? null : t("{name}: use a size like 8px or .5rem", { name });
+    case "time": return /^\d+(?:\.\d+)?m?s$/.test(v) ? null : t("{name}: use a time like 180ms", { name });
+    case "ease": return /^(?:linear|ease|ease-in|ease-out|ease-in-out|cubic-bezier\(\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*,\s*[-\d.]+\s*\))$/.test(v) ? null : t("{name}: use cubic-bezier(a, b, c, d)", { name });
+    case "font": return /^[\w\s"',.-]+$/.test(v) ? null : t("{name}: use a list of font names", { name });
+    case "shadow": return PLAIN.test(v) && supports("box-shadow", v) ? null : t("{name}: not a box-shadow", { name });
+    case "image": return v === "none" || (/^(?:repeating-)?(?:linear|radial|conic)-gradient\(/.test(v) && PLAIN.test(v) && supports("background-image", v)) ? null : t("{name}: use none or a CSS gradient", { name });
   }
 }
 
@@ -400,12 +415,12 @@ function tokenProblem(name: string, raw: unknown): string | null {
     with a plain reason each; `theme` is null only when nothing is usable (no name, or an unknown base). */
 export function validateCustomTheme(input: unknown): { theme: CustomTheme | null; problems: string[] } {
   const problems: string[] = [];
-  if (!input || typeof input !== "object") return { theme: null, problems: ["Not a theme"] };
+  if (!input || typeof input !== "object") return { theme: null, problems: [t("Not a theme")] };
   const o = input as Record<string, unknown>;
   const name = typeof o.name === "string" ? o.name.trim().slice(0, 60) : "";
-  if (!name) return { theme: null, problems: ["The theme has no name"] };
-  const baseInfo = typeof o.base === "string" ? THEMES.find((t) => t.id === o.base) : undefined;
-  if (!baseInfo) return { theme: null, problems: [`Unknown base theme "${String(o.base)}". Use one of: ${THEMES.map((t) => t.id).join(", ")}`] };
+  if (!name) return { theme: null, problems: [t("The theme has no name")] };
+  const baseInfo = typeof o.base === "string" ? THEMES.find((th) => th.id === o.base) : undefined;
+  if (!baseInfo) return { theme: null, problems: [t("Unknown base theme \"{base}\". Use one of: {ids}", { base: String(o.base), ids: THEMES.map((th) => th.id).join(", ") })] };
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32) || "theme";
   const id = typeof o.id === "string" && /^custom:[a-z0-9-]{1,40}$/.test(o.id) ? o.id : `custom:${slug}`;
   const scheme: SchemeChoice = o.scheme === "light" || o.scheme === "dark" || o.scheme === "system" ? o.scheme : baseInfo.native;
@@ -420,16 +435,16 @@ export function validateCustomTheme(input: unknown): { theme: CustomTheme | null
   const layout: LayoutPrefs = {};
   if (o.layout && typeof o.layout === "object") {
     for (const [k, v] of Object.entries(o.layout as Record<string, unknown>)) {
-      const allowed = (LAYOUT_VALUES as Record<string, readonly string[] | undefined>)[k];
-      if (!allowed) problems.push(`Layout has no "${k}" setting`);
-      else if (typeof v !== "string" || !allowed.includes(v)) problems.push(`Layout ${k} must be one of: ${allowed.join(", ")}`);
+      const allowed = USER_ONLY.includes(k as keyof LayoutPrefs) ? undefined : (LAYOUT_VALUES as Record<string, readonly string[] | undefined>)[k];
+      if (!allowed) problems.push(t("Layout has no \"{key}\" setting", { key: k }));
+      else if (typeof v !== "string" || !allowed.includes(v)) problems.push(t("Layout {key} must be one of: {values}", { key: k, values: allowed.join(", ") }));
       else (layout as Record<string, string>)[k] = v;
     }
   }
   let css: string | undefined;
   if (typeof o.css === "string" && o.css.trim()) {
-    const bad = o.css.length > CUSTOM_CSS_MAX ? `it is longer than ${CUSTOM_CSS_MAX.toLocaleString()} characters` : cssProblem(o.css);
-    if (bad) problems.push(`CSS left out: ${bad}`); else css = o.css;
+    const bad = o.css.length > CUSTOM_CSS_MAX ? t("it is longer than {n} characters", { n: CUSTOM_CSS_MAX }) : cssProblem(o.css);
+    if (bad) problems.push(t("CSS left out: {problem}", { problem: bad })); else css = o.css;
   }
   const pkg = typeof o.pkg === "string" && /^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(o.pkg) ? o.pkg : undefined;
   return { theme: { id, name, base: baseInfo.id, scheme, tokens, layout, ...(css ? { css } : {}), ...(pkg ? { pkg } : {}) }, problems };
@@ -518,7 +533,7 @@ export function applyCustomTheme(input: CustomTheme | null): string[] {
   if (!input) { applyGameTheme(lastGame); return []; }
   const { theme, problems } = validateCustomTheme(input);
   if (!theme) return problems;
-  const info = THEMES.find((t) => t.id === theme.base) ?? THEMES[0]!;
+  const info = THEMES.find((th) => th.id === theme.base) ?? THEMES[0]!;
   const want = resolve(theme.scheme);
   const scheme = info.schemes.includes(want) ? want : info.native;
   const r = document.documentElement;

@@ -1,0 +1,58 @@
+/* The developer console (Console.tsx). Its own fixed dark colours: it sits over every theme and is a tool. */
+.gmc {
+  position: fixed; inset: 0 0 auto 0; z-index: 2147483000; display: flex; flex-direction: column;
+  background: rgb(18 19 21 / 0.97); color: #d6d6d6; border-bottom: 1px solid #3a3d42;
+  font: 12px/1.45 "Cascadia Mono", Consolas, ui-monospace, monospace; box-shadow: 0 6px 24px rgb(0 0 0 / 0.4);
+}
+.gmc button, .gmc input { font: inherit; color: inherit; }
+.gmc button {
+  background: #26292d; border: 1px solid #3a3d42; border-radius: 3px; padding: 2px 8px; cursor: pointer; white-space: nowrap;
+}
+.gmc button:hover { background: #30343a; }
+.gmc button:focus-visible, .gmc input:focus-visible { outline: 1px solid #8fb3ff; outline-offset: 1px; }
+.gmc button.on { background: #3b4f7a; border-color: #5b77b3; color: #fff; }
+
+.gmc-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid #2c2f33; flex-wrap: wrap; }
+.gmc-tabs, .gmc-seg { display: flex; gap: 2px; }
+.gmc-tabs { margin-right: 8px; }
+.gmc-grow { flex: 1; }
+.gmc-mode { color: #8a8f96; padding: 0 6px; }
+.gmc-check { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+.gmc-filter { background: #0f1012; border: 1px solid #3a3d42; border-radius: 3px; padding: 2px 6px; width: 14em; }
+
+.gmc-out { flex: 1; overflow: auto; padding: 4px 0; }
+.gmc-line { display: grid; grid-template-columns: 7.6em 5.4em 1fr; column-gap: 8px; padding: 0 8px; }
+.gmc-line.more { cursor: pointer; }
+.gmc-line:hover { background: #1d1f22; }
+.gmc-t { color: #6c7178; }
+.gmc-s { color: #7f8a99; }
+.gmc-x { white-space: pre-wrap; word-break: break-word; }
+.gmc-caret { color: #6c7178; }
+.gmc-d {
+  grid-column: 2 / -1; margin: 2px 0 4px; padding: 6px 8px; background: #0c0d0f; border-left: 2px solid #3a3d42;
+  white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow: auto; font: inherit; color: #b8bcc2;
+}
+.gmc-debug .gmc-x { color: #9aa3ad; }
+.gmc-warn .gmc-x { color: #f0c36b; }
+.gmc-error .gmc-x { color: #ff7b72; }
+.gmc-src-you .gmc-x { color: #e9e9e9; }
+.gmc-src-toast .gmc-x { color: #9fd59c; }
+.gmc-src-backend.gmc-info .gmc-x { color: #c4b5f4; }
+.gmc-empty { color: #6c7178; padding: 8px; }
+
+.gmc-flows { flex: 1; overflow: auto; padding: 8px 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px 18px; align-content: start; }
+.gmc-flows h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: #fff; }
+.gmc-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+.gmc-scen { display: flex; margin: 2px 0; }
+.gmc-note { color: #8a8f96; margin: 6px 0 0; }
+
+.gmc-hints { border-top: 1px solid #2c2f33; padding: 2px 0; max-height: 12em; overflow: auto; }
+.gmc-hints button { display: flex; gap: 12px; width: 100%; text-align: left; background: none; border: 0; border-radius: 0; padding: 1px 10px; }
+.gmc-hints button em { color: #7f8a99; font-style: normal; overflow: hidden; text-overflow: ellipsis; }
+.gmc-hints button.on, .gmc-hints button:hover { background: #2a3a5c; }
+
+.gmc-in { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid #2c2f33; }
+.gmc-in > span { color: #8fb3ff; }
+.gmc-in input { flex: 1; background: transparent; border: 0; outline: none; padding: 2px 0; }
+.gmc-grip { height: 5px; cursor: ns-resize; background: #2c2f33; }
+.gmc-grip:hover { background: #3b4f7a; }

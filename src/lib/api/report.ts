@@ -1,6 +1,7 @@
 // Logs, crash reports, usage counts, feedback, and starting as administrator (src-tauri commands/report.rs).
 // Owner: SYSTEM area.
-import { call } from "../tauri";
+import { call, listen } from "../tauri";
+import { EVENTS } from "./types";
 
 export interface ReportState {
   usage: boolean;
@@ -64,6 +65,10 @@ export const report = {
   feedback: (feedback: Feedback) => call<void>("feedback_send", { feedback }),
   log: (lines: Array<{ level: "info" | "warn" | "error"; text: string }>) => call<void>("log_write", { lines }),
   uiError: (message: string, stack: string) => call<void>("report_ui_error", { message, stack }),
+  /** The end of gachamod.log, at most `max` bytes. */
+  logTail: (max = 200_000) => call<string>("log_tail", { max }),
+  /** Each line as the backend writes it to gachamod.log. */
+  onLog: (cb: (l: { level: "info" | "warn" | "error"; text: string }) => void) => listen<{ level: "info" | "warn" | "error"; text: string }>(EVENTS.appLog, cb),
 };
 
 export const rendering = {

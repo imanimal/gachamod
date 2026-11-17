@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import type { GameId } from "../../lib/api";
 import { Icon } from "../../ui/Icon";
+import { t, tb } from "../../lib/i18n";
 import { Button } from "../../ui/kit";
 import { useLive } from "./data";
 import { changeOtherKey, keepKey, moveKey, reloadKeyClashes, useKeyClashes } from "./otherKeys";
@@ -21,27 +22,30 @@ export function KeyClashNote({ game }: { game: GameId }) {
   return (
     <>
       {clashes.map((c) => {
-        const job = c.menuGames.includes(game) ? "opening the skin menu" : "showing the key list";
+        const menu = c.menuGames.includes(game);
         return (
           <div key={c.id} className="live-blocked key-clash" role="status">
             <Icon name="warn" />
-            <p>{c.menuGames.includes(game) ? c.text : c.ask}</p>
+            <p>{tb(menu ? c.text : c.ask)}</p>
             <span className="key-clash-b">
               {c.suggestion && (
                 <Button size="sm" variant="primary" busy={busy === `use-${c.id}`} disabled={!!busy} onClick={() => void run(`use-${c.id}`, () => moveKey(c))}
-                  title={`gachamod uses ${c.suggestion} in place of ${c.key}, in every game. ${c.app}'s key stays as it is`}>
-                  Use {c.suggestion}
+                  title={t("gachamod uses {free} in place of {key}, in every game. {app}'s key stays as it is", { free: c.suggestion, key: c.key, app: c.app })}>
+                  {t("Use {key}", { key: c.suggestion })}
                 </Button>
               )}
               {c.otherKey && (
                 <Button size="sm" busy={busy === `other-${c.id}`} disabled={!!busy} onClick={() => void run(`other-${c.id}`, () => changeOtherKey(c))}
-                  title={`${c.app} gets ${c.otherKey} in place of ${c.key}, and gachamod keeps ${c.key}. ${c.otherNeeds ?? ""}. A copy of ${c.app}'s settings is kept next to them before the change`}>
-                  Change {c.app}'s key
+                  title={c.otherNeeds
+                    ? t("{app} gets {free} in place of {key}, and gachamod keeps {key}. {needs}. A copy of {app}'s settings is kept next to them before the change", { app: c.app, free: c.otherKey, key: c.key, needs: tb(c.otherNeeds) })
+                    : t("{app} gets {free} in place of {key}, and gachamod keeps {key}. A copy of {app}'s settings is kept next to them before the change", { app: c.app, free: c.otherKey, key: c.key })}>
+                  {t("Change {app}'s key", { app: c.app })}
                 </Button>
               )}
               <Button size="sm" variant="ghost" busy={busy === `keep-${c.id}`} disabled={!!busy} onClick={() => void run(`keep-${c.id}`, () => keepKey(c))}
-                title={`${c.key} keeps ${job} and ${c.app} keeps using it too. gachamod stops asking`}>
-                Keep {c.key}
+                title={menu ? t("{key} keeps opening the skin menu and {app} keeps using it too. gachamod stops asking", { key: c.key, app: c.app })
+                  : t("{key} keeps showing the key list and {app} keeps using it too. gachamod stops asking", { key: c.key, app: c.app })}>
+                {t("Keep {key}", { key: c.key })}
               </Button>
             </span>
           </div>

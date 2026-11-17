@@ -3,6 +3,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { errorText, games, library, live, settings, type GameId, type LiveChange, type LiveGroup, type LiveInfo, type MenuSettings } from "../../lib/api";
 import { record } from "../../lib/history";
+import { t, tb, tn } from "../../lib/i18n";
 import { emitApp, onApp } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { onPublish } from "../library/data";
@@ -61,11 +62,11 @@ function wire() {
   if (wired) return;
   wired = true;
   // a mod turned on or off (a live skin turned on is a pick), renamed, removed: names and states in the groups follow
-  let t = 0;
+  let timer = 0;
   const later = (game: GameId) => {
     if (!infos.has(game)) return;
-    window.clearTimeout(t);
-    t = window.setTimeout(() => void reloadLive(game), 500);
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => void reloadLive(game), 500);
   };
   onApp((e) => { if (e.type === "library-refresh") later(e.game); });
   // the game saved its values (a pick it took at a reload clears "Next reload"), or it started or closed
@@ -121,8 +122,9 @@ const after = (game: GameId) => { emitApp({ type: "library-refresh", game }); vo
 function skippedNote(c: LiveChange) {
   const s = c.skipped[0];
   if (!s) return;
-  const more = c.skipped.length > 1 ? ` (and ${c.skipped.length - 1} more)` : "";
-  toast(`${s.name} can't be switched in game: ${s.reason}${more}`, true);
+  const p = { name: s.name, reason: tb(s.reason) };
+  toast(c.skipped.length > 1 ? tn(c.skipped.length - 1, "{name} can't be switched in game: {reason} (and {n} more)", "{name} can't be switched in game: {reason} (and {n} more)", p)
+    : t("{name} can't be switched in game: {reason}", p), true);
 }
 
 /** Make mods live (normally all of one character's). One Undo step takes them out again. */
@@ -133,7 +135,7 @@ export async function makeLive(game: GameId, ids: string[], who: string) {
     skippedNote(c);
     if (!c.changed.length) return;
     record({
-      label: `Made ${who} switch in game. It starts after the game reloads once`,
+      label: t("Made {name} switch in game. It starts after the game reloads once", { name: who }),
       undo: async () => { await live.remove(game, c.changed); after(game); },
       redo: async () => { await live.add(game, c.changed); after(game); },
     });
@@ -147,7 +149,7 @@ export async function stopLive(game: GameId, ids: string[], who: string) {
     after(game);
     if (!c.changed.length) return;
     record({
-      label: `Stopped switching ${who} in game`,
+      label: t("Stopped switching {name} in game", { name: who }),
       undo: async () => { await live.add(game, c.changed); after(game); },
       redo: async () => { await live.remove(game, c.changed); after(game); },
     });
@@ -162,8 +164,8 @@ export async function setAll(game: GameId, on: boolean) {
     after(game);
     skippedNote(c);
     record({
-      label: on ? "Turned on switching skins in game. It starts after the game reloads once"
-        : "Turned off switching skins in game. Each character keeps the skin it showed",
+      label: on ? t("Turned on switching skins in game. It starts after the game reloads once")
+        : t("Turned off switching skins in game. Each character keeps the skin it showed"),
       undo: async () => { await live.setAll(game, !on); after(game); },
       redo: async () => { await live.setAll(game, on); after(game); },
     });
@@ -177,8 +179,9 @@ export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSett
     await live.setMenu(game, menu);
     await reloadLive(game);
     record({
-      label: label ?? (JSON.stringify(before.binds) !== JSON.stringify(menu.binds) ? "Changed the in-game menu's keys"
-        : `Set the in-game menu to ${menu.style === "window" ? "open over the game" : "be drawn by the game"} with ${menu.key}`),
+      label: label ?? (JSON.stringify(before.binds) !== JSON.stringify(menu.binds) ? t("Changed the in-game menu's keys")
+        : menu.style === "window" ? t("Set the in-game menu to open over the game with {key}", { key: menu.key })
+        : t("Set the in-game menu to be drawn by the game with {key}", { key: menu.key })),
       undo: async () => { await live.setMenu(game, before); await reloadLive(game); },
       redo: async () => { await live.setMenu(game, menu); await reloadLive(game); },
     });
@@ -251,9 +254,9 @@ export function markShown(game: GameId, modId: string) {
 
 /** What to do when a new skin looks wrong. */
 export const newSkinTip = (character: string) =>
-  `The first time a new skin shows, ${character} can look wrong. Switch to another character and back to fix it. If it still looks wrong after that, the mod itself has a problem.`;
+  t("The first time a new skin shows, {character} can look wrong. Switch to another character and back to fix it. If it still looks wrong after that, the mod itself has a problem.", { character });
 
-const nameOf = (g: LiveGroup, slot: number) => g.mods.find((m) => m.slot === slot)?.name ?? "that mod";
+const nameOf = (g: LiveGroup, slot: number) => g.mods.find((m) => m.slot === slot)?.name ?? t("that mod");
 
 /** Show a group's slot (0: none). Sent to the game when it runs. Undo picks the one before. */
 export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
@@ -273,9 +276,11 @@ export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
     const f10 = sayF10Note(p.note);
     if (p.send && picked) markShown(game, picked.modId);
     if (before === slot) { if (p.note && !f10) toast(p.note); return; }
-    const what = slot === 0 ? `none of ${g.character}'s live skins` : nameOf(g, slot);
-    const label = p.reload ? `Turned on ${what}. It shows after the game reloads`
-      : p.send ? `Switched to ${what} in game${fresh ? `. If ${g.character} looks wrong, switch to another character and back` : ""}` : `Picked ${what} for the next start`;
-    record({ label: p.note && !f10 ? `${label}. ${p.note}` : label, undo: async () => { await put(before); }, redo: async () => { await put(slot); } });
+    const what = slot === 0 ? t("none of {character}'s live skins", { character: g.character }) : nameOf(g, slot);
+    const label = p.reload ? t("Turned on {what}. It shows after the game reloads", { what })
+      : p.send ? (fresh ? t("Switched to {what} in game. If {character} looks wrong, switch to another character and back", { what, character: g.character })
+        : t("Switched to {what} in game", { what }))
+      : t("Picked {what} for the next start", { what });
+    record({ label: p.note && !f10 ? t("{label}. {note}", { label, note: tb(p.note) }) : label, undo: async () => { await put(before); }, redo: async () => { await put(slot); } });
   } catch (e) { toast(errorText(e), true); }
 }

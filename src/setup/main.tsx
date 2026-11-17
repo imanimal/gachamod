@@ -18,8 +18,10 @@ import "../styles/themes/clay.css";
 import "./setup.css";
 import { installTips } from "../lib/keys";
 import { Setup } from "./Setup";
+import { lang } from "../lib/i18n";
 
 installTips();
+document.documentElement.lang = lang;
 // no browser menu or reload keys in a window that installs things
 window.addEventListener("contextmenu", (e) => { if (!(e.target as HTMLElement).closest("input, textarea")) e.preventDefault(); });
 window.addEventListener("keydown", (e) => { if (e.key === "F5" || (e.ctrlKey && e.key.toLowerCase() === "r")) e.preventDefault(); });

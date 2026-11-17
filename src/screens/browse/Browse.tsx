@@ -11,6 +11,8 @@ import { GbBrowser } from "./GbBrowser";
 import { openGbMod, setFilters } from "./state";
 import { useMotd } from "../../lib/motd";
 import { PullButton } from "./Pull";
+import { gameName } from "../../lib/games";
+import { t } from "../../lib/i18n";
 import "./browse.css";
 
 export function Browse() {
@@ -33,11 +35,11 @@ export function Browse() {
   if (route.user) return <CreatorPage key={route.user} id={route.user} game={game} />;
   return (
     <div className="page gb-browse">
-      <PageHeader title="Browse" icon="browse" sub={`Mods for ${game.name} on GameBanana`}
+      <PageHeader title={t("Browse")} icon="browse" sub={t("Mods for {game} on GameBanana", { game: gameName(game) })}
         actions={<>
           <PullButton game={game} />
-          {motd && <IconButton icon="gift" label={`Mod of the day, picked by animal${motd.name ? `: ${motd.name}` : ""}${motd.note ? `. ${motd.note}` : ""}`} onClick={() => openGbMod(motd.modId)} />}
-          <IconButton icon="external" label="Open GameBanana in the browser"
+          {motd && <IconButton icon="gift" label={(motd.name ? t("Mod of the day, picked by animal: {name}", { name: motd.name }) : t("Mod of the day, picked by animal")) + (motd.note ? `. ${motd.note}` : "")} onClick={() => openGbMod(motd.modId)} />}
+          <IconButton icon="external" label={t("Open GameBanana in the browser")}
             onClick={() => shell.openUrl(`https://gamebanana.com/games/${game.gamebananaId}`).catch((e) => toast(errorText(e), true))} />
         </>} />
       <GbBrowser game={game.id} />

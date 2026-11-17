@@ -174,6 +174,23 @@ pub fn create(db: &Db, game: &str, name: &str, copy_from: Option<i64>) -> Result
     get(db, id)
 }
 
+/// A new profile with the mods in `states` on or off (by id) and every other mod of the game as it is now. For
+/// loadouts brought over from another manager (IMM's presets).
+pub fn create_with(db: &Db, game: &str, name: &str, states: &HashMap<String, bool>) -> Result<Profile> {
+    games::require_def(game)?;
+    list(db, game)?;
+    let name = free_name(db, game, name, None)?;
+    let mods = library::list(db, game)?;
+    let id = insert(db, game, &name, false)?;
+    let tx = db.conn.unchecked_transaction()?;
+    for m in &mods {
+        let on = states.get(&m.id).copied().unwrap_or(m.enabled);
+        tx.execute("INSERT OR REPLACE INTO profile_mods (profile_id, mod_id, enabled) VALUES (?1, ?2, ?3)", params![id, m.id, on as i64])?;
+    }
+    tx.commit()?;
+    get(db, id)
+}
+
 pub fn update(db: &Db, id: i64, patch: &ProfilePatch) -> Result<Profile> {
     let p = get(db, id)?;
     // a bad combo fails before anything is saved

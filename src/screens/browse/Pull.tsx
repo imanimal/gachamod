@@ -4,13 +4,15 @@
 // out), and hidden mods, installed mods and blocked creators never come up. A short flash in the star colour plays first (not with
 // Animations off). Owner: BROWSE area.
 import { useState } from "react";
-import type { GameState } from "../../lib/api";
+import { errorText, type GameState } from "../../lib/api";
 import { PULL_PITY, pullPref, pullsSince, pullWord } from "../../lib/fun";
 import { listMods, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { hiddenModsPref, isBlocked, nsfwPref } from "../../lib/prefs";
 import { IconButton } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { libIndexNow, openGbMod } from "./state";
+import { gameShort } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 
 type Stars = 3 | 4 | 5;
 /** Where each rarity draws from: a sort and the pages of it. */
@@ -63,17 +65,18 @@ export function PullButton({ game }: { game: GameState }) {
       let card = await draw(game, stars);
       // nothing left after the filters: try the next rarity down
       while (!card && stars > 3) { stars = (stars - 1) as Stars; card = await draw(game, stars); }
-      if (!card) { toast(`Nothing to pull for ${game.short} right now. Try again in a moment`); return; }
+      if (!card) { toast(t("Nothing to pull for {game} right now. Try again in a moment", { game: gameShort(game) })); return; }
       void pullsSince.set(stars === 5 ? 0 : pullsSince.get() + 1);
       await flash(stars);
       openGbMod(card.id);
     } catch (e) {
-      toast(`The ${word} didn't go through: ${(e as { message?: string }).message ?? e}`, true);
+      toast(t("The {word} didn't go through: {error}", { word, error: errorText(e) }), true);
     } finally { setBusy(false); }
   };
   const left = PULL_PITY - pullsSince.get();
   return (
     <IconButton icon="star" disabled={busy} onClick={() => void go()}
-      label={busy ? `${word}: asking GameBanana for a mod` : `${word}: open a random ${game.short} mod. A 5 star is guaranteed in ${left === 1 ? "1 pull" : `${left} pulls`}`} />
+      label={busy ? t("{word}: asking GameBanana for a mod", { word })
+        : tn(left, "{word}: open a random {game} mod. A 5 star is guaranteed in {n} pull", "{word}: open a random {game} mod. A 5 star is guaranteed in {n} pulls", { word, game: gameShort(game) })} />
   );
 }

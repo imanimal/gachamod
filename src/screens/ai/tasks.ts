@@ -10,10 +10,11 @@ import {
 import { hideFromAi, neutralName, nothingToSendNote, type AiTask } from "../../lib/ai";
 import { record } from "../../lib/history";
 import { allGames, currentGame, emitApp, go } from "../../lib/store";
-import { plural } from "../../ui/kit";
 import { keysChanged, recordBackups } from "../../ui/KeyEditor";
 import { ReplyError } from "./reply";
 import { buildThemeTask } from "./themeTask";
+import { gameName, gameShort } from "../../lib/games";
+import { sentences, t, tb, tn } from "../../lib/i18n";
 
 // ── what a task gives the helper ──
 
@@ -45,14 +46,14 @@ export interface Built {
 }
 export interface TaskInput { goal: string; text: string }
 export interface TaskDef {
-  title: (t: AiTask) => string;
+  title: (task: AiTask) => string;
   goals?: Goal[];
   defaultGoal?: string;
   /** A text box: required means the prompt can't be made without it. */
   text?: { label: string; placeholder: string; required: boolean; forGoal?: string };
   /** A line under the chatbot choice, for tasks that need more than a small model. */
   note?: string;
-  build: (t: AiTask, input: TaskInput) => Promise<Built>;
+  build: (task: AiTask, input: TaskInput) => Promise<Built>;
 }
 
 export { CutOff, ReplyError, parseReply } from "./reply";
@@ -61,15 +62,15 @@ export { CutOff, ReplyError, parseReply } from "./reply";
 
 type Obj = Record<string, unknown>;
 function obj(v: unknown, where: string, keys: string[]): Obj {
-  if (!v || typeof v !== "object" || Array.isArray(v)) throw new ReplyError(`${where} should be an object.`);
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new ReplyError(t("{where} should be an object.", { where }));
   const extra = Object.keys(v).filter((k) => !keys.includes(k));
-  if (extra.length) throw new ReplyError(`${where} has fields that weren't asked for: ${extra.join(", ")}.`);
+  if (extra.length) throw new ReplyError(t("{where} has fields that weren't asked for: {fields}.", { where, fields: extra.join(", ") }));
   return v as Obj;
 }
 function list(v: unknown, where: string, max: number): unknown[] {
   if (v === undefined) return [];
-  if (!Array.isArray(v)) throw new ReplyError(`${where} should be a list.`);
-  if (v.length > max) throw new ReplyError(`${where} has ${v.length} entries; at most ${max} make sense here.`);
+  if (!Array.isArray(v)) throw new ReplyError(t("{where} should be a list.", { where }));
+  if (v.length > max) throw new ReplyError(t("{where} has {n} entries; at most {max} make sense here.", { where, n: v.length, max }));
   return v;
 }
 const str = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() && v.trim().length <= max ? v.trim() : null);
@@ -77,9 +78,9 @@ const optStr = (v: unknown, max: number): string => (typeof v === "string" ? v.t
 
 // ── shared bits ──
 
-function gameOf(t: AiTask): GameState {
-  const g = (t.game && allGames().find((x) => x.id === t.game)) || currentGame();
-  if (!g) throw new Error("Set up a game first.");
+function gameOf(task: AiTask): GameState {
+  const g = (task.game && allGames().find((x) => x.id === task.game)) || currentGame();
+  if (!g) throw new Error(t("Set up a game first."));
   return g;
 }
 
@@ -89,9 +90,9 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
 const cell = (s: string | null | undefined) => (s ?? "").replace(/[|\n\r]+/g, " ").trim() || "-";
 
 /** The mods a task is about: the picked ones, else the whole library (capped). */
-async function modsFor(t: AiTask, game: GameState, cap = 400): Promise<{ mods: ModEntry[]; total: number }> {
+async function modsFor(task: AiTask, game: GameState, cap = 400): Promise<{ mods: ModEntry[]; total: number }> {
   const all = await library.list(game.id);
-  const picked = t.modIds?.length ? all.filter((m) => t.modIds!.includes(m.id)) : all;
+  const picked = task.modIds?.length ? all.filter((m) => task.modIds!.includes(m.id)) : all;
   return { mods: picked.slice(0, cap), total: picked.length };
 }
 
@@ -102,10 +103,10 @@ async function roster(game: GameState): Promise<string[]> {
 // ── mod edits (mods, custom) ──
 
 const MOD_GOALS: Goal[] = [
-  { id: "clean", label: "Tidy names", title: "Messy file-style names become short readable ones" },
-  { id: "characters", label: "Set characters", title: "Fill in or fix which character each mod is for" },
-  { id: "tags", label: "Add tags", title: "Up to 3 short tags each: outfit, recolor, hair ..." },
-  { id: "other", label: "Something else", title: "Say what you want in your own words" },
+  { id: "clean", label: t("Tidy names"), title: t("Messy file-style names become short readable ones") },
+  { id: "characters", label: t("Set characters"), title: t("Fill in or fix which character each mod is for") },
+  { id: "tags", label: t("Add tags"), title: t("Up to 3 short tags each: outfit, recolor, hair ...") },
+  { id: "other", label: t("Something else"), title: t("Say what you want in your own words") },
 ];
 
 const GOAL_TEXT: Record<string, string> = {
@@ -131,38 +132,38 @@ function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: Game
   const byName = new Map(names.map((n) => [n.toLowerCase(), n]));
   const seen = new Set<number>();
   list(raw, "\"changes\"", 2000).forEach((c, i) => {
-    const e = obj(c, `Change ${i + 1}`, ["mod", "name", "character", "tags", "why"]);
+    const e = obj(c, t("Change {n}", { n: i + 1 }), ["mod", "name", "character", "tags", "why"]);
     const n = typeof e.mod === "number" ? e.mod : Number(e.mod);
     const mod = Number.isInteger(n) ? mods[n - 1] : undefined;
-    if (!mod) { skipped.push(`Change ${i + 1}: there's no mod number ${String(e.mod)}.`); return; }
-    if (seen.has(n)) { skipped.push(`Change ${i + 1}: ${mod.name} is listed twice; the first one counts.`); return; }
+    if (!mod) { skipped.push(t("Change {n}: there's no mod number {mod}.", { n: i + 1, mod: String(e.mod) })); return; }
+    if (seen.has(n)) { skipped.push(t("Change {n}: {name} is listed twice; the first one counts.", { n: i + 1, name: mod.name })); return; }
     seen.add(n);
     const patch: MetaPatch = {};
     const lines: PreviewRow["lines"] = [];
     const bad: string[] = [];
     if (e.name !== undefined) {
       const v = str(e.name, 120);
-      if (!v) bad.push("the name is empty or too long");
-      else if (v !== mod.name) { patch.name = v; lines.push({ label: "Name", before: mod.name, after: v }); }
+      if (!v) bad.push(t("the name is empty or too long"));
+      else if (v !== mod.name) { patch.name = v; lines.push({ label: t("Name"), before: mod.name, after: v }); }
     }
     if (e.character !== undefined) {
       if (e.character === null || e.character === "") {
-        if (mod.character) { patch.character = ""; lines.push({ label: "Character", before: mod.character, after: "None" }); }
+        if (mod.character) { patch.character = ""; lines.push({ label: t("Character"), before: mod.character, after: t("None") }); }
       } else {
         const v = typeof e.character === "string" ? (names.length ? byName.get(e.character.trim().toLowerCase()) : str(e.character, 60)) : null;
-        if (!v) bad.push(`${game.short} has no character "${String(e.character)}"`);
-        else if (v !== mod.character) { patch.character = v; lines.push({ label: "Character", before: mod.character, after: v }); }
+        if (!v) bad.push(t("{game} has no character \"{name}\"", { game: gameShort(game), name: String(e.character) }));
+        else if (v !== mod.character) { patch.character = v; lines.push({ label: t("Character"), before: mod.character, after: v }); }
       }
     }
     if (e.tags !== undefined) {
       const tags = Array.isArray(e.tags) ? e.tags.map((x) => str(x, 30)?.toLowerCase()).filter((x): x is string => !!x) : null;
-      if (!tags || tags.length !== (e.tags as unknown[]).length || tags.length > 10) bad.push("the tags aren't a list of short words");
+      if (!tags || tags.length !== (e.tags as unknown[]).length || tags.length > 10) bad.push(t("the tags aren't a list of short words"));
       else {
         const next = [...new Set(tags)];
-        if (next.join("\n") !== mod.tags.join("\n")) { patch.tags = next; lines.push({ label: "Tags", before: mod.tags.join(", ") || "None", after: next.join(", ") || "None" }); }
+        if (next.join("\n") !== mod.tags.join("\n")) { patch.tags = next; lines.push({ label: t("Tags"), before: mod.tags.join(", ") || t("None"), after: next.join(", ") || t("None") }); }
       }
     }
-    if (bad.length) { skipped.push(`${mod.name}: ${bad.join(", ")}.`); return; }
+    if (bad.length) { skipped.push(t("{name}: {problems}.", { name: mod.name, problems: bad.join(", ") })); return; }
     if (!lines.length) return;
     const why = optStr(e.why, 160);
     rows.push({ title: mod.name, lines, note: why || undefined });
@@ -194,26 +195,26 @@ function applyPatches(game: GameState, patches: Array<{ mod: ModEntry; patch: Me
       redo: () => run(patches.map((p) => ({ id: p.mod.id, patch: p.patch }))),
     });
     const out = patches.map(({ mod, patch, why }) => {
-      const parts = [patch.name !== undefined ? `${mod.name} is now "${patch.name}"` : mod.name];
-      if (patch.character !== undefined) parts.push(patch.character ? `character ${patch.character}` : "no character");
-      if (patch.tags !== undefined) parts.push(`tags ${patch.tags.join(", ") || "none"}`);
+      const parts = [patch.name !== undefined ? t("{name} is now \"{next}\"", { name: mod.name, next: patch.name }) : mod.name];
+      if (patch.character !== undefined) parts.push(patch.character ? t("character {name}", { name: patch.character }) : t("no character"));
+      if (patch.tags !== undefined) parts.push(patch.tags.length ? t("tags {tags}", { tags: patch.tags.join(", ") }) : t("no tags"));
       return `${parts.join(", ")}${why ? ` (${why})` : ""}`;
     });
-    if (failed.length) out.push(`${plural(failed.length, "change")} didn't save: ${failed[0]}`);
+    if (failed.length) out.push(tn(failed.length, "{n} change didn't save: {error}", "{n} changes didn't save: {error}", { error: failed[0]! }));
     return out;
   };
 }
 
 const modsTask: TaskDef = {
-  title: (t) => (t.modIds?.length ? `Edit ${plural(t.modIds.length, "mod")} with your chatbot` : "Edit your mods with your chatbot"),
+  title: (task) => (task.modIds?.length ? tn(task.modIds.length, "Edit {n} mod with your chatbot", "Edit {n} mods with your chatbot") : t("Edit your mods with your chatbot")),
   goals: MOD_GOALS,
   defaultGoal: "clean",
-  text: { label: "What should change?", placeholder: "Put the outfit name first, like \"Maid Outfit (Ellen)\"", required: true, forGoal: "other" },
-  async build(t, input) {
-    const game = gameOf(t);
-    const { mods: all, total } = await modsFor(t, game);
+  text: { label: t("What should change?"), placeholder: t("Put the outfit name first, like \"Maid Outfit (Ellen)\""), required: true, forGoal: "other" },
+  async build(task, input) {
+    const game = gameOf(task);
+    const { mods: all, total } = await modsFor(task, game);
     const mods = shareable(all);
-    if (!mods.length) throw new Error(all.length ? nothingToSendNote(all.length) : `${game.name} has no mods to edit yet.`);
+    if (!mods.length) throw new Error(all.length ? nothingToSendNote(all.length) : t("{game} has no mods to edit yet.", { game: gameName(game) }));
     // the roster checks any character the answer sets; the prompt carries it only when characters are the point
     const names = await roster(game);
     const sendNames = (input.goal === "characters" || input.goal === "other") && names.length > 0;
@@ -228,16 +229,18 @@ const modsTask: TaskDef = {
     return {
       prompt,
       shares: [
-        `Names, folder names, characters and tags of ${plural(mods.length, "mod")}${total > all.length ? ` (from the first ${all.length} of ${total})` : ""}`,
-        ...(sendNames ? [`${game.name}'s character list`] : []),
-        ...(input.goal === "other" && input.text.trim() ? ["What you typed"] : []),
+        total > all.length
+          ? tn(mods.length, "Names, folder names, characters and tags of {n} mod (from the first {first} of {total})", "Names, folder names, characters and tags of {n} mods (from the first {first} of {total})", { first: all.length, total })
+          : tn(mods.length, "Names, folder names, characters and tags of {n} mod", "Names, folder names, characters and tags of {n} mods"),
+        ...(sendNames ? [t("{game}'s character list", { game: gameName(game) })] : []),
+        ...(input.goal === "other" && input.text.trim() ? [t("What you typed")] : []),
       ],
       read(reply) {
-        const r = obj(reply, "The answer", ["changes"]);
+        const r = obj(reply, t("The answer"), ["changes"]);
         const { rows, skipped, patches } = readChanges(r.changes, mods, names, game);
-        const label = `Changed ${plural(patches.length, "mod")} with the AI helper`;
+        const label = tn(patches.length, "Changed {n} mod with the AI helper", "Changed {n} mods with the AI helper");
         return {
-          summary: patches.length ? `${plural(patches.length, "mod")} change${patches.length === 1 ? "s" : ""}` : "Nothing to change",
+          summary: patches.length ? tn(patches.length, "{n} mod changes", "{n} mods change") : t("Nothing to change"),
           rows, skipped, text: [], links: [],
           apply: patches.length ? applyPatches(game, patches, label) : undefined,
         };
@@ -247,11 +250,11 @@ const modsTask: TaskDef = {
 };
 
 const customTask: TaskDef = {
-  title: (t) => (t.modIds?.length ? `Ask about ${plural(t.modIds.length, "mod")}` : "Ask your chatbot"),
-  text: { label: "Your question or request", placeholder: "Which of these are duplicates? Or: rename these so the outfit comes first", required: true },
-  async build(t, input) {
-    const game = gameOf(t);
-    const { mods: all, total } = t.modIds?.length ? await modsFor(t, game, 200) : { mods: [] as ModEntry[], total: 0 };
+  title: (task) => (task.modIds?.length ? tn(task.modIds.length, "Ask about {n} mod", "Ask about {n} mods") : t("Ask your chatbot")),
+  text: { label: t("Your question or request"), placeholder: t("Which of these are duplicates? Or: rename these so the outfit comes first"), required: true },
+  async build(task, input) {
+    const game = gameOf(task);
+    const { mods: all, total } = task.modIds?.length ? await modsFor(task, game, 200) : { mods: [] as ModEntry[], total: 0 };
     const mods = shareable(all);
     if (all.length && !mods.length) throw new Error(nothingToSendNote(all.length));
     const names = mods.length ? await roster(game) : [];
@@ -263,15 +266,17 @@ const customTask: TaskDef = {
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
-      shares: ["What you typed", ...(mods.length ? [`Names, folder names, characters and tags of ${plural(mods.length, "mod")}${total > all.length ? ` (from the first ${all.length})` : ""}`] : [])],
+      shares: [t("What you typed"), ...(mods.length ? [total > all.length
+        ? tn(mods.length, "Names, folder names, characters and tags of {n} mod (from the first {first})", "Names, folder names, characters and tags of {n} mods (from the first {first})", { first: all.length })
+        : tn(mods.length, "Names, folder names, characters and tags of {n} mod", "Names, folder names, characters and tags of {n} mods")] : [])],
       read(reply) {
-        const r = obj(reply, "The answer", ["answer", "changes"]);
+        const r = obj(reply, t("The answer"), ["answer", "changes"]);
         const { rows, skipped, patches } = mods.length ? readChanges(r.changes, mods, names, game) : { rows: [], skipped: [], patches: [] };
         const answer = optStr(r.answer, 6000);
         return {
-          summary: patches.length ? `${plural(patches.length, "mod")} change${patches.length === 1 ? "s" : ""}` : answer ? "The chatbot's answer" : "Nothing in the answer",
+          summary: patches.length ? tn(patches.length, "{n} mod changes", "{n} mods change") : answer ? t("The chatbot's answer") : t("Nothing in the answer"),
           rows, skipped, text: answer ? answer.split(/\n+/) : [], links: [],
-          apply: patches.length ? applyPatches(game, patches, `Changed ${plural(patches.length, "mod")} with the AI helper`) : undefined,
+          apply: patches.length ? applyPatches(game, patches, tn(patches.length, "Changed {n} mod with the AI helper", "Changed {n} mods with the AI helper")) : undefined,
         };
       },
     };
@@ -302,19 +307,19 @@ type Aliases = ReturnType<typeof aliases>;
 const DRAW_SHAPE = `{"mods":[{"mod":1,"draw":[{"file":"Ellen.ini","section":"TextureOverrideEllenBodyPosition"}],"why":"few words"}]}`;
 
 const keysTask: TaskDef = {
-  title: (t) => (t.modIds && t.modIds.length > 1 ? `Toggles only while on screen for ${plural(t.modIds.length, "mod")}` : "Toggles only while on screen"),
-  note: "This takes a strong chatbot, like Claude Opus 5.5. Weaker ones often pick the wrong sections. If a toggle stops working in game, Undo puts it back.",
-  async build(t) {
-    const game = gameOf(t);
-    const { mods: picked } = await modsFor(t, game, 8);
-    if (!picked.length) throw new Error("Pick the mod first.");
+  title: (task) => (task.modIds && task.modIds.length > 1 ? tn(task.modIds.length, "Toggles only while on screen for {n} mod", "Toggles only while on screen for {n} mods") : t("Toggles only while on screen")),
+  note: t("This takes a strong chatbot, like Claude Opus 5.5. Weaker ones often pick the wrong sections. If a toggle stops working in game, Undo puts it back."),
+  async build(task) {
+    const game = gameOf(task);
+    const { mods: picked } = await modsFor(task, game, 8);
+    if (!picked.length) throw new Error(t("Pick the mod first."));
     const found = await Promise.all(picked.map(async (m) => ({
       mod: m,
       keys: await modKeys.list(game.id, m.id).catch(() => null),
       outline: await modKeys.outline(game.id, m.id).catch(() => [] as IniOutline[]),
     })));
     const todo = found.filter((f) => f.keys && f.keys.keys.length && !["own", "on", "global"].includes(f.keys.onScreen) && f.outline.some((o) => o.sections.length));
-    if (!todo.length) throw new Error(picked.length === 1 ? "This mod's toggles already work only while it's on screen, or it has nothing to pick from." : "These mods' toggles already work only while they're on screen.");
+    if (!todo.length) throw new Error(picked.length === 1 ? t("This mod's toggles already work only while it's on screen, or it has nothing to pick from.") : t("These mods' toggles already work only while they're on screen."));
     // hidden mods go without their names, and explicit words in file and section names are swapped out
     const items = todo.map((f) => ({ mod: f.mod, outline: f.outline, files: aliases(), sections: aliases() }));
     const blocks = items.map(({ mod, outline, files, sections }, i) => {
@@ -334,49 +339,49 @@ const keysTask: TaskDef = {
     const mods = todo.map((f) => f.mod);
     return {
       prompt,
-      shares: [`Names and a few lines (hashes, buffers, draw calls) of the override sections in ${plural(mods.length, "mod")}, and their key section names. No other file contents`,
-        "Mod names and characters"],
+      shares: [tn(mods.length, "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mod, and their key section names. No other file contents", "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mods, and their key section names. No other file contents"),
+        t("Mod names and characters")],
       read: (reply) => readDraws(reply, game, items),
     };
   },
 };
 
 function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry; outline: IniOutline[]; files: Aliases; sections: Aliases }>): Preview {
-  const r = obj(reply, "The answer", ["mods"]);
+  const r = obj(reply, t("The answer"), ["mods"]);
   const rows: PreviewRow[] = [], skipped: string[] = [];
   const picks: Array<{ mod: ModEntry; draw: DrawRef[] }> = [];
   const seen = new Set<number>();
   list(r.mods, "\"mods\"", 50).forEach((x, i) => {
-    const e = obj(x, `Entry ${i + 1}`, ["mod", "draw", "why"]);
+    const e = obj(x, t("Entry {n}", { n: i + 1 }), ["mod", "draw", "why"]);
     const n = Number(e.mod);
     const it = Number.isInteger(n) ? mods[n - 1] : undefined;
-    if (!it) { skipped.push(`Entry ${i + 1}: there's no mod number ${String(e.mod)}.`); return; }
-    if (seen.has(n)) { skipped.push(`${it.mod.name} is listed twice; the first one counts.`); return; }
+    if (!it) { skipped.push(t("Entry {n}: there's no mod number {mod}.", { n: i + 1, mod: String(e.mod) })); return; }
+    if (seen.has(n)) { skipped.push(t("{name} is listed twice; the first one counts.", { name: it.mod.name })); return; }
     seen.add(n);
     const draw: DrawRef[] = [];
     const before = skipped.length;
-    list(e.draw, `${it.mod.name}'s sections`, 40).forEach((y, j) => {
-      const d = obj(y, `${it.mod.name}, section ${j + 1}`, ["file", "section"]);
+    list(e.draw, t("{name}'s sections", { name: it.mod.name }), 40).forEach((y, j) => {
+      const d = obj(y, t("{name}, section {n}", { name: it.mod.name, n: j + 1 }), ["file", "section"]);
       const wantFile = typeof d.file === "string" ? it.files.real(d.file.trim().replaceAll("\\", "/")).toLowerCase() : "";
       const file = it.outline.find((o) => o.ini.toLowerCase() === wantFile);
       const want = typeof d.section === "string" ? it.sections.real(d.section.trim().replace(/^\[|\]$/g, "")).toLowerCase() : "";
       const sec = file?.sections.find((s) => s.section.toLowerCase() === want);
-      if (!file || !sec) { skipped.push(`${it.mod.name}: ${String(d.file)} has no section ${String(d.section)}.`); return; }
+      if (!file || !sec) { skipped.push(t("{name}: {file} has no section {section}.", { name: it.mod.name, file: String(d.file), section: String(d.section) })); return; }
       if (!draw.some((x) => x.ini === file.ini && x.section === sec.section)) draw.push({ ini: file.ini, section: sec.section });
     });
-    if (!draw.length) { if (skipped.length === before) skipped.push(`${it.mod.name}: no section to use.`); return; }
+    if (!draw.length) { if (skipped.length === before) skipped.push(t("{name}: no section to use.", { name: it.mod.name })); return; }
     const keyFiles = it.outline.filter((o) => o.keys.length).map((o) => o.ini);
     const reach = (f: string) => draw.some((d) => d.ini === f) || draw.some((d) => it.outline.find((o) => o.ini === d.ini)?.namespace);
     const left = keyFiles.filter((f) => !reach(f));
     rows.push({
       title: it.mod.name,
       lines: draw.map((d) => ({ label: d.ini, after: `[${d.section}]` })),
-      note: [optStr(e.why, 160), left.length ? `Toggles in ${left.join(", ")} will still work any time: none of these sections can reach them.` : ""].filter(Boolean).join(" ") || undefined,
+      note: sentences([optStr(e.why, 160), left.length ? t("Toggles in {files} will still work any time: none of these sections can reach them.", { files: left.join(", ") }) : ""].filter(Boolean)) || undefined,
     });
     picks.push({ mod: it.mod, draw });
   });
   return {
-    summary: picks.length ? `Toggles of ${plural(picks.length, "mod")} will work only while on screen` : "Nothing to change",
+    summary: picks.length ? tn(picks.length, "Toggles of {n} mod will work only while on screen", "Toggles of {n} mods will work only while on screen") : t("Nothing to change"),
     rows, skipped, text: [], links: [],
     apply: picks.length ? async () => {
       const done: Array<{ game: string; modId: string; backup: Backup }> = [];
@@ -386,12 +391,16 @@ function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry;
           const edit = await modKeys.onScreen(game.id, p.mod.id, true, p.draw);
           if (edit.backup) done.push({ game: game.id, modId: p.mod.id, backup: edit.backup });
           keysChanged(game.id, p.mod.id);
-          out.push(edit.backup ? `Toggles of ${p.mod.name} work only while on screen${edit.note ? `. ${edit.note}` : ""}` : `${p.mod.name}: ${edit.note ?? "nothing to change"}`);
+          // the backend's note is English: tb() shows it in the user's language
+          const note = edit.note ? tb(edit.note) : null;
+          out.push(edit.backup
+            ? note ? t("Toggles of {name} work only while on screen. {note}", { name: p.mod.name, note }) : t("Toggles of {name} work only while on screen", { name: p.mod.name })
+            : t("{name}: {note}", { name: p.mod.name, note: note ?? t("nothing to change") }));
         } catch (e) {
-          out.push(`${p.mod.name} didn't change: ${errorText(e)}`);
+          out.push(t("{name} didn't change: {error}", { name: p.mod.name, error: errorText(e) }));
         }
       }
-      if (done.length) recordBackups(`Toggles of ${plural(done.length, "mod")} work only while on screen`, done);
+      if (done.length) recordBackups(tn(done.length, "Toggles of {n} mod work only while on screen", "Toggles of {n} mods work only while on screen"), done);
       return out;
     } : undefined,
   };
@@ -402,33 +411,33 @@ function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry;
 const GB_MOD = /^https?:\/\/(?:www\.)?gamebanana\.com\/mods\/(\d+)/i;
 
 const recommendTask: TaskDef = {
-  title: () => "Mod ideas from your chatbot",
-  text: { label: "Anything in particular? (optional)", placeholder: "Swimsuits, or mods for characters I don't have mods for yet", required: false },
-  async build(t, input) {
-    const game = gameOf(t);
+  title: () => t("Mod ideas from your chatbot"),
+  text: { label: t("Anything in particular? (optional)"), placeholder: t("Swimsuits, or mods for characters I don't have mods for yet"), required: false },
+  async build(task, input) {
+    const game = gameOf(task);
     const prompt = [
       `I use 3DMigoto mods from GameBanana for ${game.name}. Suggest mods I might like.`,
-      t.detail ?? "",
+      task.detail ?? "",
       input.text.trim() ? `I'd like: ${input.text.trim()}` : "",
       `Give up to 12 ideas. Each is either a GameBanana search ("search": 1 to 4 words, like a character and an outfit type) or a GameBanana mod page you are sure exists ("url": https://gamebanana.com/mods/<number>), with "why" in a few words. ${ANSWER_RULE}`,
       "```json\n" + `{"ideas":[{"search":"Ellen swimsuit","why":"you collect Ellen mods"},{"url":"https://gamebanana.com/mods/123456","why":"few words"}]}` + "\n```",
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
-      shares: ["A summary of your mods: top characters, creators you keep and up to 40 mod names", ...(input.text.trim() ? ["What you typed"] : [])],
+      shares: [t("A summary of your mods: top characters, creators you keep and up to 40 mod names"), ...(input.text.trim() ? [t("What you typed")] : [])],
       read(reply) {
-        const r = obj(reply, "The answer", ["ideas"]);
+        const r = obj(reply, t("The answer"), ["ideas"]);
         const links: Preview["links"] = [], skipped: string[] = [];
         list(r.ideas, "\"ideas\"", 30).forEach((x, i) => {
-          const e = obj(x, `Idea ${i + 1}`, ["search", "url", "why"]);
+          const e = obj(x, t("Idea {n}", { n: i + 1 }), ["search", "url", "why"]);
           const why = optStr(e.why, 140) || undefined;
           const search = str(e.search, 60);
           const url = typeof e.url === "string" ? GB_MOD.exec(e.url.trim()) : null;
-          if (url) links.push({ label: `GameBanana mod ${url[1]}`, hint: why, run: () => go({ view: "browse", modId: Number(url[1]) }) });
-          else if (search) links.push({ label: `Search "${search}"`, hint: why, run: () => go({ view: "browse", search }) });
-          else skipped.push(`Idea ${i + 1}: not a search or a GameBanana mod link.`);
+          if (url) links.push({ label: t("GameBanana mod {id}", { id: url[1]! }), hint: why, run: () => go({ view: "browse", modId: Number(url[1]) }) });
+          else if (search) links.push({ label: t("Search \"{search}\"", { search }), hint: why, run: () => go({ view: "browse", search }) });
+          else skipped.push(t("Idea {n}: not a search or a GameBanana mod link.", { n: i + 1 }));
         });
-        return { summary: links.length ? `${plural(links.length, "idea")}. Each opens in Browse` : "No ideas in the answer", rows: [], skipped, text: [], links };
+        return { summary: links.length ? tn(links.length, "{n} idea. Each opens in Browse", "{n} ideas. Each opens in Browse") : t("No ideas in the answer"), rows: [], skipped, text: [], links };
       },
     };
   },
@@ -440,8 +449,8 @@ export const TASKS: Record<string, TaskDef> = {
   "keys-offscreen": keysTask,
   recommend: recommendTask,
   theme: {
-    title: () => "Make a theme with your chatbot",
-    text: { label: "Describe the look", placeholder: "Navy and gold with sharp corners", required: true },
-    build: (t, input) => buildThemeTask(t, input),
+    title: () => t("Make a theme with your chatbot"),
+    text: { label: t("Describe the look"), placeholder: t("Navy and gold with sharp corners"), required: true },
+    build: (task, input) => buildThemeTask(task, input),
   },
 };

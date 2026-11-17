@@ -29,3 +29,7 @@ Thumbs.db
 
 # Tauri generated
 src-tauri/gen/
+
+# Translation check output
+i18n-missing-*.json
+i18n-keys-*.json

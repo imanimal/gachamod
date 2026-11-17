@@ -164,3 +164,78 @@
 .mod-viewer-note { margin: 0; }
 /* Rescan's icon turns while the folder is read */
 .lib-scanning .i { animation: spin 1s linear infinite; }
+
+/* ── the Mods layouts (Settings, Appearance; lib/theme.ts ModsFormat) ──
+   Character list and Three panes (.has-side, and .has-pane for the docked details): Mods and a character's page fill
+   the view, the header on top, then panes that each scroll by themselves. Used by characters.css's page too */
+.page.has-side { display: grid; grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "head head" "side main"; height: 100%; min-height: 0; padding-bottom: var(--s-4); }
+.page.has-side.has-pane { grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr) clamp(20rem, 30%, 28rem); grid-template-areas: "head head head" "side main pane"; }
+.page.has-side > .page-h, .page.has-side > .char-hero { grid-area: head; margin-bottom: 0; }
+.page.has-side > .lib-side, .page.has-side > .char-strip-wrap { grid-area: side; }
+.page.has-side > .lib-main { grid-area: main; }
+.page.has-side > .mod-pane { grid-area: pane; }
+/* 4px of room inside each scrolling pane for focus rings and card shadows */
+.lib-side, .lib-main { min-height: 0; overflow: hidden auto; padding: 4px; margin: -4px; }
+.lib-main > .mod-grid-wrap { min-height: 100%; }
+
+/* the list of types and characters: the same chips as the row, one per line */
+.lib-side { display: flex; flex-direction: column; gap: 2px; }
+.lib-side .chip { flex: none; width: 100%; height: auto; min-height: calc(2.2rem * var(--d, 1)); justify-content: flex-start; }
+.lib-side .chip-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.lib-side .library-chars-sep { flex: none; align-self: stretch; width: auto; height: 1px; margin: var(--s-1) var(--s-2); }
+.lib-side .lib-update-all { align-self: flex-start; margin: 2px 0 var(--s-1) var(--s-2); }
+/* Default draws it as a plain list: rows without a frame, the picked one in the accent's soft fill */
+:where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip { border-radius: var(--radius-sm); background: none; box-shadow: none; }
+:where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip:hover { background: var(--hover); }
+:where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip.on { background: var(--accent-soft); color: var(--text); }
+
+/* a character's page: the strip of the others becomes the list down the left */
+.page.has-side > .char-strip-wrap { display: flex; flex-direction: column; align-items: stretch; min-height: 0; margin: 0; }
+.page.has-side .char-strip, .page.has-side .char-strip[data-side-scroll] { flex: 1; min-height: 0; flex-direction: column; flex-wrap: nowrap; gap: 2px;
+  overflow: hidden auto; padding: 4px; margin: -4px; scrollbar-width: thin; }
+.page.has-side .char-strip-item { display: block; }
+.page.has-side .char-strip .pchip { flex-direction: row; width: 100%; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius-sm); font-size: var(--t-small); text-align: left; }
+.page.has-side .char-strip .pchip-img { width: 2.2rem; height: 2.2rem; flex: none; }
+.page.has-side .char-strip .pchip-t { flex: 1; }
+.page.has-side .char-strip .pchip-n { position: static; flex: none; }
+.page.has-side .char-strip .pchip:hover { background: var(--hover); }
+.page.has-side .char-strip .pchip.on { background: var(--accent-soft); color: var(--text); }
+
+/* Three panes: the details drawer drawn in the page (kit Drawer docked). The game themes keep their drawer's frame */
+.page .drawer.is-docked { position: relative; width: auto; height: auto; min-height: 0; max-width: none; animation: none; }
+:where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked { border-radius: var(--radius); box-shadow: inset 0 0 0 1px var(--line); }
+/* a pane is narrower than the drawer, so Default's insets shrink with it */
+:where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked .drawer-h { padding-left: var(--s-4); }
+:where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked .drawer-b { padding: var(--s-3) var(--s-4) var(--s-5); }
+:where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked .drawer-f { padding-inline: var(--s-4); }
+.mod-pane.is-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); padding: var(--s-5); text-align: center; color: var(--text-3); }
+.mod-pane.is-empty .i { width: 2rem; height: 2rem; }
+.mod-pane.is-empty .hint { max-width: 18rem; }
+
+/* a narrow window: the list keeps only the pictures and icons (each keeps its name as its tip) */
+@container view (max-width: 62rem) {
+  .page.has-side { grid-template-columns: 3.6rem minmax(0, 1fr); }
+  .page.has-side.has-pane { grid-template-columns: 3.6rem minmax(0, 1fr) minmax(18rem, 40%); }
+  .lib-side .chip { justify-content: center; padding-inline: 0; }
+  .lib-side .chip-t, .lib-side .chip-n, .page.has-side .char-strip .pchip-t, .page.has-side .char-strip .pchip-n { display: none; }
+  .lib-side .chip-img { margin: 0; }
+  .lib-side .lib-update-all { align-self: center; margin-inline: 0; padding-inline: .6em; gap: 0; }
+  .lib-side .lib-update-all .btn-t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .page.has-side .char-strip .pchip { justify-content: center; padding-inline: 0; }
+}
+
+/* Compact list: one dense line per mod, its switch first, then the name, character and size in columns */
+.mod-grid.is-dense .mod-card.is-row { gap: var(--s-2); contain-intrinsic-size: auto 2.4rem; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-hit { padding: 2px 0; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-img { width: 2.6rem; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-body { flex-direction: row; align-items: baseline; gap: var(--s-3); }
+.mod-grid.is-dense .mod-card-name { flex: 1 1 0; min-width: 6rem; }
+.mod-grid.is-dense .mod-card-char { flex: 0 1 11rem; }
+.mod-grid.is-dense .mod-card-meta { flex: 0 1 9rem; text-align: right; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-foot { display: contents; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-foot .toggle { order: -1; position: relative; margin-left: var(--s-2); }
+.mod-grid.is-dense .mod-card.is-row .mod-card-more { position: relative; margin-right: var(--s-1); }
+@container view (max-width: 48rem) {
+  .mod-grid.is-dense .mod-card-meta { display: none; }
+}

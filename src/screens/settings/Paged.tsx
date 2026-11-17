@@ -5,17 +5,24 @@
 // stick do it at the ends of a page, and the list works with all three. A page, or anything with an id on one (a
 // panel, a row), is a route: go({ view, section: "games" }) opens the page, section: "storage" or "set-trash-days"
 // also scrolls to that panel or row and flashes it. A page that renders nothing stays out of the list.
+// A search field sits above the list in both screens and finds pages, panels and single settings in Settings and Tools
+// alike (menuSearch.ts): while it has text the matching panels show in place of the page, wherever they normally live,
+// and clearing it brings the page back. Ctrl+F and / jump to it (lib/keys.ts), Escape clears it and then leaves it.
 // Owner: SETTINGS/AI area.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Icon, type IconName } from "../../ui/Icon";
-import { Badge } from "../../ui/kit";
+import { Badge, SearchField } from "../../ui/kit";
 import { consumeRoute, useRoute } from "../../lib/store";
 import { glide, scrollToElement } from "../../lib/smoothScroll";
 import "./paged.css";
+import { t } from "../../lib/i18n";
+import type { Menu } from "./menuSearch";
+import { SearchResults } from "./SearchResults";
 
 /** A page: its route id, its name and icon in the list, the group it's listed under (none for a short list), a
- *  hover tip when the name alone doesn't say what's on it, and a count of new items on it to show in the list. */
-export interface PageInfo { id: string; label: string; icon: IconName; group?: string; tip?: string; count?: number }
+ *  hover tip that lists what's on it, other words the search finds it by, and a count of new items on it to show in
+ *  the list. */
+export interface PageInfo { id: string; label: string; icon: IconName; group?: string; tip?: string; keywords?: string; count?: number }
 
 type Dir = 1 | -1;
 
@@ -52,8 +59,8 @@ function innerScroll(target: EventTarget | null, page: Element, dir: Dir): boole
 }
 
 export function Paged({ name, label, pages, fallback, onShow, children }: {
-  /** Which screen this is, to remember its page. */
-  name: string;
+  /** Which screen this is, to remember its page and to put its own search results first. */
+  name: Menu;
   /** What the list of pages is called, for screen readers. */
   label: string;
   pages: PageInfo[];
@@ -64,6 +71,12 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
   children: Record<string, ReactNode>;
 }) {
   const route = useRoute();
+  const [query, setQuery] = useState("");
+  const searching = query.trim() !== "";
+  const searchRef = useRef(searching);
+  searchRef.current = searching;
+  const field = useRef<HTMLDivElement>(null);
+  const found = useRef<HTMLElement>(null);
   const [present, setPresent] = useState(() => pages.map((p) => p.id));
   const [active, setActive] = useState(() => {
     const s = route.section;
@@ -174,6 +187,8 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
   useEffect(() => {
     const id = route.section;
     if (!id) return;
+    // a route (a result's Open button, the global search) leaves the search for the page it names
+    setQuery("");
     const t0 = performance.now();
     let raf = 0;
     const step = () => {
@@ -214,6 +229,7 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
       lastDir = dir;
       if (fresh) { speeds = []; sum = 0; } else { speeds.push(Math.abs(dy) / Math.max(gap, 4)); if (speeds.length > 12) speeds.shift(); }
       if (moving.current) return true;
+      if (searchRef.current) return false;
       const page = els.current.get(cur.current);
       if (!page || innerScroll(target, page, dir)) { sum = 0; startedAtEdge = false; return false; }
       const resting = now - Math.max(movedAt.current, turnedAt.current);
@@ -250,7 +266,7 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
   // Page Down and Page Up scroll the page and turn it at its ends; with Ctrl they turn it straight away
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.altKey || (e.key !== "PageDown" && e.key !== "PageUp")) return;
+      if (e.defaultPrevented || e.altKey || searchRef.current || (e.key !== "PageDown" && e.key !== "PageUp")) return;
       const t = e.target instanceof HTMLElement ? e.target : null;
       const inPage = !!t && !!stage.current?.contains(t);
       if (t && t !== document.body && !inPage && !nav.current?.contains(t)) return;
@@ -281,11 +297,23 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
     if (!step) return;
     const btns = [...(nav.current?.querySelectorAll<HTMLButtonElement>(".pg-nav-i") ?? [])];
     const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+    if (i === 0 && step < 0) { e.preventDefault(); field.current?.querySelector("input")?.focus(); return; }
     const b = btns[i + step];
     if (i < 0 || !b?.dataset.to) return;
     e.preventDefault();
     b.focus();
+    if (searching) setQuery("");
     turn(b.dataset.to);
+  };
+
+  /** A page picked in the list while searching: the search clears and that page shows. */
+  const pick = (id: string) => { setQuery(""); turn(id); };
+  /** Escape on an empty field leaves it for the page list, so the keys and controller carry on from there. */
+  const fieldKey = (e: ReactKeyboardEvent) => {
+    if (e.key !== "Escape" || query || !(e.target instanceof HTMLInputElement)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (nav.current?.querySelector<HTMLElement>(".pg-nav-i.on") ?? nav.current?.querySelector<HTMLElement>(".pg-nav-i"))?.focus();
   };
 
   const groups: Array<[string, PageInfo[]]> = [];
@@ -298,24 +326,31 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
 
   return (
     <div className="pg">
-      <nav ref={nav} className="pg-nav" aria-label={label} onKeyDown={navKey}>
-        {groups.map(([g, ps]) => (
-          <div key={g} className="pg-g" role={g ? "group" : undefined} aria-label={g || undefined}>
-            {g && <span className="pg-group" aria-hidden="true">{g}</span>}
-            {ps.map((p) => (
-              <button key={p.id} type="button" data-to={p.id} className={`pg-nav-i${p.id === current ? " on" : ""}`}
-                aria-current={p.id === current ? "page" : undefined} title={p.tip} onClick={() => turn(p.id)}>
-                <Icon name={p.icon} /><span>{p.label}</span>
-                {p.count ? <span style={{ marginLeft: "auto" }}><Badge tone="bad" title={`${p.count} new since you last looked`}>{p.count}</Badge></span> : null}
-              </button>
-            ))}
-          </div>
-        ))}
-      </nav>
+      <div className="pg-side">
+        <div ref={field} className="pg-search" onKeyDown={fieldKey}>
+          <SearchField value={query} onChange={setQuery} placeholder={t("Search settings and tools")}
+            title={t("Finds any setting or tool, in Settings and Tools alike (Ctrl+F or /). Esc clears it")}
+            onDown={() => found.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus()} />
+        </div>
+        <nav ref={nav} className="pg-nav" aria-label={label} onKeyDown={navKey}>
+          {groups.map(([g, ps]) => (
+            <div key={g} className="pg-g" role={g ? "group" : undefined} aria-label={g || undefined}>
+              {g && <span className="pg-group" aria-hidden="true">{g}</span>}
+              {ps.map((p) => (
+                <button key={p.id} type="button" data-to={p.id} className={`pg-nav-i${p.id === current && !searching ? " on" : ""}`}
+                  aria-current={p.id === current && !searching ? "page" : undefined} title={p.tip} onClick={() => pick(p.id)}>
+                  <Icon name={p.icon} /><span>{p.label}</span>
+                  {p.count ? <span style={{ marginLeft: "auto" }}><Badge tone="bad" title={t("{n} new since you last looked", { n: p.count })}>{p.count}</Badge></span> : null}
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+      </div>
       <div ref={stage} className="pg-stage">
         {pages.map((p) => {
-          const on = p.id === current;
-          const out = !on && turning?.from === p.id;
+          const on = p.id === current && !searching;
+          const out = !on && !searching && turning?.from === p.id;
           const motion = turning && (on || out) ? (turning.dir > 0 ? " fwd" : " back") : "";
           return (
             <section key={p.id} data-page={p.id} aria-label={p.label} data-scroller={on ? "" : undefined}
@@ -328,6 +363,12 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
             </section>
           );
         })}
+        {/* after the pages, so a route's lookup by id finds the page's copy of a panel, not this one */}
+        {searching && (
+          <section ref={found} className="pg-page on pg-results" aria-label={t("Search results")} data-scroller="">
+            <SearchResults query={query} here={name} />
+          </section>
+        )}
       </div>
     </div>
   );

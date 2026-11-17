@@ -1,9 +1,13 @@
 // Shared shapes that cross from Rust (crates/gacha-core/src/model.rs and friends). camelCase, as serde sends them.
 // Change a shape only together with its Rust twin (docs/spec.md, "Shared contract").
+import { tb } from "../i18n";
 
 export interface ApiError { kind: string; message: string }
-export const errorText = (e: unknown): string =>
+/** An error's message as the backend wrote it, in English. For code that goes by the words. */
+export const errorEnglish = (e: unknown): string =>
   typeof e === "object" && e && "message" in e ? String((e as ApiError).message) : String(e);
+/** An error's message in the user's language, for showing. */
+export const errorText = (e: unknown): string => tb(errorEnglish(e));
 export const errorKind = (e: unknown): string =>
   typeof e === "object" && e && "kind" in e ? String((e as ApiError).kind) : "unknown";
 
@@ -147,6 +151,7 @@ export interface ProfilePatch { name?: string; icon?: string; color?: string; ba
 /** Event names (model.rs, events). */
 export const EVENTS = {
   libraryChanged: "library-changed",
+  appLog: "app-log",
   queue: "queue",
   queueProgress: "queue-progress",
   variantsNeeded: "variants-needed",

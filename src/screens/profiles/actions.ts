@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { errorText, hotkeys, profiles, type GameId, type Profile, type ProfilePatch, type ProfileSnapshot } from "../../lib/api";
 import { record, undo } from "../../lib/history";
+import { t } from "../../lib/i18n";
 import { currentRoute, emitApp, go } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { publish } from "../library/data";
@@ -71,8 +72,9 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
   const moved = holder && p.hotkey === extra.hotkey ? holder : undefined;
   let id = p.id;
   let snap: ProfileSnapshot | null = null;
-  const label = (start === "empty" ? `Made ${p.name}, with no mods on` : switched ? `Made ${p.name} from the mods on now and switched to it` : `Made ${p.name} from the mods on now`)
-    + (moved ? `. Moved ${moved.hotkey} from ${moved.name}` : "");
+  const made = start === "empty" ? t("Made {name}, with no mods on", { name: p.name })
+    : switched ? t("Made {name} from the mods on now and switched to it", { name: p.name }) : t("Made {name} from the mods on now", { name: p.name });
+  const label = moved ? t("{label}. Moved {key} from {name}", { label: made, key: moved.hotkey ?? "", name: moved.name }) : made;
   const e = record({
     label,
     undo: async () => {
@@ -93,8 +95,8 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
   }, start === "empty");
   if (start === "empty") {
     // switching turns every mod off, so it waits for a click
-    const t: number = toast(`${label}.`, false, { label: "Undo", run: () => void undo(e, t) }, {
-      label: "Switch to it",
+    const id0: number = toast(t("{label}.", { label }), false, { label: t("Undo"), run: () => void undo(e, id0) }, {
+      label: t("Switch to it"),
       run: async () => {
         const now = await loadProfiles(game).catch(() => null);
         const to = now?.find((x) => x.id === id);
@@ -110,8 +112,8 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
 export async function quickNewProfile(game: GameId): Promise<Profile | null> {
   const list = knownProfiles(game) ?? await loadProfiles(game).catch(() => [] as Profile[]);
   const taken = new Set(list.map((x) => x.name.toLowerCase()));
-  let name = "New profile";
-  for (let n = 2; taken.has(name.toLowerCase()); n++) name = `New profile ${n}`;
+  let name = t("New profile");
+  for (let n = 2; taken.has(name.toLowerCase()); n++) name = t("New profile {n}", { n });
   const p = await makeProfile(game, "now", name, {});
   if (p) requestEdit(p.id, "rename");
   return p;
@@ -120,9 +122,9 @@ export async function quickNewProfile(game: GameId): Promise<Profile | null> {
 /** Copy a profile, then name the copy: its card (or the editor, on a profile's page) opens with the name selected. */
 export async function duplicateProfile(game: GameId, p: Profile): Promise<Profile | null> {
   try {
-    const c = await profiles.create(game, `${p.name} copy`, p.id);
+    const c = await profiles.create(game, t("{name} copy", { name: p.name }), p.id);
     profilesChanged(game);
-    undoable(game, `Made ${c.name}`, c);
+    undoable(game, t("Made {name}", { name: c.name }), c);
     requestEdit(c.id, "rename");
     return c;
   } catch (e) { fail(e); return null; }
@@ -143,7 +145,7 @@ export async function patchProfile(game: GameId, p: Profile, patch: ProfilePatch
   };
   try {
     await put(patch);
-    record({ label: holder ? `${label}. Moved ${holder.hotkey} from ${holder.name}` : label, undo: () => put(before, true), redo: () => put(patch) });
+    record({ label: holder ? t("{label}. Moved {key} from {name}", { label, key: holder.hotkey ?? "", name: holder.name }) : label, undo: () => put(before, true), redo: () => put(patch) });
     return true;
   } catch (e) { fail(e); return false; }
 }
@@ -151,12 +153,12 @@ export async function patchProfile(game: GameId, p: Profile, patch: ProfilePatch
 export function renameProfile(game: GameId, p: Profile, name: string) {
   const n = name.trim();
   if (!n || n === p.name) return Promise.resolve(false);
-  return patchProfile(game, p, { name: n }, `Renamed ${p.name} to ${n}`);
+  return patchProfile(game, p, { name: n }, t("Renamed {old} to {name}", { old: p.name, name: n }));
 }
 
 /** Replace a profile's mods with the ones on now. Undo puts its old list back. */
 export async function saveInto(game: GameId, p: Profile) {
-  if (p.active) { toast(`${p.name} is on now, so it follows your changes already`); return; }
+  if (p.active) { toast(t("{name} is on now, so it follows your changes already", { name: p.name })); return; }
   try {
     let id = p.id;
     let before = await profiles.snapshot(id);
@@ -169,13 +171,13 @@ export async function saveInto(game: GameId, p: Profile) {
       before = prior;
       profilesChanged(game);
     };
-    record({ label: `Saved the mods on now into ${p.name}`, undo: swap, redo: swap });
+    record({ label: t("Saved the mods on now into {name}", { name: p.name }), undo: swap, redo: swap });
   } catch (e) { fail(e); }
 }
 
 /** Delete with Undo (no question first: the toast's Undo brings it back whole). True when it was deleted. */
 export async function deleteProfile(game: GameId, p: Profile, list: Profile[] | null): Promise<boolean> {
-  if ((list?.length ?? 2) <= 1) { toast("The only profile can't be deleted", true); return false; }
+  if ((list?.length ?? 2) <= 1) { toast(t("The only profile can't be deleted"), true); return false; }
   try {
     let snap = await profiles.snapshot(p.id);
     let id = p.id;
@@ -183,7 +185,7 @@ export async function deleteProfile(game: GameId, p: Profile, list: Profile[] | 
     profilesChanged(game);
     if (p.hotkey) syncKeys();
     record({
-      label: p.active ? `Deleted ${p.name}. The next profile is on now, with the same mods` : `Deleted ${p.name}`,
+      label: p.active ? t("Deleted {name}. The next profile is on now, with the same mods", { name: p.name }) : t("Deleted {name}", { name: p.name }),
       undo: async () => { id = (await profiles.restore(snap)).id; profilesChanged(game); if (p.hotkey) syncKeys(); },
       redo: async () => { snap = await profiles.snapshot(id); await profiles.remove(id); profilesChanged(game); if (p.hotkey) syncKeys(); },
     });

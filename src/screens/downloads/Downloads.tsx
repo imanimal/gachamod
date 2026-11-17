@@ -4,7 +4,7 @@
 // right-click menu. Rows are memo components: a progress event redraws only the row that moved.
 // Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
-import { Badge, Button, Empty, IconButton, PageHeader, Progress, Spinner, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Empty, IconButton, PageHeader, Progress, Spinner, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
 import { menuFor, menuHandler, type MenuEntry } from "../../ui/ContextMenu";
@@ -24,6 +24,8 @@ import { notesText } from "../../lib/notes";
 import { record } from "../../lib/history";
 import { BatchHead, InstalledList, ModSwitch, ModsToggle, batches, modsOf, useInstalledState } from "./Batches";
 import { isNotice, isSeen, markSeen, unseen, useSeen } from "./seen";
+import { gameName as gameTitle, gameShort as shortName } from "../../lib/games";
+import { t, tb, tn } from "../../lib/i18n";
 
 const ALL_KEY = "gm.downloads.all";
 const readAll = () => { try { return localStorage.getItem(ALL_KEY) === "1"; } catch { return false; } };
@@ -64,8 +66,8 @@ function useTicking(on: boolean) {
   const [, setT] = useState(0);
   useEffect(() => {
     if (!on) return;
-    const t = window.setInterval(() => setT((n) => n + 1), 1000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(() => setT((n) => n + 1), 1000);
+    return () => window.clearInterval(timer);
   }, [on]);
 }
 
@@ -81,21 +83,21 @@ function useSeenOnScreen(items: QueueItem[]) {
   const watched = useRef(new Set<Element>());
   const [obs] = useState(() => typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver((entries) => {
     for (const e of entries) {
-      const t = timers.current.get(e.target);
+      const timer = timers.current.get(e.target);
       if (e.isIntersecting && document.visibilityState === "visible") {
-        if (t !== undefined) continue;
+        if (timer !== undefined) continue;
         timers.current.set(e.target, window.setTimeout(() => {
           timers.current.delete(e.target);
           const it = byId.current.get(Number((e.target as HTMLElement).dataset.dlId));
           if (it && e.target.isConnected) markSeen([it]);
         }, SEEN_AFTER));
-      } else if (t !== undefined) { window.clearTimeout(t); timers.current.delete(e.target); }
+      } else if (timer !== undefined) { window.clearTimeout(timer); timers.current.delete(e.target); }
     }
   }, { threshold: 0.6 }));
   useEffect(() => {
     // hidden: stop every count; shown again: look at what is on screen now
     const h = () => {
-      timers.current.forEach((t) => window.clearTimeout(t));
+      timers.current.forEach((x) => window.clearTimeout(x));
       timers.current.clear();
       if (document.visibilityState === "visible" && obs) for (const el of watched.current) { obs.unobserve(el); if (el.isConnected) obs.observe(el); }
     };
@@ -103,7 +105,7 @@ function useSeenOnScreen(items: QueueItem[]) {
     return () => {
       document.removeEventListener("visibilitychange", h);
       obs?.disconnect();
-      timers.current.forEach((t) => window.clearTimeout(t));
+      timers.current.forEach((x) => window.clearTimeout(x));
     };
   }, [obs]);
   return (el: HTMLElement | null) => {
@@ -128,19 +130,19 @@ function clearRows(items: QueueItem[]) {
   if (!ids.length) return;
   ids.forEach((id) => clearing.add(id));
   clearEmit();
-  const what = ids.length === 1 ? (items.find((i) => i.id === ids[0])?.req.meta.name || "1 download") : plural(ids.length, "download");
+  const one = ids.length === 1 ? items.find((i) => i.id === ids[0])?.req.meta.name : undefined;
   const timer = window.setTimeout(() => {
     void Promise.all(ids.map((id) => queue.remove(id)))
       .catch((e) => toast(errorText(e), true))
       .finally(() => { ids.forEach((id) => clearing.delete(id)); clearEmit(); });
   }, CLEAR_AFTER);
-  const tid = toast(`Cleared ${what} from the list`, false, {
-    label: "Undo",
+  const tid = toast(one ? t("Cleared {name} from the list", { name: one }) : tn(ids.length, "Cleared {n} download from the list", "Cleared {n} downloads from the list"), false, {
+    label: t("Undo"),
     run: () => {
       window.clearTimeout(timer);
       ids.forEach((id) => clearing.delete(id));
       clearEmit();
-      retoast(tid, `Put back ${what}`);
+      retoast(tid, one ? t("Put back {name}", { name: one }) : tn(ids.length, "Put back {n} download", "Put back {n} downloads"));
     },
   });
 }
@@ -154,33 +156,38 @@ const MAX_DOWNLOADS = 3;
 
 function timeLeft(secs: number): string {
   if (!Number.isFinite(secs) || secs <= 0) return "";
-  if (secs < 60) return `${Math.max(1, Math.round(secs))} s left`;
-  if (secs < 3600) return `${Math.round(secs / 60)} min left`;
-  return `${(secs / 3600).toFixed(1)} h left`;
+  if (secs < 60) return t("{n} s left", { n: Math.max(1, Math.round(secs)) });
+  if (secs < 3600) return t("{n} min left", { n: Math.round(secs / 60) });
+  return t("{n} h left", { n: Math.round(secs / 360) / 10 });
 }
 
 function stateLine(i: QueueItem, speed: number | undefined, ahead: Ahead, quietSecs: number, moveSlow: boolean): string {
-  const note = i.progress?.step;
+  // the backend writes its steps in English
+  const note = i.progress?.step ? tb(i.progress.step) : undefined;
   switch (i.state) {
     case "waiting":
-      if (i.archive || i.req.localPath) return ahead.installing ? `Waiting for ${ahead.installing} to finish installing` : "Waiting to install";
-      return ahead.downloading >= MAX_DOWNLOADS ? `Waiting for a free slot. ${MAX_DOWNLOADS} files download at a time` : "Waiting to download";
+      if (i.archive || i.req.localPath) return ahead.installing ? t("Waiting for {name} to finish installing", { name: ahead.installing }) : t("Waiting to install");
+      return ahead.downloading >= MAX_DOWNLOADS ? t("Waiting for a free slot. {n} files download at a time", { n: MAX_DOWNLOADS }) : t("Waiting to download");
     case "downloading": {
-      if (!i.received) return note || "Connecting to GameBanana";
-      const parts = [i.total ? `${formatBytes(i.received)} of ${formatBytes(i.total)}` : formatBytes(i.received)];
-      if (speed) parts.push(`${formatBytes(speed)}/s`);
+      if (!i.received) return note || t("Connecting to GameBanana");
+      const parts = [i.total ? t("{done} of {total}", { done: formatBytes(i.received), total: formatBytes(i.total) }) : formatBytes(i.received)];
+      if (speed) parts.push(t("{size}/s", { size: formatBytes(speed) }));
       if (speed && i.total) { const left = timeLeft((i.total - i.received) / speed); if (left) parts.push(left); }
       if (note) parts.push(note);
       else if (quietSecs >= 10) parts.push(moveSlow
-        ? `No data for ${quietSecs} s. GameBanana's server may be busy; gachamod moves to another one if it stays slow`
-        : `No data for ${quietSecs} s. GameBanana's server may be busy`);
+        ? t("No data for {n} s. GameBanana's server may be busy; gachamod moves to another one if it stays slow", { n: quietSecs })
+        : t("No data for {n} s. GameBanana's server may be busy", { n: quietSecs }));
       return parts.join(" · ");
     }
-    case "installing": return i.progress?.step || "Getting ready to unpack";
-    case "needsChoice": return `${plural(i.candidates.length, "mod")} inside. Pick which to install`;
-    case "done": return `Installed ${(i.modIds?.length ?? 0) > 1 ? `${i.modIds.length} mods ` : ""}${i.finishedAt ? timeAgo(i.finishedAt) : ""}`.trim();
-    case "failed": return i.message;
-    case "cancelled": return "Cancelled";
+    case "installing": return note || t("Getting ready to unpack");
+    case "needsChoice": return tn(i.candidates.length, "{n} mod inside. Pick which to install", "{n} mods inside. Pick which to install");
+    case "done": {
+      const n = i.modIds?.length ?? 0;
+      if (n > 1) return i.finishedAt ? t("Installed {n} mods {ago}", { n, ago: timeAgo(i.finishedAt) }) : t("Installed {n} mods", { n });
+      return i.finishedAt ? t("Installed {ago}", { ago: timeAgo(i.finishedAt) }) : t("Installed");
+    }
+    case "failed": return tb(i.message);
+    case "cancelled": return t("Cancelled");
   }
 }
 
@@ -196,7 +203,8 @@ const gbUrl = (i: QueueItem) => i.req.meta.source?.url || `https://gamebanana.co
 /** Install a removed mod again from where it came from. */
 const reinstall = (i: QueueItem) => act(async () => {
   await queue.add({ ...i.req, meta: { ...i.req.meta, replaces: null } });
-  toast(`Installing ${i.req.meta.name || i.req.fileName || "it"} again`);
+  const name = i.req.meta.name || i.req.fileName;
+  toast(name ? t("Installing {name} again", { name }) : t("Installing it again"));
 });
 /** Get the game ready (mod loader or Mods folder), then retry. */
 const fixFolder = (i: QueueItem) => void getReady(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); });
@@ -237,10 +245,10 @@ interface RowProps {
   loaded: boolean;
 }
 
-const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSecs, aheadDownloading, aheadInstalling, moveSlow, other, all, gameShort, nf, setupRunning, installed, loaded }: RowProps) {
+const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSecs, aheadDownloading, aheadInstalling, moveSlow, other, all, gameShort: short, nf, setupRunning, installed, loaded }: RowProps) {
   const c = ctx.current!;
   const thumb = fileUrl(i.req.thumb ?? i.req.meta.previewUrl ?? null);
-  const name = i.req.meta.name || i.req.fileName || "Mod";
+  const name = i.req.meta.name || i.req.fileName || t("Mod");
   const p = i.state === "installing" ? i.progress : null;
   const progress = i.state === "downloading" && i.total ? i.received / i.total : p && p.total > 0 ? p.done / p.total : null;
   const mods = useMemo(() => modsOf(i, installed), [i, installed]);
@@ -248,8 +256,8 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
   const removed = gone > 0 && mods.length === 0;
   const canReinstall = i.req.gbModId > 0 || !!i.req.localPath;
   let line = stateLine(i, speed, { downloading: aheadDownloading, installing: aheadInstalling }, quietSecs, moveSlow);
-  if (removed) line += `. ${gone > 1 ? "They were" : "It was"} removed since`;
-  else if (gone > 0) line += `. ${gone} of them ${gone === 1 ? "was" : "were"} removed since`;
+  if (removed) line = gone > 1 ? t("{line}. They were removed since", { line }) : t("{line}. It was removed since", { line });
+  else if (gone > 0) line = tn(gone, "{line}. {n} of them was removed since", "{line}. {n} of them were removed since", { line });
   const slowOff = quietSecs >= 10 && !moveSlow && !i.progress?.step;
   const failed = i.state === "failed" || i.state === "cancelled";
   const fixable = failed ? nf : null;
@@ -259,7 +267,8 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
   // the .part stays, so Undo (or Retry) carries on where it stopped
   const cancel = () => act(async () => {
     await queue.cancel(i.id);
-    record({ label: `Cancelled ${i.req.meta.name || i.req.fileName || "the download"}`, undo: () => queue.retry(i.id), redo: () => queue.cancel(i.id) });
+    const what = i.req.meta.name || i.req.fileName;
+    record({ label: what ? t("Cancelled {name}", { name: what }) : t("Cancelled the download"), undo: () => queue.retry(i.id), redo: () => queue.cancel(i.id) });
   });
   const clear = () => clearRows([i]);
 
@@ -273,22 +282,22 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
 
   const menu = (): MenuEntry[] => {
     const list: MenuEntry[] = [
-      i.state === "needsChoice" && { label: "Pick mods to install", icon: "layers", keys: "Enter", onClick: () => openVariantPicker(i.id) },
-      i.state === "done" && mods[0] && { label: "Show in Mods", icon: "mods", keys: "Enter", onClick: () => c.showInMods(i.req.game, mods[0]!.id) },
-      removed && { label: "View trash", icon: "trash", keys: "Enter", title: "Open Mods, Trash, to put it back", onClick: () => c.showTrash(i.req.game) },
-      removed && canReinstall && { label: "Reinstall", icon: "install", onClick: () => reinstall(i) },
-      failed && fixable && { label: canInstallLoader(fixable) ? "Install mod loader" : "Find Mods folder", icon: canInstallLoader(fixable) ? "install" : "search", keys: "Enter", onClick: () => fixFolder(i) },
-      failed && fixable && { label: "Pick folder", icon: "folder", onClick: () => void pickModsFolder(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); }) },
-      failed && !fixable && { label: "Retry", icon: "refresh", keys: "Enter", onClick: () => act(() => queue.retry(i.id)) },
-      !!file && { label: "Show file", icon: "folder", onClick: () => act(() => shell.revealPath(file)) },
+      i.state === "needsChoice" && { label: t("Pick mods to install"), icon: "layers", keys: "Enter", onClick: () => openVariantPicker(i.id) },
+      i.state === "done" && mods[0] && { label: t("Show in Mods"), icon: "mods", keys: "Enter", onClick: () => c.showInMods(i.req.game, mods[0]!.id) },
+      removed && { label: t("View trash"), icon: "trash", keys: "Enter", title: t("Open Mods, Trash, to put it back"), onClick: () => c.showTrash(i.req.game) },
+      removed && canReinstall && { label: t("Reinstall"), icon: "install", onClick: () => reinstall(i) },
+      failed && fixable && { label: canInstallLoader(fixable) ? t("Install mod loader") : t("Find Mods folder"), icon: canInstallLoader(fixable) ? "install" : "search", keys: "Enter", onClick: () => fixFolder(i) },
+      failed && fixable && { label: t("Pick folder"), icon: "folder", onClick: () => void pickModsFolder(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); }) },
+      failed && !fixable && { label: t("Retry"), icon: "refresh", keys: "Enter", onClick: () => act(() => queue.retry(i.id)) },
+      !!file && { label: t("Show file"), icon: "folder", onClick: () => act(() => shell.revealPath(file)) },
       "-",
-      gb && !other && { label: "Open mod page", icon: "browse", keys: primary === openPage ? "Enter" : undefined, onClick: openPage },
-      gb && { label: "Open on GameBanana", icon: "external", onClick: () => openExternal(gbUrl(i)) },
-      gb && { label: "Copy link", icon: "link", onClick: () => copyText(gbUrl(i), "the link") },
+      gb && !other && { label: t("Open mod page"), icon: "browse", keys: primary === openPage ? "Enter" : undefined, onClick: openPage },
+      gb && { label: t("Open on GameBanana"), icon: "external", onClick: () => openExternal(gbUrl(i)) },
+      gb && { label: t("Copy link"), icon: "link", onClick: () => copyText(gbUrl(i), t("Copied the link")) },
       "-",
-      !finished(i) && i.state !== "installing" && { label: "Cancel", icon: "x", keys: "Del", onClick: cancel },
-      i.state === "installing" && { label: "Cancel", icon: "x", disabled: true, title: "It's being installed right now and will be done in a moment" },
-      finished(i) && { label: "Clear from list", icon: "x", keys: "Del", title: "The mod stays installed", onClick: clear },
+      !finished(i) && i.state !== "installing" && { label: t("Cancel"), icon: "x", keys: "Del", onClick: cancel },
+      i.state === "installing" && { label: t("Cancel"), icon: "x", disabled: true, title: t("It's being installed right now and will be done in a moment") },
+      finished(i) && { label: t("Clear from list"), icon: "x", keys: "Del", title: t("The mod stays installed"), onClick: clear },
     ];
     // a finished one-mod row also gets that mod's own menu
     if (i.state === "done" && mods.length === 1) list.push("-", { header: mods[0]!.name }, ...menuFor("mod", { game: i.req.game, mod: mods[0]! }));
@@ -307,30 +316,30 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
       <div className="dl-main">
         <div className="dl-name">
           {gb && !other
-            ? <button type="button" className="dl-t dl-t-link" tabIndex={-1} title={`${i.req.fileName}. Open its GameBanana page`} onClick={openPage}>{name}</button>
+            ? <button type="button" className="dl-t dl-t-link" tabIndex={-1} title={t("{file}. Open its GameBanana page", { file: i.req.fileName })} onClick={openPage}>{name}</button>
             : <span className="dl-t" title={i.req.fileName}>{name}</span>}
           {i.req.meta.character && (other ? <span className="dl-c">{i.req.meta.character}</span> : <CharLink game={i.req.game} name={i.req.meta.character} className="dl-c" />)}
-          {other && !all && <Badge title={`Installs into ${gameShort}. Click to switch to it`} onClick={() => setGame(i.req.game)}>{gameShort}</Badge>}
+          {other && !all && <Badge title={t("Installs into {game}. Click to switch to it", { game: short })} onClick={() => setGame(i.req.game)}>{short}</Badge>}
           {i.req.meta.replaces && (
-            <Badge tone="accent" icon="update" title="Updates a mod you have. Click to open it in Mods"
-              onClick={() => c.showInMods(i.req.game, i.req.meta.replaces!)}>Update</Badge>
+            <Badge tone="accent" icon="update" title={t("Updates a mod you have. Click to open it in Mods")}
+              onClick={() => c.showInMods(i.req.game, i.req.meta.replaces!)}>{t("Update")}</Badge>
           )}
           {i.state === "done" && i.unsure && (
-            <Badge tone="warn" icon="warn" title={`${i.unsure}. Click to see the files`}
-              onClick={() => { const at = mods[0]?.path ?? file; if (at) act(() => mods[0] ? shell.openPath(at) : shell.revealPath(at)); }}>Check files</Badge>
+            <Badge tone="warn" icon="warn" title={t("{note}. Click to see the files", { note: tb(i.unsure) })}
+              onClick={() => { const at = mods[0]?.path ?? file; if (at) act(() => mods[0] ? shell.openPath(at) : shell.revealPath(at)); }}>{t("Check files")}</Badge>
           )}
         </div>
         <div className={`dl-line hint${i.state === "failed" ? " dl-bad" : ""}`}>
           {line}
-          {slowOff && <> <button type="button" className="dl-more" title="Open the setting that moves slow downloads to another of GameBanana's servers"
-            onClick={() => go({ view: "settings", section: "set-other-servers" })}>Move slow downloads</button></>}
+          {slowOff && <> <button type="button" className="dl-more" title={t("Open the setting that moves slow downloads to another of GameBanana's servers")}
+            onClick={() => go({ view: "settings", section: "set-other-servers" })}>{t("Move slow downloads")}</button></>}
         </div>
-        {(i.state === "downloading" || i.state === "installing") && <Progress value={progress} label={`${name}: ${line}`} />}
+        {(i.state === "downloading" || i.state === "installing") && <Progress value={progress} label={t("{name}: {status}", { name, status: line })} />}
         {p && p.mods.length > 1 && (
-          <ul className="dl-mods" aria-label={`${plural(p.mods.length, "mod")} found inside`}>
+          <ul className="dl-mods" aria-label={tn(p.mods.length, "{n} mod found inside", "{n} mods found inside")}>
             {p.mods.map((m, n) => (
               <li key={n} className={n < p.placed ? "is-in" : n === p.placed ? "is-now" : undefined}
-                title={n < p.placed ? "Installed" : n === p.placed ? "Installing now" : "Waiting its turn"}>
+                title={n < p.placed ? t("Installed") : n === p.placed ? t("Installing now") : t("Waiting its turn")}>
                 {n < p.placed ? <Icon name="check" /> : n === p.placed ? <Spinner size={12} /> : <span className="dl-mods-dot" />}
                 <span>{m}</span>
               </li>
@@ -342,34 +351,34 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
       <div className="dl-act">
         {mods.length > 1 && <ModsToggle mods={mods} open={open} onToggle={() => c.flip(i)} />}
         {mods.length === 1 && <ModSwitch mod={mods[0]!} all={installed} />}
-        {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)} title="This download has more than one version. Pick the ones to install (Enter)">Pick</Button>}
+        {i.state === "needsChoice" && <Button variant="primary" size="sm" icon="layers" onClick={() => openVariantPicker(i.id)} title={t("This download has more than one version. Pick the ones to install (Enter)")}>{t("Pick")}</Button>}
         {i.state === "done" && mods[0] && (
           <Button size="sm" icon="mods" onClick={() => c.showInMods(i.req.game, mods[0]!.id)}
-            title={other ? `Switch to ${gameShort} and open it in Mods (Enter)` : "Open it in Mods (Enter)"}>Show in Mods</Button>
+            title={other ? t("Switch to {game} and open it in Mods (Enter)", { game: short }) : t("Open it in Mods (Enter)")}>{t("Show in Mods")}</Button>
         )}
-        {removed && <Button size="sm" icon="trash" onClick={() => c.showTrash(i.req.game)} title="Open Mods, Trash, where you can put it back (Enter)">View trash</Button>}
-        {removed && canReinstall && <Button size="sm" icon="install" onClick={() => reinstall(i)} title={gb ? "Download it from GameBanana and install it again" : "Install it again from the same file"}>Reinstall</Button>}
+        {removed && <Button size="sm" icon="trash" onClick={() => c.showTrash(i.req.game)} title={t("Open Mods, Trash, where you can put it back (Enter)")}>{t("View trash")}</Button>}
+        {removed && canReinstall && <Button size="sm" icon="install" onClick={() => reinstall(i)} title={gb ? t("Download it from GameBanana and install it again") : t("Install it again from the same file")}>{t("Reinstall")}</Button>}
         {failed && (fixable
           ? <>
               <Button size="sm" variant="primary" icon={canInstallLoader(fixable) ? "install" : "search"} busy={setupRunning}
-                title={canInstallLoader(fixable) ? `Installs XXMI Launcher and ${fixable.short}'s mod loader, then installs this mod (Enter)` : `Looks for ${fixable.short}'s Mods folder again, then installs this mod (Enter)`}
+                title={canInstallLoader(fixable) ? t("Installs XXMI Launcher and {game}'s mod loader, then installs this mod (Enter)", { game: shortName(fixable) }) : t("Looks for {game}'s Mods folder again, then installs this mod (Enter)", { game: shortName(fixable) })}
                 onClick={() => fixFolder(i)}>
-                {canInstallLoader(fixable) ? "Install mod loader" : "Find Mods folder"}
+                {canInstallLoader(fixable) ? t("Install mod loader") : t("Find Mods folder")}
               </Button>
-              <Button size="sm" icon="folder" title={`Pick ${fixable.short}'s Mods folder yourself, then install this mod`}
-                onClick={() => void pickModsFolder(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); })}>Pick folder</Button>
+              <Button size="sm" icon="folder" title={t("Pick {game}'s Mods folder yourself, then install this mod", { game: shortName(fixable) })}
+                onClick={() => void pickModsFolder(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); })}>{t("Pick folder")}</Button>
             </>
-          : <Button size="sm" icon="refresh" title="Try this download again (Enter)" onClick={() => act(() => queue.retry(i.id))}>Retry</Button>)}
+          : <Button size="sm" icon="refresh" title={t("Try this download again (Enter)")} onClick={() => act(() => queue.retry(i.id))}>{t("Retry")}</Button>)}
         {failed && file && (
-          <Button size="sm" icon="folder" title={`Show ${i.req.fileName || "the file"} in File Explorer, to place its files yourself`}
-            onClick={() => act(() => shell.revealPath(file))}>Show file</Button>
+          <Button size="sm" icon="folder" title={i.req.fileName ? t("Show {file} in File Explorer, to place its files yourself", { file: i.req.fileName }) : t("Show the file in File Explorer, to place its files yourself")}
+            onClick={() => act(() => shell.revealPath(file))}>{t("Show file")}</Button>
         )}
-        {i.state === "done" && file && <IconButton icon="folder" label="Show file" title={`Show ${i.req.fileName || "the downloaded file"} in File Explorer`} onClick={() => act(() => shell.revealPath(file))} />}
-        {!finished(i) && i.state !== "installing" && <IconButton icon="x" label="Cancel" title="Cancel (Delete)" onClick={cancel} />}
+        {i.state === "done" && file && <IconButton icon="folder" label={t("Show file")} title={i.req.fileName ? t("Show {file} in File Explorer", { file: i.req.fileName }) : t("Show the downloaded file in File Explorer")} onClick={() => act(() => shell.revealPath(file))} />}
+        {!finished(i) && i.state !== "installing" && <IconButton icon="x" label={t("Cancel")} title={t("Cancel (Delete)")} onClick={cancel} />}
         {i.state === "installing" && (
-          <span title="It's being installed right now and will be done in a moment"><IconButton icon="x" label="Cancel" title="" disabled /></span>
+          <span title={t("It's being installed right now and will be done in a moment")}><IconButton icon="x" label={t("Cancel")} title="" disabled /></span>
         )}
-        {finished(i) && <IconButton icon="x" label="Clear from list" title="Clear from list (Delete). The mod stays installed" onClick={clear} />}
+        {finished(i) && <IconButton icon="x" label={t("Clear from list")} title={t("Clear from list (Delete). The mod stays installed")} onClick={clear} />}
       </div>
     </li>
   );
@@ -385,7 +394,7 @@ export function Downloads() {
   const moveSlow = otherServersPref.use();
   const keepArchives = keepArchivesPref.use();
   const aheadDownloading = snap.items.filter((i) => i.state === "downloading").length;
-  const aheadInstalling = (() => { const x = snap.items.find((i) => i.state === "installing"); return x ? x.req.meta.name || x.req.fileName || "another mod" : null; })();
+  const aheadInstalling = (() => { const x = snap.items.find((i) => i.state === "installing"); return x ? x.req.meta.name || x.req.fileName || t("another mod") : null; })();
   const setup = useSetup();
   const [busy, setBusy] = useState(false);
   const [allPref, setAllPref] = useState(readAll);
@@ -416,10 +425,10 @@ export function Downloads() {
     if (!game) return;
     setBusy(true);
     try {
-      const paths = await dialogs.pickFiles({ title: "Pick mod archives", extensions: ["zip", "7z", "rar"], multiple: true });
-      if (!paths) { if (!("__TAURI_INTERNALS__" in window)) toast("Picking files works in the app. Drop archives on the window there"); return; }
+      const paths = await dialogs.pickFiles({ title: t("Pick mod archives"), extensions: ["zip", "7z", "rar"], multiple: true });
+      if (!paths) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Picking files works in the app. Drop archives on the window there")); return; }
       const o = await installs.local(game.id, paths);
-      toast(o.notes.length ? notesText(o.notes) : `Installing ${plural(paths.length, "mod")}`);
+      toast(o.notes.length ? notesText(o.notes) : tn(paths.length, "Installing {n} mod", "Installing {n} mods"));
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };
@@ -433,7 +442,7 @@ export function Downloads() {
     for (const p of tries) { try { await shell.openPath(p); return; } catch { /* not made yet, try the one above */ } }
   });
 
-  const gameName = (id: string) => games.find((g) => g.id === id)?.short ?? id;
+  const gameName = (id: string) => { const g = games.find((x) => x.id === id); return g ? shortName(g) : id; };
   /** The game a failed download had nowhere to go in (no Mods folder yet), or null. */
   const noFolder = (i: QueueItem) => { const g = games.find((x) => x.id === i.req.game); return g && !g.modsDir ? g : null; };
   /** Failed rows a plain Retry can help (not the ones still missing a Mods folder). */
@@ -456,13 +465,13 @@ export function Downloads() {
     watchSeen,
   } satisfies Omit<RowCtx, "rowKeys">);
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const t = e.target as HTMLElement;
-    if (t.closest("input, textarea, select, [contenteditable='true']")) return;
-    const rowEl = t.closest<HTMLElement>(".dl-item");
+    const el = e.target as HTMLElement;
+    if (el.closest("input, textarea, select, [contenteditable='true']")) return;
+    const rowEl = el.closest<HTMLElement>(".dl-item");
     if (!rowEl || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Home" || e.key === "End") { moveInGrid(e, pageRef.current, ".dl-item"); return; }
     const keys = ctx.current.rowKeys.get(Number(rowEl.dataset.dlId));
-    if (e.key === "Enter" && t === rowEl && keys?.primary) { e.preventDefault(); keys.primary(); }
+    if (e.key === "Enter" && el === rowEl && keys?.primary) { e.preventDefault(); keys.primary(); }
     else if (e.key === "Delete" && keys?.del) { e.preventDefault(); keys.del(); }
   };
 
@@ -503,7 +512,7 @@ export function Downloads() {
     ? <ul key="all" className="dl-list">{xs.map(draw)}</ul>
     : (
       <div key={g} className="dl-group">
-        <h3 className="dl-group-h">{games.find((x) => x.id === g)?.name ?? g}</h3>
+        <h3 className="dl-group-h">{gameTitle(games.find((x) => x.id === g)) || g}</h3>
         <ul className="dl-list">{xs.map(draw)}</ul>
       </div>
     ));
@@ -511,53 +520,55 @@ export function Downloads() {
   const running = active.filter((i) => i.state === "downloading" || i.state === "installing").length;
   const waiting = active.filter((i) => i.state === "waiting").length;
   const failedHere = done.filter((i) => i.state === "failed").length;
-  const counts = [running && `${running} running`, waiting && `${waiting} waiting`, failedHere && `${failedHere} failed`].filter(Boolean);
-  const sub = counts.length ? counts.join(", ") : "Mods you install from Browse, links and dropped files show up here";
+  const counts = [running && t("{n} running", { n: running }), waiting && t("{n} waiting", { n: waiting }), failedHere && t("{n} failed", { n: failedHere })].filter(Boolean);
+  const sub = counts.length ? counts.join(", ") : t("Mods you install from Browse, links and dropped files show up here");
   const toRetry = retryable(done).length;
   return (
     <div className="page dl-page" ref={pageRef} onKeyDown={onKeyDown}>
-      <PageHeader title="Downloads" icon="downloads" sub={sub}
+      <PageHeader title={t("Downloads")} icon="downloads" sub={sub}
         actions={<>
-          <span title="A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods and downloads"><EnableNewSwitch size="sm" label="Turn on new mods" /></span>
-          {game && <span title="Show the downloads of every game, grouped by game"><Toggle size="sm" checked={all} onChange={setAll} label="All games" /></span>}
-          <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title="Install .zip, .7z or .rar files from this PC (or drop them on the window)">Install from files</Button>
-          {toRetry > 0 && <Button icon="refresh" onClick={() => retryAll(done)} title="Try every failed download on this page again">Retry failed ({toRetry})</Button>}
-          <Button variant="ghost" icon="trash" disabled={!done.length} title={all ? "Clear every finished download from the list. The mods stay installed" : `Clear ${game?.short ?? "this game"}'s finished downloads from the list. The mods stay installed`}
-            onClick={() => clearRows(done)}>Clear finished</Button>
-          <IconButton icon="folder" label="Open the downloads folder"
-            title={keepArchives ? "Open the downloads folder. Downloaded archives stay there after installing" : "Open the downloads folder. Archives are deleted once they install, so it holds the ones that didn't"}
+          <span title={t("A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods")}><EnableNewSwitch size="sm" label={t("Turn on new mods")} /></span>
+          {game && <span title={t("Show the downloads of every game, grouped by game")}><Toggle size="sm" checked={all} onChange={setAll} label={t("All games")} /></span>}
+          <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title={t("Install .zip, .7z or .rar files from this PC (or drop them on the window)")}>{t("Install from files")}</Button>
+          {toRetry > 0 && <Button icon="refresh" onClick={() => retryAll(done)} title={t("Try every failed download on this page again")}>{t("Retry failed ({n})", { n: toRetry })}</Button>}
+          <Button variant="ghost" icon="trash" disabled={!done.length} title={all || !game ? t("Clear every finished download from the list. The mods stay installed") : t("Clear {game}'s finished downloads from the list. The mods stay installed", { game: shortName(game) })}
+            onClick={() => clearRows(done)}>{t("Clear finished")}</Button>
+          <IconButton icon="folder" label={t("Open the downloads folder")}
+            title={keepArchives ? t("Open the downloads folder. Downloaded archives stay there after installing") : t("Open the downloads folder. Archives are deleted once they install, so it holds the ones that didn't")}
             onClick={openDownloadsFolder} />
-          <IconButton icon="settings" label="Download settings (Settings, Downloads and installing)" onClick={() => go({ view: "settings", section: "set-archives" })} />
+          <IconButton icon="settings" label={t("Download settings (Settings, Downloads and installing)")} onClick={() => go({ view: "settings", section: "set-archives" })} />
         </>} />
       {error && !items.length ? (
-        <Empty icon="warn" title="Couldn't read the download queue"
-          actions={<Button variant="primary" icon="refresh" busy={loading} onClick={reload}>{loading ? "Reading the queue" : "Try again"}</Button>}>
+        <Empty icon="warn" title={t("Couldn't read the download queue")}
+          actions={<Button variant="primary" icon="refresh" busy={loading} onClick={reload}>{loading ? t("Reading the queue") : t("Try again")}</Button>}>
           {error}
         </Empty>
       ) : mine.length === 0 ? (
-        <Empty icon="downloads" title={elsewhere ? `Nothing downloading for ${game?.short ?? "this game"}` : "Nothing downloading"}
+        <Empty icon="downloads" title={elsewhere && game ? t("Nothing downloading for {game}", { game: shortName(game) }) : t("Nothing downloading")}
           actions={<>
-            <Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse mods</Button>
-            {elsewhere > 0 && <Button icon="layers" onClick={() => setAll(true)}>Show all games ({elsewhere})</Button>}
+            <Button variant="primary" icon="browse" onClick={() => go("browse")}>{t("Browse mods")}</Button>
+            {elsewhere > 0 && <Button icon="layers" onClick={() => setAll(true)}>{t("Show all games ({n})", { n: elsewhere })}</Button>}
           </>}>
-          Install a mod from Browse, open a GameBanana link, or drop an archive or folder on the window.
+          {t("Install a mod from Browse, open a GameBanana link, or drop an archive or folder on the window.")}
         </Empty>
       ) : (
         <>
           {active.length > 0 && (
-            <section className="dl-sec" aria-label={`In progress, ${active.length}`}>
-              <h2 className="dl-sec-h">In progress <span className="dl-sec-n">{active.length}</span></h2>
+            <section className="dl-sec" aria-label={t("In progress, {n}", { n: active.length })}>
+              <h2 className="dl-sec-h">{t("In progress")} <span className="dl-sec-n">{active.length}</span></h2>
               {grouped(activeGroups, row)}
             </section>
           )}
           {done.length > 0 && (
-            <section className="dl-sec" aria-label={`Finished, ${done.length}`}>
-              <h2 className="dl-sec-h">Finished <span className="dl-sec-n">{done.length}</span></h2>
+            <section className="dl-sec" aria-label={t("Finished, {n}", { n: done.length })}>
+              <h2 className="dl-sec-h">{t("Finished")} <span className="dl-sec-n">{done.length}</span></h2>
               {grouped(doneGroups, batchRows)}
             </section>
           )}
           {!all && elsewhere > 0 && (
-            <p className="hint dl-elsewhere">{plural(elsewhere, "download")} for other games{failedElsewhere ? ` (${failedElsewhere} failed)` : ""}. <button type="button" className="dl-more" onClick={() => setAll(true)}>Show all games</button></p>
+            <p className="hint dl-elsewhere">{failedElsewhere
+              ? tn(elsewhere, "{n} download for other games ({failed} failed).", "{n} downloads for other games ({failed} failed).", { failed: failedElsewhere })
+              : tn(elsewhere, "{n} download for other games.", "{n} downloads for other games.")} <button type="button" className="dl-more" onClick={() => setAll(true)}>{t("Show all games")}</button></p>
           )}
         </>
       )}

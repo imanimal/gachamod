@@ -1,15 +1,18 @@
-/* Paged screens (Paged.tsx): Settings and Tools. The pages listed on the left in groups, one page on the right that
-   slides like a scroll when it changes. Colours are theme tokens only. Owner: SETTINGS/AI area. */
+/* Paged screens (Paged.tsx): Settings and Tools. A search field over the pages listed on the left in groups, one page
+   on the right that slides like a scroll when it changes, or the search's results in its place. Colours are theme
+   tokens only. Owner: SETTINGS/AI area. */
 .view > .page.pg-screen { height: 100%; min-height: 0; padding-bottom: 0; }
 .pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--s-5); }
 
-.pg-nav { min-height: 0; display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-1) 0 var(--s-6); overflow: hidden auto; scrollbar-width: thin; }
+.pg-side { min-height: 0; display: flex; flex-direction: column; gap: var(--s-3); }
+.pg-search .search { width: 100%; min-width: 0; }
+.pg-nav { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-1) 0 var(--s-6); overflow: hidden auto; scrollbar-width: thin; }
 .pg-g { display: flex; flex-direction: column; gap: 2px; }
 .pg-group { padding: 0 var(--s-3) var(--s-1); color: var(--text-3); font-size: var(--t-meta); font-weight: 650; }
 .pg-nav-i { display: flex; align-items: center; gap: var(--s-2); padding: .42rem var(--s-3); border-radius: var(--radius-sm); color: var(--text-2);
   text-align: left; font-size: .93em; transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .pg-nav-i .i { width: 1.05rem; height: 1.05rem; flex: none; opacity: .8; }
-/* a page's name says what is on it, so a long one takes a second line instead of losing its end */
+/* a long name (in a longer language) takes a second line instead of losing its end */
 .pg-nav-i > span { min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
 .pg-nav-i:hover { background: var(--hover); color: var(--text); }
 .pg-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
@@ -48,9 +51,18 @@
 .pg-flash { animation: pgFlash 1.6s var(--ease-out); border-radius: var(--radius-sm); }
 @keyframes pgFlash { 0%, 30% { background: var(--accent-soft); } 100% { background: transparent; } }
 
+/* The search's results (SearchResults.tsx): each page's panels under a line saying where they live. A single setting
+   that matched keeps the flash's colour while the search shows it. A line whose panels drew nothing goes too. */
+.pg-from { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); color: var(--text-2); font-size: var(--t-small); }
+.pg-results .pg-from:not(:first-child) { margin-top: var(--s-3); }
+.pg-results .pg-from:is(:last-child, :has(+ .pg-from)) { display: none; }
+.pg-results .sub-h { margin: var(--s-6) 0 var(--s-1); font-size: .95rem; }
+.pg-hit { border-radius: var(--radius-sm); background: var(--accent-soft); box-shadow: 0 0 0 .3rem var(--accent-soft); }
+
 /* a narrow window: the list runs across the top */
 @container view (max-width: 46rem) {
   .pg { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--s-2); }
+  .pg-side { gap: var(--s-2); }
   .pg-nav { flex-direction: row; gap: 2px; padding: 0 0 var(--s-1); overflow: auto hidden; }
   .pg-g { display: contents; }
   .pg-group { display: none; }

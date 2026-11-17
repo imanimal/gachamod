@@ -17,8 +17,11 @@ import { GbBrowser } from "../browse/GbBrowser";
 import { ExtensionFrame, NeedsNote } from "../extensions/ExtensionFrame";
 import { changeStates } from "../library/data";
 import { ModGrid } from "../library/ModGrid";
+import { moveInGrid } from "../library/gridNav";
+import { useModsFormat } from "../../lib/theme";
 import { toggleOwned } from "./owned";
 import type { RosterChar } from "./roster";
+import { t, tn } from "../../lib/i18n";
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -33,6 +36,9 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
   const tab = route.tab === "online" ? "online" : extTab ? route.tab! : "installed";
   const stripRef = useRef<HTMLDivElement>(null);
   const one = charNoun(game, true), many = charNoun(game);
+  // the Character list and Three panes layouts (Settings, Appearance) put the strip down the left as a list
+  const format = useModsFormat();
+  const side = format === "chars" || format === "panes";
 
   const c = roster?.find((x) => same(x.name, name));
   const own = useMemo(() => {
@@ -51,6 +57,7 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
     if (!to) return;
     replaceRoute({ view: "characters", character: to.name, tab: route.tab });
     document.querySelector(".app .view")?.scrollTo({ top: 0 });
+    document.querySelector(".characters .lib-main")?.scrollTo({ top: 0 });
   };
   const hopRef = useRef(hop);
   hopRef.current = hop;
@@ -65,8 +72,8 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
     const h = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if ((key !== "[" && key !== "]" && key !== "o") || e.ctrlKey || e.altKey || e.metaKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return;
       if (document.querySelector(".overlay, .ctx, .popover")) return;
       e.preventDefault();
       if (key === "o") ownedRef.current();
@@ -83,48 +90,61 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
   // keep the current one in view in the strip
   useEffect(() => {
     const row = stripRef.current, on = row?.querySelector<HTMLElement>(".pchip.on");
-    if (row && on) reveal(row, on, "center");
-  }, [name, strip.length]);
+    if (row && on) { if (side) on.scrollIntoView({ block: "nearest" }); else reveal(row, on, "center"); }
+  }, [name, strip.length, side]);
 
   const defaultOutfit = async () => {
-    try { await changeStates(game, `${name} is back in the default outfit`, [], on.map((m) => m.id), mods); }
+    try { await changeStates(game, t("{name} is back in the default outfit", { name }), [], on.map((m) => m.id), mods); }
     catch (e) { toast(errorText(e), true); }
   };
 
   const owned = !!c?.owned;
+  const content = (
+    extTab && gameState
+      ? <div className="char-ext"><NeedsNote ext={extTab} /><ExtensionFrame ext={extTab} slot="characterTab" game={gameState} character={{ name: display, owned }} /></div>
+      : tab === "online"
+      ? <GbBrowser game={game} character={display} />
+      : <ModGrid game={game} mods={own} all={mods} setMods={setMods} loading={!loaded && !own.length} showCharacter={false}
+          empty={(
+            <Empty icon="mods" title={t("No mods for {name} yet", { name: display })}
+              actions={<Button variant="primary" icon="browse" onClick={() => patchRoute({ tab: "online" })} title={t("Look for {name} mods on GameBanana", { name: display })}>{t("Find mods online")}</Button>}>
+              {t("Mods you install for {name} show up here.", { name: display })}
+            </Empty>
+          )} />
+  );
   return (
     <>
       <header className="char-hero" onContextMenu={menuHandler(() => menuFor("character", { game, name: display }))}>
         <Portrait game={game} name={display} icon={c?.icon} size="7.5rem" ring className="char-hero-pic" />
         <div className="char-hero-t">
-          <button type="button" className="char-hero-back" onClick={() => closeRoute(["character", "tab", "modId"])} title={`Back to all ${many.toLowerCase()} (Alt+Left)`}>
+          <button type="button" className="char-hero-back" onClick={() => closeRoute(["character", "tab", "modId"])} title={t("Back to all {noun} (Alt+Left)", { noun: many.toLowerCase() })}>
             {many}
           </button>
           <h1 className="char-hero-name">{display}</h1>
           <span className="hint">
-            {own.length ? `${own.length === 1 ? "1 mod" : `${own.length} mods`}, ${on.length ? `${on.length} on` : "default outfit"}` : "No mods installed yet"}
+            {!own.length ? t("No mods installed yet") : on.length ? tn(own.length, "{n} mod, {on} on", "{n} mods, {on} on", { on: on.length }) : tn(own.length, "{n} mod, default outfit", "{n} mods, default outfit")}
           </span>
           <div className="char-hero-a">
             <Tabs value={tab} onChange={(v) => patchRoute({ tab: v === "installed" ? undefined : v, modId: undefined })}
-              tabs={[{ value: "installed", label: "Installed", icon: "mods", count: own.length }, { value: "online", label: "Online", icon: "browse" },
-                ...extTabs.map((e) => ({ value: `ext:${e.id}`, label: e.manifest!.characterTab!.title, icon: "puzzle" as const, title: `From the ${e.manifest!.name} extension` }))]} />
-            {on.length > 0 && <Button size="sm" variant="ghost" icon="undo" onClick={() => void defaultOutfit()} title={`Turns off every mod for ${display}`}>Default outfit</Button>}
+              tabs={[{ value: "installed", label: t("Installed"), icon: "mods", count: own.length }, { value: "online", label: t("Online"), icon: "browse" },
+                ...extTabs.map((e) => ({ value: `ext:${e.id}`, label: e.manifest!.characterTab!.title, icon: "puzzle" as const, title: t("From the {name} extension", { name: e.manifest!.name }) }))]} />
+            {on.length > 0 && <Button size="sm" variant="ghost" icon="undo" onClick={() => void defaultOutfit()} title={t("Turns off every mod for {name}", { name: display })}>{t("Default outfit")}</Button>}
             <Button size="sm" variant="ghost" icon={owned ? "check" : "plus"} className={owned ? "char-owned on" : "char-owned"} aria-pressed={owned}
               onClick={() => void toggleOwned(game, display)}
-              title={owned ? `You own ${display}. Click to mark as not owned (O)` : `Mark ${display} as owned, for the Owned filter on ${many} (O)`}>
-              {owned ? "Owned" : "Mark as owned"}
+              title={owned ? t("You own {name}. Click to mark as not owned (O)", { name: display }) : t("Mark {name} as owned, for the Owned filter on {page} (O)", { name: display, page: many })}>
+              {owned ? t("Owned") : t("Mark as owned")}
             </Button>
           </div>
         </div>
         <div className="char-hero-nav">
-          <IconButton icon="left" label={prev ? `Previous: ${prev.name} ([)` : `Previous ${one.toLowerCase()} ([)`} disabled={!prev} onClick={() => hop(prev)} />
-          <IconButton icon="right" label={next ? `Next: ${next.name} (])` : `Next ${one.toLowerCase()} (])`} disabled={!next} onClick={() => hop(next)} />
+          <IconButton icon="left" label={prev ? t("Previous: {name} ([)", { name: prev.name }) : t("Previous {noun} ([)", { noun: one.toLowerCase() })} disabled={!prev} onClick={() => hop(prev)} />
+          <IconButton icon="right" label={next ? t("Next: {name} (])", { name: next.name }) : t("Next {noun} (])", { noun: one.toLowerCase() })} disabled={!next} onClick={() => hop(next)} />
         </div>
       </header>
 
       {strip.length > 1 && (
         <div className={`char-strip-wrap${stripAll ? " is-all" : ""}`}>
-        <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many} onKeyDown={(e) => rowKeys(e, ".pchip")}>
+        <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many} onKeyDown={(e) => (side ? moveInGrid(e, stripRef.current, ".pchip") : rowKeys(e, ".pchip"))}>
           {strip.map((x) => (
             <div key={x.name} role="listitem" className="char-strip-item">
             <button type="button" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
@@ -137,21 +157,11 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
             </div>
           ))}
         </div>
-        <ShowAll open={stripAll} onToggle={toggleStripAll} fits={!stripEdges.left && !stripEdges.right} label={`Show every ${one.toLowerCase()} (${strip.length})`} />
+        {!side && <ShowAll open={stripAll} onToggle={toggleStripAll} fits={!stripEdges.left && !stripEdges.right} label={t("Show every {noun} ({n})", { noun: one.toLowerCase(), n: strip.length })} />}
         </div>
       )}
 
-      {extTab && gameState
-        ? <div className="char-ext"><NeedsNote ext={extTab} /><ExtensionFrame ext={extTab} slot="characterTab" game={gameState} character={{ name: display, owned }} /></div>
-        : tab === "online"
-        ? <GbBrowser game={game} character={display} />
-        : <ModGrid game={game} mods={own} all={mods} setMods={setMods} loading={!loaded && !own.length} showCharacter={false}
-            empty={(
-              <Empty icon="mods" title={`No mods for ${display} yet`}
-                actions={<Button variant="primary" icon="browse" onClick={() => patchRoute({ tab: "online" })} title={`Look for ${display} mods on GameBanana`}>Find mods online</Button>}>
-                Mods you install for {display} show up here.
-              </Empty>
-            )} />}
+      {side ? <div className="lib-main">{content}</div> : content}
     </>
   );
 }

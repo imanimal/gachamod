@@ -139,3 +139,42 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .check-seen > .i { flex: none; margin-top: .15em; }
 .check-seen.ok > .i { color: var(--accent-ink); }
 .check-game .waiting { padding: 0; }
+
+/* the Mods layouts (FormatPicker.tsx): Settings, Appearance, the setup page and the first-start card. Each preview is
+   a miniature drawn with boxes in the theme's colours; the accent marks what is picked in it */
+.set-format { display: flex; flex-direction: column; gap: var(--s-1); padding-bottom: var(--s-4); border-bottom: 1px solid var(--line); }
+.set-format .fmt-picker { margin-top: var(--s-2); }
+.fmt-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); }
+.fmt-card { gap: 0; }
+.fmt-card-t { display: flex; flex-direction: column; gap: .1rem; padding: var(--s-2) var(--s-3) var(--s-3); }
+.fmt-prev { display: grid; gap: 4px; height: 5rem; padding: 6px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.fmt-prev.is-cards { grid-template-rows: auto minmax(0, 1fr); }
+.fmt-prev.is-chars { grid-template-columns: 30% minmax(0, 1fr); }
+.fmt-prev.is-panes { grid-template-columns: 24% minmax(0, 1fr) 30%; }
+.fmt-chips { display: flex; gap: 3px; }
+.fmt-chip { width: 16%; height: 6px; border-radius: 99px; background: var(--line-2); }
+.fmt-chip:first-child, .fmt-li:nth-child(2) { background: var(--accent); }
+.fmt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
+.is-panes .fmt-grid { grid-template-columns: repeat(2, 1fr); }
+.fmt-tile { border-radius: 2px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line); }
+.fmt-list { display: flex; flex-direction: column; gap: 3px; }
+.fmt-li { height: 7px; border-radius: 2px; background: var(--line-2); }
+.fmt-info { display: flex; flex-direction: column; padding: 3px; border-radius: 2px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-2); }
+.fmt-info-pic { height: 40%; border-radius: 2px; background: var(--surface-3); }
+.fmt-rows { display: flex; flex-direction: column; gap: 3px; }
+.fmt-row { position: relative; height: 8px; border-radius: 2px; background: var(--surface-3); }
+.fmt-row::before { content: ""; position: absolute; left: 2px; top: 2px; width: 9px; height: 4px; border-radius: 99px; background: var(--line-2); }
+.fmt-row:nth-child(3n + 1)::before { background: var(--accent); }
+.fmt-picker.is-small { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
+.fmt-picker.is-small .fmt-prev { height: 3.4rem; }
+.fmt-picker.is-small .fmt-card-t { padding: var(--s-1) var(--s-2) var(--s-2); font-size: var(--t-small); }
+/* the first-start card: bottom left of the view, since the toasts take the bottom right */
+.fmt-intro { position: fixed; left: calc(var(--side-w, 15.75rem) + 1.2rem); bottom: 1.2rem; z-index: 40; width: min(27rem, calc(100vw - var(--side-w, 15.75rem) - 2.4rem));
+  display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-4) var(--s-4) var(--s-3); border-radius: var(--radius);
+  background: var(--raised); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); }
+[data-sidebar="right"] .fmt-intro { left: 1.2rem; }
+.fmt-intro p { margin: 0; }
+.fmt-intro-a { align-items: center; gap: var(--s-2); }
+.fmt-intro-a .hint { flex: 1; min-width: 0; font-size: var(--t-small); }
+.setup-format { display: flex; flex-direction: column; gap: var(--s-3); width: 100%; margin-top: var(--s-4); }
+.setup-format h2 { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 750; }

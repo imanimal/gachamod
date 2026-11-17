@@ -990,6 +990,7 @@ pub fn import(db: &Shared, path: &Path, opts: &ImportOptions, progress: &dyn Fn(
     let manifest = read_manifest(&mut z)?;
     let data_dir = data_dir_of(&lock(db));
     let staging = data_dir.join("staging").join(format!("pack-{}", library::new_id()));
+    let _holds: Vec<_> = manifest.games.iter().map(|g| crate::watch::hold(&g.game)).collect();
     let r = import_all(db, &mut z, &manifest, opts, &data_dir, &staging, progress);
     let _ = fs::remove_dir_all(&staging);
     r

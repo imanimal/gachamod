@@ -5,6 +5,7 @@
 // Owner: skeleton.
 import type { MenuEntry } from "../ui/ContextMenu";
 import type { IconName } from "../ui/Icon";
+import { english, lang } from "./i18n";
 
 export interface Command {
   /** Stable id (recent picks are remembered by it). */
@@ -42,7 +43,10 @@ export const commandSources = () => [...sources.entries()];
 
 // ── matching ──
 
-const fold = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9+#]+/g, " ").trim();
+// letters and digits of any script, so Russian and Chinese titles match too
+const fold = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}+#]+/gu, " ").trim();
+/** Chinese and Japanese run words together without spaces, so a two-character word is worth looking for inside one. */
+const cjk = (s: string) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(s);
 const words = (s: string) => fold(s).split(" ").filter(Boolean);
 
 function editWithin(a: string, b: string, max: number): boolean {
@@ -66,24 +70,24 @@ function editWithin(a: string, b: string, max: number): boolean {
   return prev[n]! <= max;
 }
 
-function subsequence(q: string, t: string): boolean {
+function subsequence(q: string, target: string): boolean {
   let i = 0;
-  for (const c of t) if (c === q[i]) i++;
+  for (const c of target) if (c === q[i]) i++;
   return i === q.length;
 }
 
 /** How well one typed word matches a list of target words (0 = not at all). */
 function wordScore(q: string, targets: string[], joined: string): number {
   let best = 0;
-  for (const t of targets) {
-    if (t === q) return 10;
-    if (t.startsWith(q)) best = Math.max(best, 8 - Math.min(3, (t.length - q.length) / 4));
-    else if (q.length >= 3 && t.includes(q)) best = Math.max(best, 5);
-    else if (q.length >= 4 && editWithin(q, t.slice(0, q.length + 1), q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
-    else if (q.length >= 4 && editWithin(q, t, q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
+  for (const w of targets) {
+    if (w === q) return 10;
+    if (w.startsWith(q)) best = Math.max(best, 8 - Math.min(3, (w.length - q.length) / 4));
+    else if ((q.length >= 3 || cjk(q)) && w.includes(q)) best = Math.max(best, 5);
+    else if (q.length >= 4 && editWithin(q, w.slice(0, q.length + 1), q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
+    else if (q.length >= 4 && editWithin(q, w, q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
   }
   // skipped letters ("rscn" finds Rescan) only inside one title word: across several words nearly anything matches
-  if (!best && q.length >= 3 && joined && targets.some((t) => t.length <= q.length * 2 + 2 && subsequence(q, t))) best = 1.5;
+  if (!best && q.length >= 3 && joined && targets.some((w) => w.length <= q.length * 2 + 2 && subsequence(q, w))) best = 1.5;
   return best;
 }
 
@@ -91,7 +95,9 @@ function wordScore(q: string, targets: string[], joined: string): number {
 export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords" | "priority" | "where">): number {
   const qs = words(query);
   if (!qs.length) return 1 + (c.priority ?? 0) / 10;
-  const title = words(c.title), kw = words(`${c.keywords ?? ""} ${c.where ?? ""}`);
+  // a translated title is found by its English words too ("settings" and "настройки" both work)
+  const en = lang === "en" ? "" : `${english(c.title)} ${c.where ? english(c.where) : ""}`;
+  const title = words(c.title), kw = words(`${c.keywords ?? ""} ${c.where ?? ""} ${en}`);
   const joinedTitle = title.join(" ");
   let total = 0;
   for (const q of qs) {

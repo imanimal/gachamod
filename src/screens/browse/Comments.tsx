@@ -7,6 +7,7 @@ import { CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { errorText, shell } from "../../lib/api";
 import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, type GbCommentPage, type GbModel } from "../../lib/gamebanana";
+import { t, tn } from "../../lib/i18n";
 
 type OnLink = (e: MouseEvent | KeyboardEvent) => void;
 
@@ -72,32 +73,32 @@ export function Comments({ modId, model = "Mod", url, onLink }: { modId: number;
   const openSite = () => void shell.openUrl(url).catch((e) => toast(errorText(e), true));
 
   return (
-    <section ref={ref} className="gb-comments" aria-label="Comments">
+    <section ref={ref} className="gb-comments" aria-label={t("Comments")}>
       <div className="gb-comments-h">
-        <h3 className="sub-h">Comments</h3>
+        <h3 className="sub-h">{t("Comments")}</h3>
         {data && data.total > 0 && <span className="muted">{data.total}</span>}
         <span className="grow" />
-        <Segmented<CommentSort> label="Sort comments" size="sm" value={sort} onChange={pickSort} options={[
-          { value: "popular", label: "Popular", title: "Most liked comments first" },
-          { value: "newest", label: "Newest", title: "Newest comments first, such as reports after a game update" },
+        <Segmented<CommentSort> label={t("Sort comments")} size="sm" value={sort} onChange={pickSort} options={[
+          { value: "popular", label: t("Popular"), title: t("Most liked comments first") },
+          { value: "newest", label: t("Newest"), title: t("Newest comments first, such as reports after a game update") },
         ]} />
-        <Button size="sm" variant="ghost" icon="external" onClick={openSite} title="Comments are written on GameBanana">Reply on GameBanana</Button>
+        <Button size="sm" variant="ghost" icon="external" onClick={openSite} title={t("Comments are written on GameBanana")}>{t("Reply on GameBanana")}</Button>
       </div>
       {!data && !error && (seen || busy) && (
-        <Waiting className="gb-comments-skel" what="Loading comments" hold="GameBanana is slow to answer. Reply on GameBanana opens the comments there" />
+        <Waiting className="gb-comments-skel" what={t("Loading comments")} hold={t("GameBanana is slow to answer. Reply on GameBanana opens the comments there")} />
       )}
-      {data && data.items.length === 0 && !error && <p className="muted">No comments yet.</p>}
+      {data && data.items.length === 0 && !error && <p className="muted">{t("No comments yet.")}</p>}
       {data && data.items.length > 0 && (
         <ol className="gb-comment-list">{data.items.map((c) => <Comment key={c.id} c={c} onLink={onLink} />)}</ol>
       )}
       {error && (
         <div className="gb-comments-err">
-          <span className="hint">{data ? "Couldn't load more comments." : "Couldn't load the comments."} {error}</span>
-          <Button size="sm" icon="refresh" onClick={retry}>Try again</Button>
+          <span className="hint">{data ? t("Couldn't load more comments. {error}", { error }) : t("Couldn't load the comments. {error}", { error })}</span>
+          <Button size="sm" icon="refresh" onClick={retry}>{t("Try again")}</Button>
         </div>
       )}
       {data && !data.complete && !error && (
-        <Button className="gb-comments-more" busy={busy} onClick={more}>Load more</Button>
+        <Button className="gb-comments-more" busy={busy} onClick={more}>{t("Load more")}</Button>
       )}
     </section>
   );
@@ -106,7 +107,7 @@ export function Comments({ modId, model = "Mod", url, onLink }: { modId: number;
 function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: boolean }) {
   const [open, setOpen] = useState(false);
   const html = useMemo(() => sanitizeHtml(c.html), [c.html]);
-  const name = c.author?.name ?? "Someone";
+  const name = c.author?.name ?? t("Someone");
   return (
     <li className={`gb-comment${reply ? " is-reply" : ""}`}>
       <Avatar src={c.author?.avatar ?? null} name={name} size={reply ? 24 : 32} />
@@ -115,14 +116,14 @@ function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: b
           {c.author
             ? <CreatorLink id={c.author.id} name={name} className="gb-comment-who" />
             : <strong>{name}</strong>}
-          {c.labels.includes("Submitter") && <Badge tone="accent">Author</Badge>}
-          {c.pinned && !reply && <Badge icon="pin">Pinned</Badge>}
+          {c.labels.includes("Submitter") && <Badge tone="accent">{t("Author")}</Badge>}
+          {c.pinned && !reply && <Badge icon="pin">{t("Pinned")}</Badge>}
           <span className="muted" title={new Date(c.added * 1000).toLocaleString()}>{timeAgo(c.added)}</span>
         </div>
         <div className="gb-desc gb-comment-text selectable" onClick={onLink} onKeyDown={onLink} dangerouslySetInnerHTML={{ __html: html }} />
         {c.replies > 0 && !reply && (
           <button type="button" className="gb-older gb-comment-replies" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            <Icon name={open ? "down" : "chevron"} /><span>{c.replies === 1 ? "1 reply" : `${c.replies} replies`}</span>
+            <Icon name={open ? "down" : "chevron"} /><span>{tn(c.replies, "{n} reply", "{n} replies")}</span>
           </button>
         )}
         {open && <Replies postId={c.id} onLink={onLink} />}
@@ -133,13 +134,13 @@ function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: b
 
 function Replies({ postId, onLink }: { postId: number; onLink: OnLink }) {
   const { data, error, busy, more, retry } = usePages((p, s) => commentReplies(postId, p, s), true);
-  if (!data && !error) return <Waiting what="Loading replies" hold="GameBanana is slow to answer. Reply on GameBanana opens the comments there" />;
+  if (!data && !error) return <Waiting what={t("Loading replies")} hold={t("GameBanana is slow to answer. Reply on GameBanana opens the comments there")} />;
   return (
     <>
       {data && data.items.length > 0 && <ol className="gb-comment-list">{data.items.map((r) => <Comment key={r.id} c={r} onLink={onLink} reply />)}</ol>}
-      {data && data.items.length === 0 && !error && <p className="muted">The replies were removed.</p>}
-      {error && <div className="gb-comments-err"><span className="hint">{error}</span><Button size="sm" icon="refresh" onClick={retry}>Try again</Button></div>}
-      {data && !data.complete && !error && <Button size="sm" variant="ghost" busy={busy} onClick={more}>More replies</Button>}
+      {data && data.items.length === 0 && !error && <p className="muted">{t("The replies were removed.")}</p>}
+      {error && <div className="gb-comments-err"><span className="hint">{error}</span><Button size="sm" icon="refresh" onClick={retry}>{t("Try again")}</Button></div>}
+      {data && !data.complete && !error && <Button size="sm" variant="ghost" busy={busy} onClick={more}>{t("More replies")}</Button>}
     </>
   );
 }

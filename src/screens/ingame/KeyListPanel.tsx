@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { errorText, fileUrl, keyList, type GameId, type KeyListSettings, type ModKeyList } from "../../lib/api";
 import { record } from "../../lib/history";
+import { t, tn } from "../../lib/i18n";
 import { go } from "../../lib/store";
 import { Icon } from "../../ui/Icon";
 import { Badge, Button, Checkbox, Panel, SearchField, Segmented, Skeleton, Toggle } from "../../ui/kit";
@@ -13,16 +14,16 @@ import { HotkeyField } from "../profiles/HotkeyField";
 import { keyHits, useKeyList } from "./KeyListParts";
 
 const STYLE_HINT: Record<KeyListSettings["style"], (key: string) => string> = {
-  window: (key) => `${key} opens gachamod's menu over the game on its Keys tab. In exclusive fullscreen the game draws the list in its top right corner instead. The game reloads once after a change here.`,
-  game: (key) => `The game draws the list in its top right corner, and it stays there while you play until you press ${key} again. Works in exclusive fullscreen too. The game reloads once after a change here.`,
+  window: (key) => t("{key} opens gachamod's menu over the game on its Keys tab. In exclusive fullscreen the game draws the list in its top right corner instead. The game reloads once after a change here.", { key }),
+  game: (key) => t("The game draws the list in its top right corner, and it stays there while you play until you press {key} again. Works in exclusive fullscreen too. The game reloads once after a change here.", { key }),
 };
 
 /** What a change of the settings did, for Undo. */
 function changeLabel(before: KeyListSettings, next: KeyListSettings): string {
-  if (before.on !== next.on) return next.on ? "Turned the key list on" : "Turned the key list off";
-  if (before.style !== next.style) return next.style === "window" ? "Set the key list to show over the game" : "Set the key list to show inside the game";
-  if (before.key !== next.key) return `Set the key list's key to ${next.key}`;
-  return next.own ? "Listed mods that show their own key help" : "Left out mods that show their own key help";
+  if (before.on !== next.on) return next.on ? t("Turned the key list on") : t("Turned the key list off");
+  if (before.style !== next.style) return next.style === "window" ? t("Set the key list to show over the game") : t("Set the key list to show inside the game");
+  if (before.key !== next.key) return t("Set the key list's key to {key}", { key: next.key });
+  return next.own ? t("Listed mods that show their own key help") : t("Left out mods that show their own key help");
 }
 
 export function KeyListPanel({ game }: { game: GameId }) {
@@ -53,9 +54,9 @@ export function KeyListPanel({ game }: { game: GameId }) {
 
   if (!list) {
     return (
-      <Panel id="keylist" title="Key list in game" icon="keyboard">
+      <Panel id="keylist" title={t("Key list in game")} icon="keyboard">
         {kl.error
-          ? <p className="hint row"><span>{kl.error}</span><Button size="sm" icon="refresh" onClick={() => void kl.reload()} title="Read the mods' keys again">Try again</Button></p>
+          ? <p className="hint row"><span>{kl.error}</span><Button size="sm" icon="refresh" onClick={() => void kl.reload()} title={t("Read the mods' keys again")}>{t("Try again")}</Button></p>
           : <div className="kl-all"><Skeleton h="3rem" /></div>}
       </Panel>
     );
@@ -63,16 +64,17 @@ export function KeyListPanel({ game }: { game: GameId }) {
 
   const s = list.settings;
   return (
-    <Panel id="keylist" title="Key list in game" icon="keyboard" count={list.mods.length || undefined}>
+    <Panel id="keylist" title={t("Key list in game")} icon="keyboard" count={list.mods.length || undefined}>
       <div className="kl-all">
-        <Toggle checked={s.on} disabled={busy === "settings"} onChange={(on) => void save({ ...s, on })} label="Show mod keys while playing"
-          hint={s.on && !list.available ? `${s.key} shows the toggle keys of the mods showing now, once Switch skins in game is on.`
-            : s.on ? `Press ${s.key} while you play to see the toggle keys of the mods showing now.${s.own ? "" : " Mods that show their own key help are left out."}`
-            : `Off: ${s.key} does nothing in the game.`} />
+        <Toggle checked={s.on} disabled={busy === "settings"} onChange={(on) => void save({ ...s, on })} label={t("Show mod keys while playing")}
+          hint={s.on && !list.available ? t("{key} shows the toggle keys of the mods showing now, once Switch skins in game is on.", { key: s.key })
+            : s.on && s.own ? t("Press {key} while you play to see the toggle keys of the mods showing now.", { key: s.key })
+            : s.on ? t("Press {key} while you play to see the toggle keys of the mods showing now. Mods that show their own key help are left out.", { key: s.key })
+            : t("Off: {key} does nothing in the game.", { key: s.key })} />
         {!list.available && (
           <div className="kl-off">
-            <p className="hint">The key list opens from the menu while you play, which needs Switch skins in game turned on.</p>
-            <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "ingame" })} title="Opens Switch skins in game">Switch skins in game</Button>
+            <p className="hint">{t("The key list opens from the menu while you play, which needs Switch skins in game turned on.")}</p>
+            <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "ingame" })} title={t("Opens Switch skins in game")}>{t("Switch skins in game")}</Button>
           </div>
         )}
       </div>
@@ -80,25 +82,25 @@ export function KeyListPanel({ game }: { game: GameId }) {
         <>
           <div className="kl-opts">
             <div className="kl-opts-row">
-              <span className="kl-opts-l">Where it shows</span>
-              <Segmented label="Where it shows" size="sm" value={s.style} disabled={busy === "settings"} onChange={(style) => void save({ ...s, style })} options={[
-                { value: "window", label: "Over the game", title: `The Keys tab of gachamod's menu over the game, which ${s.key} opens. In exclusive fullscreen the game always draws it` },
-                { value: "game", label: "Inside the game", title: "The game draws it in the top right corner and it stays there while you play. Also works in exclusive fullscreen" },
+              <span className="kl-opts-l">{t("Where it shows")}</span>
+              <Segmented label={t("Where it shows")} size="sm" value={s.style} disabled={busy === "settings"} onChange={(style) => void save({ ...s, style })} options={[
+                { value: "window", label: t("Over the game"), title: t("The Keys tab of gachamod's menu over the game, which {key} opens. In exclusive fullscreen the game always draws it", { key: s.key }) },
+                { value: "game", label: t("Inside the game"), title: t("The game draws it in the top right corner and it stays there while you play. Also works in exclusive fullscreen") },
               ]} />
             </div>
             <div className="kl-opts-row">
-              <HotkeyField label="Key that opens it" value={s.key} bareF keep onChange={(key) => { if (key && key !== s.key) void save({ ...s, key }); }} />
-              <Checkbox checked={s.own} disabled={busy === "settings"} onChange={(own) => void save({ ...s, own })} label="Also list mods that show their own key help"
-                title="Some mods draw their own key help in the game, like a picture that F1 shows. They're left out unless this is on. A mod's own pick below still wins" />
+              <HotkeyField label={t("Key that opens it")} value={s.key} bareF keep onChange={(key) => { if (key && key !== s.key) void save({ ...s, key }); }} />
+              <Checkbox checked={s.own} disabled={busy === "settings"} onChange={(own) => void save({ ...s, own })} label={t("Also list mods that show their own key help")}
+                title={t("Some mods draw their own key help in the game, like a picture that F1 shows. They're left out unless this is on. A mod's own pick below still wins")} />
             </div>
             <p className="hint">{STYLE_HINT[s.style](s.key)}</p>
           </div>
           <div className="kl-h">
-            <h3>Mods with keys</h3>
-            {list.mods.length > 0 && <SearchField value={q} onChange={setQ} placeholder="Find a mod, character or key" />}
+            <h3>{t("Mods with keys")}</h3>
+            {list.mods.length > 0 && <SearchField value={q} onChange={setQ} placeholder={t("Find a mod, character or key")} />}
           </div>
-          {!list.mods.length ? <p className="muted kl-none">None of your mods for this game has keys.</p>
-            : !found.length ? <p className="muted kl-none">No mod, character or key matches that.</p>
+          {!list.mods.length ? <p className="muted kl-none">{t("None of your mods for this game has keys.")}</p>
+            : !found.length ? <p className="muted kl-none">{t("No mod, character or key matches that.")}</p>
             : (
               <ul className="kl-list">
                 {found.map((m) => <KeyModRow key={m.modId} m={m} own={s.own} busy={busy === m.modId} onChoose={(v) => void choose(m, v)} />)}
@@ -112,24 +114,24 @@ export function KeyListPanel({ game }: { game: GameId }) {
 
 function KeyModRow({ m, own, busy, onChoose }: { m: ModKeyList; own: boolean; busy: boolean; onChoose: (listed: boolean | null) => void }) {
   const src = fileUrl(m.preview);
-  const facts = [m.character, m.rows.length === 1 ? "1 key" : `${m.rows.length} keys`, m.showing ? "showing now" : null].filter(Boolean).join(", ");
-  const auto = m.ownHelp && !own ? "left out, since it shows its own key help" : "listed";
+  const facts = [m.character, tn(m.rows.length, "{n} key", "{n} keys"), m.showing ? t("showing now") : null].filter(Boolean).join(", ");
+  const auto = m.ownHelp && !own;
   return (
     <li className="kl-mod">
       <span className="kl-thumb">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
       <span className="kl-name">
-        <button type="button" className="kl-link" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
-        <span className="hint" title={m.rows.map((r) => `${r.keys.join(" or ")}: ${r.what}`).join("\n")}>{facts}</span>
+        <button type="button" className="kl-link" title={t("Open in Mods")} onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
+        <span className="hint" title={m.rows.map((r) => t("{keys}: {what}", { keys: r.keys.reduce((a, b) => t("{a} or {b}", { a, b })), what: r.what })).join("\n")}>{facts}</span>
       </span>
       <span className="kl-acts">
         {m.ownHelp && (
-          <Badge tone="info" title={m.helpKey ? `This mod shows its own key help with ${m.helpKey}` : "This mod shows its own key help in the game"}>Own help</Badge>
+          <Badge tone="info" title={m.helpKey ? t("This mod shows its own key help with {key}", { key: m.helpKey }) : t("This mod shows its own key help in the game")}>{t("Own help")}</Badge>
         )}
         {m.choice !== null && (
-          <Button size="sm" variant="ghost" icon="undo" disabled={busy} onClick={() => onChoose(null)} title={`Go back to automatic: ${auto}`}>Automatic</Button>
+          <Button size="sm" variant="ghost" icon="undo" disabled={busy} onClick={() => onChoose(null)} title={auto ? t("Go back to automatic: left out, since it shows its own key help") : t("Go back to automatic: listed")}>{t("Automatic")}</Button>
         )}
-        <Checkbox checked={m.listed} disabled={busy} onChange={(v) => onChoose(v)} label="Listed"
-          title={m.listed ? `${m.name}'s keys show in the key list. Click to leave it out` : `${m.name} is left out of the key list. Click to list it`} />
+        <Checkbox checked={m.listed} disabled={busy} onChange={(v) => onChoose(v)} label={t("Listed")}
+          title={m.listed ? t("{name}'s keys show in the key list. Click to leave it out", { name: m.name }) : t("{name} is left out of the key list. Click to list it", { name: m.name })} />
       </span>
     </li>
   );

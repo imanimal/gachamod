@@ -1,6 +1,7 @@
 // What the Downloads badge counts, kept apart so the sidebar tip can say "2 downloading, 1 to pick" instead of
 // calling a pick a download. OnlineOverlays sets it with the badge. Owner: ONLINE area.
 import { useSyncExternalStore } from "react";
+import { t } from "../../lib/i18n";
 
 export interface DownloadsCounts { downloading: number; picks: number; failed: number }
 
@@ -17,7 +18,7 @@ export const useDownloadsCounts = () => useSyncExternalStore((f) => { subs.add(f
 
 /** The tip's count part: "3 failed", "1 waiting for you to pick", "2 downloading, 1 to pick". Empty with nothing. */
 export function downloadsTipText(c: DownloadsCounts): string {
-  if (c.failed > 0) return `${c.failed} failed`;
-  if (!c.downloading) return c.picks ? `${c.picks} waiting for you to pick` : "";
-  return c.picks ? `${c.downloading} downloading, ${c.picks} to pick` : `${c.downloading} downloading`;
+  if (c.failed > 0) return t("{n} failed", { n: c.failed });
+  if (!c.downloading) return c.picks ? t("{n} waiting for you to pick", { n: c.picks }) : "";
+  return c.picks ? t("{n} downloading, {picks} to pick", { n: c.downloading, picks: c.picks }) : t("{n} downloading", { n: c.downloading });
 }

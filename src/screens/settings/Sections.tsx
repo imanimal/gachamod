@@ -1,19 +1,21 @@
-// The panels of Settings, Mods and downloads (turning mods on, mods for adults, downloads and installing, mod update
+// The panels of Settings, Mods (turning mods on, mods for adults, downloads and installing, mod update
 // checks and rescans, mods a game update broke, the trash) and Creators. Owner: SETTINGS/AI area.
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
 import { go, useGame, useGames } from "../../lib/store";
-import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, plural } from "../../ui/kit";
+import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle } from "../../ui/kit";
 import { nsfwTip } from "../browse/menus";
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, reviewUnsurePref, trashDaysPref, useTrashDays } from "./automatic";
+import { autoRescanPref, watchModsPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, reviewUnsurePref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
 import { MatchGbAdultRow } from "./AccountSection";
 import { autoMutePref, fixWarningsPref } from "../../lib/fixes";
 import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "../library/shuffle";
+import { t, tn } from "../../lib/i18n";
+import { gameName, gameShort } from "../../lib/games";
 
 /** "Keys only while the character is on screen" for new installs (the install flow reads it). Same key as
  *  lib/keybinds.ts uses. */
@@ -22,9 +24,9 @@ const onScreenOnInstallPref = pref<boolean>("keys.onScreenOnInstall", false, (r)
 // ── mods ──
 
 const SHUFFLE_OPTIONS: Array<{ value: ShuffleWhen; label: string; title: string }> = [
-  { value: "off", label: "Off", title: "Outfits change only when you change them" },
-  { value: "play", label: "Each Play", title: "New outfits every time you press Play" },
-  { value: "day", label: "Once a day", title: "New outfits at the first Play of the day" },
+  { value: "off", label: t("Off"), title: t("Outfits change only when you change them") },
+  { value: "play", label: t("Each Play"), title: t("New outfits every time you press Play") },
+  { value: "day", label: t("Once a day"), title: t("New outfits at the first Play of the day") },
 ];
 
 function ShuffleRow() {
@@ -37,11 +39,11 @@ function ShuffleRow() {
     try { await shuffleOutfits(game.id); } catch (e) { toast(errorText(e), true); } finally { setBusy(false); }
   };
   return (
-    <SetRow id="set-shuffle" label="Shuffle outfits" hint="For every character with two or more mods, one goes on at random and the others off. Undo puts them back">
+    <SetRow id="set-shuffle" label={t("Shuffle outfits")} hint={t("For every character with two or more mods, one goes on at random and the others off. Undo puts them back")}>
       <span className="set-shuffle">
-        <Segmented<ShuffleWhen> value={when} onChange={(v) => void shuffleWhenPref.set(v, v === "off" ? "Stopped shuffling outfits" : v === "play" ? "Shuffling outfits at each Play" : "Shuffling outfits once a day")}
-          label="When to shuffle" options={SHUFFLE_OPTIONS} size="sm" />
-        <Button size="sm" icon="dice" busy={busy} disabled={!game} onClick={() => void now()} title={game ? `Shuffle ${game.short}'s outfits now` : "Set up a game first"}>Shuffle now</Button>
+        <Segmented<ShuffleWhen> value={when} onChange={(v) => void shuffleWhenPref.set(v, v === "off" ? t("Stopped shuffling outfits") : v === "play" ? t("Shuffling outfits at each Play") : t("Shuffling outfits once a day"))}
+          label={t("When to shuffle")} options={SHUFFLE_OPTIONS} size="sm" />
+        <Button size="sm" icon="dice" busy={busy} disabled={!game} onClick={() => void now()} title={game ? t("Shuffle {game}'s outfits now", { game: gameShort(game) }) : t("Set up a game first")}>{t("Shuffle now")}</Button>
       </span>
     </SetRow>
   );
@@ -50,16 +52,16 @@ function ShuffleRow() {
 /** Also on the Downloads page, where installs happen. */
 export function EnableNewSwitch({ size, label }: { size?: "sm"; label?: string }) {
   const on = enableNewPref.use();
-  return <Toggle size={size} label={label} checked={on} onChange={(v) => void enableNewPref.set(v, v ? "New mods turn on when they install" : "New mods stay off until you turn them on")} />;
+  return <Toggle size={size} label={label} checked={on} onChange={(v) => void enableNewPref.set(v, v ? t("New mods turn on when they install") : t("New mods stay off until you turn them on"))} />;
 }
 
 export function ModsSection() {
   const shown = useGames().filter((g) => g.shown);
   return (
-    <Panel title="Turning mods on and reloading the game" icon="mods" id="mods">
+    <Panel title={t("Turning mods on and reloading the game")} icon="mods" id="mods">
       <div className="set-rows">
-        <SetRow id="set-enable-new" label="Turn on new mods" hint="A mod you install turns on right away, and its character's other skin turns off unless that game is set to Keep"
-          tip="Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was">
+        <SetRow id="set-enable-new" label={t("Turn on new mods")} hint={t("A mod you install turns on right away, and its character's other skin turns off unless that game is set to Keep")}
+          tip={t("Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was")}>
           <EnableNewSwitch />
         </SetRow>
         <ShuffleRow />
@@ -67,8 +69,8 @@ export function ModsSection() {
       {shown.length > 0 && (
         <div className="set-pergame" id="set-pergame">
           <div className="set-pergame-h"><span />
-            <span title="What happens when you turn on a mod and its character already has another one on. Sub-mods never count. A mod that just installed only follows Keep: otherwise the other skin goes off, and Ctrl+Z puts it back">Another skin already on</span>
-            <span title="Presses the game's reload key for you when you switch back to it after a change, so 3DMigoto loads the mods again. The key is F10 unless the game's d3dx.ini sets another">Reload in game</span>
+            <span title={t("What happens when you turn on a mod and its character already has another one on. Sub-mods never count. A mod that just installed only follows Keep: otherwise the other skin goes off, and Ctrl+Z puts it back")}>{t("Another skin already on")}</span>
+            <span title={t("Presses the game's reload key for you when you switch back to it after a change, so 3DMigoto loads the mods again. The key is F10 unless the game's d3dx.ini sets another")}>{t("Reload in game")}</span>
           </div>
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
         </div>
@@ -81,11 +83,11 @@ export function ModsSection() {
 export function AdultSection() {
   const nsfw = useNsfw();
   return (
-    <Panel title="Mods for adults" icon="eye" id="adult">
+    <Panel title={t("Mods for adults")} icon="eye" id="adult">
       <div className="set-rows">
-        <SetRow id="set-nsfw" label="Mods marked for adults" hint="Marked NSFW on GameBanana or by you. Hide leaves them out, Blur blurs their pictures until opened">
-          <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
-            options={[{ value: "hide", label: "Hide", title: nsfwTip("hide") }, { value: "blur", label: "Blur", title: nsfwTip("blur") }, { value: "show", label: "Show", title: nsfwTip("show") }]} />
+        <SetRow id="set-nsfw" label={t("Mods marked for adults")} hint={t("Marked NSFW on GameBanana or by you. Hide leaves them out, Blur blurs their pictures until opened")}>
+          <Segmented value={nsfw} onChange={setNsfw} label={t("Mods for adults")}
+            options={[{ value: "hide", label: t("Hide"), title: nsfwTip("hide") }, { value: "blur", label: t("Blur"), title: nsfwTip("blur") }, { value: "show", label: t("Show"), title: nsfwTip("show") }]} />
         </SetRow>
         <MatchGbAdultRow id="set-gb-adult" />
       </div>
@@ -94,9 +96,9 @@ export function AdultSection() {
 }
 
 const ONE_SKIN: Array<{ value: string; label: string; title: string }> = [
-  { value: "ask", label: "Ask", title: "When you turn a mod on, ask: turn the other off, keep both on, or make the new one a sub-mod of it. A mod that just installed turns the other off without asking, and Ctrl+Z puts it back" },
-  { value: "auto", label: "Turn off", title: "Turn the other one off without asking, so two never load at once" },
-  { value: "0", label: "Keep", title: "Keep both on without asking" },
+  { value: "ask", label: t("Ask"), title: t("When you turn a mod on, ask: turn the other off, keep both on, or make the new one a sub-mod of it. A mod that just installed turns the other off without asking, and Ctrl+Z puts it back") },
+  { value: "auto", label: t("Turn off"), title: t("Turn the other one off without asking, so two never load at once") },
+  { value: "0", label: t("Keep"), title: t("Keep both on without asking") },
 ];
 
 function PerGame({ game }: { game: GameState }) {
@@ -105,9 +107,9 @@ function PerGame({ game }: { game: GameState }) {
   const [auto, setAuto] = useSetting(`${game.id}.autoReload`, "1");
   return (
     <div className="set-pergame-r">
-      <span className="row"><GameBadge game={game} size={24} />{game.name}</span>
-      <Segmented size="sm" label={`${game.name}: another skin already on`} value={one === "auto" || one === "0" ? one : "ask"} onChange={setOne} options={ONE_SKIN} />
-      <Toggle size="sm" ariaLabel={`${game.name}: reload in game`} checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
+      <span className="row"><GameBadge game={game} size={24} />{gameName(game)}</span>
+      <Segmented size="sm" label={t("{game}: another skin already on", { game: gameName(game) })} value={one === "auto" || one === "0" ? one : "ask"} onChange={setOne} options={ONE_SKIN} />
+      <Toggle size="sm" ariaLabel={t("{game}: reload in game", { game: gameName(game) })} checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
     </div>
   );
 }
@@ -125,26 +127,26 @@ function Switch({ p, on, off }: { p: BoolPref; on: string; off: string }) {
 export function InstallingSection() {
   const keep = keepArchivesPref.use();
   return (
-    <Panel title="Downloads and installing" icon="downloads" id="installing">
+    <Panel title={t("Downloads and installing")} icon="downloads" id="installing">
       <div className="set-rows">
-        <SetRow id="set-archives" label="Delete downloaded archives" hint="The .zip or .7z goes once the mod is installed">
-          <Toggle checked={!keep} onChange={(v) => void keepArchivesPref.set(!v, v ? "Deleting archives after installs" : "Keeping archives after installs")} />
+        <SetRow id="set-archives" label={t("Delete downloaded archives")} hint={t("The .zip or .7z goes once the mod is installed")}>
+          <Toggle checked={!keep} onChange={(v) => void keepArchivesPref.set(!v, v ? t("Deleting archives after installs") : t("Keeping archives after installs"))} />
         </SetRow>
-        <SetRow id="set-all-parts" label="Install every mod in an archive" hint="Skips the window that asks which ones to install"
-          tip="Some downloads hold several mods, like a skin and its icons. They install as one mod, and its details let you turn each part on or off">
-          <Switch p={installAllPartsPref} on="Archives with several mods install all of them" off="Asking which mods to install from an archive" />
+        <SetRow id="set-all-parts" label={t("Install every mod in an archive")} hint={t("Skips the window that asks which ones to install")}
+          tip={t("Some downloads hold several mods, like a skin and its icons. They install as one mod, and its details let you turn each part on or off")}>
+          <Switch p={installAllPartsPref} on={t("Archives with several mods install all of them")} off={t("Asking which mods to install from an archive")} />
         </SetRow>
-        <SetRow id="set-other-servers" label="Move slow downloads to another server" hint="When a GameBanana download stays under 1 MB/s"
-          tip="GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one">
-          <Switch p={otherServersPref} on="Slow downloads move to another server" off="Downloads stay on the server GameBanana picks" />
+        <SetRow id="set-other-servers" label={t("Move slow downloads to another server")} hint={t("When a GameBanana download stays under 1 MB/s")}
+          tip={t("GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one")}>
+          <Switch p={otherServersPref} on={t("Slow downloads move to another server")} off={t("Downloads stay on the server GameBanana picks")} />
         </SetRow>
-        <SetRow id="set-review-unsure" label="Ask me to check files gachamod can't place" hint="Files with no .ini that nothing says where to put"
-          tip="They go in Mods as they came, and the download's row says so. This adds a message with a button that shows the files">
-          <Switch p={reviewUnsurePref} on="Asking you to check files gachamod can't place" off="Stopped asking about files gachamod can't place" />
+        <SetRow id="set-review-unsure" label={t("Ask me to check files gachamod can't place")} hint={t("Files with no .ini that nothing says where to put")}
+          tip={t("They go in Mods as they came, and the download's row says so. This adds a message with a button that shows the files")}>
+          <Switch p={reviewUnsurePref} on={t("Asking you to check files gachamod can't place")} off={t("Stopped asking about files gachamod can't place")} />
         </SetRow>
-        <SetRow id="set-onscreen" label="Toggles only while on screen, for new mods"
-          tip="A mod's toggles stop working when its character isn't on screen, so two mods can share a key">
-          <Switch p={onScreenOnInstallPref} on="New mods get toggles only while on screen" off="New mods keep their toggles as they are" />
+        <SetRow id="set-onscreen" label={t("Toggles only while on screen, for new mods")}
+          tip={t("A mod's toggles stop working when its character isn't on screen, so two mods can share a key")}>
+          <Switch p={onScreenOnInstallPref} on={t("New mods get toggles only while on screen")} off={t("New mods keep their toggles as they are")} />
         </SetRow>
       </div>
     </Panel>
@@ -154,13 +156,18 @@ export function InstallingSection() {
 /** The checks gachamod runs on mods by itself. Each has a switch. gachamod's own updates are on About and updates. */
 export function AutomaticSection() {
   return (
-    <Panel title="Mod update checks and rescans" icon="refresh" id="automatic">
+    <Panel title={t("Mod update checks and rescans")} icon="refresh" id="automatic">
       <div className="set-rows">
-        <SetRow id="set-mod-updates" label="Check mods for updates" hint="When you open Mods, and every 30 minutes">
-          <Switch p={modUpdateCheckPref} on="Checking mods for updates" off="Stopped checking mods for updates" />
+        <SetRow id="set-mod-updates" label={t("Check mods for updates")} hint={t("When you open Mods, and every 30 minutes")}>
+          <Switch p={modUpdateCheckPref} on={t("Checking mods for updates")} off={t("Stopped checking mods for updates")} />
         </SetRow>
-        <SetRow id="set-rescan" label="Rescan mods when Mods opens" hint="Finds mods you added to the folder by hand">
-          <Switch p={autoRescanPref} on="Rescanning mods on its own" off="Stopped rescanning mods on its own" />
+        <SetRow id="set-watch-mods" label={t("Watch Mods folders for changes")} hint={t("Mods you add, rename or delete in Explorer show up at once")}
+          tip={t("gachamod rescans a game's Mods folder a moment after something changes there, including changes made by other mod managers")}>
+          <Switch p={watchModsPref} on={t("Watching Mods folders for changes")} off={t("Stopped watching Mods folders")} />
+        </SetRow>
+        <SetRow id="set-rescan" label={t("Rescan mods when Mods opens")} hint={t("Finds mods you added to the folder by hand")}
+          tip={t("While Mods folders are watched, this runs only the first time Mods opens after gachamod starts")}>
+          <Switch p={autoRescanPref} on={t("Rescanning mods on its own")} off={t("Stopped rescanning mods on its own")} />
         </SetRow>
       </div>
     </Panel>
@@ -170,22 +177,22 @@ export function AutomaticSection() {
 /** Fixers and warnings for mods a game update broke. Tools > Fixes shows the same two. */
 export function BrokenModsSection() {
   return (
-    <Panel title="Mods a game update broke" icon="wand" id="broken-mods">
+    <Panel title={t("Mods a game update broke")} icon="wand" id="broken-mods">
       <div className="set-rows">
-        <SetRow id="set-fix-updates" label="Look for new mod fixers" tip="When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded"
-          hint="Fixer tools that people post on GameBanana after a game update">
-          <Switch p={fixesAutoUpdatePref} on="Looking for new mod fixers" off="Stopped looking for new mod fixers" />
+        <SetRow id="set-fix-updates" label={t("Look for new mod fixers")} tip={t("When a game update breaks mods, people post fixer tools on GameBanana. Tools > Fixes checks for new ones (at most once an hour) and lists them. Nothing is downloaded")}
+          hint={t("Fixer tools that people post on GameBanana after a game update")}>
+          <Switch p={fixesAutoUpdatePref} on={t("Looking for new mod fixers")} off={t("Stopped looking for new mod fixers")} />
         </SetRow>
-        <SetRow id="set-fix-warn" label="Warn about broken mods" hint="On mod cards, in a mod's details and in Tools > Fixes"
-          tip="Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods">
-          <Switch p={fixWarningsPref} on="Showing the broken mod warnings" off="Muted the broken mod warnings" />
+        <SetRow id="set-fix-warn" label={t("Warn about broken mods")} hint={t("On mod cards, in a mod's details and in Tools > Fixes")}
+          tip={t("Same as Mute in Tools > Fixes. Off hides the warnings, and nothing changes in the mods")}>
+          <Switch p={fixWarningsPref} on={t("Showing the broken mod warnings")} off={t("Muted the broken mod warnings")} />
         </SetRow>
-        <SetRow id="set-fix-automute" label="Turn off mods that need their author" hint="Mods no fix here can repair go off and stop warning, without asking"
-          tip="Same as Always turn off and mute mods that need their author in Tools > Fixes. Undo turns them back on, and Muted in Tools > Fixes lists them">
-          <Switch p={autoMutePref} on="Turning off mods that need their author" off="Listing mods that need their author again" />
+        <SetRow id="set-fix-automute" label={t("Turn off mods that need their author")} hint={t("Mods no fix here can repair go off and stop warning, without asking")}
+          tip={t("Same as Always turn off and mute mods that need their author in Tools > Fixes. Undo turns them back on, and Muted in Tools > Fixes lists them")}>
+          <Switch p={autoMutePref} on={t("Turning off mods that need their author")} off={t("Listing mods that need their author again")} />
         </SetRow>
-        <SetRow label="Fixes in Tools" hint="The fixers, the broken mods and the muted ones">
-          <Button size="sm" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title="Opens Tools > Fixes">Open Fixes</Button>
+        <SetRow label={t("Fixes in Tools")} hint={t("The fixers, the broken mods and the muted ones")}>
+          <Button size="sm" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title={t("Opens Tools > Fixes")}>{t("Open Fixes")}</Button>
         </SetRow>
       </div>
     </Panel>
@@ -200,9 +207,9 @@ export function StorageSection() {
   const days = useTrashDays();
   const [ask, setAsk] = useState<{ days: number; count: number } | null>(null);
   const opts = (DAY_OPTIONS.includes(days) || days === 0 ? DAY_OPTIONS : [...DAY_OPTIONS, days].sort((a, b) => a - b))
-    .map((d) => ({ value: String(d), label: d === 1 ? "1 day" : `${d} days` }));
+    .map((d) => ({ value: String(d), label: tn(d, "{n} day", "{n} days") }));
 
-  const save = (d: number) => void trashDaysPref.set(d, d ? `Removed mods keep their files ${d === 1 ? "1 day" : `${d} days`}` : "Removed mods' files are deleted right away");
+  const save = (d: number) => void trashDaysPref.set(d, d ? tn(d, "Removed mods keep their files {n} day", "Removed mods keep their files {n} days") : t("Removed mods' files are deleted right away"));
   const choose = async (d: number) => {
     if (d >= days) { save(d); return; }
     // fewer days deletes files that are past the new limit, which can't be undone: say how many first
@@ -214,22 +221,22 @@ export function StorageSection() {
   };
 
   return (
-    <Panel title="Trash and removed mods" icon="archive" id="storage">
+    <Panel title={t("Trash and removed mods")} icon="archive" id="storage">
       <div className="set-rows">
-        <SetRow id="set-trash-days" label="Keep removed mods' files"
+        <SetRow id="set-trash-days" label={t("Keep removed mods' files")}
           hint={days
-            ? "Removed mods stay on your PC for a while so Put back works without downloading. Mods, Trash keeps their GameBanana link either way"
-            : "Off: removing a mod deletes its files. Mods, Trash keeps its GameBanana link and settings so you can download it again"}>
+            ? t("Removed mods stay on your PC for a while so Put back works without downloading. Mods, Trash keeps their GameBanana link either way")
+            : t("Off: removing a mod deletes its files. Mods, Trash keeps its GameBanana link and settings so you can download it again")}>
           <span className="set-inline">
-            <Button size="sm" variant="ghost" icon="trash" onClick={() => go({ view: "library", tab: "archive" })} title="Opens Mods > Trash">Open Trash</Button>
+            <Button size="sm" variant="ghost" icon="trash" onClick={() => go({ view: "library", tab: "archive" })} title={t("Opens Mods > Trash")}>{t("Open Trash")}</Button>
             {days > 0 && <Select value={String(days)} onChange={(v) => void choose(Number(v))} options={opts} />}
             <Toggle checked={days > 0} onChange={(v) => void choose(v ? 14 : 0)} />
           </span>
         </SetRow>
       </div>
       {ask && (
-        <Confirm title="Delete files now?" yes="Delete files" danger onClose={() => setAsk(null)} onYes={() => save(ask.days)}>
-          {plural(ask.count, "removed mod")} {ask.count === 1 ? "is" : "are"} older than that, so {ask.count === 1 ? "its files go" : "their files go"} now. Each one's GameBanana link stays in Mods, Trash.
+        <Confirm title={t("Delete files now?")} yes={t("Delete files")} danger onClose={() => setAsk(null)} onYes={() => save(ask.days)}>
+          {tn(ask.count, "{n} removed mod is older than that, so its files go now. Each one's GameBanana link stays in Mods, Trash.", "{n} removed mods are older than that, so their files go now. Each one's GameBanana link stays in Mods, Trash.")}
         </Confirm>
       )}
     </Panel>
@@ -239,10 +246,10 @@ export function StorageSection() {
 // ── creators ──
 
 const LISTS: Array<{ flag: CreatorFlag; title: string; remove: string; tip: string }> = [
-  { flag: "prio", title: "Prioritized", remove: "Stop prioritizing", tip: "Their mods come first in Browse and always count as high quality" },
-  { flag: "fav", title: "Favourites", remove: "Remove from favourites", tip: "Listed first among your creators" },
-  { flag: "sub", title: "Following", remove: "Stop following", tip: "Their new mods show on Home" },
-  { flag: "blocked", title: "Blocked", remove: "Unblock", tip: "Their mods never show" },
+  { flag: "prio", title: t("Prioritized"), remove: t("Stop prioritizing"), tip: t("Their mods come first in Browse and always count as high quality") },
+  { flag: "fav", title: t("Favourites"), remove: t("Remove from favourites"), tip: t("Listed first among your creators") },
+  { flag: "sub", title: t("Following"), remove: t("Stop following"), tip: t("Their new mods show on Home") },
+  { flag: "blocked", title: t("Blocked"), remove: t("Unblock"), tip: t("Their mods never show") },
 ];
 
 export function CreatorsSection() {
@@ -250,8 +257,8 @@ export function CreatorsSection() {
   const list = Object.values(all);
   const any = LISTS.some((l) => list.some((c) => c[l.flag]));
   return (
-    <Panel title="Creators" icon="user" id="creators">
-      {!any && <p className="hint">Right-click a creator's name anywhere to follow, favourite, prioritize or block them.</p>}
+    <Panel title={t("Creators")} icon="user" id="creators">
+      {!any && <p className="hint">{t("Right-click a creator's name anywhere to follow, favourite, prioritize or block them.")}</p>}
       {LISTS.map((l) => {
         const people = list.filter((c) => c[l.flag]).sort((a, b) => a.name.localeCompare(b.name));
         if (!people.length) return null;
@@ -273,7 +280,7 @@ function CreatorRow({ c, flag, remove }: { c: CreatorFlags; flag: CreatorFlag; r
     <div className="set-creator">
       <Avatar src={c.avatar} name={c.name} size={28} />
       <CreatorLink id={c.id} name={c.name} className="grow" />
-      <IconButton size="sm" icon="x" label={`${remove}: ${c.name}`} onClick={() => setCreatorFlag(c, flag, false)} />
+      <IconButton size="sm" icon="x" label={t("{action}: {creator}", { action: remove, creator: c.name })} onClick={() => setCreatorFlag(c, flag, false)} />
     </div>
   );
 }

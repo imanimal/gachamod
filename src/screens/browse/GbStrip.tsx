@@ -13,6 +13,7 @@ import { rowKeys, useSideScroll } from "./sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { openWithFilters, useLibIndex } from "./state";
 import "./browse.css";
+import { english, t, tx } from "../../lib/i18n";
 
 export interface GbStripQuery {
   /** "foryou": mods that suit the library (lib/recommend.ts). */
@@ -77,7 +78,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
 
   const shown = (items ?? []).filter((m) => !(m.submitter && creators[String(m.submitter.id)]?.blocked) && !hidden.includes(m.id) && !(nsfw === "hide" && m.nsfw)).slice(0, COUNT);
   const row = useRef<HTMLDivElement>(null);
-  const [all, toggleAll] = useRowOpen(`strip.${title}`);
+  const [all, toggleAll] = useRowOpen(`strip.${english(title)}`);
   const { left, right, page } = useSideScroll(row, [shown.length, all, !!error]);
   if (!gs) return null;
 
@@ -92,20 +93,20 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
         <h3 className="sub-h">{title}</h3>
         <span className="grow" />
         {!all && <>
-          <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
-          <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
+          <IconButton size="sm" icon="left" label={t("Scroll left")} disabled={!left} onClick={() => page(-1)} />
+          <IconButton size="sm" icon="right" label={t("Scroll right")} disabled={!right} onClick={() => page(1)} />
         </>}
-        <ShowAll open={all} onToggle={toggleAll} fits={!items || (!left && !right)} label={`Show all ${shown.length} here`} />
-        <Button size="sm" variant="ghost" iconRight="chevron" onClick={seeAll} title="Open these in Browse">See all</Button>
+        <ShowAll open={all} onToggle={toggleAll} fits={!items || (!left && !right)} label={t("Show all {n} here", { n: shown.length })} />
+        <Button size="sm" variant="ghost" iconRight="chevron" onClick={seeAll} title={t("Open these in Browse")}>{t("See all")}</Button>
       </header>
       {error ? (
-        <div className="gb-strip-msg hint">Couldn't load GameBanana. <button type="button" className="link-btn" onClick={() => setAttempt((a) => a + 1)}>Try again</button></div>
+        <div className="gb-strip-msg hint">{tx("Couldn't load GameBanana. {retry}", { retry: <button type="button" className="link-btn" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</button> })}</div>
       ) : items && !shown.length ? (
         <div className="gb-strip-msg hint">
-          {query.followed && !subIds.length ? "Follow creators (right-click a creator's name) and their new mods show here." : "Nothing new here right now."}
+          {query.followed && !subIds.length ? t("Follow creators (right-click a creator's name) and their new mods show here.") : t("Nothing new here right now.")}
         </div>
       ) : !items ? (
-        <Waiting what="Asking GameBanana for mods">
+        <Waiting what={t("Asking GameBanana for mods")}>
           <div className="gb-strip-row" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}</div>
         </Waiting>
       ) : (

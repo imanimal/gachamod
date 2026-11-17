@@ -5,9 +5,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { likeMod, modMe, signIn, subscribeMod, thankMod, useAccount, useLiked, useSubscribed, useThanked, type ModMe } from "../../lib/account";
 import type { GbMod } from "../../lib/gamebanana";
-import { Button, Select, formatCount, plural, timeAgo } from "../../ui/kit";
+import { Button, Select, formatCount, timeAgo } from "../../ui/kit";
 import { Icon, type IconName } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
+import { t, tn } from "../../lib/i18n";
 
 /** `act`: the like, subscribe and thanks buttons (mods, not tools). */
 export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: boolean; onFiles: () => void; onComments: () => void }) {
@@ -40,7 +41,7 @@ export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: b
   const likes = Math.max(0, mod.likes + Number(liked) - Number(base.liked));
   const subs = Math.max(0, (mod.subscribers ?? 0) + Number(subscribed) - Number(base.subscribed));
   const thanks = (mod.thanks ?? 0) + sent;
-  const creator = mod.submitter?.name ?? "the creator";
+  const creator = mod.submitter?.name ?? t("the creator");
   const own = me?.own ?? (!!acc.user && mod.submitter?.id === acc.user.id);
 
   const toggle = (what: "like" | "sub") => {
@@ -57,37 +58,37 @@ export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: b
       {act && !own ? (
         <>
           <Stat icon="heart" on={liked} pressed={signedIn ? liked : undefined} disabled={busy === "like"} onClick={() => toggle("like")}
-            title={!signedIn ? `${plural(likes, "like")}. Sign in to GameBanana to like it`
-              : liked ? `${plural(likes, "like")}, yours included. Click to take back your like`
-              : `${plural(likes, "like")}. Click to like it on GameBanana. Nobody is notified`}>
+            title={!signedIn ? tn(likes, "{n} like. Sign in to GameBanana to like it", "{n} likes. Sign in to GameBanana to like it")
+              : liked ? tn(likes, "{n} like, yours included. Click to take back your like", "{n} likes, yours included. Click to take back your like")
+              : tn(likes, "{n} like. Click to like it on GameBanana. Nobody is notified", "{n} likes. Click to like it on GameBanana. Nobody is notified")}>
             {formatCount(likes)}
           </Stat>
           <Stat icon="bell" on={subscribed} pressed={signedIn ? subscribed : undefined} disabled={busy === "sub"} onClick={() => toggle("sub")}
-            title={!signedIn ? `${plural(subs, "subscriber")}. Sign in to GameBanana to subscribe`
-              : subscribed ? `${plural(subs, "subscriber")}, you included. Click to unsubscribe`
-              : `${plural(subs, "subscriber")}. Click to subscribe on GameBanana, which tells you there when it updates`}>
+            title={!signedIn ? tn(subs, "{n} subscriber. Sign in to GameBanana to subscribe", "{n} subscribers. Sign in to GameBanana to subscribe")
+              : subscribed ? tn(subs, "{n} subscriber, you included. Click to unsubscribe", "{n} subscribers, you included. Click to unsubscribe")
+              : tn(subs, "{n} subscriber. Click to subscribe on GameBanana, which tells you there when it updates", "{n} subscribers. Click to subscribe on GameBanana, which tells you there when it updates")}>
             {formatCount(subs)}
           </Stat>
           <Stat icon="gift" on={thanked} onClick={(el) => { if (!signedIn) void signIn(); else setThankAt((a) => (a ? null : el)); }}
-            title={!signedIn ? `${plural(thanks, "thank")}. Sign in to GameBanana to thank ${creator}`
-              : thanked ? `${plural(thanks, "thank")}, yours included. Click to thank ${creator} again`
-              : `${plural(thanks, "thank")}. Click to thank ${creator} with GameBanana points`}>
+            title={!signedIn ? tn(thanks, "{n} thank. Sign in to GameBanana to thank {creator}", "{n} thanks. Sign in to GameBanana to thank {creator}", { creator })
+              : thanked ? tn(thanks, "{n} thank, yours included. Click to thank {creator} again", "{n} thanks, yours included. Click to thank {creator} again", { creator })
+              : tn(thanks, "{n} thank. Click to thank {creator} with GameBanana points", "{n} thanks. Click to thank {creator} with GameBanana points", { creator })}>
             {formatCount(thanks)}
           </Stat>
         </>
       ) : (
         <>
-          <span className="gb-stat" title={plural(mod.likes, "like")}><Icon name="heart" />{formatCount(mod.likes)}</span>
-          {act && <span className="gb-stat" title={`${plural(subs, "subscriber")}. It's your mod`}><Icon name="bell" />{formatCount(subs)}</span>}
-          {act && <span className="gb-stat" title={`${plural(thanks, "thank")}. It's your mod`}><Icon name="gift" />{formatCount(thanks)}</span>}
+          <span className="gb-stat" title={tn(mod.likes, "{n} like", "{n} likes")}><Icon name="heart" />{formatCount(mod.likes)}</span>
+          {act && <span className="gb-stat" title={tn(subs, "{n} subscriber. It's your mod", "{n} subscribers. It's your mod")}><Icon name="bell" />{formatCount(subs)}</span>}
+          {act && <span className="gb-stat" title={tn(thanks, "{n} thank. It's your mod", "{n} thanks. It's your mod")}><Icon name="gift" />{formatCount(thanks)}</span>}
         </>
       )}
-      <span className="gb-stat" title={plural(mod.views, "view")}><Icon name="eye" />{formatCount(mod.views)}</span>
+      <span className="gb-stat" title={tn(mod.views, "{n} view", "{n} views")}><Icon name="eye" />{formatCount(mod.views)}</span>
       {mod.downloads !== null && (
-        <Stat icon="downloads" title={`${plural(mod.downloads, "download")}. Click to go to the files`} onClick={onFiles}>{formatCount(mod.downloads)}</Stat>
+        <Stat icon="downloads" title={tn(mod.downloads, "{n} download. Click to go to the files", "{n} downloads. Click to go to the files")} onClick={onFiles}>{formatCount(mod.downloads)}</Stat>
       )}
-      {(mod.comments ?? 0) > 0 && <Stat icon="feed" title="Go to the comments" onClick={onComments}>{plural(mod.comments ?? 0, "comment")}</Stat>}
-      <span className="gb-stat" title={`Added ${new Date(mod.added * 1000).toLocaleString()}, updated ${new Date(mod.updated * 1000).toLocaleString()}`}><Icon name="clock" />{timeAgo(mod.updated)}</span>
+      {(mod.comments ?? 0) > 0 && <Stat icon="feed" title={t("Go to the comments")} onClick={onComments}>{tn(mod.comments ?? 0, "{n} comment", "{n} comments")}</Stat>}
+      <span className="gb-stat" title={t("Added {added}, updated {updated}", { added: new Date(mod.added * 1000).toLocaleString(), updated: new Date(mod.updated * 1000).toLocaleString() })}><Icon name="clock" />{timeAgo(mod.updated)}</span>
       {thankAt && (
         <ThankBox anchor={thankAt} mod={mod} creator={creator} me={me} again={thanked} onClose={() => setThankAt(null)}
           onSent={(points, free) => {
@@ -112,7 +113,7 @@ function Stat({ icon, title, on, pressed, disabled, onClick, children }: {
 }
 
 /** The amounts GameBanana's own page offers. */
-const AMOUNTS = ["5", "10", "25", "50", "100", "250", "500", "1000"].map((v) => ({ value: v, label: `${v} points` }));
+const AMOUNTS = ["5", "10", "25", "50", "100", "250", "500", "1000"].map((v) => ({ value: v, label: tn(Number(v), "{n} point", "{n} points") }));
 
 /** What a thanks costs, and the one button that sends it. GameBanana's first thanks of the day is free (it sends 10
  *  of its own points); after that the member picks how many of theirs to give. */
@@ -126,23 +127,23 @@ function ThankBox({ anchor, mod, creator, me, again, onClose, onSent }: {
   const points = free ? 10 : Number(amount);
   const short = !free && me?.points != null && me.points < points;
   // keyboard and controller land on the button (the box is placed a frame after it opens)
-  useEffect(() => { const t = window.setTimeout(() => box.current?.querySelector<HTMLElement>(".btn-primary")?.focus({ preventScroll: true }), 30); return () => window.clearTimeout(t); }, []);
+  useEffect(() => { const timer = window.setTimeout(() => box.current?.querySelector<HTMLElement>(".btn-primary")?.focus({ preventScroll: true }), 30); return () => window.clearTimeout(timer); }, []);
 
   return (
-    <Popover anchor={anchor} onClose={onClose} label={`Thank ${creator}`} width="19em" align="start">
+    <Popover anchor={anchor} onClose={onClose} label={t("Thank {creator}", { creator })} width="19em" align="start">
       <div ref={box} className="gb-thank">
-        <p>{again ? `You thanked ${creator} for this before. Another thanks gives them more points.` : `A thanks gives ${creator} points on GameBanana. It can't be taken back.`}</p>
+        <p>{again ? t("You thanked {creator} for this before. Another thanks gives them more points.", { creator }) : t("A thanks gives {creator} points on GameBanana. It can't be taken back.", { creator })}</p>
         {free
-          ? <p className="hint">Your first thanks today is free: GameBanana gives the 10 points.</p>
-          : <Select label="Points to give" value={amount} options={AMOUNTS} onChange={setAmount}
-              hint={me?.points != null ? `You have ${formatCount(me.points)} points` : undefined} />}
+          ? <p className="hint">{t("Your first thanks today is free: GameBanana gives the 10 points.")}</p>
+          : <Select label={t("Points to give")} value={amount} options={AMOUNTS} onChange={setAmount}
+              hint={me?.points != null ? t("You have {points} points", { points: formatCount(me.points) }) : undefined} />}
         <Button variant="primary" icon="gift" busy={busy} disabled={short}
-          title={short ? `You have ${me?.points ?? 0} points. Pick fewer` : undefined}
+          title={short ? t("You have {points} points. Pick fewer", { points: me?.points ?? 0 }) : undefined}
           onClick={() => {
             setBusy(true);
             void thankMod(mod.id, mod.name, creator, points, free).then((ok) => { setBusy(false); if (ok) onSent(points, free); });
           }}>
-          {free ? "Thank for free" : `Thank for ${points} points`}
+          {free ? t("Thank for free") : tn(points, "Thank for {n} point", "Thank for {n} points")}
         </Button>
       </div>
     </Popover>

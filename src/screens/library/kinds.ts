@@ -4,14 +4,15 @@
 import type { ModEntry } from "../../lib/api";
 import { K_TOOL } from "../../lib/gamebanana";
 import type { IconName } from "../../ui/Icon";
+import { t } from "../../lib/i18n";
 
 export type LibKind = "ui" | "tool" | "weapon" | "other";
 
 export const LIB_KINDS: Array<{ value: LibKind; label: string; icon: IconName; title: string }> = [
-  { value: "ui", label: "UI", icon: "layout", title: "Menus, icons, the HUD and loading screens" },
-  { value: "tool", label: "Tools and fixes", icon: "tool", title: "Shader and effect libraries like RabbitFX and ORFix, removers, camera mods and other fixes" },
-  { value: "weapon", label: "Weapons", icon: "sword", title: "Weapon models" },
-  { value: "other", label: "Other", icon: "box", title: "Mods without a character that aren't UI, tools or weapons, like NPCs, pets and objects" },
+  { value: "ui", label: t("UI"), icon: "layout", title: t("Menus, icons, the HUD and loading screens") },
+  { value: "tool", label: t("Tools and fixes"), icon: "tool", title: t("Shader and effect libraries like RabbitFX and ORFix, removers, camera mods and other fixes") },
+  { value: "weapon", label: t("Weapons"), icon: "sword", title: t("Weapon models") },
+  { value: "other", label: t("Other"), icon: "box", title: t("Mods without a character that aren't UI, tools or weapons, like NPCs, pets and objects") },
 ];
 
 export const kindName = (k: LibKind) => LIB_KINDS.find((x) => x.value === k)!.label;

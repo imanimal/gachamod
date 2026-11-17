@@ -5,8 +5,8 @@ import { errorText, library, type GameId, type ModHealthRow } from "../../lib/ap
 import { autoMutePref, fixWarningsPref, isDeadEnd, onHealth } from "../../lib/fixes";
 import { holdMods, holdsNow, holdsPref, releaseMods } from "../../lib/holds";
 import { record } from "../../lib/history";
-import { plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
+import { t, tn } from "../../lib/i18n";
 import { publish, restoreStates } from "../library/data";
 
 /** Turn these mods off and wait for an update to them, as one Undo step. */
@@ -25,9 +25,12 @@ export async function muteDeadEnds(game: GameId, rows: ModHealthRow[]) {
     }
     held = await holdMods(game, refs, "update", false);
   } catch (e) { toast(errorText(e), true); return; }
-  const what = rows.length === 1 ? rows[0]!.name : plural(rows.length, "mod");
+  const one = rows.length === 1 ? rows[0]!.name : null;
+  const label = changed.length
+    ? (one ? t("Turned off {mod} until its author posts an update", { mod: one }) : tn(rows.length, "Turned off {n} mod until their author posts an update", "Turned off {n} mods until their author posts an update"))
+    : (one ? t("Muted {mod} until its author posts an update", { mod: one }) : tn(rows.length, "Muted {n} mod until their author posts an update", "Muted {n} mods until their author posts an update"));
   record({
-    label: `${changed.length ? "Turned off" : "Muted"} ${what} until ${rows.length === 1 ? "its" : "their"} author posts an update`,
+    label,
     undo: async () => { if (changed.length) await restoreStates(game, before, changed); await held?.undo(); },
     redo: async () => { if (offIds.length) publish(game, await library.setEnabled(game, offIds, false)); await held?.redo(); },
   });

@@ -11,13 +11,14 @@ import { Badge, Button, Chip, Dialog, TextField } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Icon } from "../../ui/Icon";
 import { CutOff, ReplyError, TASKS, parseReply, type Built, type Preview } from "./tasks";
+import { english, t, tn } from "../../lib/i18n";
 import "./ai.css";
 
 export function AiHost() {
   const show = useAiShow();
   const [task, setTask] = useState<{ n: number; task: AiTask } | null>(null);
   useEffect(() => onApp((e) => {
-    if (e.type === "ai" && aiShowPref.get() !== "off") setTask((t) => ({ n: (t?.n ?? 0) + 1, task: e.task }));
+    if (e.type === "ai" && aiShowPref.get() !== "off") setTask((cur) => ({ n: (cur?.n ?? 0) + 1, task: e.task }));
   }), []);
   if (show === "off") return null;
   return (
@@ -40,11 +41,11 @@ function BotPicker({ value, onPick }: { value: ChatbotId | ""; onPick: (id: Chat
   const installed = useInstalled();
   const order = [...CHATBOTS].sort((a, b) => Number(installed.includes(b.id)) - Number(installed.includes(a.id)));
   return (
-    <div className="ai-bots" role="radiogroup" aria-label="Your chatbot">
+    <div className="ai-bots" role="radiogroup" aria-label={t("Your chatbot")}>
       {order.map((b) => (
         <Chip key={b.id} on={value === b.id} onClick={() => onPick(b.id)}
           title={chatbotTip(b, installed.includes(b.id))}>
-          {b.name}{installed.includes(b.id) && <span className="ai-bot-here">on this PC</span>}
+          {b.name}{installed.includes(b.id) && <span className="ai-bot-here">{t("on this PC")}</span>}
         </Chip>
       ))}
     </div>
@@ -87,11 +88,11 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   // build the prompt as the input changes (it also tells what gets shared before anything is copied)
   useEffect(() => {
     let live = true;
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       def.build(task, { goal, text }).then((b) => { if (live) { setBuilt(b); setBuildErr(null); } })
         .catch((e) => { if (live) { setBuilt(null); setBuildErr(errorText(e)); } });
     }, 250);
-    return () => { live = false; window.clearTimeout(t); };
+    return () => { live = false; window.clearTimeout(timer); };
   }, [def, task, goal, text]);
 
   const read = useMemo((): { preview?: Preview; error?: string; cut?: boolean } => {
@@ -107,9 +108,9 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     try { await navigator.clipboard.writeText(built.prompt); } catch { copied = false; }
     const link = open && bot ? chatbotLink(bot, built.prompt) : null;
     if (link) { try { await shell.openUrl(link.url); } catch (e) { toast(errorText(e), true); } }
-    const name = botInfo?.id === "other" || !botInfo ? "your chatbot" : botInfo.name;
-    if (!copied && !link?.prefilled) toast("Couldn't copy the prompt. Open \"See the prompt\" and copy it from there", true);
-    else toast(link?.prefilled ? `Opened ${name} with the prompt in the box. Send it, then copy the whole answer` : `Prompt copied. Paste it in ${name}, then copy the whole answer`);
+    const name = botInfo?.id === "other" || !botInfo ? t("your chatbot") : botInfo.name;
+    if (!copied && !link?.prefilled) toast(t("Couldn't copy the prompt. Open \"See the prompt\" and copy it from there"), true);
+    else toast(link?.prefilled ? t("Opened {name} with the prompt in the box. Send it, then copy the whole answer", { name }) : t("Prompt copied. Paste it in {name}, then copy the whole answer", { name }));
     setSent(true);
     window.setTimeout(() => replyBox.current?.querySelector("textarea")?.focus(), 60);
   };
@@ -117,7 +118,7 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   // an answer that was cut off gets the next one after it (closing its open code block first)
   const pasteReply = async () => {
     let add: string;
-    try { add = await navigator.clipboard.readText(); } catch { toast("Couldn't read the clipboard. Paste with Ctrl+V", true); return; }
+    try { add = await navigator.clipboard.readText(); } catch { toast(t("Couldn't read the clipboard. Paste with Ctrl+V"), true); return; }
     setReply((r) => {
       if (!read.cut || !r.trim() || r.includes(add.trim())) return add;
       const open = (r.match(/^\s*```/gm) ?? []).length % 2 === 1;
@@ -145,16 +146,16 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     return () => window.removeEventListener("keydown", k);
   });
 
-  const openLabel = !bot ? "Copy the prompt" : bot === "other" ? "Copy the prompt" : `Copy and open ${botInfo?.name}`;
+  const openLabel = !bot || bot === "other" ? t("Copy the prompt") : t("Copy and open {name}", { name: botInfo?.name ?? "" });
 
   if (done) {
     return (
       <Dialog title={def.title(task)} icon="ai" size="lg" className="ai-help" onClose={onClose}
         footer={<>
-          <Button variant="ghost" icon="copy" onClick={() => { void navigator.clipboard.writeText(done.join("\n")).then(() => toast("Copied the list")); }} title="Copy what changed as text">Copy the list</Button>
-          <Button variant="primary" autoFocus onClick={onClose}>Done</Button>
+          <Button variant="ghost" icon="copy" onClick={() => { void navigator.clipboard.writeText(done.join("\n")).then(() => toast(t("Copied the list"))); }} title={t("Copy what changed as text")}>{t("Copy the list")}</Button>
+          <Button variant="primary" autoFocus onClick={onClose}>{t("Done")}</Button>
         </>}>
-        <p><Icon name="check" /> {done.length === 1 ? "1 change made" : `${done.length} changes made`}. Ctrl+Z undoes all of it.</p>
+        <p><Icon name="check" /> {tn(done.length, "{n} change made. Ctrl+Z undoes all of it.", "{n} changes made. Ctrl+Z undoes all of it.")}</p>
         <ul className="ai-done selectable">{done.map((l, i) => <li key={i}>{l}</li>)}</ul>
       </Dialog>
     );
@@ -164,31 +165,31 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   return (
     <Dialog title={def.title(task)} icon="ai" size="lg" className="ai-help" onClose={onClose}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Close</Button>
+        <Button variant="ghost" onClick={onClose}>{t("Close")}</Button>
         {p?.apply
-          ? <Button variant="primary" icon="check" busy={busy} onClick={() => void apply()} title="Apply these changes (Ctrl+Enter). Undo puts them back">Apply</Button>
+          ? <Button variant="primary" icon="check" busy={busy} onClick={() => void apply()} title={t("Apply these changes (Ctrl+Enter). Undo puts them back")}>{t("Apply")}</Button>
           : <Button variant={sent ? "secondary" : "primary"} icon={bot && bot !== "other" ? "external" : "copy"} disabled={!built || needText}
-              onClick={() => void send(true)} title="Copies the prompt and opens your chatbot (Ctrl+Enter)">{sent ? "Copy again" : openLabel}</Button>}
+              onClick={() => void send(true)} title={t("Copies the prompt and opens your chatbot (Ctrl+Enter)")}>{sent ? t("Copy again") : openLabel}</Button>}
       </>}>
       <section className="ai-step">
-        <h3 className="ai-step-h"><span className="ai-n">1</span>What to ask</h3>
+        <h3 className="ai-step-h"><span className="ai-n">1</span>{t("What to ask")}</h3>
         {def.goals && (
-          <div className="ai-goals" role="radiogroup" aria-label="What to ask">
+          <div className="ai-goals" role="radiogroup" aria-label={t("What to ask")}>
             {def.goals.map((g) => <Chip key={g.id} on={goal === g.id} onClick={() => setGoal(g.id)} title={g.title}>{g.label}</Chip>)}
           </div>
         )}
         {showText && <TextField label={def.text!.label} value={text} onChange={setText} placeholder={def.text!.placeholder} multiline rows={2} autoFocus />}
         <div className="ai-bot-row">
-          <span className="field-l">Your chatbot</span>
+          <span className="field-l">{t("Your chatbot")}</span>
           <BotPicker value={bot} onPick={(id) => void chatbotPref.set(id)} />
           {def.note && <span className="hint">{def.note}</span>}
         </div>
         {buildErr ? <BuildError text={buildErr} onGo={onClose} /> : built && (
           <div className="ai-shares">
-            <span className="hint">Shared when you paste the prompt:</span>
+            <span className="hint">{t("Shared when you paste the prompt:")}</span>
             <ul>{built.shares.map((s) => <li key={s}>{s}</li>)}</ul>
             <details className="ai-prompt">
-              <summary>See the prompt</summary>
+              <summary>{t("See the prompt")}</summary>
               <pre className="selectable">{built.prompt}</pre>
             </details>
           </div>
@@ -196,13 +197,13 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
       </section>
 
       <section className={`ai-step${sent || reply ? "" : " dim"}`} ref={replyBox}>
-        <h3 className="ai-step-h"><span className="ai-n">2</span>Paste the answer</h3>
-        <TextField value={reply} onChange={setReply} multiline rows={4} mono placeholder="The chatbot's whole reply, with its code blocks" />
+        <h3 className="ai-step-h"><span className="ai-n">2</span>{t("Paste the answer")}</h3>
+        <TextField value={reply} onChange={setReply} multiline rows={4} mono placeholder={t("The chatbot's whole reply, with its code blocks")} />
         <div className="row">
           {read.cut
-            ? <Button size="sm" icon="paste" onClick={() => void pasteReply()} title="Adds the chatbot's next answer after this one">Paste the rest</Button>
-            : <Button size="sm" icon="paste" onClick={() => void pasteReply()} title="Paste the chatbot's answer from the clipboard">Paste</Button>}
-          {reply && <Button size="sm" variant="ghost" icon="x" onClick={() => setReply("")}>Clear</Button>}
+            ? <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Adds the chatbot's next answer after this one")}>{t("Paste the rest")}</Button>
+            : <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Paste the chatbot's answer from the clipboard")}>{t("Paste")}</Button>}
+          {reply && <Button size="sm" variant="ghost" icon="x" onClick={() => setReply("")}>{t("Clear")}</Button>}
         </div>
         {read.error && <p className="ai-err" role="alert">{read.error}</p>}
       </section>
@@ -228,7 +229,7 @@ function PreviewView({ p }: { p: Preview }) {
     <section className="ai-step ai-preview">
       <h3 className="ai-step-h"><span className="ai-n">3</span>{p.summary}</h3>
       {p.cut && <div className="note t-warn" role="status"><Icon name="warn" /><span>{p.cut}</span></div>}
-      {p.text.length > 0 && <div className="ai-text selectable">{p.text.map((t, i) => <p key={i}>{t}</p>)}</div>}
+      {p.text.length > 0 && <div className="ai-text selectable">{p.text.map((line, i) => <p key={i}>{line}</p>)}</div>}
       {p.rows.length > 0 && (
         <div className="ai-rows">
           {p.rows.map((r, i) => (
@@ -238,7 +239,7 @@ function PreviewView({ p }: { p: Preview }) {
               {r.lines.map((l, j) => (
                 <div key={j} className="ai-line">
                   <span className="ai-line-l">{l.label}</span>
-                  {l.before !== undefined && <span className="ai-before">{l.before || "None"}</span>}
+                  {l.before !== undefined && <span className="ai-before">{l.before || t("None")}</span>}
                   {l.before !== undefined && <Icon name="right" />}
                   <span className="ai-after selectable">{l.after}</span>
                 </div>
@@ -249,12 +250,12 @@ function PreviewView({ p }: { p: Preview }) {
       )}
       {p.links.length > 0 && (
         <div className="ai-links">
-          {p.links.map((l, i) => <Button key={i} size="sm" icon={l.label.startsWith("Open") ? "folder" : "browse"} onClick={l.run} title={l.hint}>{l.label}</Button>)}
+          {p.links.map((l, i) => <Button key={i} size="sm" icon={english(l.label).startsWith("Open") ? "folder" : "browse"} onClick={l.run} title={l.hint}>{l.label}</Button>)}
         </div>
       )}
       {p.skipped.length > 0 && (
         <details className="ai-skipped">
-          <summary><Badge tone="warn">{p.skipped.length} skipped</Badge> {p.skipped.length === 1 ? "A part of the answer that can't be used" : "Parts of the answer that can't be used"}. Click to see them</summary>
+          <summary><Badge tone="warn">{t("{n} skipped", { n: p.skipped.length })}</Badge> {p.skipped.length === 1 ? t("A part of the answer that can't be used. Click to see them") : t("Parts of the answer that can't be used. Click to see them")}</summary>
           <ul>{p.skipped.map((s, i) => <li key={i}>{s}</li>)}</ul>
         </details>
       )}
@@ -270,39 +271,40 @@ function AiIntro() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let live = true;
-    let t = 0;
+    let timer = 0;
     // 10 seconds after start, and not in the session that did the first setup (that one has Browse to find): setup
     // was already done when this start began
     void Promise.all([aiIntroPref.ready, chatbotPref.ready, settings.get("onboarded").catch(() => null)]).then(([, , ob]) => {
-      if (live && ob === "1") t = window.setTimeout(() => { if (live) setReady(true); }, 10000);
+      if (live && ob === "1") timer = window.setTimeout(() => { if (live) setReady(true); }, 10000);
     });
-    return () => { live = false; window.clearTimeout(t); };
+    return () => { live = false; window.clearTimeout(timer); };
   }, []);
   if (!ready || intro === "done" || bot) return null;
 
   const pick = (id: ChatbotId) => {
     void chatbotPref.set(id);
     void aiIntroPref.set("done");
-    toast(`${chatbotOf(id)?.name ?? "Your chatbot"} it is. AI buttons open it with the prompt ready`);
+    const name = chatbotOf(id)?.name;
+    toast(name ? t("{name} it is. AI buttons open it with the prompt ready", { name }) : t("Your chatbot it is. AI buttons open it with the prompt ready"));
   };
   return (
-    <aside className="ai-intro" aria-label="Use your chatbot with gachamod">
+    <aside className="ai-intro" aria-label={t("Use your chatbot with gachamod")}>
       <div className="ai-intro-h">
         <Icon name="ai" />
-        <b>Use a chatbot you already have</b>
+        <b>{t("Use a chatbot you already have")}</b>
       </div>
-      <p className="hint">gachamod writes the prompt, opens the chatbot and applies its answer with Undo. No account or key. It can:</p>
+      <p className="hint">{t("gachamod writes the prompt, opens the chatbot and applies its answer with Undo. No account or key. It can:")}</p>
       <ul>
-        <li>Make a theme from "navy and gold, sharp corners"</li>
-        <li>Tidy 200 messy mod names at once</li>
-        <li>Make a mod's toggles work only while its character is on screen</li>
+        <li>{t("Make a theme from \"navy and gold, sharp corners\"")}</li>
+        <li>{t("Tidy 200 messy mod names at once")}</li>
+        <li>{t("Make a mod's toggles work only while its character is on screen")}</li>
       </ul>
-      <span className="field-l">Which one do you use?</span>
+      <span className="field-l">{t("Which one do you use?")}</span>
       <BotPicker value="" onPick={pick} />
       <div className="row ai-intro-a">
-        <Button size="sm" variant="ghost" onClick={() => void aiIntroPref.set("done")} title="Hide this for good. Settings, AI helper has it">No thanks</Button>
-        <Button size="sm" variant="ghost" onClick={() => { void aiShowPref.set("off", "Turned the AI helper off"); void aiIntroPref.set("done"); }}
-          title="Hides every AI button and menu item. Turn it back on in Settings">Turn AI off</Button>
+        <Button size="sm" variant="ghost" onClick={() => void aiIntroPref.set("done")} title={t("Hide this for good. Settings, AI helper has it")}>{t("No thanks")}</Button>
+        <Button size="sm" variant="ghost" onClick={() => { void aiShowPref.set("off", t("Turned the AI helper off")); void aiIntroPref.set("done"); }}
+          title={t("Hides every AI button and menu item. Turn it back on in Settings")}>{t("Turn AI off")}</Button>
       </div>
     </aside>
   );

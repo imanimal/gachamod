@@ -2,6 +2,7 @@
 // whose character has other mods offers to make all of them live. Owner: INGAME area.
 import { useState } from "react";
 import type { GameId } from "../../lib/api";
+import { t, tn } from "../../lib/i18n";
 import { go } from "../../lib/store";
 import { Button, Panel } from "../../ui/kit";
 import { makeLive, pickLive, stopLive, useLive } from "./data";
@@ -17,19 +18,20 @@ export function InGameOptions({ game, modId }: { game: GameId; modId: string }) 
   if (g && me) {
     const showing = g.active === me.slot;
     return (
-      <Panel title="In game" icon="swap" className="mi-panel mi-ingame">
+      <Panel title={t("In game")} icon="swap" className="mi-panel mi-ingame">
         <p className="hint">
-          {showing ? `Showing now. ${g.character}'s other live skins are hidden.` : `Hidden in game. It switches with ${g.character}'s ${g.mods.length - 1 === 1 ? "other live skin" : `${g.mods.length - 1} other live skins`}.`}
+          {showing ? t("Showing now. {character}'s other live skins are hidden.", { character: g.character })
+            : tn(g.mods.length - 1, "Hidden in game. It switches with {character}'s other live skin.", "Hidden in game. It switches with {character}'s {n} other live skins.", { character: g.character })}
         </p>
         <div className="row live-opts">
           <Button size="sm" variant={showing ? "secondary" : "primary"} icon={showing ? "check" : "swap"} disabled={busy || showing} busy={busy}
-            title={info.running ? "Sends it to the game, which comes to the front for a moment" : "Shows next time you start the game"}
-            onClick={() => void run(() => pickLive(game, g, me.slot))}>{showing ? "Showing" : "Show in game"}</Button>
+            title={info.running ? t("Sends it to the game, which comes to the front for a moment") : t("Shows next time you start the game")}
+            onClick={() => void run(() => pickLive(game, g, me.slot))}>{showing ? t("Showing") : t("Show in game")}</Button>
           <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "ingame" })}
-            title="All live characters in Tools">View live skins</Button>
+            title={t("All live characters in Tools")}>{t("View live skins")}</Button>
           <span className="grow" />
           <Button size="sm" variant="ghost" icon="x" disabled={busy} onClick={() => void run(() => stopLive(game, [modId], me.name))}
-            title={showing ? "It stays on and always shows" : "It's turned off"}>Stop switching</Button>
+            title={showing ? t("It stays on and always shows") : t("It's turned off")}>{t("Stop switching")}</Button>
         </div>
       </Panel>
     );
@@ -39,16 +41,17 @@ export function InGameOptions({ game, modId }: { game: GameId; modId: string }) 
   if (!ready || !info.all) return null;
   const grouped = info.groups.find((x) => x.character.toLowerCase() === ready.character.toLowerCase());
   return (
-    <Panel title="In game" icon="swap" className="mi-panel mi-ingame">
+    <Panel title={t("In game")} icon="swap" className="mi-panel mi-ingame">
       <p className="hint">
-        {grouped ? `${ready.character}'s other skins switch in game already. Add this one to pick it there too.`
-          : `${ready.character} has ${ready.mods.length} mods. Make them live to pick which one shows while you play, without a reload.`}
+        {grouped ? t("{character}'s other skins switch in game already. Add this one to pick it there too.", { character: ready.character })
+          : tn(ready.mods.length, "{character} has {n} mod. Make them live to pick which one shows while you play, without a reload.",
+            "{character} has {n} mods. Make them live to pick which one shows while you play, without a reload.", { character: ready.character })}
       </p>
       <div className="row live-opts">
         <Button size="sm" icon="swap" busy={busy} disabled={busy}
-          title={`Every ${ready.character} mod stays loaded and you pick which one shows. The game reloads once to start`}
-          onClick={() => void run(() => grouped ? makeLive(game, [modId], ready.mods.find((m) => m.modId === modId)?.name ?? "This mod") : makeLive(game, ready.mods.map((m) => m.modId), ready.character))}>
-          {grouped ? "Add to live skins" : `Switch ${ready.character} in game`}
+          title={t("Every {character} mod stays loaded and you pick which one shows. The game reloads once to start", { character: ready.character })}
+          onClick={() => void run(() => grouped ? makeLive(game, [modId], ready.mods.find((m) => m.modId === modId)?.name ?? t("This mod")) : makeLive(game, ready.mods.map((m) => m.modId), ready.character))}>
+          {grouped ? t("Add to live skins") : t("Switch {character} in game", { character: ready.character })}
         </Button>
       </div>
     </Panel>

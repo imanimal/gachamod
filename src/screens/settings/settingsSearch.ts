@@ -1,6 +1,7 @@
-// Settings in the global search: every section and every setting, with the words people use for them ("trash",
-// "recycle bin" and "disk space" all find how long removed mods keep their files). Picking one opens Settings at
-// that setting. AI jobs show only when AI is on. Owner: SETTINGS/AI area.
+// Settings' pages, panels and single settings, with the words people use for them ("trash", "recycle bin" and "disk
+// space" all find how long removed mods keep their files). The global search lists the panels and settings, and
+// picking one opens Settings at it; the search at the top of Settings and Tools (menuSearch.ts) uses all three. AI
+// jobs show only when AI is on. Owner: SETTINGS/AI area.
 import type { IconName } from "../../ui/Icon";
 import type { PageInfo } from "./Paged";
 import { aiShown, askAi } from "../../lib/ai";
@@ -9,123 +10,142 @@ import { registerCommands, type Command } from "../../lib/search";
 import { currentGame, go } from "../../lib/store";
 import { openXxmi } from "./parts";
 import { openFeedback, openGameCheck } from "../../lib/feedback";
+import { english, t } from "../../lib/i18n";
+
+// Labels show in the user's language, and the search still finds them by their English names: shown() keeps each
+// label's English (english() has it right after t()), and the commands carry it in their keywords.
+const EN = new Map<string, string>();
+const shown = (label: string) => { EN.set(label, english(label)); return label; };
+const en = (label: string) => EN.get(label) ?? label;
 
 /** A panel in Settings: its id (a route section), the page it's on, and its name and words for the search. */
 export interface SectionInfo { id: string; page: string; label: string; icon: IconName; keywords: string }
 
 /** Settings' pages in order, each in its group in the list (Paged.tsx). A page holds the panels that belong together.
- *  A page's name says what is on it ("About and updates", not "About"), and its tip lists the rest. */
+ *  A page's name is a word or two ("Mods", "About"), its tip lists everything on it, and its keywords keep the
+ *  older, longer names ("About and updates") so they still find it. */
 export const PAGES: PageInfo[] = [
-  { id: "games", label: "Games and mod loaders", icon: "controller", group: "Games and mods", tip: "Game folders, one-game mode and XXMI Launcher" },
-  { id: "launch", label: "Launch options", icon: "play", group: "Games and mods", tip: "How each game starts: XXMI or its exe, arguments, window mode, commands before and after, 3DMigoto's switches for mod makers and running as administrator" },
-  { id: "mods", label: "Mods and downloads", icon: "mods", group: "Games and mods", tip: "Turning mods on, mods for adults, Mods folders, downloads, mod update checks, broken mods and the trash" },
-  { id: "creators", label: "Creators", icon: "user", group: "Games and mods", tip: "Creators you follow, favourite, prioritize or block" },
-  { id: "hotkeys", label: "In-game profile hotkeys", icon: "keyboard", group: "Games and mods", tip: "Keys that switch profiles while you play" },
-  { id: "appearance", label: "Appearance", icon: "palette", group: "Look", tip: "Themes, colours, layout, text size, your own themes and hardware acceleration" },
-  { id: "fun", label: "Fun extras", icon: "sparkle", group: "Look", tip: "Chill mode, the pull button, seasonal touches and your year in mods" },
-  { id: "account", label: "Account, links and AI", icon: "link", group: "App", tip: "Your GameBanana account, 1-click installs, .gachamod files and the AI helper" },
-  { id: "extensions", label: "Extensions", icon: "puzzle", group: "App", tip: "Themes and extensions other people made, extension lists and making your own" },
-  { id: "feedback", label: "Feedback, privacy and logs", icon: "help", group: "App", tip: "Send feedback, tester options, usage counts, crash reports and log files" },
-  { id: "about", label: "About and updates", icon: "info", group: "App", tip: "Version, gachamod updates (automatic or Check now), backing up settings, repair, reset and uninstall" },
+  { id: "games", label: shown(t("Games")), icon: "controller", group: t("Games and mods"), tip: t("Game folders, one-game mode and XXMI Launcher"),
+    keywords: "games and mod loaders" },
+  { id: "launch", label: shown(t("Launch")), icon: "play", group: t("Games and mods"), tip: t("How each game starts: XXMI or its exe, arguments, window mode, commands before and after, 3DMigoto's switches for mod makers and running as administrator"),
+    keywords: "launch options start" },
+  { id: "mods", label: shown(t("Mods")), icon: "mods", group: t("Games and mods"), tip: t("Turning mods on, mods for adults, Mods folders, downloads, mod update checks, broken mods and the trash"),
+    keywords: "mods and downloads" },
+  { id: "creators", label: shown(t("Creators")), icon: "user", group: t("Games and mods"), tip: t("Creators you follow, favourite, prioritize or block") },
+  { id: "hotkeys", label: shown(t("Hotkeys")), icon: "keyboard", group: t("Games and mods"), tip: t("Keys that switch profiles while you play"),
+    keywords: "in-game profile hotkeys" },
+  { id: "appearance", label: shown(t("Appearance")), icon: "palette", group: t("Look"), tip: t("Themes, colours, layout, text size, your own themes and hardware acceleration") },
+  { id: "fun", label: shown(t("Fun")), icon: "sparkle", group: t("Look"), tip: t("Chill mode, the pull button, seasonal touches and your year in mods"),
+    keywords: "fun extras" },
+  { id: "account", label: shown(t("Account")), icon: "link", group: t("App"), tip: t("Your GameBanana account, 1-click installs, .gachamod files and the AI helper"),
+    keywords: "account links and ai" },
+  { id: "extensions", label: shown(t("Extensions")), icon: "puzzle", group: t("App"), tip: t("Themes and extensions other people made, extension lists and making your own") },
+  { id: "feedback", label: shown(t("Feedback")), icon: "help", group: t("App"), tip: t("Send feedback, tester options, usage counts, crash reports and log files"),
+    keywords: "feedback privacy and logs" },
+  { id: "about", label: shown(t("About")), icon: "info", group: t("App"), tip: t("Version, gachamod updates (automatic or Check now), backing up settings, repair, reset and uninstall"),
+    keywords: "about and updates" },
 ];
 
 /** The panels on those pages, in order. */
 export const SECTIONS: SectionInfo[] = [
-  { id: "games", page: "games", label: "Games and their folders", icon: "controller", keywords: "game folders paths add show hide detect one game mode" },
-  { id: "xxmi", page: "games", label: "XXMI Launcher", icon: "package", keywords: "xxmi launcher importer gimi srmi zzmi wwmi himi efmi version folder mod loader" },
-  { id: "launch", page: "launch", label: "Launch options", icon: "play", keywords: "launch start arguments args window mode borderless fullscreen priority commands before after exe xxmi fps limit hdr graphics reshade close when the game starts" },
-  { id: "migoto", page: "launch", label: "Mod maker switches", icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers" },
-  { id: "game-start", page: "launch", label: "Run as administrator", icon: "shield", keywords: "admin administrator elevated uac keys" },
-  { id: "mods", page: "mods", label: "Turning mods on and reloading the game", icon: "mods", keywords: "new mods enable one skin shuffle reload f10" },
-  { id: "adult", page: "mods", label: "Mods for adults", icon: "eye", keywords: "nsfw 18+ adult lewd blur hide show censor" },
-  { id: "mod-folders", page: "mods", label: "Mods folders", icon: "folder", keywords: "mods folder path location directory where mods live detect find change pick set mod folder" },
-  { id: "installing", page: "mods", label: "Downloads and installing", icon: "downloads", keywords: "download archive zip 7z rar keep delete slow server install parts variants toggles new mods" },
-  { id: "automatic", page: "mods", label: "Mod update checks and rescans", icon: "refresh", keywords: "auto automatic background checks turn off disable mod updates rescan scan" },
-  { id: "broken-mods", page: "mods", label: "Mods a game update broke", icon: "wand", keywords: "fixer fixes hash broken game update patch warning mute outdated" },
-  { id: "storage", page: "mods", label: "Trash and removed mods", icon: "archive", keywords: "trash disk space removed files storage recycle bin deleted" },
-  { id: "creators", page: "creators", label: "Creators", icon: "user", keywords: "authors modders followed favourite favorite blocked prioritized whitelist blacklist" },
-  { id: "hotkeys", page: "hotkeys", label: "In-game profile hotkeys", icon: "keyboard", keywords: "profile switch keys shortcut in game hotkeys next previous" },
-  { id: "appearance", page: "appearance", label: "Theme and colours", icon: "palette", keywords: "theme look dark light colours colors accent scheme" },
-  { id: "layout", page: "appearance", label: "Layout, text size and animations", icon: "layout", keywords: "density compact spacing sidebar corners buttons font size zoom motion animation hints" },
-  { id: "themes", page: "appearance", label: "Custom themes", icon: "wand", keywords: "my themes import export json make own theme" },
-  { id: "graphics", page: "appearance", label: "Hardware acceleration and rendering log", icon: "sliders", keywords: "gpu graphics card black screen window blank flicker drawing rendering performance" },
-  { id: "fun", page: "fun", label: "Fun extras", icon: "sparkle", keywords: "fun extras chill lower case lowercase pull wish warp gacha random seasonal snow hearts halloween year stats wrapped mod of the day" },
-  { id: "account", page: "account", label: "GameBanana account", icon: "user", keywords: "login log in sign in gamebanana gb account" },
-  { id: "integrations", page: "account", label: "1-click installs and .gachamod files", icon: "link", keywords: "gachamod links protocol url .gachamod file association default app 1-click one click install" },
-  { id: "ai", page: "account", label: "AI helper", icon: "ai", keywords: "ai chatbot chatgpt claude gemini copilot grok gpt llm assistant" },
-  { id: "extensions", page: "extensions", label: "Extensions", icon: "puzzle", keywords: "extensions plugins addons add-ons themes repo marketplace store community download share" },
-  { id: "feedback", page: "feedback", label: "Feedback and testing", icon: "help", keywords: "feedback bug report problem suggestion idea contact developer tester check game" },
-  { id: "privacy", page: "feedback", label: "Usage counts and crash reports", icon: "eye", keywords: "telemetry usage analytics counts crash reports privacy anonymous data tracking" },
-  { id: "logs", page: "feedback", label: "Log files", icon: "file", keywords: "logs log file gachamod.log rendering log errors debug folder" },
-  { id: "about", page: "about", label: "About gachamod", icon: "info", keywords: "version data folder licences licenses credits ko-fi kofi tip donate support" },
-  { id: "updates", page: "about", label: "gachamod updates", icon: "update", keywords: "update check now new version upgrade automatic release notes what's new" },
-  { id: "transfer", page: "about", label: "Back up or move your settings", icon: "export", keywords: "export import backup restore settings file new pc migrate" },
-  { id: "repair", page: "about", label: "Repair, reset or uninstall", icon: "tool", keywords: "repair uninstall setup reinstall reset start over factory defaults" },
+  { id: "games", page: "games", label: shown(t("Games and their folders")), icon: "controller", keywords: "game folders paths add show hide detect one game mode" },
+  { id: "xxmi", page: "games", label: shown(t("XXMI Launcher")), icon: "package", keywords: "xxmi launcher importer gimi srmi zzmi wwmi himi efmi version folder mod loader" },
+  { id: "launch", page: "launch", label: shown(t("Launch options")), icon: "play", keywords: "launch start arguments args window mode borderless fullscreen priority commands before after exe xxmi fps limit hdr graphics reshade close when the game starts" },
+  { id: "migoto", page: "launch", label: shown(t("Mod maker switches")), icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers" },
+  { id: "game-start", page: "launch", label: shown(t("Run as administrator")), icon: "shield", keywords: "admin administrator elevated uac keys" },
+  { id: "mods", page: "mods", label: shown(t("Turning mods on and reloading the game")), icon: "mods", keywords: "new mods enable one skin shuffle reload f10" },
+  { id: "adult", page: "mods", label: shown(t("Mods for adults")), icon: "eye", keywords: "nsfw 18+ adult lewd blur hide show censor" },
+  { id: "mod-folders", page: "mods", label: shown(t("Mods folders")), icon: "folder", keywords: "mods folder path location directory where mods live detect find change pick set mod folder" },
+  { id: "installing", page: "mods", label: shown(t("Downloads and installing")), icon: "downloads", keywords: "download archive zip 7z rar keep delete slow server install parts variants toggles new mods" },
+  { id: "automatic", page: "mods", label: shown(t("Mod update checks and rescans")), icon: "refresh", keywords: "auto automatic background checks turn off disable mod updates rescan scan" },
+  { id: "broken-mods", page: "mods", label: shown(t("Mods a game update broke")), icon: "wand", keywords: "fixer fixes hash broken game update patch warning mute outdated" },
+  { id: "storage", page: "mods", label: shown(t("Trash and removed mods")), icon: "archive", keywords: "trash disk space removed files storage recycle bin deleted" },
+  { id: "creators", page: "creators", label: shown(t("Creators")), icon: "user", keywords: "authors modders followed favourite favorite blocked prioritized whitelist blacklist" },
+  { id: "hotkeys", page: "hotkeys", label: shown(t("In-game profile hotkeys")), icon: "keyboard", keywords: "profile switch keys shortcut in game hotkeys next previous" },
+  { id: "appearance", page: "appearance", label: shown(t("Theme and colours")), icon: "palette", keywords: "theme look dark light colours colors accent scheme" },
+  { id: "layout", page: "appearance", label: shown(t("Layout, text size and animations")), icon: "layout", keywords: "language density compact spacing sidebar corners buttons font size zoom motion animation hints" },
+  { id: "themes", page: "appearance", label: shown(t("Custom themes")), icon: "wand", keywords: "my themes import export json make own theme" },
+  { id: "graphics", page: "appearance", label: shown(t("Hardware acceleration and rendering log")), icon: "sliders", keywords: "gpu graphics card black screen window blank flicker drawing rendering performance" },
+  { id: "fun", page: "fun", label: shown(t("Fun extras")), icon: "sparkle", keywords: "fun extras chill lower case lowercase pull wish warp gacha random seasonal snow hearts halloween year stats wrapped mod of the day" },
+  { id: "account", page: "account", label: shown(t("GameBanana account")), icon: "user", keywords: "login log in sign in gamebanana gb account" },
+  { id: "integrations", page: "account", label: shown(t("1-click installs and .gachamod files")), icon: "link", keywords: "gachamod links protocol url .gachamod file association default app 1-click one click install" },
+  { id: "ai", page: "account", label: shown(t("AI helper")), icon: "ai", keywords: "ai chatbot chatgpt claude gemini copilot grok gpt llm assistant" },
+  { id: "extensions", page: "extensions", label: shown(t("Extensions")), icon: "puzzle", keywords: "extensions plugins addons add-ons themes repo marketplace store community download share" },
+  { id: "feedback", page: "feedback", label: shown(t("Feedback and testing")), icon: "help", keywords: "feedback bug report problem suggestion idea contact developer tester check game" },
+  { id: "privacy", page: "feedback", label: shown(t("Usage counts and crash reports")), icon: "eye", keywords: "telemetry usage analytics counts crash reports privacy anonymous data tracking" },
+  { id: "logs", page: "feedback", label: shown(t("Log files")), icon: "file", keywords: "logs log file gachamod.log rendering log errors debug folder" },
+  { id: "about", page: "about", label: shown(t("About gachamod")), icon: "info", keywords: "version data folder licences licenses credits ko-fi kofi tip donate support" },
+  { id: "updates", page: "about", label: shown(t("gachamod updates")), icon: "update", keywords: "update check now new version upgrade automatic release notes what's new" },
+  { id: "transfer", page: "about", label: shown(t("Back up or move your settings")), icon: "export", keywords: "export import backup restore settings file new pc migrate" },
+  { id: "repair", page: "about", label: shown(t("Repair, reset or uninstall")), icon: "tool", keywords: "repair uninstall setup reinstall reset start over factory defaults" },
 ];
 
 /** Single settings: [row id (a route section), the section it sits in, title, keywords, icon]. */
 export const SETTINGS: Array<[string, string, string, string, IconName]> = [
-  ["set-admin", "game-start", "Run as administrator", "admin administrator elevated uac f10 keys hotkeys zenless zzz always restart", "shield"],
-  ["set-only-game", "games", "One-game mode", "one game only single focus just one exclusive hide other games main game", "focus"],
-  ["set-community", "games", "Community games", "pgr punishing gray raven p5x persona gf2 girls frontline identity v stella sora taimanin 3dmigoto loader other games", "controller"],
-  ["set-links", "integrations", "1-click installs from GameBanana", "gachamod links protocol url one click install handler default app", "link"],
-  ["set-files", "integrations", "Open .gachamod files", "gachamod file pack association double click open with default app", "link"],
-  ["set-scheme", "appearance", "Light or dark", "dark mode light mode night theme scheme system colours colors", "moon"],
-  ["set-accent", "appearance", "Accent", "accent colour color highlight tint", "palette"],
-  ["set-layout", "layout", "Spacing", "layout density compact comfortable spacing sidebar left right nav style corners round sharp buttons", "layout"],
-  ["set-text-size", "layout", "Text size", "font size zoom bigger smaller scale ui size", "sliders"],
-  ["set-motion", "layout", "Animations", "motion animation reduce reduced effects transitions", "sparkle"],
-  ["set-intro", "layout", "Opening screen", "intro splash startup start opening animation loading screen tips tip of the day", "play"],
-  ["set-hints", "layout", "First-start hints", "hints tips highlight tutorial tour guide new user first start", "info"],
-  ["set-gpu", "graphics", "Hardware acceleration", "gpu graphics card hardware acceleration black screen window blank flicker drawing rendering performance", "sliders"],
-  ["set-shuffle", "mods", "Shuffle outfits", "random randomize randomise outfits skins surprise each launch play daily", "dice"],
-  ["set-chill", "fun", "Chill mode", "lower case lowercase chill relaxed text casual", "sparkle"],
-  ["set-pull", "fun", "Pull button", "pull wish warp signal search convene headhunt gacha random mod pity 5 star roll lucky", "star"],
-  ["set-seasonal", "fun", "Seasonal touches", "snow christmas winter valentine hearts halloween bats pumpkins spooky holiday season", "snow"],
-  ["set-year", "fun", "Your year in mods", "year stats wrapped recap summary hours played most mods", "calendar"],
-  ["set-enable-new", "mods", "Turn on new mods", "auto enable activate new mods after install download turn on automatically off by default", "power"],
-  ["set-nsfw", "adult", "Mods marked for adults", "hide blur show nsfw 18+ adult lewd blur hide show censor", "eye"],
-  ["set-gb-adult", "adult", "Match my GameBanana settings", "nsfw adult gamebanana account content ratings sync match same as site", "eye"],
-  ["set-pergame", "mods", "Another skin already on", "one skin per character single skin outfit only one at a time auto turn off others", "characters"],
-  ["set-pergame", "mods", "Reload in game", "automatically f10 reload refresh in game auto press", "refresh"],
-  ["set-app-updates", "updates", "Update gachamod automatically", "app update check new version upgrade auto install automatic tell notify only off", "update"],
-  ["set-app-check", "updates", "Check for updates", "gachamod app update check now new version upgrade latest", "update"],
-  ["set-mod-updates", "automatic", "Check mods for updates", "mod updates outdated gamebanana auto check", "update"],
-  ["set-rescan", "automatic", "Rescan mods when Mods opens", "scan rescan refresh folder watch auto automatically", "refresh"],
-  ["set-archives", "installing", "Delete downloaded archives", "zip 7z rar archive keep downloads cleanup disk space", "trash"],
-  ["set-all-parts", "installing", "Install every mod in an archive", "archive several mods variants parts pick which ask window all", "layers"],
-  ["set-other-servers", "installing", "Move slow downloads to another server", "slow download speed mirror server filecache gamebanana faster", "downloads"],
-  ["set-fix-updates", "broken-mods", "Look for new mod fixers", "fixer fixes hash broken game update patch auto", "wand"],
-  ["set-fix-warn", "broken-mods", "Warn about broken mods", "mods a game update broke mute fixes broken outdated hash warning badge hide", "bell"],
-  ["set-onscreen", "installing", "Toggles only while on screen, for new mods", "toggles hotkeys keybinds key conflict off screen character visible active", "key"],
-  ["set-ext-sources", "extensions", "Extension lists", "repo repository index source marketplace url add another list", "puzzle"],
-  ["set-ext-make", "extensions", "Make your own", "make an extension develop create build plugin addon package link folder share submit upload", "code"],
-  ["set-trash-days", "storage", "Keep removed mods' files", "trash recycle bin deleted removed days storage disk space archive purge", "trash"],
-  ["set-gb-signin", "account", "Sign in to GameBanana", "login log in account follow like subscribe session", "user"],
-  ["set-creators-sub", "creators", "Followed creators", "following subscribed subscriptions authors", "feed"],
-  ["set-creators-fav", "creators", "Favourite creators", "favorite favourites starred authors", "star"],
-  ["set-creators-prio", "creators", "Prioritized creators", "priority whitelist first top authors", "crown"],
-  ["set-creators-blocked", "creators", "Blocked creators", "block blacklist mute hide authors", "block"],
-  ["set-feedback", "feedback", "Send feedback", "feedback bug report problem suggestion idea contact developer message", "help"],
-  ["set-tester", "feedback", "Tester options", "tester testing experimental beta menu the game draws inside the game exclusive fullscreen switch skins live wuthering waves endfield", "check"],
-  ["set-gamecheck", "feedback", "Check this game", "test testing tester check game report works switching skins menu genshin star rail wuthering waves endfield", "check"],
-  ["set-usage", "privacy", "Usage counts", "telemetry analytics usage statistics tracking privacy anonymous", "eye"],
-  ["set-crashes", "privacy", "Crash reports", "crash report error bug automatic send privacy", "bug"],
-  ["set-logs", "logs", "Logs", "log logs file gachamod.log errors debug folder", "file"],
-  ["set-render-log", "logs", "Rendering log", "rendering log black screen window blank flicker gpu graphics card driver nvidia frames debug", "file"],
-  ["set-ai-show", "ai", "Show AI buttons", "turn ai on or off hide ai disable chatbot buttons show everything", "ai"],
-  ["set-xxmi-uninstall", "xxmi", "Uninstall XXMI Launcher", "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
-  ["set-reset", "repair", "Reset gachamod", "reset start over factory defaults clear wipe fresh delete settings data", "undo"],
-  ["set-ai-chatbot", "ai", "Your chatbot", "chatgpt claude gemini copilot grok chatbot pick change", "ai"],
-  ["set-ai-adult", "ai", "Hide adult mods from the chatbot", "nsfw adult explicit names prompt refuse refused chatbot hide", "ai"],
-  ["set-ai-jobs", "ai", "Ask it now", "ai chatbot make a theme tidy mod names set characters mod ideas jobs", "ai"],
-  ["set-fix-automute", "broken-mods", "Turn off mods that need their author", "fixer broken mute auto turn off cant fix can't fix need their author", "wand"],
-  ["set-review-unsure", "installing", "Ask me to check files gachamod can't place", "can't place cant place unsure no ini files where to put review check", "downloads"],
-  ["set-motd", "fun", "Mod of the day", "motd daily pick gift featured", "star"],
-  ["set-extensions", "extensions", "Extensions and themes", "extensions plugins addons themes browse manage installed", "puzzle"],
-  ["set-hotkeys-on", "hotkeys", "Switch profiles with hotkeys", "profile hotkeys keys in game switch on off", "keyboard"],
-  ["set-hotkeys-profiles", "hotkeys", "Profile keys", "profile hotkey own key each profile manage profiles editor", "profiles"],
-  ["set-hotkeys-menu", "hotkeys", "In-game menu keys", "menu key keys f7 open skin menu rebind change shortcut in game overlay", "keyboard"],
+  ["set-admin", "game-start", shown(t("Run as administrator")), "admin administrator elevated uac f10 keys hotkeys zenless zzz always restart", "shield"],
+  ["set-only-game", "games", shown(t("One-game mode")), "one game only single focus just one exclusive hide other games main game", "focus"],
+  ["set-community", "games", shown(t("Community games")), "pgr punishing gray raven p5x persona gf2 girls frontline identity v stella sora taimanin 3dmigoto loader other games", "controller"],
+  ["set-links", "integrations", shown(t("1-click installs from GameBanana")), "gachamod links protocol url one click install handler default app", "link"],
+  ["set-files", "integrations", shown(t("Open .gachamod files")), "gachamod file pack association double click open with default app", "link"],
+  ["set-lang", "layout", shown(t("Language")), "language translate translation english chinese spanish portuguese russian 语言 中文 简体 idioma español português língua язык русский", "web"],
+  ["set-scheme", "appearance", shown(t("Light or dark")), "dark mode light mode night theme scheme system colours colors", "moon"],
+  ["set-accent", "appearance", shown(t("Accent")), "accent colour color highlight tint", "palette"],
+  ["set-format", "layout", shown(t("Mods layout")), "layout format view panes three panes character list compact list cards rows look like jasm imm integrated mod manager skinselectimpact ssi arg xxmm xx mod manager other mod manager switch from", "layout"],
+  ["set-layout", "layout", shown(t("Spacing")), "layout density compact comfortable spacing sidebar left right nav style corners round sharp buttons", "layout"],
+  ["set-text-size", "layout", shown(t("Text size")), "font size zoom bigger smaller scale ui size", "sliders"],
+  ["set-motion", "layout", shown(t("Animations")), "motion animation reduce reduced effects transitions", "sparkle"],
+  ["set-intro", "layout", shown(t("Opening screen")), "intro splash startup start opening animation loading screen tips tip of the day", "play"],
+  ["set-hints", "layout", shown(t("First-start hints")), "hints tips highlight tutorial tour guide new user first start", "info"],
+  ["set-gpu", "graphics", shown(t("Hardware acceleration")), "gpu graphics card hardware acceleration black screen window blank flicker drawing rendering performance", "sliders"],
+  ["set-shuffle", "mods", shown(t("Shuffle outfits")), "random randomize randomise outfits skins surprise each launch play daily", "dice"],
+  ["set-chill", "fun", shown(t("Chill mode")), "lower case lowercase chill relaxed text casual", "sparkle"],
+  ["set-pull", "fun", shown(t("Pull button")), "pull wish warp signal search convene headhunt gacha random mod pity 5 star roll lucky", "star"],
+  ["set-seasonal", "fun", shown(t("Seasonal touches")), "snow christmas winter valentine hearts halloween bats pumpkins spooky holiday season", "snow"],
+  ["set-year", "fun", shown(t("Your year in mods")), "year stats wrapped recap summary hours played most mods", "calendar"],
+  ["set-enable-new", "mods", shown(t("Turn on new mods")), "auto enable activate new mods after install download turn on automatically off by default", "power"],
+  ["set-nsfw", "adult", shown(t("Mods marked for adults")), "hide blur show nsfw 18+ adult lewd blur hide show censor", "eye"],
+  ["set-gb-adult", "adult", shown(t("Match my GameBanana settings")), "nsfw adult gamebanana account content ratings sync match same as site", "eye"],
+  ["set-pergame", "mods", shown(t("Another skin already on")), "one skin per character single skin outfit only one at a time auto turn off others", "characters"],
+  ["set-pergame", "mods", shown(t("Reload in game")), "automatically f10 reload refresh in game auto press", "refresh"],
+  ["set-app-updates", "updates", shown(t("Update gachamod automatically")), "app update check new version upgrade auto install automatic tell notify only off", "update"],
+  ["set-app-check", "updates", shown(t("Check for updates")), "gachamod app update check now new version upgrade latest", "update"],
+  ["set-mod-updates", "automatic", shown(t("Check mods for updates")), "mod updates outdated gamebanana auto check", "update"],
+  ["set-watch-mods", "automatic", shown(t("Watch Mods folders for changes")), "watch watcher explorer live auto refresh folder changes added renamed deleted other manager", "refresh"],
+  ["set-rescan", "automatic", shown(t("Rescan mods when Mods opens")), "scan rescan refresh folder watch auto automatically", "refresh"],
+  ["set-archives", "installing", shown(t("Delete downloaded archives")), "zip 7z rar archive keep downloads cleanup disk space", "trash"],
+  ["set-all-parts", "installing", shown(t("Install every mod in an archive")), "archive several mods variants parts pick which ask window all", "layers"],
+  ["set-other-servers", "installing", shown(t("Move slow downloads to another server")), "slow download speed mirror server filecache gamebanana faster", "downloads"],
+  ["set-fix-updates", "broken-mods", shown(t("Look for new mod fixers")), "fixer fixes hash broken game update patch auto", "wand"],
+  ["set-fix-warn", "broken-mods", shown(t("Warn about broken mods")), "mods a game update broke mute fixes broken outdated hash warning badge hide", "bell"],
+  ["set-onscreen", "installing", shown(t("Toggles only while on screen, for new mods")), "toggles hotkeys keybinds key conflict off screen character visible active", "key"],
+  ["set-ext-sources", "extensions", shown(t("Extension lists")), "repo repository index source marketplace url add another list", "puzzle"],
+  ["set-ext-make", "extensions", shown(t("Make your own")), "make an extension develop create build plugin addon package link folder share submit upload", "code"],
+  ["set-trash-days", "storage", shown(t("Keep removed mods' files")), "trash recycle bin deleted removed days storage disk space archive purge", "trash"],
+  ["set-gb-signin", "account", shown(t("Sign in to GameBanana")), "login log in account follow like subscribe session", "user"],
+  ["set-creators-sub", "creators", shown(t("Followed creators")), "following subscribed subscriptions authors", "feed"],
+  ["set-creators-fav", "creators", shown(t("Favourite creators")), "favorite favourites starred authors", "star"],
+  ["set-creators-prio", "creators", shown(t("Prioritized creators")), "priority whitelist first top authors", "crown"],
+  ["set-creators-blocked", "creators", shown(t("Blocked creators")), "block blacklist mute hide authors", "block"],
+  ["set-feedback", "feedback", shown(t("Send feedback")), "feedback bug report problem suggestion idea contact developer message", "help"],
+  ["set-tester", "feedback", shown(t("Tester options")), "tester testing experimental beta menu the game draws inside the game exclusive fullscreen switch skins live wuthering waves endfield", "check"],
+  ["set-gamecheck", "feedback", shown(t("Check this game")), "test testing tester check game report works switching skins menu genshin star rail wuthering waves endfield", "check"],
+  ["set-usage", "privacy", shown(t("Usage counts")), "telemetry analytics usage statistics tracking privacy anonymous", "eye"],
+  ["set-crashes", "privacy", shown(t("Crash reports")), "crash report error bug automatic send privacy", "bug"],
+  ["set-logs", "logs", shown(t("Logs")), "log logs file gachamod.log errors debug folder", "file"],
+  ["set-render-log", "logs", shown(t("Rendering log")), "rendering log black screen window blank flicker gpu graphics card driver nvidia frames debug", "file"],
+  ["set-ai-show", "ai", shown(t("Show AI buttons")), "turn ai on or off hide ai disable chatbot buttons show everything", "ai"],
+  ["set-xxmi-uninstall", "xxmi", shown(t("Uninstall XXMI Launcher")), "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
+  ["set-reset", "repair", shown(t("Reset gachamod")), "reset start over factory defaults clear wipe fresh delete settings data", "undo"],
+  ["set-ai-chatbot", "ai", shown(t("Your chatbot")), "chatgpt claude gemini copilot grok chatbot pick change", "ai"],
+  ["set-ai-adult", "ai", shown(t("Hide adult mods from the chatbot")), "nsfw adult explicit names prompt refuse refused chatbot hide", "ai"],
+  ["set-ai-jobs", "ai", shown(t("Ask it now")), "ai chatbot make a theme tidy mod names set characters mod ideas jobs", "ai"],
+  ["set-fix-automute", "broken-mods", shown(t("Turn off mods that need their author")), "fixer broken mute auto turn off cant fix can't fix need their author", "wand"],
+  ["set-review-unsure", "installing", shown(t("Ask me to check files gachamod can't place")), "can't place cant place unsure no ini files where to put review check", "downloads"],
+  ["set-motd", "fun", shown(t("Mod of the day")), "motd daily pick gift featured", "star"],
+  ["set-extensions", "extensions", shown(t("Extensions and themes")), "extensions plugins addons themes browse manage installed", "puzzle"],
+  ["set-hotkeys-on", "hotkeys", shown(t("Switch profiles with hotkeys")), "profile hotkeys keys in game switch on off", "keyboard"],
+  ["set-hotkeys-profiles", "hotkeys", shown(t("Profile keys")), "profile hotkey own key each profile manage profiles editor", "profiles"],
+  ["set-hotkeys-menu", "hotkeys", shown(t("In-game menu keys")), "menu key keys f7 open skin menu rebind change shortcut in game overlay", "keyboard"],
 ];
 
 /** The page a panel or a setting row is on, to open it when the panel or row isn't shown (AI turned off, an empty list). */
@@ -134,13 +154,13 @@ export const sectionOf = (id: string): string | undefined => {
   return SECTIONS.find((s) => s.id === section)?.page;
 };
 
-/** "Settings › Mods and downloads › Trash and removed mods" for a panel or a setting in it (the panel is left out when
+/** "Settings › Mods › Trash and removed mods" for a panel or a setting in it (the panel is left out when
  *  it has the page's name). */
 export function settingsWhere(panel: string): string {
   const sec = SECTIONS.find((s) => s.id === panel);
   const page = PAGES.find((p) => p.id === sec?.page);
-  if (!sec || !page) return "Settings";
-  return sec.label === page.label ? `Settings › ${page.label}` : `Settings › ${page.label} › ${sec.label}`;
+  if (!sec || !page) return t("Settings");
+  return sec.label === page.label ? t("Settings › {page}", { page: page.label }) : t("Settings › {page} › {panel}", { page: page.label, panel: sec.label });
 }
 
 registerCommands("settings", () => {
@@ -148,41 +168,43 @@ registerCommands("settings", () => {
     const page = PAGES.find((p) => p.id === s.page);
     return {
       id: `settings:${s.id}`, title: s.label, section: "Settings", icon: s.icon, keywords: `settings ${s.keywords}`,
-      where: page && page.label !== s.label ? `Settings › ${page.label}` : "Settings",
+      where: page && page.label !== s.label ? t("Settings › {page}", { page: page.label }) : t("Settings"),
       run: () => go({ view: "settings", section: s.id }),
     };
   });
   for (const [section, panel, title, keywords, icon] of SETTINGS) {
     if ((section === "set-ai-chatbot" || section === "set-ai-adult" || section === "set-ai-jobs") && !aiShown("useful")) continue;
-    list.push({ id: `settings:${section}:${title}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
+    // the id stays English: recent picks are remembered by it
+    list.push({ id: `settings:${section}:${en(title)}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
       run: () => go({ view: "settings", section }) });
   }
   list.push(
-    { id: "page:extensions", title: "Extensions", section: "Pages", icon: "puzzle", keywords: "extensions plugins addons add-ons themes get more download marketplace store",
+    { id: "page:extensions", title: shown(t("Extensions")), section: "Pages", icon: "puzzle", keywords: "extensions plugins addons add-ons themes get more download marketplace store",
       run: () => go({ view: "extensions" }) },
-    { id: "page:themes-online", title: "Get more themes", section: "Actions", icon: "palette", keywords: "themes download community share look skins", where: "Extensions › Themes",
+    { id: "page:themes-online", title: shown(t("Get more themes")), section: "Actions", icon: "palette", keywords: "themes download community share look skins", where: t("Extensions › Themes"),
       run: () => go({ view: "extensions", section: "themes" }) },
   );
-  list.push({ id: "act:feedback", title: "Send feedback", section: "Actions", icon: "help", where: "Settings › Feedback, privacy and logs", keywords: "feedback bug report problem suggestion idea contact developer", run: () => openFeedback() });
-  list.push({ id: "act:gamecheck", title: "Check this game", section: "Actions", icon: "check", keywords: "test testing tester check game report switching skins menu", run: openGameCheck });
-  list.push({ id: "act:xxmi", title: "Open XXMI Launcher", section: "Actions", icon: "external", keywords: "xxmi launcher open start run", run: openXxmi });
+  list.push({ id: "act:feedback", title: shown(t("Send feedback")), section: "Actions", icon: "help", where: t("Settings › {page}", { page: PAGES.find((p) => p.id === "feedback")!.label }), keywords: "feedback bug report problem suggestion idea contact developer", run: () => openFeedback() });
+  list.push({ id: "act:gamecheck", title: shown(t("Check this game")), section: "Actions", icon: "check", keywords: "test testing tester check game report switching skins menu", run: openGameCheck });
+  list.push({ id: "act:xxmi", title: shown(t("Open XXMI Launcher")), section: "Actions", icon: "external", keywords: "xxmi launcher open start run", run: openXxmi });
 
   const g = currentGame();
   if (aiShown("useful")) {
-    list.push({ id: "ai:theme", title: "Make a theme with your chatbot", section: "Actions", icon: "ai", keywords: "ai chatbot theme generate custom colours chatgpt claude",
+    list.push({ id: "ai:theme", title: shown(t("Make a theme with your chatbot")), section: "Actions", icon: "ai", keywords: "ai chatbot theme generate custom colours chatgpt claude",
       run: () => askAi({ kind: "theme", game: g?.id }) });
     if (g) {
       list.push(
-        { id: "ai:tidy", title: "Tidy mod names with your chatbot", section: "Actions", icon: "ai", keywords: "ai chatbot rename clean names bulk mass chatgpt claude",
+        { id: "ai:tidy", title: shown(t("Tidy mod names with your chatbot")), section: "Actions", icon: "ai", keywords: "ai chatbot rename clean names bulk mass chatgpt claude",
           run: () => askAi({ kind: "mods", game: g.id, detail: "clean" }) },
-        { id: "ai:chars", title: "Set mod characters with your chatbot", section: "Actions", icon: "ai", keywords: "ai chatbot character assign sort bulk",
+        { id: "ai:chars", title: shown(t("Set mod characters with your chatbot")), section: "Actions", icon: "ai", keywords: "ai chatbot character assign sort bulk",
           run: () => askAi({ kind: "mods", game: g.id, detail: "characters" }) },
       );
     }
   }
   if (g && aiShown("extra")) {
-    list.push({ id: "ai:ideas", title: "Ask your chatbot for mod ideas", section: "Actions", icon: "ai", keywords: "ai chatbot recommend suggest ideas what to download",
+    list.push({ id: "ai:ideas", title: shown(t("Ask your chatbot for mod ideas")), section: "Actions", icon: "ai", keywords: "ai chatbot recommend suggest ideas what to download",
       run: () => { void ideasTask(g.id).then(askAi); } });
   }
-  return list;
+  // the English name matches too, whatever language the app is in
+  return list.map((c) => (en(c.title) === c.title ? c : { ...c, keywords: `${c.keywords ?? ""} ${en(c.title)}` }));
 });

@@ -2,13 +2,14 @@
 // installs (or a bundle of 18 outfits) can be turned on or off together. Each finished row lists the mods it installed
 // with a switch each. Owner: BROWSE area (docs/spec.md, "Downloads and Browse").
 import { useEffect, useMemo, useState } from "react";
-import { Button, IconButton, Toggle, plural } from "../../ui/kit";
+import { Button, IconButton, Toggle } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { errorText, library, type ModEntry, type QueueItem } from "../../lib/api";
 import { held } from "../../lib/tauri";
 import { go } from "../../lib/store";
 import { onPublish, toggleMods } from "../library/data";
+import { t, tn } from "../../lib/i18n";
 
 /** Downloads that start within this long of the last one finishing join its batch. */
 const GAP_SECS = 10 * 60;
@@ -35,9 +36,9 @@ export function batchWhen(unixSecs: number): string {
   const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
   const day = new Date(); day.setHours(0, 0, 0, 0);
   const diff = Math.round((day.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86_400_000);
-  if (diff === 0) return `Today at ${time}`;
-  if (diff === 1) return `Yesterday at ${time}`;
-  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} at ${time}`;
+  if (diff === 0) return t("Today at {time}", { time });
+  if (diff === 1) return t("Yesterday at {time}", { time });
+  return t("{date} at {time}", { date: d.toLocaleDateString(undefined, { month: "short", day: "numeric" }), time });
 }
 
 /** Every mod of these games by id, kept current with on/off changes and installs. */
@@ -83,7 +84,13 @@ export async function setMods(mods: ModEntry[], on: boolean, all: Map<string, Mo
   const game = mods[0]?.game;
   if (!game) return;
   const ids = mods.filter((m) => m.enabled !== on).map((m) => m.id);
-  if (!ids.length) { toast(mods.length === 1 ? `${mods[0]!.name} is ${on ? "on" : "off"} already` : `They're all ${on ? "on" : "off"} already`); return; }
+  if (!ids.length) {
+    const name = mods[0]!.name;
+    toast(mods.length === 1
+      ? on ? t("{name} is on already", { name }) : t("{name} is off already", { name })
+      : on ? t("They're all on already") : t("They're all off already"));
+    return;
+  }
   try { await toggleMods(game, ids, on, [...all.values()].filter((m) => m.game === game)); }
   catch (e) { toast(errorText(e), true); }
 }
@@ -95,32 +102,32 @@ export const modsOf = (i: QueueItem, all: Map<string, ModEntry>): ModEntry[] =>
 const onCount = (mods: ModEntry[]) => mods.filter((m) => m.enabled).length;
 
 /** Turn all on / Turn all off, for a row's mods or a batch's. */
-export function AllSwitches({ mods, all, what }: { mods: ModEntry[]; all: Map<string, ModEntry>; what: string }) {
+export function AllSwitches({ mods, all, from }: { mods: ModEntry[]; all: Map<string, ModEntry>; from: "download" | "batch" }) {
   const [busy, setBusy] = useState<"on" | "off" | null>(null);
   const on = onCount(mods);
   const run = (v: boolean) => { setBusy(v ? "on" : "off"); void setMods(mods, v, all).finally(() => setBusy(null)); };
   return (
     <>
       <Button size="sm" icon="power" busy={busy === "on"} disabled={on === mods.length || !!busy} onClick={() => run(true)}
-        title={`Turn on every mod ${what}. A character's other skins turn off as usual`}>Turn all on</Button>
+        title={from === "batch" ? t("Turn on every mod from this batch. A character's other skins turn off as usual") : t("Turn on every mod from this download. A character's other skins turn off as usual")}>{t("Turn all on")}</Button>
       <Button size="sm" variant="ghost" busy={busy === "off"} disabled={on === 0 || !!busy} onClick={() => run(false)}
-        title={`Turn off every mod ${what}`}>Turn all off</Button>
+        title={from === "batch" ? t("Turn off every mod from this batch") : t("Turn off every mod from this download")}>{t("Turn all off")}</Button>
     </>
   );
 }
 
 /** One switch for a row that installed one mod. */
 export function ModSwitch({ mod, all }: { mod: ModEntry; all: Map<string, ModEntry> }) {
-  return <Toggle size="sm" checked={mod.enabled} onChange={(v) => void setMods([mod], v, all)} label={mod.enabled ? "On" : "Off"}
-    title={mod.enabled ? `Turn ${mod.name} off` : `Turn ${mod.name} on. Its character's other skin turns off as usual`} />;
+  return <Toggle size="sm" checked={mod.enabled} onChange={(v) => void setMods([mod], v, all)} label={mod.enabled ? t("On") : t("Off")}
+    title={mod.enabled ? t("Turn {name} off", { name: mod.name }) : t("Turn {name} on. Its character's other skin turns off as usual", { name: mod.name })} />;
 }
 
 /** The button that shows or hides a row's mods: "3 of 18 on". */
 export function ModsToggle({ mods, open, onToggle }: { mods: ModEntry[]; open: boolean; onToggle: () => void }) {
   return (
     <button type="button" className={`dl-mods-btn${open ? " open" : ""}`} aria-expanded={open} onClick={onToggle}
-      title={open ? "Hide the mods this installed" : "Show the mods this installed, to turn each on or off"}>
-      <Icon name="chevron" />{onCount(mods)} of {mods.length} on
+      title={open ? t("Hide the mods this installed") : t("Show the mods this installed, to turn each on or off")}>
+      <Icon name="chevron" />{t("{on} of {n} on", { on: onCount(mods), n: mods.length })}
     </button>
   );
 }
@@ -130,15 +137,15 @@ export function InstalledList({ mods, all, gone }: { mods: ModEntry[]; all: Map<
   return (
     <div className="dl-installed">
       <div className="dl-installed-bar">
-        <AllSwitches mods={mods} all={all} what="from this download" />
-        {gone > 0 && <span className="hint">{plural(gone, "mod")} from it {gone === 1 ? "was" : "were"} removed since</span>}
+        <AllSwitches mods={mods} all={all} from="download" />
+        {gone > 0 && <span className="hint">{tn(gone, "{n} mod from it was removed since", "{n} mods from it were removed since")}</span>}
       </div>
       <ul>
         {mods.map((m) => (
           <li key={m.id}>
             <Toggle size="sm" checked={m.enabled} onChange={(v) => void setMods([m], v, all)}
-              title={m.enabled ? `Turn ${m.name} off` : `Turn ${m.name} on. Its character's other skin turns off as usual`} />
-            <button type="button" className="dl-installed-name" title={`Open ${m.name} in Mods`} onClick={() => go({ view: "library", modId: m.id })}>{m.name}</button>
+              title={m.enabled ? t("Turn {name} off", { name: m.name }) : t("Turn {name} on. Its character's other skin turns off as usual", { name: m.name })} />
+            <button type="button" className="dl-installed-name" title={t("Open {name} in Mods", { name: m.name })} onClick={() => go({ view: "library", modId: m.id })}>{m.name}</button>
             {m.character && <span className="dl-c">{m.character}</span>}
           </li>
         ))}
@@ -152,15 +159,19 @@ export function BatchHead({ items, all, onClear, onRetry }: { items: QueueItem[]
   const mods = useMemo(() => items.flatMap((i) => modsOf(i, all)), [items, all]);
   const when = Math.max(...items.map((i) => i.finishedAt ?? i.addedAt));
   const failed = items.filter((i) => i.state === "failed").length;
-  const parts = [plural(items.length, "download"), mods.length ? `${plural(mods.length, "mod")}, ${onCount(mods)} on` : "", failed ? `${failed} failed` : ""].filter(Boolean);
+  const parts = [
+    tn(items.length, "{n} download", "{n} downloads"),
+    mods.length ? tn(mods.length, "{n} mod, {on} on", "{n} mods, {on} on", { on: onCount(mods) }) : "",
+    failed ? t("{n} failed", { n: failed }) : "",
+  ].filter(Boolean);
   return (
     <div className="dl-batch-h">
       <span className="dl-batch-t">{batchWhen(when)}</span>
       <span className="hint">{parts.join(" · ")}</span>
       <span className="dl-batch-act">
-        {failed > 0 && onRetry && <Button size="sm" icon="refresh" onClick={onRetry} title={`Try the ${plural(failed, "failed download")} in this batch again`}>Retry failed</Button>}
-        {mods.length > 1 && <AllSwitches mods={mods} all={all} what="from this batch" />}
-        <IconButton icon="x" size="sm" label="Clear this batch from the list. Its mods stay installed" onClick={onClear} />
+        {failed > 0 && onRetry && <Button size="sm" icon="refresh" onClick={onRetry} title={tn(failed, "Try the {n} failed download in this batch again", "Try the {n} failed downloads in this batch again")}>{t("Retry failed")}</Button>}
+        {mods.length > 1 && <AllSwitches mods={mods} all={all} from="batch" />}
+        <IconButton icon="x" size="sm" label={t("Clear this batch from the list. Its mods stay installed")} onClick={onClear} />
       </span>
     </div>
   );

@@ -17,6 +17,13 @@ export function registerReportDemo() {
     },
     telemetry_events: () => undefined,
     log_write: () => undefined,
+    log_tail: () => [
+      "2026-11-17 18:02:11 info  gachamod 0.1.1-demo started",
+      "2026-11-17 18:02:11 info  Found Genshin Impact, Zenless Zone Zero, Wuthering Waves, Arknights: Endfield",
+      "2026-11-17 18:02:12 info  Watching 4 Mods folders for changes",
+      "2026-11-17 18:02:14 warn  GameBanana took 6.2 s to answer; trying again",
+      "2026-11-17 18:03:40 error Couldn't read ZZMI/Mods/Ellen Maid/mod.ini: The file is in use by another process",
+    ].join("\r\n"),
     report_ui_error: () => undefined,
     render_events: () => undefined,
     render_state: () => ({ on: on("render.log"), dir: "%APPDATA%\app.gachamod.desktop\logs\rendering", incidents: 0 }),

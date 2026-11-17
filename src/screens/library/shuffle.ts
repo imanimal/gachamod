@@ -1,10 +1,11 @@
 // Shuffle outfits: for every character with two or more mods and one of them on, turn one on at random and the others off, as
 // one change with Undo. Sub-mods aren't outfits: they follow their parent. Characters with every mod off stay that way. Runs from a button (Mods, Characters, search) or on its own: each time you press Play, or at
-// the first Play of the day (Settings, Mods and downloads). Mods hidden as for adults stay out of it. Owner: LIBRARY area.
+// the first Play of the day (Settings, Mods). Mods hidden as for adults stay out of it. Owner: LIBRARY area.
 import { library, type GameId, type ModEntry } from "../../lib/api";
 import { nsfwPref, pref } from "../../lib/prefs";
 import { toast } from "../../ui/toast";
 import { changeStates } from "./data";
+import { t, tn } from "../../lib/i18n";
 
 export type ShuffleWhen = "off" | "play" | "day";
 export const shuffleWhenPref = pref<ShuffleWhen>("mods.shuffle", "off", (r) => (r === "play" || r === "day" || r === "off" ? r : undefined), (v) => v);
@@ -34,8 +35,8 @@ export async function shuffleOutfits(game: GameId): Promise<number> {
     offs.push(...wearing.filter((m) => m.id !== pick.id).map((m) => m.id));
     n++;
   }
-  if (!n) { toast("Nothing to shuffle yet. A character needs two or more mods, with one of them on"); return 0; }
-  await changeStates(game, `Shuffled outfits for ${n === 1 ? "1 character" : `${n} characters`}`, ons, offs, mods);
+  if (!n) { toast(t("Nothing to shuffle yet. A character needs two or more mods, with one of them on")); return 0; }
+  await changeStates(game, tn(n, "Shuffled outfits for {n} character", "Shuffled outfits for {n} characters"), ons, offs, mods);
   return n;
 }
 

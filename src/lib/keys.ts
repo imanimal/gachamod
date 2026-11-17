@@ -3,6 +3,7 @@
 // Ctrl+= - 0 (lib/zoom.ts) live with what they change. Owner: SHELL area.
 import { KEY_VIEWS, viewLabel } from "../shell/names";
 import { currentGame } from "./store";
+import { stops, t } from "./i18n";
 
 // The Ctrl+1 ... 8 line names the fourth page as the current game does (Resonators in WuWa, Agents in ZZZ). It's
 // read each time the list draws, so it follows game switches.
@@ -13,55 +14,55 @@ Object.defineProperty(viewKeys, 1, {
 });
 
 export const SHORTCUTS: Array<[string, string]> = [
-  ["Ctrl+K, or start typing", "Search everything: pages, mods, characters, settings, actions"],
-  ["/", "Find: the search field of the screen or the open window"],
-  ["Ctrl+F", "Find, too"],
+  [t("Ctrl+K, or start typing"), t("Search everything: pages, mods, characters, settings, actions")],
+  ["/", t("Find: the search field of the screen or the open window")],
+  ["Ctrl+F", t("Find, too")],
   viewKeys,
-  ["Alt+Left, Alt+Right", "Back, forward (mouse buttons 4 and 5 too)"],
-  ["Ctrl+Tab, Ctrl+Shift+Tab", "Next or previous game"],
-  ["Ctrl+Enter", "Play the current game"],
-  ["Ctrl+B", "Fold the sidebar to icons, or unfold it"],
-  ["F6, Shift+F6", "Move between the page, messages, title bar and sidebar"],
-  ["Shift+F10, Menu key", "The focused thing's right-click menu"],
-  ["Escape", "Close the top window, drawer or menu"],
-  ["Ctrl+Z, Ctrl+Y", "Undo, redo"],
-  ["Ctrl+=, Ctrl+-, Ctrl+0", "Text size"],
-  ["?", "This list"],
+  ["Alt+Left, Alt+Right", t("Back, forward (mouse buttons 4 and 5 too)")],
+  ["Ctrl+Tab, Ctrl+Shift+Tab", t("Next or previous game")],
+  ["Ctrl+Enter", t("Play the current game")],
+  ["Ctrl+B", t("Fold the sidebar to icons, or unfold it")],
+  ["F6, Shift+F6", t("Move between the page, messages, title bar and sidebar")],
+  [t("Shift+F10, Menu key"), t("The focused thing's right-click menu")],
+  ["Escape", t("Close the top window, drawer or menu")],
+  ["Ctrl+Z, Ctrl+Y", t("Undo, redo")],
+  ["Ctrl+=, Ctrl+-, Ctrl+0", t("Text size")],
+  ["?", t("This list")],
 ];
 
 /** Keys on a mod card or row, for the shortcuts list. */
 export const MOD_SHORTCUTS: Array<[string, string]> = [
-  ["Enter", "Open its details"],
-  ["Space", "Turn it on or off (the selected mods, when it's one of them)"],
-  ["Shift+Space", "Turn it on and keep the character's other mods on too"],
-  ["Ctrl+Space, Ctrl+click", "Select it, or take it out of the selection"],
-  ["Shift+arrow keys, Shift+click", "Select a range"],
-  ["Ctrl+A", "Select every mod shown"],
-  ["F2", "Rename"],
-  ["Del", "Move to the trash"],
-  ["Arrow keys, Home, End", "Move between mods"],
-  ["I", "Install, on a Browse card"],
-  ["O", "Mark as owned, on a character's page"],
+  ["Enter", t("Open its details")],
+  ["Space", t("Turn it on or off (the selected mods, when it's one of them)")],
+  ["Shift+Space", t("Turn it on and keep the character's other mods on too")],
+  [t("Ctrl+Space, Ctrl+click"), t("Select it, or take it out of the selection")],
+  [t("Shift+arrow keys, Shift+click"), t("Select a range")],
+  ["Ctrl+A", t("Select every mod shown")],
+  ["F2", t("Rename")],
+  ["Del", t("Move to the trash")],
+  [t("Arrow keys, Home, End"), t("Move between mods")],
+  ["I", t("Install, on a Browse card")],
+  ["O", t("Mark as owned, on a character's page")],
 ];
 
 /** The controller's buttons (Xbox names; PlayStation's are in the same places), for the shortcuts list. */
 export const PAD_SHORTCUTS: Array<[string, string]> = [
-  ["D-pad, left stick", "Move between buttons"],
-  ["A", "Press"],
-  ["B", "Close, or back"],
-  ["X", "The focused mod's main action"],
-  ["Y", "Find, or search everything"],
-  ["LB, RB", "Previous, next view"],
-  ["View + LB, View + RB", "Previous, next game"],
-  ["View + Y", "The newest message's button"],
-  ["LT, RT, right stick", "Scroll"],
-  ["View (tap)", "Back"],
-  ["Right stick press", "The focused thing's menu"],
-  ["Menu", "Play"],
+  [t("D-pad, left stick"), t("Move between buttons")],
+  ["A", t("Press")],
+  ["B", t("Close, or back")],
+  ["X", t("The focused mod's main action")],
+  ["Y", t("Find, or search everything")],
+  ["LB, RB", t("Previous, next view")],
+  ["View + LB, View + RB", t("Previous, next game")],
+  ["View + Y", t("The newest message's button")],
+  [t("LT, RT, right stick"), t("Scroll")],
+  [t("View (tap)"), t("Back")],
+  [t("Right stick press"), t("The focused thing's menu")],
+  [t("Menu"), t("Play")],
 ];
 
-const typing = (t: EventTarget | null) => {
-  const el = t as HTMLElement | null;
+const typing = (target: EventTarget | null) => {
+  const el = target as HTMLElement | null;
   return !!el && (el.isContentEditable || (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !["checkbox", "radio", "button"].includes((el as HTMLInputElement).type)));
 };
 
@@ -88,8 +89,8 @@ const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([t
 /** Focus the newest message's button (its action, else Dismiss). False when no message shows. */
 export function focusToast(): boolean {
   const all = [...document.querySelectorAll<HTMLElement>(".toasts .toast:not(.gone)")];
-  const t = all[all.length - 1];
-  const b = t?.querySelector<HTMLElement>(".toast-act") ?? t?.querySelector<HTMLElement>(".toast-x");
+  const last = all[all.length - 1];
+  const b = last?.querySelector<HTMLElement>(".toast-act") ?? last?.querySelector<HTMLElement>(".toast-x");
   if (!b) return false;
   document.documentElement.classList.add("kbd");
   b.focus();
@@ -190,7 +191,7 @@ export function installTips(): () => void {
   let cur: HTMLElement | null = null;
   // the element just clicked: its tip stays away until the pointer leaves it
   let clicked: HTMLElement | null = null;
-  const tipped = (t: EventTarget | null) => (t as Element | null)?.closest?.(TIPPED) as HTMLElement | null;
+  const tipped = (target: EventTarget | null) => (target as Element | null)?.closest?.(TIPPED) as HTMLElement | null;
   const hide = () => {
     clearTimeout(timer);
     if (cur?.dataset.tip !== undefined && !cur.getAttribute("title")) { cur.setAttribute("title", cur.dataset.tip); delete cur.dataset.tip; }
@@ -202,7 +203,7 @@ export function installTips(): () => void {
     let text = el.getAttribute("title") || el.dataset.tip || el.getAttribute("aria-label");
     // Buttons: icons only hides a button's name, so its tip starts with it
     const hidden = el.matches(ICONS_ONLY) ? el.querySelector(":scope > .btn-t")?.textContent?.trim() ?? "" : "";
-    if (hidden && !(text ?? "").toLowerCase().startsWith(hidden.toLowerCase())) text = text ? `${hidden}. ${text}` : hidden;
+    if (hidden && !(text ?? "").toLowerCase().startsWith(hidden.toLowerCase())) text = text ? stops([hidden, text]) : hidden;
     if (!text) return;
     hide();
     cur = el;
@@ -214,10 +215,10 @@ export function installTips(): () => void {
       tip.setAttribute("role", "tooltip");
       tip.textContent = text;
       (document.querySelector(".app") ?? document.body).appendChild(tip);
-      const r = el.getBoundingClientRect(), t = tip.getBoundingClientRect(), pad = 8;
+      const r = el.getBoundingClientRect(), box = tip.getBoundingClientRect(), pad = 8;
       let top = r.bottom + 6;
-      if (top + t.height > window.innerHeight - pad) top = r.top - t.height - 6;
-      const left = Math.max(pad, Math.min(window.innerWidth - t.width - pad, r.left + r.width / 2 - t.width / 2));
+      if (top + box.height > window.innerHeight - pad) top = r.top - box.height - 6;
+      const left = Math.max(pad, Math.min(window.innerWidth - box.width - pad, r.left + r.width / 2 - box.width / 2));
       tip.style.left = `${left}px`; tip.style.top = `${Math.max(pad, top)}px`;
     }, 380);
   };

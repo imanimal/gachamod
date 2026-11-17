@@ -13,6 +13,7 @@ import { toast } from "../../ui/toast";
 import { characterNames } from "../characters/roster";
 import { addTag, modsName, removeTag, renameMod, setCharacter } from "./actions";
 import { Preview } from "./Preview";
+import { t } from "../../lib/i18n";
 
 type Ask =
   | { kind: "rename"; game: GameId; mod: ModEntry }
@@ -51,7 +52,7 @@ function Host() {
 /** Every tag used in the library, once each (the first spelling met), for a tag field's suggestions. */
 export function libraryTags(mods: ModEntry[]): string[] {
   const seen = new Map<string, string>();
-  for (const m of mods) for (const t of m.tags) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+  for (const m of mods) for (const tag of m.tags) if (!seen.has(tag.toLowerCase())) seen.set(tag.toLowerCase(), tag);
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
@@ -65,15 +66,15 @@ function RenameDialog({ game, mod }: { game: GameId; mod: ModEntry }) {
   }, []);
   const save = async () => { await renameMod(game, mod, name); close(); };
   return (
-    <Dialog title="Rename" icon="edit" size="sm" onClose={close} footer={<>
-      <Button variant="ghost" onClick={close}>Cancel</Button>
-      <Button variant="primary" disabled={!name.trim()} onClick={() => void save()}>Rename</Button>
+    <Dialog title={t("Rename")} icon="edit" size="sm" onClose={close} footer={<>
+      <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>
+      <Button variant="primary" disabled={!name.trim()} onClick={() => void save()}>{t("Rename")}</Button>
     </>}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <label className="field">
-          <span className="field-l">Name</span>
+          <span className="field-l">{t("Name")}</span>
           <input ref={input} value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-          <span className="hint">Only the name shown here changes. The folder stays as it is.</span>
+          <span className="hint">{t("Only the name shown here changes. The folder stays as it is.")}</span>
         </label>
       </form>
     </Dialog>
@@ -90,16 +91,16 @@ function CharacterDialog({ game, mods }: { game: GameId; mods: ModEntry[] }) {
   const q = name.trim().toLowerCase();
   const picks = q ? names.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 8) : [];
   return (
-    <Dialog title={`Character of ${modsName(mods)}`} icon="characters" size="sm" onClose={close} footer={<>
-      {firstChar && <Button variant="ghost" onClick={() => void save("")} title="The mods won't belong to any character">Clear</Button>}
+    <Dialog title={t("Character of {mods}", { mods: modsName(mods) })} icon="characters" size="sm" onClose={close} footer={<>
+      {firstChar && <Button variant="ghost" onClick={() => void save("")} title={t("The mods won't belong to any character")}>{t("Clear")}</Button>}
       <span className="grow" />
-      <Button variant="ghost" onClick={close}>Cancel</Button>
-      <Button variant="primary" disabled={!name.trim()} onClick={() => void save(name)}>Set</Button>
+      <Button variant="ghost" onClick={close}>{t("Cancel")}</Button>
+      <Button variant="primary" disabled={!name.trim()} onClick={() => void save(name)}>{t("Set")}</Button>
     </>}>
       <form className="lib-ask" onSubmit={(e) => { e.preventDefault(); if (q) void save(names.find((c) => c.name.toLowerCase() === q)?.name ?? name); }}>
         <label className="field">
-          <span className="field-l">Character</span>
-          <input list={listId} value={name} autoFocus spellCheck={false} placeholder="Type a name, like Ellen" onChange={(e) => setName(e.target.value)} />
+          <span className="field-l">{t("Character")}</span>
+          <input list={listId} value={name} autoFocus spellCheck={false} placeholder={t("Type a name, like Ellen")} onChange={(e) => setName(e.target.value)} />
           <datalist id={listId}>{names.map((c) => <option key={c.name} value={c.name} />)}</datalist>
         </label>
         {picks.length > 0 && (
@@ -129,25 +130,25 @@ function TagsDialog({ game, ids, first }: { game: GameId; ids: string[]; first: 
     if (all) { const want = new Set(ids); setMods(all.filter((m) => want.has(m.id))); }
   };
   const counts = new Map<string, { tag: string; n: number }>();
-  for (const m of mods) for (const t of m.tags) {
-    const k = t.toLowerCase();
-    const c = counts.get(k) ?? { tag: t, n: 0 };
+  for (const m of mods) for (const tg of m.tags) {
+    const k = tg.toLowerCase();
+    const c = counts.get(k) ?? { tag: tg, n: 0 };
     c.n++;
     counts.set(k, c);
   }
-  const add = async () => { const t = tag.trim(); setTag(""); if (t && await addTag(game, mods, t)) await refresh(); };
+  const add = async () => { const tg = tag.trim(); setTag(""); if (tg && await addTag(game, mods, tg)) await refresh(); };
   return (
-    <Dialog title={`Tags for ${modsName(mods)}`} icon="tag" size="sm" onClose={close} footer={<Button variant="primary" onClick={close}>Done</Button>}>
+    <Dialog title={t("Tags for {mods}", { mods: modsName(mods) })} icon="tag" size="sm" onClose={close} footer={<Button variant="primary" onClick={close}>{t("Done")}</Button>}>
       <form className="lib-ask" onSubmit={(e) => { e.preventDefault(); void add(); }}>
         <label className="field">
-          <span className="field-l">Add a tag</span>
-          <input list={listId} value={tag} autoFocus spellCheck={false} placeholder="Like outfit or summer" onChange={(e) => setTag(e.target.value)} />
-          <datalist id={listId}>{known.filter((t) => !counts.has(t.toLowerCase()) || counts.get(t.toLowerCase())!.n < mods.length).map((t) => <option key={t} value={t} />)}</datalist>
+          <span className="field-l">{t("Add a tag")}</span>
+          <input list={listId} value={tag} autoFocus spellCheck={false} placeholder={t("Like outfit or summer")} onChange={(e) => setTag(e.target.value)} />
+          <datalist id={listId}>{known.filter((k) => !counts.has(k.toLowerCase()) || counts.get(k.toLowerCase())!.n < mods.length).map((k) => <option key={k} value={k} />)}</datalist>
         </label>
         {counts.size > 0 && (
           <div className="lib-ask-picks">
             {[...counts.values()].sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)).map((c) => (
-              <button key={c.tag} type="button" className="chip" title={`Remove "${c.tag}"${mods.length > 1 ? ` from the ${c.n === 1 ? "mod that has it" : `${c.n} mods that have it`}` : ""}`}
+              <button key={c.tag} type="button" className="chip" title={mods.length <= 1 ? t("Remove \"{tag}\"", { tag: c.tag }) : c.n === 1 ? t("Remove \"{tag}\" from the mod that has it", { tag: c.tag }) : t("Remove \"{tag}\" from the {n} mods that have it", { tag: c.tag, n: c.n })}
                 onClick={() => void removeTag(game, mods, c.tag).then((ok) => { if (ok) void refresh(); })}>
                 <span className="chip-t">{c.tag}</span>
                 {mods.length > 1 && <span className="chip-n">{c.n}</span>}
@@ -176,7 +177,7 @@ function shrink(file: Blob): Promise<string> {
       URL.revokeObjectURL(url);
       resolve(c.toDataURL("image/webp", 0.88));
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file isn't an image")); };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(t("That file isn't an image"))); };
     img.src = url;
   });
 }
@@ -191,7 +192,7 @@ function PortraitDialog({ game, name }: { game: GameId; name: string }) {
   const use = (src: string | null) => { setCustomPortrait(game, name, src); close(); };
   const pick = async () => {
     if (inTauri()) {
-      const r = await dialogs.pickFiles({ title: `A picture for ${name}`, extensions: IMAGE_EXTS });
+      const r = await dialogs.pickFiles({ title: t("A picture for {name}", { name }), extensions: IMAGE_EXTS });
       const src = r?.[0] ? fileUrl(r[0]) : undefined;
       if (src) use(src);
       return;
@@ -204,20 +205,20 @@ function PortraitDialog({ game, name }: { game: GameId; name: string }) {
   };
   const okUrl = /^https?:\/\/\S+$/i.test(url.trim());
   return (
-    <Dialog title={`Picture for ${name}`} icon="image" size="sm" onClose={close} footer={<>
-      {custom && <Button variant="ghost" onClick={() => use(null)} title="Use the usual portrait again">Back to the default</Button>}
+    <Dialog title={t("Picture for {name}", { name })} icon="image" size="sm" onClose={close} footer={<>
+      {custom && <Button variant="ghost" onClick={() => use(null)} title={t("Use the usual portrait again")}>{t("Back to the default")}</Button>}
       <span className="grow" />
-      <Button onClick={close} variant="ghost">Cancel</Button>
-      <Button icon="folder" onClick={() => void pick()} title="Use a picture from this PC">Pick a file</Button>
+      <Button onClick={close} variant="ghost">{t("Cancel")}</Button>
+      <Button icon="folder" onClick={() => void pick()} title={t("Use a picture from this PC")}>{t("Pick a file")}</Button>
     </>}>
       <form className="lib-ask" onSubmit={(e) => { e.preventDefault(); if (okUrl) use(url.trim()); }}>
         <div className="lib-ask-now"><Portrait game={game} name={name} size="4.5rem" ring /></div>
         <div className="lib-ask-url">
-          <TextField label="Image link" value={url} onChange={setUrl} placeholder="https://..." />
-          <Button type="submit" disabled={!okUrl}>Use</Button>
+          <TextField label={t("Image link")} value={url} onChange={setUrl} placeholder="https://..." />
+          <Button type="submit" disabled={!okUrl}>{t("Use")}</Button>
         </div>
         {previews.length > 0 && <>
-          <span className="field-l">Or one of {name}'s mod previews</span>
+          <span className="field-l">{t("Or one of {name}'s mod previews", { name })}</span>
           <div className="lib-ask-previews">
             {previews.map((m) => (
               <button key={m.id} type="button" className="lib-ask-prev" title={m.name} onClick={() => use(fileUrl(m.preview) ?? m.preview!)}>

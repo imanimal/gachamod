@@ -173,6 +173,9 @@ pub fn run() {
             gacha_core::render_log::init(&logs_dir, render::setting(&state.db));
             let log = std::env::args().any(|a| a == BROWSER_LOG_ARG);
             app.manage(state);
+            // the console (src/dev/console) shows the log as it's written
+            let logs_to = app.handle().clone();
+            gacha_core::logs::set_sink(move |level, text| { let _ = logs_to.emit(events::APP_LOG, serde_json::json!({ "level": level.name(), "text": text })); });
             app.manage(Flags { gpu, log });
             let main = main_window(app, Flags { gpu, log })?;
             render::watch_window(&main);
@@ -185,6 +188,12 @@ pub fn run() {
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
             if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
+            // LIBRARY: each game's Mods folder is watched, so mods added, renamed or removed outside gachamod show up
+            // at once (gacha_core::watch runs the same scan as Rescan and says when the list changed)
+            let watched = app.handle().clone();
+            gacha_core::watch::start(app.state::<state::AppState>().db.clone(), move |g| {
+                let _ = watched.emit(events::LIBRARY_CHANGED, serde_json::json!({ "game": g }));
+            });
             // INGAME: live.ini says who holds the menu key for this run (its pictures may be drawn again: off the
             // main thread)
             let live_db = app.state::<state::AppState>().db.clone();
@@ -284,6 +293,7 @@ pub fn run() {
             commands::modtools::conflict_drop,
             commands::modtools::lint_scan,
             commands::modtools::lint_fix,
+            commands::modtools::merged_split,
             commands::account::gb_account,
             commands::account::gb_sign_in,
             commands::account::gb_sign_out,
@@ -325,6 +335,7 @@ pub fn run() {
             commands::report::telemetry_events,
             commands::report::feedback_send,
             commands::report::log_write,
+            commands::report::log_tail,
             commands::report::report_ui_error,
             render::render_events,
             render::render_state,
@@ -345,6 +356,11 @@ pub fn run() {
             commands::modtools::pack_import,
             commands::modtools::imm_detect,
             commands::modtools::imm_takeover,
+            commands::modtools::nrmm_detect,
+            commands::modtools::nrmm_takeover,
+            commands::migrate::migrate_detect,
+            commands::migrate::migrate_import,
+            commands::migrate::migrate_undo,
             commands::modtools::keys_list,
             commands::modtools::keys_rebind,
             commands::modtools::keys_set_off,

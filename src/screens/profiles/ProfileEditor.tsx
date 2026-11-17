@@ -4,11 +4,12 @@
 // in-game hotkey. Enter in a one-line field saves. Saving can be undone. Owner: HOME/PROFILES area.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { dialogs, errorText, hotkeys, library, type Character, type GameId, type ModEntry, type Profile } from "../../lib/api";
-import { article, charNoun } from "../../lib/games";
+import { charNoun } from "../../lib/games";
+import { t, tb, tn } from "../../lib/i18n";
 import { go } from "../../lib/store";
 import { onColor as inkOn } from "../../lib/theme";
 import { Icon } from "../../ui/Icon";
-import { Button, Dialog, Segmented, Tabs, TextField, Waiting, plural } from "../../ui/kit";
+import { Button, Dialog, Segmented, Tabs, TextField, Waiting } from "../../ui/kit";
 import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
 import { Preview } from "../library/Preview";
@@ -50,7 +51,7 @@ async function pickPicture(title: string): Promise<string | null> {
     input.click();
   });
 }
-const pictureName = (v: string) => (v.startsWith("data:") ? "Picked picture" : v.split(/[\\/]/).pop() ?? v);
+const pictureName = (v: string) => (v.startsWith("data:") ? t("Picked picture") : v.split(/[\\/]/).pop() ?? v);
 
 /** The name a new profile gets unless one is typed: "New profile", or "New profile (2)" when that is taken (the
  *  backend numbers names the same way). */
@@ -60,7 +61,7 @@ function freeName(game: GameId, base: string) {
   for (let n = 2; names.has(cand.toLowerCase()); n++) cand = `${base} (${n})`;
   return cand;
 }
-const baseName = (s: NewStart) => (s === "empty" ? "No mods" : "New profile");
+const baseName = (s: NewStart) => (s === "empty" ? t("No mods") : t("New profile"));
 
 /** The new-profile window, for whichever screen asked (the sidebar, Home, Profiles, search). Lives in App. */
 export function NewProfileHost() {
@@ -98,12 +99,12 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
   // A new profile, and Rename from a profile's page, open with the name selected, so typing replaces it and Enter saves.
   useEffect(() => {
     if (!focus && !making) return;
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (focus === "hotkey") keyRef.current?.querySelector("input")?.focus();
       else if (focus && focus !== "name") setOpen(focus);
       else { const i = fieldsRef.current?.querySelector("input"); i?.focus(); i?.select(); }
     }, 80);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [focus, making]);
 
   const pickStart = (s: NewStart) => {
@@ -117,8 +118,8 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
     if (!p) return;
     // made already, so a combo another app holds is a note, not a reason to stay open
     if (hotkey) {
-      const t = (await hotkeys.sync().catch(() => [])).find((x) => x.combo === hotkey);
-      if (t) toast(t.reason, true);
+      const clash = (await hotkeys.sync().catch(() => [])).find((x) => x.combo === hotkey);
+      if (clash) toast(clash.reason, true);
     }
     onClose();
   };
@@ -131,11 +132,11 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
       const patch = { name: shownName, description, icon, color, banner, hotkey };
       const changed = Object.fromEntries(Object.entries(patch).filter(([k, v]) => v !== ((profile as unknown as Record<string, string | null>)[k] ?? "")));
       if (!Object.keys(changed).length) { onClose(); return; }
-      if (!(await patchProfile(game, profile, changed, `Changed ${patch.name}`))) return;
+      if (!(await patchProfile(game, profile, changed, t("Changed {name}", { name: patch.name })))) return;
       // another app holding the combo keeps the editor open with the field marked
       const list = hotkey !== (profile.hotkey ?? "") ? await hotkeys.sync().catch(() => []) : [];
-      const t = hotkey ? list.find((x) => x.combo === hotkey) : undefined;
-      if (t) { setTaken(t.reason); toast(t.reason, true); return; }
+      const clash = hotkey ? list.find((x) => x.combo === hotkey) : undefined;
+      if (clash) { setTaken(tb(clash.reason)); toast(clash.reason, true); return; }
       onClose();
     } catch (e) { toast(errorText(e), true); }
     finally { setSaving(false); }
@@ -148,51 +149,51 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
   };
 
   return (
-    <Dialog title={profile ? `Edit ${profile.name}` : "New profile"} icon={profile ? "edit" : "plus"} className="profile-editor" onClose={onClose}
+    <Dialog title={profile ? t("Edit {name}", { name: profile.name }) : t("New profile")} icon={profile ? "edit" : "plus"} className="profile-editor" onClose={onClose}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" busy={saving} onClick={() => void save()} title={making ? "Make the profile (Enter)" : "Save (Enter)"}>{making ? "Create" : "Save"}</Button>
+        <Button variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
+        <Button variant="primary" busy={saving} onClick={() => void save()} title={making ? t("Make the profile (Enter)") : t("Save (Enter)")}>{making ? t("Create") : t("Save")}</Button>
       </>}>
       <div className="profile-editor-top" style={color ? ({ "--p-color": color } as CSSProperties) : undefined}>
         <button ref={bannerBtn} type="button" className={`pe-banner${open === "banner" ? " on" : ""}`} onClick={() => toggle("banner")}
-          title={banner ? "Change the banner" : "Add a banner"} aria-expanded={open === "banner"} aria-haspopup="dialog">
+          title={banner ? t("Change the banner") : t("Add a banner")} aria-expanded={open === "banner"} aria-haspopup="dialog">
           <Preview className="profile-editor-banner" src={banner || null} icon="image" />
-          <span className="pe-hint"><Icon name="image" />{banner ? "Change banner" : "Add a banner"}</span>
+          <span className="pe-hint"><Icon name="image" />{banner ? t("Change banner") : t("Add a banner")}</span>
         </button>
         <button ref={iconBtn} type="button" className={`pe-icon${open === "icon" ? " on" : ""}`} onClick={() => toggle("icon")}
-          title="Change the icon and colour" aria-expanded={open === "icon"} aria-haspopup="dialog">
+          title={t("Change the icon and colour")} aria-expanded={open === "icon"} aria-haspopup="dialog">
           <ProfileIcon profile={{ icon, name: shownName, color }} chars={chars} size={64} />
           <span className="pe-icon-edit" aria-hidden="true"><Icon name="edit" /></span>
         </button>
       </div>
 
       <div className="profile-editor-fields" ref={fieldsRef} onKeyDown={onFieldKey}>
-        <TextField label="Name" value={name} onChange={(v) => { named.current = true; setName(v); }} placeholder={profile?.name ?? baseName(start)} />
+        <TextField label={t("Name")} value={name} onChange={(v) => { named.current = true; setName(v); }} placeholder={profile?.name ?? baseName(start)} />
         {making && (
           <div className="field">
-            <span className="field-l">Start with</span>
-            <Segmented<NewStart> label="Start with" value={start} onChange={pickStart} options={[
-              { value: "now", label: "The mods on now", title: "Saves which mods are on now and their options" },
-              { value: "empty", label: "No mods", title: "Every mod off, for playing without mods" },
+            <span className="field-l">{t("Start with")}</span>
+            <Segmented<NewStart> label={t("Start with")} value={start} onChange={pickStart} options={[
+              { value: "now", label: t("The mods on now"), title: t("Saves which mods are on now and their options") },
+              { value: "empty", label: t("No mods"), title: t("Every mod off, for playing without mods") },
             ]} />
-            <span className="hint">{start === "now"
-              ? `Saves ${onNow === undefined ? "the mods" : plural(onNow, "mod")} on now and their options.`
-              : "Switching to it turns every mod off, like a clean game."}</span>
+            <span className="hint">{start !== "now" ? t("Switching to it turns every mod off, like a clean game.")
+              : onNow === undefined ? t("Saves the mods on now and their options.")
+              : tn(onNow, "Saves {n} mod on now and its options.", "Saves {n} mods on now and their options.")}</span>
           </div>
         )}
-        <TextField label="Description" multiline rows={2} value={description} onChange={setDescription} placeholder="What this loadout is for" />
-        <div ref={keyRef}><HotkeyField label="In-game hotkey" value={hotkey} onChange={(v) => { setHotkey(v); setTaken(null); }} taken={taken}
-          hint={holder ? `${holder.name} uses ${hotkey}. ${making ? "Creating" : "Saving"} moves it here`
-            : "Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1"} /></div>
+        <TextField label={t("Description")} multiline rows={2} value={description} onChange={setDescription} placeholder={t("What this loadout is for")} />
+        <div ref={keyRef}><HotkeyField label={t("In-game hotkey")} value={hotkey} onChange={(v) => { setHotkey(v); setTaken(null); }} taken={taken}
+          hint={holder ? (making ? t("{name} uses {key}. Creating moves it here", { name: holder.name, key: hotkey }) : t("{name} uses {key}. Saving moves it here", { name: holder.name, key: hotkey }))
+            : t("Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1")} /></div>
       </div>
 
       {open === "icon" && (
-        <Popover anchor={iconBtn.current} onClose={() => setOpen(null)} width="25rem" label="Icon and colour" align="start">
+        <Popover anchor={iconBtn.current} onClose={() => setOpen(null)} width="25rem" label={t("Icon and colour")} align="start">
           <IconPicker game={game} icon={icon} color={color} name={shownName} chars={chars} onIcon={setIcon} onColor={setColor} />
         </Popover>
       )}
       {open === "banner" && (
-        <Popover anchor={bannerBtn.current} onClose={() => setOpen(null)} width="32rem" label="Banner" align="start">
+        <Popover anchor={bannerBtn.current} onClose={() => setOpen(null)} width="32rem" label={t("Banner")} align="start">
           <BannerPicker game={game} banner={banner} onPick={(b) => { setBanner(b); setOpen(null); }} />
         </Popover>
       )}
@@ -203,11 +204,11 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
 /** Moves keyboard and controller focus into a picker when it opens: the picked item, else the first one. */
 function useFocusIn(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       const el = ref.current?.querySelector<HTMLElement>("[aria-checked='true'], button, input");
       el?.focus({ preventScroll: true });
     }, 30);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [ref]);
 }
 
@@ -221,40 +222,40 @@ function IconPicker({ game, icon, color, name, chars, onIcon, onColor }:
   const portraits = chars.filter((c) => c.icon && (!query || c.name.toLowerCase().includes(query)));
   const picture = icon.startsWith("img:") ? icon.slice(4) : "";
   const pick = async () => {
-    try { const v = await pickPicture("Pick a picture for the icon"); if (v) onIcon(`img:${v}`); } catch (e) { toast(errorText(e), true); }
+    try { const v = await pickPicture(t("Pick a picture for the icon")); if (v) onIcon(`img:${v}`); } catch (e) { toast(errorText(e), true); }
   };
   const fill = /^#[0-9a-f]{6}$/i.test(color) ? ({ "--pe-c": color, "--pe-on": inkOn(color) } as CSSProperties) : undefined;
 
   return (
     <div className="pe-pick" ref={box}>
-      <div className="pe-colors" role="radiogroup" aria-label="Colour">
-        <button type="button" role="radio" aria-checked={!color} className={`pe-nocolor${!color ? " on" : ""}`} onClick={() => onColor("")} title="No colour">
+      <div className="pe-colors" role="radiogroup" aria-label={t("Colour")}>
+        <button type="button" role="radio" aria-checked={!color} className={`pe-nocolor${!color ? " on" : ""}`} onClick={() => onColor("")} title={t("No colour")}>
           <Icon name="block" />
         </button>
         {PROFILE_COLORS.map((c) => (
           <button key={c} type="button" role="radio" aria-checked={color.toLowerCase() === c} className={`swatch${color.toLowerCase() === c ? " on" : ""}`}
             style={{ "--c": c } as CSSProperties} aria-label={c} title={c} onClick={() => onColor(c)} />
         ))}
-        <label className={`swatch pe-anycolor${color && !PROFILE_COLORS.includes(color.toLowerCase()) ? " on" : ""}`} title="Any colour"
+        <label className={`swatch pe-anycolor${color && !PROFILE_COLORS.includes(color.toLowerCase()) ? " on" : ""}`} title={t("Any colour")}
           style={color && !PROFILE_COLORS.includes(color.toLowerCase()) ? ({ "--c": color } as CSSProperties) : undefined}>
-          <input type="color" value={/^#[0-9a-f]{6}$/i.test(color) ? color : "#808080"} onChange={(e) => onColor(e.target.value)} aria-label="Any colour" />
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(color) ? color : "#808080"} onChange={(e) => onColor(e.target.value)} aria-label={t("Any colour")} />
         </label>
       </div>
-      <Tabs<IconTab> value={tab} onChange={setTab} tabs={[{ value: "picture", label: "From this PC" }, { value: "icons", label: "Icons" },
-        { value: "emoji", label: "Emoji" }, { value: "character", label: charNoun(game, true) }]} />
+      <Tabs<IconTab> value={tab} onChange={setTab} tabs={[{ value: "picture", label: t("From this PC") }, { value: "icons", label: t("Icons") },
+        { value: "emoji", label: t("Emoji") }, { value: "character", label: charNoun(game, true) }]} />
       {tab === "picture" && (
         <div className="pe-file">
           {picture && <ProfileIcon profile={{ icon, name, color }} chars={chars} size={56} />}
           <span className="pe-file-t">
-            <Button icon="image" variant={picture ? "secondary" : "primary"} onClick={() => void pick()}>{picture ? "Pick another picture" : "Pick a picture"}</Button>
-            <span className="hint">{picture ? pictureName(picture) : "PNG, JPG, WebP or GIF. A square one fits best."}</span>
+            <Button icon="image" variant={picture ? "secondary" : "primary"} onClick={() => void pick()}>{picture ? t("Pick another picture") : t("Pick a picture")}</Button>
+            <span className="hint">{picture ? pictureName(picture) : t("PNG, JPG, WebP or GIF. A square one fits best.")}</span>
           </span>
-          {picture && <Button size="sm" variant="ghost" icon="x" onClick={() => onIcon("")} title="Use the name's first letters instead">Remove</Button>}
+          {picture && <Button size="sm" variant="ghost" icon="x" onClick={() => onIcon("")} title={t("Use the name's first letters instead")}>{t("Remove")}</Button>}
         </div>
       )}
       {tab === "icons" && (
-        <div className="pe-grid" role="radiogroup" aria-label="Icon" style={fill}>
-          <button type="button" role="radio" aria-checked={!icon} className={`pe-tile pe-initials${!icon ? " on" : ""}`} title={`No icon: ${/^default$/i.test(name.trim()) ? "the layers mark" : "the name's first letters"}`} onClick={() => onIcon("")}>Aa</button>
+        <div className="pe-grid" role="radiogroup" aria-label={t("Icon")} style={fill}>
+          <button type="button" role="radio" aria-checked={!icon} className={`pe-tile pe-initials${!icon ? " on" : ""}`} title={/^default$/i.test(name.trim()) ? t("No icon: the layers mark") : t("No icon: the name's first letters")} onClick={() => onIcon("")}>Aa</button>
           {PROFILE_GLYPHS.map((g) => {
             const v = `icon:${g}`;
             return (
@@ -266,7 +267,7 @@ function IconPicker({ game, icon, color, name, chars, onIcon, onColor }:
         </div>
       )}
       {tab === "emoji" && (
-        <div className="pe-grid" role="radiogroup" aria-label="Emoji">
+        <div className="pe-grid" role="radiogroup" aria-label={t("Emoji")}>
           {EMOJIS.map((e) => (
             <button key={e} type="button" role="radio" aria-checked={icon === e} className={`pe-tile pe-emoji${icon === e ? " on" : ""}`} onClick={() => onIcon(e)}>{e}</button>
           ))}
@@ -274,7 +275,7 @@ function IconPicker({ game, icon, color, name, chars, onIcon, onColor }:
       )}
       {tab === "character" && (
         <>
-          <TextField value={q} onChange={setQ} placeholder={`Find ${article(charNoun(game, true).toLowerCase())} ${charNoun(game, true).toLowerCase()}`} />
+          <TextField value={q} onChange={setQ} placeholder={t("Search {nouns}", { nouns: charNoun(game).toLowerCase() })} />
           {portraits.length ? (
             <div className="pe-grid pe-portraits" role="radiogroup" aria-label={charNoun(game, true)}>
               {portraits.map((c) => {
@@ -286,11 +287,11 @@ function IconPicker({ game, icon, color, name, chars, onIcon, onColor }:
                 );
               })}
             </div>
-          ) : query ? <p className="hint">No {charNoun(game, true).toLowerCase()} by that name.</p> : (
+          ) : query ? <p className="hint">{t("No {noun} by that name.", { noun: charNoun(game, true).toLowerCase() })}</p> : (
             <div className="banner-link">
-              <span className="hint">No portraits yet. Opening {charNoun(game)} once loads them.</span>
+              <span className="hint">{t("No portraits yet. Opening {page} once loads them.", { page: charNoun(game) })}</span>
               <Button size="sm" icon="characters" onClick={() => go({ view: "characters" })}
-                title={`Goes to ${charNoun(game)}, which loads the portraits`}>Open {charNoun(game)}</Button>
+                title={t("Goes to {page}, which loads the portraits", { page: charNoun(game) })}>{t("Open {page}", { page: charNoun(game) })}</Button>
             </div>
           )}
         </>
@@ -320,21 +321,21 @@ function BannerPicker({ game, banner, onPick }: { game: GameId; banner: string; 
 
   const useLink = () => {
     if (/^https:\/\//i.test(link.trim())) onPick(link.trim());
-    else toast("That doesn't look like an https:// image link", true);
+    else toast(t("That doesn't look like an https:// image link"), true);
   };
   const pickFile = async () => {
-    try { const v = await pickPicture("Pick a banner picture"); if (v) onPick(v); } catch (e) { toast(errorText(e), true); }
+    try { const v = await pickPicture(t("Pick a banner picture")); if (v) onPick(v); } catch (e) { toast(errorText(e), true); }
   };
 
   return (
     <div className="pe-pick" ref={box}>
       <div className="pe-pick-h">
         <Tabs<BannerTab> value={tab} onChange={(v) => { touched.current = true; setTab(v); }}
-          tabs={[{ value: "file", label: "From this PC" }, { value: "mods", label: "A mod's preview" }, { value: "link", label: "Link" }]} />
-        {banner && <Button size="sm" variant="ghost" icon="x" onClick={() => onPick("")}>No banner</Button>}
+          tabs={[{ value: "file", label: t("From this PC") }, { value: "mods", label: t("A mod's preview") }, { value: "link", label: t("Link") }]} />
+        {banner && <Button size="sm" variant="ghost" icon="x" onClick={() => onPick("")}>{t("No banner")}</Button>}
       </div>
-      {tab === "mods" && (mods === null ? <Waiting what="Reading your mods" /> : mods.length ? (
-        <div className="pe-banners" role="radiogroup" aria-label="Mod previews">
+      {tab === "mods" && (mods === null ? <Waiting what={t("Reading your mods")} /> : mods.length ? (
+        <div className="pe-banners" role="radiogroup" aria-label={t("Mod previews")}>
           {mods.map((m) => (
             <button key={m.id} type="button" role="radio" aria-checked={banner === m.preview} className={`pe-banner-tile${banner === m.preview ? " on" : ""}`}
               title={m.name} onClick={() => onPick(m.preview ?? "")}>
@@ -342,17 +343,17 @@ function BannerPicker({ game, banner, onPick }: { game: GameId; banner: string; 
             </button>
           ))}
         </div>
-      ) : <p className="hint">No mod previews in this game yet.</p>)}
+      ) : <p className="hint">{t("No mod previews in this game yet.")}</p>)}
       {tab === "link" && (
         <div className="banner-link">
-          <TextField value={link} onChange={setLink} placeholder="https://images.gamebanana.com/img/ss/mods/..." hint="Any image link, like one from a GameBanana mod page" />
-          <Button onClick={useLink}>Use</Button>
+          <TextField value={link} onChange={setLink} placeholder="https://images.gamebanana.com/img/ss/mods/..." hint={t("Any image link, like one from a GameBanana mod page")} />
+          <Button onClick={useLink}>{t("Use")}</Button>
         </div>
       )}
       {tab === "file" && (
         <div className="banner-link">
-          <Button icon="image" variant={banner ? "secondary" : "primary"} onClick={() => void pickFile()}>{banner ? "Pick another picture" : "Pick a picture"}</Button>
-          <span className="hint">{banner && !/^https?:/.test(banner) ? pictureName(banner) : "PNG, JPG, WebP or GIF. A wide one fits best."}</span>
+          <Button icon="image" variant={banner ? "secondary" : "primary"} onClick={() => void pickFile()}>{banner ? t("Pick another picture") : t("Pick a picture")}</Button>
+          <span className="hint">{banner && !/^https?:/.test(banner) ? pictureName(banner) : t("PNG, JPG, WebP or GIF. A wide one fits best.")}</span>
         </div>
       )}
     </div>

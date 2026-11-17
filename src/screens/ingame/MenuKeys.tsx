@@ -3,6 +3,7 @@
 // open it. Tucked into a fold under the key that opens the menu. Owner: INGAME area.
 import { useEffect, useRef, useState } from "react";
 import { MENU_BINDS, type MenuSettings } from "../../lib/api";
+import { t } from "../../lib/i18n";
 import { Icon } from "../../ui/Icon";
 import { captureKeys } from "../../ui/KeyEditor";
 import { Button, IconButton } from "../../ui/kit";
@@ -13,22 +14,22 @@ import "../../ui/key-editor.css";
 const MOST = 4;
 
 const ROWS: Array<{ id: string; label: string; tip: string }> = [
-  { id: "up", label: "Move up", tip: "The row above. From the first row it goes to the last" },
-  { id: "down", label: "Move down", tip: "The row below. From the last row it goes to the first" },
-  { id: "show", label: "Show the skin", tip: "Shows the row's skin. On the list of characters it opens the character" },
-  { id: "back", label: "Back to characters", tip: "From a character's skins to the list of characters" },
-  { id: "close", label: "Close the menu", tip: "The key that opens the menu closes it too" },
-  { id: "open", label: "Open with a controller", tip: "Controller buttons only, pressed together. The keyboard key is Key that opens it, above" },
-  { id: "keys", label: "Show the key list", tip: "Shows the keys of the mods on screen, from the skin menu" },
+  { id: "up", label: t("Move up"), tip: t("The row above. From the first row it goes to the last") },
+  { id: "down", label: t("Move down"), tip: t("The row below. From the last row it goes to the first") },
+  { id: "show", label: t("Show the skin"), tip: t("Shows the row's skin. On the list of characters it opens the character") },
+  { id: "back", label: t("Back to characters"), tip: t("From a character's skins to the list of characters") },
+  { id: "close", label: t("Close the menu"), tip: t("The key that opens the menu closes it too") },
+  { id: "open", label: t("Open with a controller"), tip: t("Controller buttons only, pressed together. The keyboard key is Key that opens it, above") },
+  { id: "keys", label: t("Show the key list"), tip: t("Shows the keys of the mods on screen, from the skin menu") },
 ];
 
 const same = (a: string[], b: readonly string[]) => a.length === b.length && a.every((k, i) => k === b[i]);
 
 /** The row whose keys are controller buttons only. */
 const PAD_ROW = "open";
-const padOnly = (binding: string) => binding.split(/\s+/).filter(Boolean).every((t) => t.startsWith("XB_"));
+const padOnly = (binding: string) => binding.split(/\s+/).filter(Boolean).every((k) => k.startsWith("XB_"));
 /** What a chip asks for while it waits. */
-const pressText = (pad: boolean) => (pad ? "Press the controller buttons" : "Press the new key, combination or controller buttons");
+const waitTip = (pad: boolean) => (pad ? t("Press the controller buttons. Esc or B cancels") : t("Press the new key, combination or controller buttons. Esc or B cancels"));
 
 /** Wait for the next keys the player presses (keyboard, mouse or controller). The label says what is held so far, null
  *  while nothing is being recorded; calling `start` again stops it. `pad`: only controller buttons count, and a
@@ -47,7 +48,7 @@ function useCapture(onBinding: (binding: string) => void, pad: boolean): [string
     void c.done.then((b) => {
       cancel.current = null;
       setLive(null);
-      if (b && pad && !padOnly(b)) setNote("Controller buttons only. The keyboard key is Key that opens it");
+      if (b && pad && !padOnly(b)) setNote(t("Controller buttons only. The keyboard key is Key that opens it"));
       else if (b) onBinding(b);
     });
   };
@@ -60,12 +61,13 @@ function BindChip({ binding, what, pad, onBinding, onRemove }: { binding: string
   return (
     <span className="live-bind-c">
       <button type="button" className={`ke-chip${live !== null ? " capturing" : ""}`} onClick={start}
-        title={live !== null ? `${pressText(pad)}. Esc or B cancels` : `Change ${label}: click, then ${pressText(pad).toLowerCase()}`}
-        aria-label={live !== null ? "Waiting for keys" : `${what}: ${label}. Change`}>
-        {live !== null ? <span className="ke-chip-live" aria-live="polite">{live || "Press keys"}</span>
+        title={live !== null ? waitTip(pad) : pad ? t("Change {key}: click, then press the controller buttons", { key: label })
+          : t("Change {key}: click, then press the new key, combination or controller buttons", { key: label })}
+        aria-label={live !== null ? t("Waiting for keys") : t("{what}: {key}. Change", { what, key: label })}>
+        {live !== null ? <span className="ke-chip-live" aria-live="polite">{live || t("Press keys")}</span>
           : <><span className="kbd">{label}</span><Icon name="edit" className="ke-chip-i" /></>}
       </button>
-      <IconButton size="sm" icon="x" label={`Remove ${label} from ${what}`} onClick={onRemove} />
+      <IconButton size="sm" icon="x" label={t("Remove {key} from {what}", { key: label, what })} onClick={onRemove} />
       {note && <span className="hint" role="status">{note}</span>}
     </span>
   );
@@ -75,15 +77,15 @@ function AddKey({ what, pad, onBinding }: { what: string; pad: boolean; onBindin
   const [live, start, note] = useCapture(onBinding, pad);
   if (live !== null) {
     return (
-      <button type="button" className="ke-chip capturing" onClick={start} title={`${pressText(pad)}. Esc or B cancels`} aria-label="Waiting for keys">
-        <span className="ke-chip-live" aria-live="polite">{live || (pad ? "Press buttons" : "Press keys")}</span>
+      <button type="button" className="ke-chip capturing" onClick={start} title={waitTip(pad)} aria-label={t("Waiting for keys")}>
+        <span className="ke-chip-live" aria-live="polite">{live || (pad ? t("Press buttons") : t("Press keys"))}</span>
       </button>
     );
   }
   return (
     <>
-      <IconButton size="sm" icon="plus" label={pad ? `Add buttons to ${what}` : `Add a key to ${what}`}
-        title={pad ? `Add another controller button combination to ${what}` : `Add another key or controller button to ${what}`} onClick={start} />
+      <IconButton size="sm" icon="plus" label={pad ? t("Add buttons to {what}", { what }) : t("Add a key to {what}", { what })}
+        title={pad ? t("Add another controller button combination to {what}", { what }) : t("Add another key or controller button to {what}", { what })} onClick={start} />
       {note && <span className="hint" role="status">{note}</span>}
     </>
   );
@@ -99,7 +101,7 @@ export function MenuKeys({ menu, onChange }: { menu: MenuSettings; onChange: (up
   const set = (id: string, f: (keys: string[]) => string[], label: string) => onChange((b) => ({ ...b, [id]: f(b[id] ?? []) }), label);
   return (
     <details className="live-binds">
-      <summary title="Change the keys and controller buttons that move, pick and close in the skin menu">Menu keys</summary>
+      <summary title={t("Change the keys and controller buttons that move, pick and close in the skin menu")}>{t("Menu keys")}</summary>
       <ul className="live-binds-l">
         {ROWS.map((r) => {
           const keys = menu.binds[r.id] ?? [];
@@ -109,22 +111,22 @@ export function MenuKeys({ menu, onChange }: { menu: MenuSettings; onChange: (up
               <span className="live-bind-k">
                 {keys.map((k) => (
                   <BindChip key={k} binding={k} what={r.label} pad={r.id === PAD_ROW}
-                    onBinding={(b) => set(r.id, (ks) => ks.map((x) => (x === k ? b : x)), `Changed ${bindingLabel(k)} to ${bindingLabel(b)} for ${r.label}`)}
-                    onRemove={() => set(r.id, (ks) => ks.filter((x) => x !== k), `Removed ${bindingLabel(k)} from ${r.label}`)} />
+                    onBinding={(b) => set(r.id, (ks) => ks.map((x) => (x === k ? b : x)), t("Changed {old} to {key} for {what}", { old: bindingLabel(k), key: bindingLabel(b), what: r.label }))}
+                    onRemove={() => set(r.id, (ks) => ks.filter((x) => x !== k), t("Removed {key} from {what}", { key: bindingLabel(k), what: r.label }))} />
                 ))}
                 {keys.length < MOST && <AddKey what={r.label} pad={r.id === PAD_ROW}
-                  onBinding={(b) => set(r.id, (ks) => (ks.length < MOST && !ks.includes(b) ? [...ks, b] : ks), `Added ${bindingLabel(b)} to ${r.label}`)} />}
+                  onBinding={(b) => set(r.id, (ks) => (ks.length < MOST && !ks.includes(b) ? [...ks, b] : ks), t("Added {key} to {what}", { key: bindingLabel(b), what: r.label }))} />}
               </span>
             </li>
           );
         })}
       </ul>
       <p className="hint">
-        Click a key to rebind it. Keyboard keys work in both menus. In the menu over the game the arrow keys and Enter always work as well, and a
-        controller moves in it the way it does in gachamod.{!menu.pad && " Controller buttons are off: turn on Use a controller in the menu."}
+        {menu.pad ? t("Click a key to rebind it. Keyboard keys work in both menus. In the menu over the game the arrow keys and Enter always work as well, and a controller moves in it the way it does in gachamod.")
+          : t("Click a key to rebind it. Keyboard keys work in both menus. In the menu over the game the arrow keys and Enter always work as well, and a controller moves in it the way it does in gachamod. Controller buttons are off: turn on Use a controller in the menu.")}
       </p>
-      {!usual && <Button size="sm" variant="ghost" icon="undo" title="Arrow keys, Enter, the D-pad, A, B and both sticks, as the menu starts out"
-        onClick={() => onChange(() => ({ ...MENU_BINDS }), "Put back the usual menu keys")}>Use the usual keys</Button>}
+      {!usual && <Button size="sm" variant="ghost" icon="undo" title={t("Arrow keys, Enter, the D-pad, A, B and both sticks, as the menu starts out")}
+        onClick={() => onChange(() => ({ ...MENU_BINDS }), t("Put back the usual menu keys"))}>{t("Use the usual keys")}</Button>}
     </details>
   );
 }

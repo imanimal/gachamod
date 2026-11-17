@@ -1,6 +1,7 @@
 // A field that records a key combo like "Ctrl+Alt+1": focus it, press the keys. Used for profile hotkeys and the
 // next/previous profile keys in Settings. The combo format matches gacha-core's hotkeys.rs.
 import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { t } from "../../lib/i18n";
 import { Button } from "../../ui/kit";
 import "./profiles.css";
 
@@ -43,9 +44,9 @@ export function HotkeyField({ label, value, onChange, taken, hint, bareF, keep, 
     if (!m.length && (e.key === "Backspace" || e.key === "Delete")) { if (!keep) { onChange(""); setProblem(""); } return; }
     const key = keyOf(e.code);
     if (!key) { setPartial(m.length ? `${m.join("+")}+` : ""); return; }
-    if (!m.some((x) => x !== "Shift") && !(bareF && !m.length && /^F\d+$/.test(key))) { setProblem(`Hold Ctrl, Alt or Win with ${key}, like Ctrl+Alt+${key}`); return; }
+    if (!m.some((x) => x !== "Shift") && !(bareF && !m.length && /^F\d+$/.test(key))) { setProblem(t("Hold Ctrl, Alt or Win with {key}, like Ctrl+Alt+{key}", { key })); return; }
     const combo = [...m, key].join("+");
-    if (combo.toLowerCase() === reloadKey.toLowerCase()) { setProblem(`${reloadKey} is the game's reload key. Pick another key`); return; }
+    if (combo.toLowerCase() === reloadKey.toLowerCase()) { setProblem(t("{key} is the game's reload key. Pick another key", { key: reloadKey })); return; }
     setProblem("");
     setPartial("");
     onChange(combo);
@@ -58,12 +59,12 @@ export function HotkeyField({ label, value, onChange, taken, hint, bareF, keep, 
       {label && <label className="field-l" htmlFor={id}>{label}</label>}
       <span className="hotkey-row">
         <input id={id} readOnly value={shown} className="mono" aria-invalid={!!(taken || problem) || undefined} aria-describedby={note ? `${id}-note` : undefined}
-          placeholder={listening ? "Press the keys" : "Click, then press the keys"}
-          title={keep ? "Click and press a key like F7, or a combo like Ctrl+Alt+M. Esc stops" : "Click and press a combo like Ctrl+Alt+1. Backspace clears it, Esc stops"}
+          placeholder={listening ? t("Press the keys") : t("Click, then press the keys")}
+          title={keep ? t("Click and press a key like F7, or a combo like Ctrl+Alt+M. Esc stops") : t("Click and press a combo like Ctrl+Alt+1. Backspace clears it, Esc stops")}
           onFocus={() => setListening(true)} onBlur={() => { setListening(false); setPartial(""); }}
           onKeyDown={onKeyDown} onKeyUp={(e) => { if (!mods(e).length) setPartial(""); }} />
-        {value && !keep && <Button size="sm" variant="ghost" icon="x" title="Clear the hotkey" onClick={() => { onChange(""); setProblem(""); }} />}
-        {reset && value !== reset && <Button size="sm" variant="ghost" icon="undo" title={`Put back ${reset}, the usual key`} onClick={() => { onChange(reset); setProblem(""); }}>Use {reset}</Button>}
+        {value && !keep && <Button size="sm" variant="ghost" icon="x" title={t("Clear the hotkey")} onClick={() => { onChange(""); setProblem(""); }} />}
+        {reset && value !== reset && <Button size="sm" variant="ghost" icon="undo" title={t("Put back {key}, the usual key", { key: reset })} onClick={() => { onChange(reset); setProblem(""); }}>{t("Use {key}", { key: reset })}</Button>}
       </span>
       {note && <span className="hint" id={`${id}-note`}>{note}</span>}
     </div>

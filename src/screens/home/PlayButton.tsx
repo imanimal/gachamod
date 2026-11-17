@@ -15,6 +15,8 @@ import { HOLD, STUCK_MS } from "../../lib/activity";
 import { shuffleBeforePlay } from "../library/shuffle";
 import { setKickFixDone } from "../../lib/kickFix";
 import { askKick } from "./KickWarning";
+import { gameName, gameShort } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 import "./home.css";
 
 // shared by every Play button, so the sidebar's and Home's agree
@@ -64,16 +66,16 @@ export async function play(game: GameState, vanilla = false) {
     if (starting.get(game.id) !== stamp) return;
     starting.delete(game.id);
     changed();
-    const again = { label: "Try again", run: () => { const g = allGames().find((x) => x.id === game.id); if (g) void play(g, vanilla); } };
-    toast(`${game.name} didn't start. A launcher window waiting for an answer can hold it, so check the taskbar`, true,
-      game.xxmi ? { label: "Open XXMI Launcher", run: () => { xxmi.open().catch((e) => toast(errorText(e), true)); } } : again,
+    const again = { label: t("Try again"), run: () => { const g = allGames().find((x) => x.id === game.id); if (g) void play(g, vanilla); } };
+    toast(t("{game} didn't start. A launcher window waiting for an answer can hold it, so check the taskbar", { game: gameName(game) }), true,
+      game.xxmi ? { label: t("Open XXMI Launcher"), run: () => { xxmi.open().catch((e) => toast(errorText(e), true)); } } : again,
       game.xxmi ? again : undefined);
   }, GIVE_UP_MS);
   try {
     if (!vanilla) await shuffleBeforePlay(game.id);
     const note = await games.launch(game.id, vanilla);
     giveUp();
-    toast(note ?? (vanilla ? `Starting ${game.name} without mods` : `Starting ${game.name}`), "info");
+    toast(note ?? (vanilla ? t("Starting {game} without mods", { game: gameName(game) }) : t("Starting {game}", { game: gameName(game) })), "info");
     const close = await settings.get(`${game.id}.closeOnLaunch`).catch(() => null);
     if (close === "1") window.setTimeout(() => void windowAction("close"), 1500);
   } catch (e) {
@@ -116,8 +118,8 @@ export function PlayButton({ big = false }: { big?: boolean }) {
   // tick each second while starting or running (play() gives up on Starting after a minute)
   useEffect(() => {
     if (!id || (!isRunning && startTime === undefined)) return;
-    const t = window.setInterval(() => tick((n) => n + 1), 1000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(timer);
   }, [id, isRunning, startTime]);
 
   const setup = useSetup();
@@ -129,9 +131,9 @@ export function PlayButton({ big = false }: { big?: boolean }) {
       <div className={cls}>
         {canInstallLoader(game)
           ? <Button className="play-btn play-setup" variant="primary" size="lg" icon="install" busy={setup.running}
-              title={`Installs XXMI Launcher and ${game.short}'s mod loader`} onClick={() => void installLoaders([game.id])}>Set up</Button>
-          : <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={`Find or pick ${game.name}'s folders in Settings, Games and mod loaders`}
-              onClick={() => go({ view: "settings", section: "games" })}>Set up</Button>}
+              title={t("Installs XXMI Launcher and {game}'s mod loader", { game: gameShort(game) })} onClick={() => void installLoaders([game.id])}>{t("Set up")}</Button>
+          : <Button className="play-btn play-setup" variant="secondary" size="lg" icon="settings" title={t("Find or pick {game}'s folders in Settings, Games", { game: gameName(game) })}
+              onClick={() => go({ view: "settings", section: "games" })}>{t("Set up")}</Button>}
       </div>
     );
   }
@@ -141,18 +143,20 @@ export function PlayButton({ big = false }: { big?: boolean }) {
   // Starting for 10 s or more: say what can hold it
   const waitMs = isStarting ? Date.now() - (startTime ?? Date.now()) : 0;
   const slow = waitMs >= STUCK_MS;
-  const label = isRunning ? `Running ${elapsed(ranMs)}` : isStarting ? "Starting" : "Play";
-  const tip = isRunning && ranMs >= 4 * 3600_000 ? `Running for ${Math.floor(ranMs / 3600_000)} hours. Maybe drink some water`
-    : isRunning ? `${game.name} is running (${elapsed(ranMs)})`
-    : slow ? `Starting ${game.name} (${elapsed(waitMs)}). ${HOLD.game}` : game.viaXxmi ? `Start ${game.name} with mods through XXMI (Ctrl+Enter)` : `Start ${game.name} (Ctrl+Enter)`;
+  const name = gameName(game);
+  const label = isRunning ? t("Running {time}", { time: elapsed(ranMs) }) : isStarting ? t("Starting") : t("Play");
+  const tip = isRunning && ranMs >= 4 * 3600_000 ? tn(Math.floor(ranMs / 3600_000), "Running for {n} hour. Maybe drink some water", "Running for {n} hours. Maybe drink some water")
+    : isRunning ? t("{game} is running ({time})", { game: name, time: elapsed(ranMs) })
+    : slow ? t("Starting {game} ({time}). {hold}", { game: name, time: elapsed(waitMs), hold: HOLD.game })
+    : game.viaXxmi ? t("Start {game} with mods through XXMI (Ctrl+Enter)", { game: name }) : t("Start {game} (Ctrl+Enter)", { game: name });
   // the same entries for the More button and a right-click on Play
   const startItems = (close: () => void) => [
-    { label: "Play without mods", icon: "play" as const, disabled: isRunning || isStarting, hint: "Starts the game with no mods, the way the developers intended. Brave",
+    { label: t("Play without mods"), icon: "play" as const, disabled: isRunning || isStarting, hint: t("Starts the game with no mods, the way the developers intended. Brave"),
       onClick: () => { close(); void play(game, true); } },
-    ...(game.xxmi ? [{ label: "Open XXMI Launcher", icon: "external" as const, onClick: () => {
+    ...(game.xxmi ? [{ label: t("Open XXMI Launcher"), icon: "external" as const, onClick: () => {
       close(); xxmi.open().catch((e) => toast(errorText(e), true));
     } }] : []),
-    { label: "Launch options", icon: "sliders" as const, onClick: () => { close(); go({ view: "settings", section: "launch" }); } },
+    { label: t("Launch options"), icon: "sliders" as const, onClick: () => { close(); go({ view: "settings", section: "launch" }); } },
   ];
 
   return (
@@ -161,12 +165,12 @@ export function PlayButton({ big = false }: { big?: boolean }) {
       <Button className="play-btn" variant="primary" size="lg" icon={isRunning ? "zap" : "play"} busy={isStarting}
         disabled={isRunning} title={tip} onClick={() => void play(game)}>{label}</Button>
       <span ref={more} className="play-more-w">
-        <IconButton className="play-more" icon="menu" variant="primary" size="lg" label="More ways to start" title="More ways to start: without mods, XXMI Launcher, launch options" on={menu}
+        <IconButton className="play-more" icon="menu" variant="primary" size="lg" label={t("More ways to start")} title={t("More ways to start: without mods, XXMI Launcher, launch options")} on={menu}
           onClick={() => setMenu((m) => !m)} />
       </span>
       {big && slow && <p className="hint" role="status" style={{ flexBasis: "100%", maxWidth: "18rem", margin: 0 }}>{HOLD.game}</p>}
       {menu && (
-        <Popover anchor={more.current} onClose={() => setMenu(false)} width="15em" label="Start options">
+        <Popover anchor={more.current} onClose={() => setMenu(false)} width="15em" label={t("Start options")}>
           <Menu items={startItems(() => setMenu(false))} />
         </Popover>
       )}

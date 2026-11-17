@@ -41,7 +41,13 @@ pub struct LogLine { level: String, text: String }
 /// Lines for gachamod.log from the window (failed calls, warnings).
 #[tauri::command]
 pub async fn log_write(lines: Vec<LogLine>) -> Result<()> {
-    blocking(move || { for l in lines.iter().take(200) { logs::write(logs::Level::parse(&l.level), &l.text); } Ok(()) }).await
+    blocking(move || { for l in lines.iter().take(200) { logs::write_from_window(logs::Level::parse(&l.level), &l.text); } Ok(()) }).await
+}
+
+/// The end of gachamod.log, at most `max` bytes (for the console).
+#[tauri::command]
+pub async fn log_tail(max: usize) -> Result<String> {
+    blocking(move || Ok(logs::tail(max.min(2_000_000)))).await
 }
 
 /// An error in the window's code, kept as a crash report.

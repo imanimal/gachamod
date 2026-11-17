@@ -8,6 +8,7 @@ pub mod common;
 pub mod extensions;
 pub mod ingame;
 pub mod library;
+pub mod migrate;
 pub mod modtools;
 pub mod online;
 pub mod otherkeys;

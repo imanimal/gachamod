@@ -504,6 +504,7 @@ fn entry_for(game: &str, mods_dir: &Path, dir: &Path, sc: &Sidecar) -> ModEntry 
 /// keys; empty means "all when there is one, else ask" (returns `needs_choice`). The staging folder is removed in
 /// every outcome except `needs_choice`.
 pub fn place(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
+    let _hold = crate::watch::hold(game);
     // files with a fixed place go in on the first call only: a second one answers a choice from the same files
     let r = if choose.is_empty() { place_first(db, data_dir, game, staging, meta) } else { place_inner(db, data_dir, game, staging, meta, choose) };
     if !matches!(&r, Ok(o) if o.needs_choice.is_some()) { let _ = fs::remove_dir_all(staging); }
@@ -1032,6 +1033,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
 /// Install archives or folders right away, without the queue (the app itself queues local installs so they get
 /// progress and the variant picker; this is the same work in one call). Each path is staged and placed.
 pub fn install_local(db: &crate::db::Shared, data_dir: &Path, game: &str, paths: &[PathBuf], choose: &[String]) -> Result<InstallOutcome> {
+    let _hold = crate::watch::hold(game);
     let mut out = InstallOutcome::default();
     for p in paths {
         let staging = stage_any(data_dir, p)?;

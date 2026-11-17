@@ -4,9 +4,10 @@
 // in game). Owner: INGAME area.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, fileUrl, modKeys, type GameId, type KeyLine, type KeyList, type KeyRow, type ModKeyList } from "../../lib/api";
+import { t, tb, tn } from "../../lib/i18n";
 import { Icon } from "../../ui/Icon";
 import { KeyChip, recordEdit } from "../../ui/KeyEditor";
-import { Button, SearchField, Waiting, plural } from "../../ui/kit";
+import { Button, SearchField, Waiting } from "../../ui/kit";
 import { LazyImg } from "../../ui/LazyImg";
 import { Portrait } from "../../ui/Portrait";
 import { byCharacter, keyHits, rowNote, rowTip } from "./KeyListParts";
@@ -40,8 +41,8 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
     busy.current = true;
     try {
       const edit = await modKeys.rebind(game, m.modId, { ini: r.ini, section: r.section, field: l.field, index: l.index }, binding);
-      recordEdit(game, m.modId, edit, "That's already the key");
-      if (edit.backup && edit.note) onSay(`${edit.note}.`);
+      recordEdit(game, m.modId, edit, t("That's already the key"));
+      if (edit.backup && edit.note) onSay(t("{note}.", { note: tb(edit.note) }));
     } catch (e) { onSay(errorText(e), true); } finally { busy.current = false; }
   };
 
@@ -49,8 +50,8 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
   const ready = !!list;
   useEffect(() => {
     if (!ready) return;
-    const t = window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod .ke-chip")?.focus({ preventScroll: true }), 80);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod .ke-chip")?.focus({ preventScroll: true }), 80);
+    return () => window.clearTimeout(timer);
   }, [ready]);
   /** Enter in the search: on to the first key found. After the key is done, so the same Enter does nothing more. */
   const toFirst = () => window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod .ke-chip")?.focus(), 0);
@@ -60,24 +61,24 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
       <div className="ov-page ov-scroll">
         <div className="ov-empty bad">
           <p>{error}</p>
-          <Button size="sm" icon="refresh" onClick={onRetry} title="Read the mods' keys again">Try again</Button>
+          <Button size="sm" icon="refresh" onClick={onRetry} title={t("Read the mods' keys again")}>{t("Try again")}</Button>
         </div>
       </div>
     );
   }
-  if (!list) return <div className="ov-wait"><Waiting what="Reading mod keys" /></div>;
+  if (!list) return <div className="ov-wait"><Waiting what={t("Reading mod keys")} /></div>;
 
   const empty = !list.settings.on ? (
-    <div className="ov-empty"><p>The key list is turned off for this game.</p>
-      <Button size="sm" icon="settings" onClick={onSettings} title="Opens Tools, Key list in game, in gachamod's own window">Key list settings</Button></div>
+    <div className="ov-empty"><p>{t("The key list is turned off for this game.")}</p>
+      <Button size="sm" icon="settings" onClick={onSettings} title={t("Opens Tools, Key list in game, in gachamod's own window")}>{t("Key list settings")}</Button></div>
   ) : !list.mods.length ? (
-    <p className="muted ov-empty">None of your mods for this game has keys.</p>
+    <p className="muted ov-empty">{t("None of your mods for this game has keys.")}</p>
   ) : !showing.length ? (
-    <div className="ov-empty"><p className="muted">None of the mods showing now has keys. Turn one on in My mods.</p>
-      <Button size="sm" icon="mods" onClick={onMine} title="Your characters and their mods (Tab switches)">My mods</Button></div>
+    <div className="ov-empty"><p className="muted">{t("None of the mods showing now has keys. Turn one on in My mods.")}</p>
+      <Button size="sm" icon="mods" onClick={onMine} title={t("Your characters and their mods (Tab switches)")}>{t("My mods")}</Button></div>
   ) : !listed.length ? (
-    <div className="ov-empty"><p className="muted">You left the mods showing now out of the list.</p>
-      <Button size="sm" icon="settings" onClick={onSettings} title="Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window">Choose mods</Button></div>
+    <div className="ov-empty"><p className="muted">{t("You left the mods showing now out of the list.")}</p>
+      <Button size="sm" icon="settings" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window")}>{t("Choose mods")}</Button></div>
   ) : null;
 
   return (
@@ -85,9 +86,9 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
       {empty ?? (
         <>
           <div className="ov-kbar">
-            <SearchField value={q} onChange={setQ} placeholder="Find a character, mod or key" onEnter={toFirst} />
+            <SearchField value={q} onChange={setQ} placeholder={t("Find a character, mod or key")} onEnter={toFirst} />
           </div>
-          {!groups.length && <p className="muted ov-none">No character, mod or key matches that.</p>}
+          {!groups.length && <p className="muted ov-none">{t("No character, mod or key matches that.")}</p>}
           {groups.map((g) => (
             <section key={g.name} className="ov-kwho">
               <h2 className="ov-kwho-h">
@@ -101,8 +102,8 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
           ))}
           {hidden > 0 && !words && (
             <p className="muted ov-khidden">
-              {hidden === 1 ? "1 mod showing now isn't listed: you left it out." : `${plural(hidden, "mod")} showing now aren't listed: you left them out.`}
-              <Button size="sm" variant="ghost" onClick={onSettings} title="Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window">Choose mods</Button>
+              {tn(hidden, "{n} mod showing now isn't listed: you left it out.", "{n} mods showing now aren't listed: you left them out.")}
+              <Button size="sm" variant="ghost" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window")}>{t("Choose mods")}</Button>
             </p>
           )}
         </>
@@ -114,12 +115,12 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
 function KeyCard({ m, i, onBinding }: { m: ModKeyList; i: number; onBinding: (r: KeyRow, l: KeyLine, binding: string) => void }) {
   const src = fileUrl(m.preview);
   return (
-    <div className="ov-kmod" role="group" aria-label={`Keys of ${m.name}`} style={{ "--i": Math.min(i, 16) } as React.CSSProperties}>
+    <div className="ov-kmod" role="group" aria-label={t("Keys of {name}", { name: m.name })} style={{ "--i": Math.min(i, 16) } as React.CSSProperties}>
       <div className="ov-kmod-h">
         <span className="ov-kpic">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
         <span className="ov-kmod-t">
           <span className="ov-kmod-n">{m.name}</span>
-          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">Shows its key help with {m.helpKey}</span>}
+          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">{t("Shows its key help with {key}", { key: m.helpKey })}</span>}
         </span>
       </div>
       <ul className="ov-krows">
@@ -130,7 +131,7 @@ function KeyCard({ m, i, onBinding }: { m: ModKeyList; i: number; onBinding: (r:
               <span className="ov-kchips">
                 {r.lines.map((l) => (
                   <span key={`${l.field}-${l.index}`} className="ke-line">
-                    {l.field === "back" && <span className="ke-back hint" title="Steps back through the looks">Back</span>}
+                    {l.field === "back" && <span className="ke-back hint" title={t("Steps back through the looks")}>{t("Back")}</span>}
                     <KeyChip line={l} onBinding={(b) => onBinding(r, l, b)} />
                   </span>
                 ))}

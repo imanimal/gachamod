@@ -11,14 +11,15 @@ import { useGames } from "../../lib/store";
 import { GIMI_DOWNLOAD, useKick } from "../../lib/kickFix";
 import { openXxmi } from "../settings/parts";
 import { lockNote } from "./XxmiDll";
+import { t } from "../../lib/i18n";
 import "./tools.css";
 
-const MODES = [{ value: "HOOK", label: "Hook" }, { value: "DIRECT", label: "Direct" }, { value: "SKIP", label: "Skip" }];
+const MODES = [{ value: "HOOK", label: t("Hook") }, { value: "DIRECT", label: t("Direct") }, { value: "SKIP", label: t("Skip") }];
 
 function Step({ n, done, children }: { n: number; done: boolean; children: ReactNode }) {
   return (
     <li className={done ? "kick-step done" : "kick-step"}>
-      <span className="kick-step-n" title={done ? "gachamod sees this step done" : undefined}>{done ? <Icon name="check" /> : n}</span>
+      <span className="kick-step-n" title={done ? t("gachamod sees this step done") : undefined}>{done ? <Icon name="check" /> : n}</span>
       <div className="kick-step-b">{children}</div>
     </li>
   );
@@ -39,31 +40,30 @@ export function KickSteps({ dll, locked, onChange }: { dll: DllConfig; locked: R
     <div className="kick-steps">
       <ol>
         <Step n={1} done={dllIn}>
-          <p>Download 3dmigoto-GIMI-for-playing-mods.zip from GIMI's GitHub page.</p>
-          <Button size="sm" variant="ghost" icon="external" title={`Open ${GIMI_DOWNLOAD} in your browser`} onClick={() => open(shell.openUrl(GIMI_DOWNLOAD))}>Open the download page</Button>
+          <p>{t("Download {file} from GIMI's GitHub page.", { file: "3dmigoto-GIMI-for-playing-mods.zip" })}</p>
+          <Button size="sm" variant="ghost" icon="external" title={t("Open {url} in your browser", { url: GIMI_DOWNLOAD })} onClick={() => open(shell.openUrl(GIMI_DOWNLOAD))}>{t("Open the download page")}</Button>
         </Step>
-        <Step n={2} done={dllIn}><p>Open the zip and take out d3d11.dll.</p></Step>
+        <Step n={2} done={dllIn}><p>{t("Open the zip and take out d3d11.dll.")}</p></Step>
         <Step n={3} done={dllIn}>
-          <p>Paste it into XXMI's GIMI folder, replacing the d3d11.dll there. Don't replace the folder's d3dx.ini.</p>
-          {gimi && <Button size="sm" variant="ghost" icon="folder" title={gimi} onClick={() => open(shell.openPath(gimi))}>Open the GIMI folder</Button>}
+          <p>{t("Paste it into XXMI's GIMI folder, replacing the d3d11.dll there. Don't replace the folder's d3dx.ini.")}</p>
+          {gimi && <Button size="sm" variant="ghost" icon="folder" title={gimi} onClick={() => open(shell.openPath(gimi))}>{t("Open the GIMI folder")}</Button>}
         </Step>
         <Step n={4} done={dll.unsafeMode}>
-          <p>Turn on Unsafe Mode in XXMI Launcher's settings, then close XXMI Launcher so gachamod sees it. XXMI signs this
-            setting, so gachamod can't turn it on.</p>
-          {!dll.unsafeMode && <Button size="sm" variant="ghost" title="Open XXMI Launcher to turn on Unsafe Mode there" onClick={openXxmi}>Open XXMI Launcher</Button>}
+          <p>{t("Turn on Unsafe Mode in XXMI Launcher's settings, then close XXMI Launcher so gachamod sees it. XXMI signs this setting, so gachamod can't turn it on.")}</p>
+          {!dll.unsafeMode && <Button size="sm" variant="ghost" title={t("Open XXMI Launcher to turn on Unsafe Mode there")} onClick={openXxmi}>{t("Open XXMI Launcher")}</Button>}
         </Step>
         <Step n={5} done={mode === "DIRECT"}>
-          <p>Set Injection mode to Direct.</p>
-          <Select label="Injection mode" value={mode} options={modes} disabled={!!locked["dll.injectMode"]} onChange={(v) => onChange({ injectMode: v })}
+          <p>{t("Set Injection mode to Direct.")}</p>
+          <Select label={t("Injection mode")} value={mode} options={modes} disabled={!!locked["dll.injectMode"]} onChange={(v) => onChange({ injectMode: v })}
             hint={lockNote(locked["dll.injectMode"])} />
         </Step>
         <Step n={6} done={!dll.injectLibraries}>
-          <p>Turn off Inject libraries.</p>
+          <p>{t("Turn off Inject libraries.")}</p>
           <Toggle checked={dll.injectLibraries} disabled={!!locked["dll.injectLibraries"] || (!dll.injectLibraries && !libs)}
-            onChange={(v) => onChange({ injectLibraries: v })} label="Inject libraries" hint={lockNote(locked["dll.injectLibraries"])} />
+            onChange={(v) => onChange({ injectLibraries: v })} label={t("Inject libraries")} hint={lockNote(locked["dll.injectLibraries"])} />
         </Step>
       </ol>
-      {all && <p className="hint">Every step looks done.</p>}
+      {all && <p className="hint">{t("Every step looks done.")}</p>}
     </div>
   );
 }

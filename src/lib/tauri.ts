@@ -19,12 +19,22 @@ export function registerDemo(handlers: Record<string, Handler>) { Object.assign(
 let watcher: { ran: (cmd: string, args: Record<string, unknown>) => void; failed: (cmd: string, e: unknown) => void } | null = null;
 export function watchCalls(w: NonNullable<typeof watcher>) { watcher = w; }
 
+/** A finished call, for the console (src/dev/console): how long it took and what came back or went wrong. */
+export interface CallDone { cmd: string; args: Record<string, unknown>; ms: number; ok: boolean; result?: unknown; error?: unknown }
+const callDone = new Set<(c: CallDone) => void>();
+export function onCallDone(f: (c: CallDone) => void): () => void { callDone.add(f); return () => { callDone.delete(f); }; }
+
 /** Run a backend command. Each one is noted in lib/activity.ts while it runs, so a slow one shows what it is. */
 export function call<T>(cmd: string, args: InvokeArgs = {}): Promise<T> {
   const d = describeCall(cmd);
   watcher?.ran(cmd, args as Record<string, unknown>);
   const p = d ? track(run<T>(cmd, args), d[0], d[1]) : run<T>(cmd, args);
   if (watcher) p.catch((e) => watcher?.failed(cmd, e));
+  if (callDone.size) {
+    const t0 = performance.now();
+    const tell = (c: Omit<CallDone, "cmd" | "args" | "ms">) => callDone.forEach((f) => f({ cmd, args: args as Record<string, unknown>, ms: performance.now() - t0, ...c }));
+    p.then((result) => tell({ ok: true, result }), (error) => tell({ ok: false, error }));
+  }
   return p;
 }
 

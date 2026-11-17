@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { errorText, library, profiles, type GameId, type ModEntry, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
+import { t, tn } from "../../lib/i18n";
 import { portraitNow, usePortraitBatch, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { closeRoute, patchRoute, useRoute } from "../../lib/store";
@@ -71,7 +72,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = visible.filter((m) => (tab === "every" || isIn(m) || kept.has(m.id))
-      && (!q || m.name.toLowerCase().includes(q) || m.character?.toLowerCase().includes(q) || m.tags.some((t) => t.toLowerCase().includes(q))));
+      && (!q || m.name.toLowerCase().includes(q) || m.character?.toLowerCase().includes(q) || m.tags.some((tag) => tag.toLowerCase().includes(q))));
     // the card's switch shows whether it's in this profile
     return list.sort(byCharThenName).map((m) => (m.enabled === isIn(m) ? m : { ...m, enabled: isIn(m) }));
   }, [visible, tab, isIn, kept, query]);
@@ -107,7 +108,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
         // only the ones that change the same parts come out: a hair recolour stays next to an outfit
         const near = overlappingAll(going, asIn).filter((o) => !liveCharacterOf(game, o.id));
         const same = near.length ? await library.overlapping(game, ids, near.map((o) => o.id)).catch(() => near.map((o) => o.id)) : [];
-        for (const o of near) if (same.includes(o.id)) { outs.push(o.id); notes.push(`took out ${o.name}`); }
+        for (const o of near) if (same.includes(o.id)) { outs.push(o.id); notes.push(t("took out {name}", { name: o.name })); }
         if (outs.length) setKept((k) => new Set([...k, ...outs]));
       }
     }
@@ -116,7 +117,9 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
     for (const id of ins) next.add(id);
     setMembersState(next);
     const named = mods.filter((m) => (on ? ins : outs).includes(m.id) && ids.includes(m.id));
-    const label = `${on ? "Added" : "Took"} ${modsName(named.length ? named : list)} ${on ? "to" : "out of"} ${p.name}${notes.length ? `, ${notes.join(", ")}` : ""}`;
+    const what = modsName(named.length ? named : list);
+    const base = on ? t("Added {mods} to {profile}", { mods: what, profile: p.name }) : t("Took {mods} out of {profile}", { mods: what, profile: p.name });
+    const label = notes.length ? t("{label}, {notes}", { label: base, notes: notes.join(", ") }) : base;
     try {
       await setMembers(game, p.id, ins, outs);
       record({ label, undo: () => setMembers(game, p.id, outs, ins), redo: () => setMembers(game, p.id, ins, outs) });
@@ -129,7 +132,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
   const itemsFor = useCallback((m: ModEntry): MenuEntry[] => {
     const inIt = isIn(m);
     return [
-      { label: inIt ? `Take out of ${p.name}` : `Add to ${p.name}`, icon: inIt ? "minus" : "plus", keys: "Space", onClick: () => void setIn([m], !inIt) },
+      { label: inIt ? t("Take out of {name}", { name: p.name }) : t("Add to {name}", { name: p.name }), icon: inIt ? "minus" : "plus", keys: "Space", onClick: () => void setIn([m], !inIt) },
       "-",
       ...withoutKeys(menuFor("mod", { game, mod: mods.find((x) => x.id === m.id) ?? m }).filter((e) => !(e && typeof e === "object" && "keys" in e && e.keys === "Space")), ["Enter"]),
     ];
@@ -154,58 +157,61 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
     openMenu({ x: e.clientX, y: e.clientY }, itemsFor(m));
   };
 
-  const tipFor = (m: ModEntry) => `${m.name}. Enter opens the details, Space ${m.enabled ? `takes it out of ${p.name}` : `adds it to ${p.name}`}`;
+  const tipFor = (m: ModEntry) => (m.enabled ? t("{mod}. Enter opens the details, Space takes it out of {profile}", { mod: m.name, profile: p.name })
+    : t("{mod}. Enter opens the details, Space adds it to {profile}", { mod: m.name, profile: p.name }));
   const portraitOf = (m: ModEntry) => (m.preview || !m.character ? null : portraitNow(game, m.character, null));
   const total = visible.length;
 
   return (
     <>
       <header className="char-hero profile-hero" onContextMenu={menuHandler(() => withoutKeys(menuFor("profile", { game, id: p.id })))}>
-        <button type="button" className="profile-hero-pic" onClick={() => onEdit("icon")} title="Change the icon and colour">
+        <button type="button" className="profile-hero-pic" onClick={() => onEdit("icon")} title={t("Change the icon and colour")}>
           <ProfileIcon profile={p} chars={chars} size={88} />
         </button>
         <div className="char-hero-t">
-          <button type="button" className="char-hero-back" onClick={() => closeRoute(["profile", "tab", "modId"])} title="Back to all profiles (Alt+Left)">
-            Profiles
+          <button type="button" className="char-hero-back" onClick={() => closeRoute(["profile", "tab", "modId"])} title={t("Back to all profiles (Alt+Left)")}>
+            {t("Profiles")}
           </button>
           <h1 className="char-hero-name" title={p.name}>{p.name}</h1>
           <span className="hint">
-            {inCount === 1 ? "1 mod" : `${inCount} mods`}{p.updatedAt ? `, changed ${timeAgo(p.updatedAt)}` : ""}
+            {p.updatedAt ? tn(inCount, "{n} mod, changed {when}", "{n} mods, changed {when}", { when: timeAgo(p.updatedAt) }) : tn(inCount, "{n} mod", "{n} mods")}
             {p.description ? `. ${p.description}` : ""}
           </span>
           <div className="char-hero-a">
             <Tabs value={tab} onChange={(v) => patchRoute({ tab: v === "every" ? "every" : undefined, modId: undefined })}
-              tabs={[{ value: "in", label: "In this profile", icon: "profiles", count: ready ? inCount : undefined },
-                { value: "every", label: "Add mods", icon: "plus", count: ready ? total - inCount : undefined }]} />
+              tabs={[{ value: "in", label: t("In this profile"), icon: "profiles", count: ready ? inCount : undefined },
+                { value: "every", label: t("Add mods"), icon: "plus", count: ready ? total - inCount : undefined }]} />
           </div>
         </div>
         <div className="char-hero-nav">
           {p.active
-            ? <Badge tone="accent" icon="check" title="The profile in use. Turning mods on or off anywhere saves here">On now</Badge>
-            : <Button variant="primary" icon="swap" busy={busy} onClick={onSwitch} title={`Turns mods on and off to match ${p.name}`}>Switch to it</Button>}
-          <IconButton icon="edit" label="Edit" title="Edit the name, icon, colour, banner and hotkey" onClick={() => onEdit()} />
-          <IconButton icon="more" label="More" title="More (right-click the header works too)" onClick={(e) => openMenu(e.currentTarget, withoutKeys(menuFor("profile", { game, id: p.id })))} />
+            ? <Badge tone="accent" icon="check" title={t("The profile in use. Turning mods on or off anywhere saves here")}>{t("On now")}</Badge>
+            : <Button variant="primary" icon="swap" busy={busy} onClick={onSwitch} title={t("Turns mods on and off to match {name}", { name: p.name })}>{t("Switch to it")}</Button>}
+          <IconButton icon="edit" label={t("Edit")} title={t("Edit the name, icon, colour, banner and hotkey")} onClick={() => onEdit()} />
+          <IconButton icon="more" label={t("More")} title={t("More (right-click the header works too)")} onClick={(e) => openMenu(e.currentTarget, withoutKeys(menuFor("profile", { game, id: p.id })))} />
         </div>
       </header>
 
       <div className="profile-page-bar">
-        <SearchField value={query} onChange={setQuery} placeholder={tab === "every" ? "Search every mod" : `Search ${p.name}`} />
+        <SearchField value={query} onChange={setQuery} placeholder={tab === "every" ? t("Search every mod") : t("Search {name}", { name: p.name })} />
         <span className="hint">
-          {p.active ? "It's the profile in use, so a switch here turns the mod on or off right away."
-            : `Switches here only change ${p.name}'s list. Mods turn on and off when you switch to it.`}
+          {p.active ? t("It's the profile in use, so a switch here turns the mod on or off right away.")
+            : t("Switches here only change {name}'s list. Mods turn on and off when you switch to it.", { name: p.name })}
         </span>
       </div>
 
       {!ready ? (
-        <Waiting what={`Reading the mods in ${p.name}`}>
+        <Waiting what={t("Reading the mods in {name}", { name: p.name })}>
           <div className="mod-grid is-loading" aria-busy="true">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}</div>
         </Waiting>
       ) : !shown.length ? (
-        query ? <Empty icon="search" title="Nothing matches">No mod {tab === "every" ? "" : `in ${p.name} `}has "{query.trim()}" in its name, character or tags.</Empty>
-        : tab === "every" ? <Empty icon="mods" title="No mods installed yet">Mods you install show up here to add to {p.name}.</Empty>
-        : <Empty icon="profiles" title={`Nothing in ${p.name} yet`}
-            actions={<Button variant="primary" icon="plus" onClick={() => patchRoute({ tab: "every" })}>Add mods</Button>}>
-            {p.active ? "Mods you turn on while it's in use are saved here." : "Add mods to it here, or switch to it and turn mods on."}
+        query ? <Empty icon="search" title={t("Nothing matches")}>{tab === "every"
+            ? t("No mod has \"{q}\" in its name, character or tags.", { q: query.trim() })
+            : t("No mod in {name} has \"{q}\" in its name, character or tags.", { name: p.name, q: query.trim() })}</Empty>
+        : tab === "every" ? <Empty icon="mods" title={t("No mods installed yet")}>{t("Mods you install show up here to add to {name}.", { name: p.name })}</Empty>
+        : <Empty icon="profiles" title={t("Nothing in {name} yet", { name: p.name })}
+            actions={<Button variant="primary" icon="plus" onClick={() => patchRoute({ tab: "every" })}>{t("Add mods")}</Button>}>
+            {p.active ? t("Mods you turn on while it's in use are saved here.") : t("Add mods to it here, or switch to it and turn mods on.")}
           </Empty>
       ) : (
         <div ref={gridRef} className="mod-grid cards" onKeyDown={onKey} onContextMenu={onContextMenu}

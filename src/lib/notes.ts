@@ -1,9 +1,20 @@
 // Notes from the backend and toasts often come one per mod with the same wording: "Options for A come back after you
 // close the game", "Options for B come back ...". These fold such runs into one line with an Oxford comma, so a
 // change to 12 mods says one thing instead of twelve. Notes that only share a word or two stay apart.
+// Backend notes are folded in English (toast() translates the folded line by the backend's patterns); oxford() for
+// the app's own text lists in the user's language.
+import { lang, tn } from "./i18n";
 
-/** "a, b, and c"; past `max` names the rest is counted: "a, b, and 4 more". */
+/** "a, b, and c"; past `max` names the rest is counted: "a, b, and 4 more". In the user's language. */
 export function oxford(names: string[], max = 8): string {
+  if (lang === "en") return englishList(names, max);
+  const shown = names.length > max ? names.slice(0, Math.max(1, max - 1)) : names;
+  const more = names.length - shown.length;
+  const parts = more > 0 ? [...shown, tn(more, "{n} more", "{n} more")] : shown;
+  return new Intl.ListFormat(lang, { type: "conjunction" }).format(parts);
+}
+
+function englishList(names: string[], max: number): string {
   const shown = names.length > max ? names.slice(0, Math.max(1, max - 1)) : names;
   const parts = names.length > shown.length ? [...shown, `${names.length - shown.length} more`] : shown;
   if (parts.length <= 1) return parts.join("");
@@ -55,7 +66,7 @@ export function groupNotes(notes: string[]): string[] {
     }
     if (!placed) out.push(n);
   }
-  return out.map((o) => (typeof o === "string" ? o : `${o.prefix}${oxford(o.names)}${o.suffix}`));
+  return out.map((o) => (typeof o === "string" ? o : `${o.prefix}${englishList(o.names, 8)}${o.suffix}`));
 }
 
 /** Notes as one toast's text. */

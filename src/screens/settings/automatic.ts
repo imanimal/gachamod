@@ -12,8 +12,12 @@ export type AppUpdateMode = "1" | "tell" | "0";
 export const appUpdateModePref = pref<AppUpdateMode>("app.updateCheck", "1", (r) => (r === "1" || r === "tell" || r === "0" ? r : undefined), (v) => v);
 /** Look up installed GameBanana mods for updates when Mods opens and every 30 minutes. */
 export const modUpdateCheckPref = flag("updates.check", true);
-/** Read the Mods folder again when Mods opens, so files added by hand show up. */
+/** Read the Mods folder again when Mods opens, so files added by hand show up. While watching is on, only the first
+ *  time each session. */
 export const autoRescanPref = flag("library.autoScan", true);
+/** Watch each game's Mods folder and rescan it when something changes there (the backend's gacha_core::watch reads
+ *  "library.watch"), so a mod added, renamed or deleted in Explorer shows up at once. */
+export const watchModsPref = flag("library.watch", true);
 /** Keep the downloaded .zip/.7z after installing (the downloader reads "downloads.keep"). Off deletes them. */
 export const keepArchivesPref = flag("downloads.keep", false);
 /** An archive that holds several mods installs all of them as one mod without asking (the downloader reads
@@ -36,8 +40,3 @@ export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 export const trashDaysPref = pref<number>("trash.days", 0,
   (r) => { const n = Number.parseInt(r, 10); return Number.isFinite(n) ? Math.max(0, Math.min(3650, n)) : undefined; }, (v) => String(v));
 export const useTrashDays = () => trashDaysPref.use();
-/** How removed files are kept, to finish a sentence that starts "The files ": "stay on your PC for 7 days" or
- *  "are deleted right away". */
-export function trashPhrase(days = trashDaysPref.get()): string {
-  return days > 0 ? `stay on your PC for ${days === 1 ? "1 day" : `${days} days`}` : "are deleted right away";
-}

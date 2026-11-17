@@ -8,6 +8,7 @@ import { STUCK_MS, seconds, useActivity, useElapsed } from "../lib/activity";
 import { LazyImg } from "./LazyImg";
 import { Popover } from "./Popover";
 import { openFeedback } from "../lib/feedback";
+import { t, tn } from "../lib/i18n";
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
@@ -109,9 +110,9 @@ export function Segmented<T extends string>({ value, options, onChange, label, s
 export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; tabs: Array<{ value: T; label: ReactNode; icon?: IconName; count?: number; title?: string }>; onChange: (v: T) => void }) {
   return (
     <div className="tabs" role="tablist">
-      {tabs.map((t) => (
-        <button key={t.value} type="button" role="tab" aria-selected={value === t.value} className={cx("tab", value === t.value && "on")} onClick={() => onChange(t.value)} title={t.title}>
-          {t.icon && <Icon name={t.icon} />}<span>{t.label}</span>{t.count !== undefined && <span className="tab-n">{t.count}</span>}
+      {tabs.map((tab) => (
+        <button key={tab.value} type="button" role="tab" aria-selected={value === tab.value} className={cx("tab", value === tab.value && "on")} onClick={() => onChange(tab.value)} title={tab.title}>
+          {tab.icon && <Icon name={tab.icon} />}<span>{tab.label}</span>{tab.count !== undefined && <span className="tab-n">{tab.count}</span>}
         </button>
       ))}
     </div>
@@ -120,7 +121,7 @@ export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; ta
 
 /** A search box. "/" and Ctrl+F focus it (lib/keys.ts). ArrowDown runs `onDown`, or `onEnter` when there is none,
  *  so it can move to the results. */
-export function SearchField({ value, onChange, placeholder = "Search", onEnter, onDown, autoFocus, className, title }:
+export function SearchField({ value, onChange, placeholder = t("Search"), onEnter, onDown, autoFocus, className, title }:
   { value: string; onChange: (v: string) => void; placeholder?: string; onEnter?: () => void; onDown?: () => void; autoFocus?: boolean; className?: string; title?: string }) {
   return (
     <label className={cx("search", className)} title={title}>
@@ -131,7 +132,7 @@ export function SearchField({ value, onChange, placeholder = "Search", onEnter, 
           if (e.key === "ArrowDown" && (onDown ?? onEnter)) { e.preventDefault(); (onDown ?? onEnter)!(); }
           if (e.key === "Escape" && value) { e.stopPropagation(); onChange(""); }
         }} />
-      {value ? <button type="button" className="search-x" aria-label="Clear" title="Clear (Esc)" onClick={() => onChange("")}><Icon name="x" /></button> : <kbd className="search-k">/</kbd>}
+      {value ? <button type="button" className="search-x" aria-label={t("Clear")} title={t("Clear (Esc)")} onClick={() => onChange("")}><Icon name="x" /></button> : <kbd className="search-k">/</kbd>}
     </label>
   );
 }
@@ -322,13 +323,13 @@ export function Waiting({ what, hold, className, children }: { what: string; hol
   const running = useActivity()[0];
   const long = s * 1000 >= STUCK_MS;
   const fault = !hold && !running;
-  const why = hold ?? (running ? `It's waiting on this: ${running.what.toLowerCase()}. ${running.hold}`
-    : "Nothing is running in the background, so this may be a fault in gachamod. Go to another page and back, or send feedback.");
+  const why = hold ?? (running ? t("It's waiting on this: {what}. {hold}", { what: running.what.toLowerCase(), hold: running.hold })
+    : t("Nothing is running in the background, so this may be a fault in gachamod. Go to another page and back, or send feedback."));
   return (
     <div className={cx("waiting", className)} role="status" aria-live="polite" aria-busy="true">
       <p className="waiting-t"><Spinner /><span>{what}{s >= 3 ? ` (${seconds(s)})` : ""}</span></p>
       {long && <p className="waiting-hold">{why}</p>}
-      {long && fault && <Button size="sm" icon="help" onClick={() => openFeedback({ text: `Stuck on "${what}" for ${seconds(s)}.` })}>Send feedback</Button>}
+      {long && fault && <Button size="sm" icon="help" onClick={() => openFeedback({ text: t("Stuck on \"{what}\" for {time}.", { what, time: seconds(s) }) })}>{t("Send feedback")}</Button>}
       {children}
     </div>
   );
@@ -447,7 +448,7 @@ export function Dialog({ title, icon, onClose, children, footer, size = "md", lo
       <section ref={box} className={cx("dialog", `dialog-${size}`, className)} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} style={{ outline: "none" }}>
         <header className="dialog-h">
           <h2 id={titleId}>{icon && <Icon name={icon} />}<span>{title}</span></h2>
-          <IconButton icon="x" label={locked ?? "Close (Esc)"} onClick={close} disabled={!!locked} />
+          <IconButton icon="x" label={locked ?? t("Close (Esc)")} onClick={close} disabled={!!locked} />
         </header>
         <div className="dialog-b">{children}</div>
         {footer && <footer className="dialog-f">{footer}</footer>}
@@ -456,8 +457,40 @@ export function Dialog({ title, icon, onClose, children, footer, size = "md", lo
 }
 
 /** A panel that slides in from the right (mod details, a GameBanana page). */
-export function Drawer({ title, onClose, children, footer, width = "min(46rem, 92vw)", actions, className }:
-  { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: string; actions?: ReactNode; className?: string }) {
+interface DrawerProps { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: string; actions?: ReactNode; className?: string;
+  /** Drawn in the page as a pane (the "Three panes" Mods layout) instead of sliding in over it: no layer, focus stays
+   *  where it was, and Escape closes it only from inside. */
+  docked?: boolean }
+
+/** A panel at the right edge with a title, a close button and an optional footer. */
+export function Drawer(props: DrawerProps) {
+  return props.docked ? <DockedDrawer {...props} /> : <LayerDrawer {...props} />;
+}
+
+function DockedDrawer({ title, onClose, children, footer, actions, className }: DrawerProps) {
+  const box = useRef<HTMLElement>(null);
+  const titleId = useId();
+  const close = () => {
+    // a field that saves when it loses focus saves now, before the pane empties
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && box.current?.contains(a)) a.blur();
+    onClose();
+  };
+  return (
+    <aside ref={box} className={cx("drawer", "is-docked", className)} aria-labelledby={titleId}
+      onKeyDown={(e) => { if (e.key === "Escape" && !e.defaultPrevented && !behindLayer(e.currentTarget)) { e.stopPropagation(); close(); } }}>
+      <header className="drawer-h">
+        <h2 id={titleId}>{title}</h2>
+        {actions}
+        <IconButton icon="x" label={t("Close (Esc)")} onClick={close} />
+      </header>
+      <div className="drawer-b">{children}</div>
+      {footer && <footer className="drawer-f">{footer}</footer>}
+    </aside>
+  );
+}
+
+function LayerDrawer({ title, onClose, children, footer, width = "min(46rem, 92vw)", actions, className }: DrawerProps) {
   const ref = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLElement>(null);
   const close = useCallback(() => {
@@ -475,7 +508,7 @@ export function Drawer({ title, onClose, children, footer, width = "min(46rem, 9
         <header className="drawer-h">
           <h2 id={titleId}>{title}</h2>
           {actions}
-          <IconButton icon="x" label="Close (Esc)" onClick={close} />
+          <IconButton icon="x" label={t("Close (Esc)")} onClick={close} />
         </header>
         <div className="drawer-b">{children}</div>
         {footer && <footer className="drawer-f">{footer}</footer>}
@@ -484,13 +517,13 @@ export function Drawer({ title, onClose, children, footer, width = "min(46rem, 9
 }
 
 /** A yes/no question. Use only for things that can't be undone; everything else acts and offers Undo. */
-export function Confirm({ title, children, yes = "OK", danger, onYes, onClose }:
+export function Confirm({ title, children, yes = t("OK"), danger, onYes, onClose }:
   { title: string; children?: ReactNode; yes?: string; danger?: boolean; onYes: () => void | Promise<void>; onClose: () => void }) {
   const [busy, run] = useBusy();
   return (
     <Dialog title={title} onClose={onClose} size="sm" footer={<>
       {/* a risky question starts on Cancel, so a stray Enter or A press doesn't do it */}
-      <Button variant="ghost" autoFocus={danger} onClick={onClose}>Cancel</Button>
+      <Button variant="ghost" autoFocus={danger} onClick={onClose}>{t("Cancel")}</Button>
       <Button variant={danger ? "danger" : "primary"} busy={busy} autoFocus={!danger} onClick={() => void run(async () => { await onYes(); onClose(); })}>{yes}</Button>
     </>}>
       {children}
@@ -529,12 +562,11 @@ export function formatBytes(bytes: number): string {
 /** "3 days ago", "just now", from unix seconds. */
 export function timeAgo(unixSecs: number, now = Date.now()): string {
   const s = Math.max(0, Math.floor(now / 1000 - unixSecs));
-  if (s < 60) return "just now";
-  const m = Math.floor(s / 60); if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60); if (h < 24) return `${h} h ago`;
-  const d = Math.floor(h / 24); if (d < 30) return d === 1 ? "yesterday" : `${d} days ago`;
-  const mo = Math.floor(d / 30); if (mo < 12) return mo === 1 ? "a month ago" : `${mo} months ago`;
-  const y = Math.floor(d / 365); return y <= 1 ? "a year ago" : `${y} years ago`;
+  if (s < 60) return t("just now");
+  const m = Math.floor(s / 60); if (m < 60) return tn(m, "{n} min ago", "{n} min ago");
+  const h = Math.floor(m / 60); if (h < 24) return tn(h, "{n} h ago", "{n} h ago");
+  const d = Math.floor(h / 24); if (d < 30) return d === 1 ? t("yesterday") : tn(d, "{n} day ago", "{n} days ago");
+  const mo = Math.floor(d / 30); if (mo < 12) return mo === 1 ? t("a month ago") : tn(mo, "{n} month ago", "{n} months ago");
+  const y = Math.floor(d / 365); return y <= 1 ? t("a year ago") : tn(y, "{n} year ago", "{n} years ago");
 }
 
-export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

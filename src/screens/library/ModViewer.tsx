@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { errorText, modtools, type GameId, type ModMesh } from "../../lib/api";
 import { Button, IconButton } from "../../ui/kit";
+import { lang, stops, t, tb } from "../../lib/i18n";
 
 const bytes = (b64: string) => {
   const s = atob(b64);
@@ -25,7 +26,7 @@ interface View {
   snap: () => Promise<Blob | null>;
 }
 
-const TIP = "Drag to turn, scroll to zoom, right-drag to move. Arrow keys turn it, + and - zoom, Home resets the view";
+const TIP = t("Drag to turn, scroll to zoom, right-drag to move. Arrow keys turn it, + and - zoom, Home resets the view");
 
 export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: {
   game: GameId; modId: string; onClose: () => void; onSnapshot: (png: Blob) => void; saving?: boolean;
@@ -50,7 +51,7 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
     try { renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); }
     catch (e) {
       console.error("3D view: no WebGL", e);
-      setError("Couldn't start the 3D view. The graphics driver didn't allow it, which can happen with hardware acceleration turned off or an old driver");
+      setError(t("Couldn't start the 3D view. The graphics driver didn't allow it, which can happen with hardware acceleration turned off or an old driver"));
       return;
     }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -71,14 +72,14 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
     let render = () => {};
     const loader = new THREE.TextureLoader();
     const textures = mesh.textures.map((url) => {
-      const t = loader.load(url, () => render());
-      t.colorSpace = THREE.SRGBColorSpace;
+      const tex = loader.load(url, () => render());
+      tex.colorSpace = THREE.SRGBColorSpace;
       // the game's UVs start at the top of the image
-      t.flipY = false;
-      t.wrapS = t.wrapT = THREE.RepeatWrapping;
-      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      owned.push(t);
-      return t;
+      tex.flipY = false;
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      owned.push(tex);
+      return tex;
     });
 
     const root = new THREE.Group();
@@ -216,22 +217,22 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
   return (
     <div className="mod-viewer-wrap">
       <div ref={box} className={`mod-viewer${ready ? "" : " is-wait"}`} tabIndex={0} title={ready ? TIP : undefined}
-        aria-label={ready ? `3D view. ${TIP}` : "3D view"} onKeyDown={onKey}>
-        {!mesh && !error && <span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />Reading the model</span>}
+        aria-label={ready ? t("3D view. {tip}", { tip: TIP }) : t("3D view")} onKeyDown={onKey}>
+        {!mesh && !error && <span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />{t("Reading the model")}</span>}
         {error && <span className="mod-viewer-msg">{error}</span>}
         <div className="mod-drawer-picact">
           {ready && (
             <Button size="sm" className="on-img" icon="camera" busy={saving} onClick={() => void snap()}
-              title="Save this view as the mod's preview picture">Use as preview</Button>
+              title={t("Save this view as the mod's preview picture")}>{t("Use as preview")}</Button>
           )}
-          {ready && <IconButton size="sm" variant="secondary" className="on-img" icon="refresh" label="Reset the view (Home)" onClick={() => view.current?.reset()} />}
-          <IconButton size="sm" variant="secondary" className="on-img" icon="x" label="Close the 3D view (Esc)" onClick={onClose} />
+          {ready && <IconButton size="sm" variant="secondary" className="on-img" icon="refresh" label={t("Reset the view (Home)")} onClick={() => view.current?.reset()} />}
+          <IconButton size="sm" variant="secondary" className="on-img" icon="x" label={t("Close the 3D view (Esc)")} onClick={onClose} />
         </div>
       </div>
       {ready && (
         <p className="hint mod-viewer-note">
-          The parts this mod replaces, as its toggles are set now ({ready.triangles.toLocaleString()} triangles).
-          {ready.notes.length > 0 && ` ${ready.notes.join(". ")}.`}
+          {t("The parts this mod replaces, as its toggles are set now ({n} triangles).", { n: ready.triangles })}
+          {ready.notes.length > 0 && (lang === "zh-CN" ? "" : " ") + stops(ready.notes.map((n) => tb(n)), true)}
         </p>
       )}
     </div>

@@ -25,6 +25,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: "[data-nav=\"grid\"]", what: "view buttons as two-column tiles" },
       { sel: "[data-corners]", what: "sharp or round, absent for soft; overrides the --radius tokens" },
       { sel: "[data-buttons]", what: "icons or text: buttons show only that; absent for both" },
+      { sel: "[data-format]", what: "how Mods is laid out, picked by the user: chars (character list on the left), panes (plus details docked on the right), rows (dense list); absent for cards. Themes style it, never set it" },
       { sel: "html.kbd, html.pad", what: "keyboard or controller in use, focus rings show" },
     ],
   },
@@ -179,7 +180,8 @@ export const THEME_ANATOMY: ThemeArea[] = [
   },
   {
     id: "settings", name: "Settings and Tools", parts: [
-      { sel: ".pg > .pg-nav (.pg-group, .pg-nav-i), .pg-stage (.pg-page); .on", what: "page list left (.pg-nav-i.on is open), the page right" },
+      { sel: ".pg > .pg-side (.pg-search, .pg-nav (.pg-group, .pg-nav-i)), .pg-stage (.pg-page); .on", what: "search field and page list left (.pg-nav-i.on is open), the page right" },
+      { sel: ".pg-page.pg-results > .pg-body (.pg-from, .panel, .pg-hit)", what: "search results in place of the page: where each page's panels live, the panels, matching settings lit" },
       { sel: ".pg-page > .pg-body > .panel", what: "a page's panels, kept frameless by the app; .panel-h still takes your style" },
       { sel: ".set-row", what: "a setting: label and .hint left, control right" },
       { sel: ".set-game > .gbadge, .set-game-main (.set-game-h, .set-folder); .shown", what: "a game and its folders" },

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { errorText, library, type GameId, type ModEntry, type ModPart } from "../../lib/api";
 import { record } from "../../lib/history";
-import { Panel, Toggle, formatBytes, plural } from "../../ui/kit";
+import { Panel, Toggle, formatBytes } from "../../ui/kit";
+import { t, tn } from "../../lib/i18n";
 import { toast } from "../../ui/toast";
 import { publish } from "./data";
 
@@ -22,7 +23,7 @@ export function ModParts({ game, mod }: { game: GameId; mod: ModEntry }) {
   const flip = async (name: string, on: boolean) => {
     const now = await library.parts(game, mod.id);
     const p = now.find((x) => x.name === name);
-    if (!p) throw new Error(`${name} isn't in ${mod.name} anymore`);
+    if (!p) throw new Error(t("{part} isn't in {mod} anymore", { part: name, mod: mod.name }));
     const m = await library.setPart(game, mod.id, p.folder, on);
     publish(game, { changed: [m], removed: [], notes: [] });
     setParts(await library.parts(game, mod.id));
@@ -31,19 +32,19 @@ export function ModParts({ game, mod }: { game: GameId; mod: ModEntry }) {
     setBusy(true);
     try {
       await flip(p.name, on);
-      record({ label: `Turned ${on ? "on" : "off"} ${p.name} in ${mod.name}`, undo: () => flip(p.name, !on), redo: () => flip(p.name, on) });
+      record({ label: on ? t("Turned on {part} in {mod}", { part: p.name, mod: mod.name }) : t("Turned off {part} in {mod}", { part: p.name, mod: mod.name }), undo: () => flip(p.name, !on), redo: () => flip(p.name, on) });
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };
 
   const on = parts.filter((p) => p.enabled).length;
   return (
-    <Panel title="Parts" icon="layers" className="mi-panel mod-parts" count={`${on} of ${parts.length} on`}>
-      <p className="hint">Folders inside this mod with their own .ini. A part that's off isn't loaded, and the rest of the mod stays on.</p>
+    <Panel title={t("Parts")} icon="layers" className="mi-panel mod-parts" count={t("{on} of {n} on", { on, n: parts.length })}>
+      <p className="hint">{t("Folders inside this mod with their own .ini. A part that's off isn't loaded, and the rest of the mod stays on.")}</p>
       <div className="mod-parts-list">
         {parts.map((p) => (
           <Toggle key={p.name} checked={p.enabled} disabled={busy} onChange={(v) => void set(p, v)}
-            label={p.name} hint={`${plural(p.iniCount, "ini")}, ${formatBytes(p.sizeBytes)}`} />
+            label={p.name} hint={tn(p.iniCount, "{n} ini, {size}", "{n} inis, {size}", { size: formatBytes(p.sizeBytes) })} />
         ))}
       </div>
     </Panel>

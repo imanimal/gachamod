@@ -7,7 +7,7 @@ import { holdsNow, holdsPref, releaseMods } from "../../lib/holds";
 import { jsonPref } from "../../lib/prefs";
 import { emitApp, go } from "../../lib/store";
 import { onKeysChanged, recordBackups } from "../../ui/KeyEditor";
-import { plural } from "../../ui/kit";
+import { t, tb, tn } from "../../lib/i18n";
 import { toast } from "../../ui/toast";
 import { problemSeenKey } from "./toolsBadge";
 
@@ -48,7 +48,7 @@ export function ignore(game: GameId, m: ModProblems, problems: Problem[]) {
   const all = { ...ignoredPref.get() };
   const k = modKey(game, m.modId);
   all[k] = [...new Set([...(all[k] ?? []), ...problems.map(problemKey)])];
-  void ignoredPref.set(all, `Ignored ${plural(problems.length, "problem")} in ${m.name}`);
+  void ignoredPref.set(all, tn(problems.length, "Ignored {n} problem in {name}", "Ignored {n} problems in {name}", { name: m.name }));
 }
 
 export function ignoreAll(game: GameId, list: ModProblems[]) {
@@ -61,7 +61,7 @@ export function ignoreAll(game: GameId, list: ModProblems[]) {
     all[k] = [...new Set([...(all[k] ?? []), ...shown.map(problemKey)])];
     n += shown.length;
   }
-  if (n) void ignoredPref.set(all, `Ignored ${plural(n, "problem")}`);
+  if (n) void ignoredPref.set(all, tn(n, "Ignored {n} problem", "Ignored {n} problems"));
 }
 
 export function unignore(game: GameId, m: ModProblems) {
@@ -69,7 +69,7 @@ export function unignore(game: GameId, m: ModProblems) {
   const all = { ...ignoredPref.get() };
   if (!all[modKey(game, m.modId)]) return;
   delete all[modKey(game, m.modId)];
-  void ignoredPref.set(all, `Showing ${m.name}'s problems again`);
+  void ignoredPref.set(all, t("Showing {name}'s problems again", { name: m.name }));
 }
 
 // ── the lint result, one per game ──
@@ -108,21 +108,23 @@ onKeysChanged((game) => { if (snap.game === game) void loadLint(game); });
 
 /** Short button text for a fix ("Use RegularRaiden/x.buf", "Keep 1/Yelan.ini on"). */
 export function fixLabel(f: ProblemFix): string {
-  if (f.kind === "keep") return `Keep ${f.ini ?? f.inis[0] ?? "one"} on`;
+  if (f.kind === "keep") { const ini = f.ini ?? f.inis[0]; return ini ? t("Keep {ini} on", { ini }) : t("Keep one on"); }
+  if (f.kind === "off") return t("Turn this copy off");
   const to = (f.to ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
-  return `Use ${to}`;
+  return t("Use {file}", { file: to });
 }
 
 export function fixHint(f: ProblemFix): string {
-  if (f.kind === "keep") return `Turn off the others by renaming them DISABLED_. Undo puts them back`;
-  return `The same file is at ${(f.to ?? "").replace(/\\/g, "/")}. Changes ${f.ini} to load it from there. Undo puts the old line back`;
+  if (f.kind === "keep") return t("Turn off the others by renaming them DISABLED_. Undo puts them back");
+  if (f.kind === "off") return t("Renames {ini} DISABLED_, so the loader uses its own copy. Undo puts it back", { ini: f.ini ?? "" });
+  return t("The same file is at {file}. Changes {ini} to load it from there. Undo puts the old line back", { file: (f.to ?? "").replace(/\\/g, "/"), ini: f.ini ?? "" });
 }
 
 /** Make a fix, with Undo. True when it worked. */
 export async function applyFix(game: GameId, m: ModProblems, fix: ProblemFix): Promise<boolean> {
   try {
     const backup = await modtools.fix(game, m.modId, fix);
-    recordBackups(`${m.name}: ${backup.label}`, [{ game, modId: m.modId, backup }]);
+    recordBackups(t("{name}: {what}", { name: m.name, what: tb(backup.label) }), [{ game, modId: m.modId, backup }]);
     return true;
   } catch (e) {
     toast(errorText(e), true);
@@ -144,7 +146,7 @@ export async function fixAll(game: GameId, list: ModProblems[], ign: Ignored) {
   for (const { m, fix } of autoFixes(list, ign, game)) {
     try { taken.push({ game, modId: m.modId, backup: await modtools.fix(game, m.modId, fix) }); } catch (e) { failed ??= e; }
   }
-  if (taken.length) recordBackups(taken.length === 1 ? taken[0]!.backup.label : `Fixed ${plural(taken.length, "problem")}`, taken);
+  if (taken.length) recordBackups(taken.length === 1 ? tb(taken[0]!.backup.label) : tn(taken.length, "Fixed {n} problem", "Fixed {n} problems"), taken);
   if (failed) toast(errorText(failed), true);
   emitApp({ type: "library-refresh", game });
   void loadLint(game);
@@ -157,11 +159,11 @@ export async function downloadAgain(game: GameId, m: ModProblems) {
   if (!s) return;
   try {
     const mod = await modPage(s.modId);
-    if (!mod) { toast(`Couldn't find ${m.name} on GameBanana`, true); return; }
+    if (!mod) { toast(t("Couldn't find {name} on GameBanana", { name: m.name }), true); return; }
     const file = mod.files.find((f) => f.id === s.fileId) ?? newestFile(mod);
-    if (!file) { toast(`${m.name} has no file to download on GameBanana`, true); return; }
+    if (!file) { toast(t("{name} has no file to download on GameBanana", { name: m.name }), true); return; }
     await queueModFile(game, mod, file, m.modId);
-    toast(`Downloading ${m.name} again`, false, { label: "Show", run: () => go("downloads") });
+    toast(t("Downloading {name} again", { name: m.name }), false, { label: t("Show"), run: () => go("downloads") });
   } catch (e) { toast(errorText(e), true); }
 }
 

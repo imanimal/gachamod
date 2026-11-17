@@ -1,6 +1,7 @@
 // Reading the theme task's answer: its json block and the css blocks after it, also when the answer came in parts
-// because the chatbot ran out of room. No app imports, so it is tested on its own (themeReply.test.ts).
-// Owner: SETTINGS/AI area.
+// because the chatbot ran out of room. Nothing from the app but lib/i18n, so it is tested on its own
+// (themeReply.test.ts). Owner: SETTINGS/AI area.
+import { t } from "../../lib/i18n";
 import { CutOff, ReplyError, parseReply } from "./reply";
 
 interface Block { lang: string; body: string; cut: boolean }
@@ -42,27 +43,27 @@ function braces(css: string): { depth: number; lastTop: number } {
   return { depth, lastTop };
 }
 
-export const CUT_NOTE = "The stylesheet stops partway (the chatbot ran out of room). Apply uses what's here. For the rest, ask the chatbot to go on in a new css block, copy that answer and press Paste the rest.";
+export const CUT_NOTE = t("The stylesheet stops partway (the chatbot ran out of room). Apply uses what's here. For the rest, ask the chatbot to go on in a new css block, copy that answer and press Paste the rest.");
 
 /** The theme in a pasted reply: its json block, with every css block joined as the stylesheet. Several answers pasted
     one after another work: a block that was cut off is joined with the next, or cut back to its last whole rule when
     the next starts over. `cut` says the stylesheet still stops partway. A reply without code blocks is read as one
     bare JSON object. */
 export function parseThemeReply(text: string): { theme: unknown; cut: boolean } {
-  if (!text.trim()) throw new ReplyError("Paste the chatbot's answer first.");
+  if (!text.trim()) throw new ReplyError(t("Paste the chatbot's answer first."));
   const blocks = blocksOf(text);
   if (!blocks.length) return { theme: parseReply(text), cut: false };
   const json = blocks.find((b) => b.lang === "json") ?? blocks.find((b) => b.lang !== "css" && /^\s*\{/.test(b.body));
   if (!json) {
-    if (blocks.some((b) => b.cut)) throw new CutOff("The answer stops before its json code block (the chatbot ran out of room). Ask it to send the json block, copy that answer and press Paste the rest.");
-    throw new ReplyError("There's no json code block in that answer. Copy the chatbot's whole reply, including its code blocks.");
+    if (blocks.some((b) => b.cut)) throw new CutOff(t("The answer stops before its json code block (the chatbot ran out of room). Ask it to send the json block, copy that answer and press Paste the rest."));
+    throw new ReplyError(t("There's no json code block in that answer. Copy the chatbot's whole reply, including its code blocks."));
   }
   let theme: unknown;
   try { theme = JSON.parse(json.body); } catch {
-    if (json.cut) throw new CutOff("The answer stops inside its json code block. Ask the chatbot to send the json block again, copy that answer and press Paste the rest.");
-    throw new ReplyError("The json code block isn't valid JSON. Ask the chatbot to send it again.");
+    if (json.cut) throw new CutOff(t("The answer stops inside its json code block. Ask the chatbot to send the json block again, copy that answer and press Paste the rest."));
+    throw new ReplyError(t("The json code block isn't valid JSON. Ask the chatbot to send it again."));
   }
-  if (!theme || typeof theme !== "object" || Array.isArray(theme)) throw new ReplyError("The json code block should be one theme object.");
+  if (!theme || typeof theme !== "object" || Array.isArray(theme)) throw new ReplyError(t("The json code block should be one theme object."));
 
   const css = blocks.filter((b) => b.lang === "css");
   const parts = css.map((b) => b.body.trim());

@@ -61,7 +61,7 @@
         // the layout picked in Settings (a custom theme's own layout below wins)
         var mine = null;
         try { mine = JSON.parse(g("gm.layout") || "null"); } catch (e) { /* not set */ }
-        ["density", "sidebar", "nav", "corners"].forEach(function (n) { if (mine && typeof mine[n] === "string") r.setAttribute("data-" + n, mine[n]); });
+        ["density", "sidebar", "nav", "corners", "format"].forEach(function (n) { if (mine && typeof mine[n] === "string") r.setAttribute("data-" + n, mine[n]); });
         if (custom) {
           // a custom theme: its checked CSS and layout, as lib/theme.ts last applied them
           r.setAttribute("data-custom", custom.id);

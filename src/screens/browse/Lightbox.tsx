@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "../../ui/kit";
 import { imageAt, type GbImage } from "../../lib/gamebanana";
+import { t } from "../../lib/i18n";
 
 export function Lightbox({ images, start, onClose }: { images: GbImage[]; start: number; onClose: () => void }) {
   const [i, setI] = useState(Math.max(0, Math.min(start, images.length - 1)));
@@ -27,20 +28,20 @@ export function Lightbox({ images, start, onClose }: { images: GbImage[]; start:
   if (!img) return null;
   const host = document.querySelector(".app") ?? document.body;
   return createPortal(
-    <div ref={boxRef} className="overlay gb-lightbox" role="dialog" aria-modal="true" aria-label="Pictures"
+    <div ref={boxRef} className="overlay gb-lightbox" role="dialog" aria-modal="true" aria-label={t("Pictures")}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="gb-lightbox-bar">
         <span className="gb-lightbox-n">{i + 1} / {n}</span>
         {img.caption && <span className="gb-lightbox-cap">{img.caption}</span>}
-        <IconButton className="gb-lightbox-x" icon="x" label="Close (Esc)" onClick={onClose} />
+        <IconButton className="gb-lightbox-x" icon="x" label={t("Close (Esc)")} onClick={onClose} />
       </div>
       {broken
-        ? <div className="gb-lightbox-img gb-img-broken">This picture didn't load</div>
+        ? <div className="gb-lightbox-img gb-img-broken">{t("This picture didn't load")}</div>
         : <img key={img.full} className="gb-lightbox-img" src={img.full} alt={img.caption ?? ""} decoding="async"
             onError={(e) => { const fallback = imageAt(img, 800); if (fallback && e.currentTarget.src !== fallback) e.currentTarget.src = fallback; else setBroken(true); }} />}
       {n > 1 && <>
-        <IconButton className="gb-lightbox-prev" icon="back" label="Previous (Left arrow)" onClick={() => step(-1)} />
-        <IconButton className="gb-lightbox-next" icon="chevron" label="Next (Right arrow)" onClick={() => step(1)} />
+        <IconButton className="gb-lightbox-prev" icon="back" label={t("Previous (Left arrow)")} onClick={() => step(-1)} />
+        <IconButton className="gb-lightbox-next" icon="chevron" label={t("Next (Right arrow)")} onClick={() => step(1)} />
       </>}
     </div>, host);
 }

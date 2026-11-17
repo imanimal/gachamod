@@ -11,7 +11,8 @@ import type { AiTask } from "../../lib/ai";
 import { currentGame } from "../../lib/store";
 import { CUSTOM_CSS_MAX, THEMES, THEME_TOKENS, themeState, validateCustomTheme } from "../../lib/theme";
 import { THEME_ANATOMY, anatomyText } from "../../lib/theme-anatomy";
-import { plural } from "../../ui/kit";
+import { gameName } from "../../lib/games";
+import { english, t, tn } from "../../lib/i18n";
 import { saveTheme } from "../settings/customThemes";
 import { ReplyError } from "./reply";
 import type { Built, TaskInput } from "./tasks";
@@ -41,7 +42,7 @@ function fontList(): string {
 export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Built> {
   const want = input.text.trim();
   const now = themeState();
-  const nowName = THEMES.find((t) => t.id === now.id)?.name ?? now.id;
+  const nowName = english(THEMES.find((x) => x.id === now.id)?.name ?? now.id);
   const game = currentGame();
   const css = getComputedStyle(document.documentElement);
   const value = (k: string) => css.getPropertyValue(k).trim().replace(/\s+/g, " ").slice(0, 90);
@@ -57,7 +58,7 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
   const prompt = [
     `Make a theme for gachamod, a Windows app that manages game mods, from this description: "${want}".`,
     "How themes work here: a theme is a base theme, token values, a layout and a stylesheet. The built-in game themes are 60 to 100 KB of CSS each. They define their own materials as custom properties (surfaces, ink, rims, textures made from gradients or inline SVG) and then restyle every part with them: buttons, toggles, chips, tabs, fields, panels, cards, dialogs, menus, toasts, the title bar, the sidebar, page headers, each screen, decoration and motion. Work at that depth. When the description names a style, a material, a game or a mood, give every part in the map below a deliberate look in that style, not just new colours. A small request (\"a pink accent\") only needs tokens.",
-    `"base" is the built-in theme it sits on:\n${THEMES.map((t) => `${t.id}: ${t.description}`).join("\n")}\n` +
+    `"base" is the built-in theme it sits on:\n${THEMES.map((x) => `${x.id}: ${english(x.description)}`).join("\n")}\n` +
       `Use "default" unless the description asks for one of those games' looks. The game themes keep drawing their own menus (shapes, textures) under yours, so your CSS would have to override them.`,
     `Showing now: ${nowName} (${now.scheme})${game ? ` for ${game.name}` : ""}${gameAccent ? `, game colour ${gameAccent}` : ""}. Tokens (only these go in "tokens") with their current values. Colours: #hex, rgb(), hsl(), oklch(), color-mix() or var(--token).\n${tokens}`,
     [
@@ -93,30 +94,30 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
 
   return {
     prompt,
-    shares: ["What you typed", "The theme settings gachamod understands, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)"],
+    shares: [t("What you typed"), t("The theme settings gachamod understands, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)")],
     parse: parseThemeReply,
     read(parsed) {
       const { theme: reply, cut } = parsed as ReturnType<typeof parseThemeReply>;
-      if (!reply || typeof reply !== "object" || Array.isArray(reply)) throw new ReplyError("The answer should be one theme object.");
+      if (!reply || typeof reply !== "object" || Array.isArray(reply)) throw new ReplyError(t("The answer should be one theme object."));
       const extra = Object.keys(reply).filter((k) => !FIELDS.includes(k));
-      if (extra.length) throw new ReplyError(`The theme has fields that weren't asked for: ${extra.join(", ")}.`);
+      if (extra.length) throw new ReplyError(t("The theme has fields that weren't asked for: {fields}.", { fields: extra.join(", ") }));
       const { theme, problems } = validateCustomTheme(reply);
-      if (!theme) throw new ReplyError(problems[0] ?? "That isn't a theme.");
+      if (!theme) throw new ReplyError(problems[0] ?? t("That isn't a theme."));
       const game = currentGame();
       const base = THEMES.find((b) => b.id === theme.base)?.name ?? theme.base;
       const lay = Object.entries(theme.layout);
       const reach = theme.css ? partsStyled(theme.css) : null;
       return {
-        summary: `${theme.name}, on ${base}`,
+        summary: t("{name}, on {base}", { name: theme.name, base }),
         rows: [
-          ...(Object.keys(theme.tokens).length ? [{ title: "Colours and sizes", lines: Object.entries(theme.tokens).map(([k, v]) => ({ label: k, after: v })) }] : []),
-          ...(lay.length ? [{ title: "Layout", lines: lay.map(([k, v]) => ({ label: k, after: String(v) })) }] : []),
+          ...(Object.keys(theme.tokens).length ? [{ title: t("Colours and sizes"), lines: Object.entries(theme.tokens).map(([k, v]) => ({ label: k, after: v })) }] : []),
+          ...(lay.length ? [{ title: t("Layout"), lines: lay.map(([k, v]) => ({ label: k, after: String(v) })) }] : []),
           ...(theme.css && reach ? [{
-            title: "Stylesheet",
+            title: t("Stylesheet"),
             lines: [
-              { label: "Size", after: `${Math.max(1, Math.round(theme.css.length / 1024))} KB, ${plural(theme.css.split("\n").length, "line")}` },
-              ...(reach.styled.length ? [{ label: "Restyles", after: reach.styled.join(", ") }] : []),
-              ...(reach.left.length ? [{ label: "Left to the base", after: reach.left.join(", ") }] : []),
+              { label: t("Size"), after: tn(theme.css.split("\n").length, "{kb} KB, {n} line", "{kb} KB, {n} lines", { kb: Math.max(1, Math.round(theme.css.length / 1024)) }) },
+              ...(reach.styled.length ? [{ label: t("Restyles"), after: reach.styled.join(", ") }] : []),
+              ...(reach.left.length ? [{ label: t("Left to the base"), after: reach.left.join(", ") }] : []),
             ],
           }] : []),
         ],
@@ -125,13 +126,22 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
         text: [],
         links: [],
         apply: async () => {
-          const t = await saveTheme(theme, true, game);
-          return [`Saved the theme ${t.name}`, game ? `Using it for ${game.name}. Change it in Settings, Appearance` : "Pick it for a game in Settings, Custom themes"];
+          const saved = await saveTheme(theme, true, game);
+          return [t("Saved the theme {name}", { name: saved.name }), game ? t("Using it for {game}. Change it in Settings, Appearance", { game: gameName(game) }) : t("Pick it for a game in Settings, Custom themes")];
         },
       };
     },
   };
 }
+
+/** The parts map's areas as the preview names them (the prompt keeps lib/theme-anatomy.ts's English). */
+const AREA_NAMES: Record<string, string> = {
+  root: t("Attributes on <html>"), window: t("Window and text"), icons: t("Icons"), titlebar: t("Title bar"),
+  sidebar: t("Sidebar"), header: t("Page header"), buttons: t("Buttons"), fields: t("Fields"), pickers: t("Pickers"),
+  boxes: t("Boxes"), overlays: t("Overlays"), feedback: t("Feedback"), library: t("Mods screen"),
+  browse: t("Browse screen"), characters: t("Characters screen"), downloads: t("Downloads screen"),
+  settings: t("Settings and Tools"), home: t("Home and Profiles"), deco: t("Decoration (hidden until a theme gives it display)"),
+};
 
 /** Which areas of the parts map a stylesheet touches (it names one of their classes), and which it leaves alone. */
 function partsStyled(css: string): { styled: string[]; left: string[] } {
@@ -140,7 +150,7 @@ function partsStyled(css: string): { styled: string[]; left: string[] } {
     const classes = new Set(area.parts.flatMap((p) => [...p.sel.matchAll(/\.([a-z][\w-]*)/gi)].map((m) => m[1]!)));
     if (!classes.size) continue;
     const hit = [...classes].some((c) => new RegExp(`\\.${c.replace(/-/g, "\\-")}(?![\\w-])`).test(css));
-    (hit ? styled : left).push(area.name);
+    (hit ? styled : left).push(AREA_NAMES[area.id] ?? area.name);
   }
   return { styled, left };
 }

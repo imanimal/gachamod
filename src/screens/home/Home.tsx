@@ -8,10 +8,11 @@ import { record } from "../../lib/history";
 import { useCreators, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { surpriseMe } from "../../lib/recommend";
 import { usePortraitBatch } from "../../lib/portraits";
-import { charNoun } from "../../lib/games";
+import { charNoun, gameName } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 import { emitApp, go, useGame } from "../../lib/store";
 import { gameInfo } from "../../lib/gamebanana";
-import { Badge, Button, IconButton, plural, Skeleton, timeAgo } from "../../ui/kit";
+import { Badge, Button, IconButton, Skeleton, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { Portrait } from "../../ui/Portrait";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
@@ -71,26 +72,26 @@ function HomeFor({ game }: { game: GameState }) {
     setHomeEditing(false);
     const to = normalize(homeLayoutPref.get());
     if (from && JSON.stringify(from) !== JSON.stringify(to)) {
-      record({ label: "Changed what Home shows", undo: () => homeLayoutPref.set(from), redo: () => homeLayoutPref.set(to) });
+      record({ label: t("Changed what Home shows"), undo: () => homeLayoutPref.set(from), redo: () => homeLayoutPref.set(to) });
     }
   }
   const put = (l: HomeLayout) => void homeLayoutPref.set(l);
   // the characters widget is named with the game's word ("Your resonators"), here and in Customise
   const noun = charNoun(game.id);
-  const titleOf = (id: WidgetId) => id === "characters" ? `Your ${noun.toLowerCase()}` : WIDGETS[id].title;
-  const tipOf = (id: WidgetId) => id === "characters" ? `${noun} you have mods for` : WIDGETS[id].tip;
+  const titleOf = (id: WidgetId) => id === "characters" ? t("Your {noun}", { noun: noun.toLowerCase() }) : WIDGETS[id].title;
+  const tipOf = (id: WidgetId) => id === "characters" ? t("{noun} you have mods for", { noun }) : WIDGETS[id].tip;
 
   // right-click on a widget's header: hide it, with Undo
   const headerMenu = (id: WidgetId) => (e: MouseEvent) => {
     if (!(e.target as Element | null)?.closest?.("header")) return;
     menuHandler(() => [
-      { label: "Hide from Home", icon: "hide", onClick: () => {
+      { label: t("Hide from Home"), icon: "hide", onClick: () => {
         const from = normalize(homeLayoutPref.get());
         const to = setShown(from, id, false);
         put(to);
-        record({ label: `Hid ${titleOf(id)} from Home`, undo: async () => homeLayoutPref.set(from), redo: async () => homeLayoutPref.set(to) });
+        record({ label: t("Hid {widget} from Home", { widget: titleOf(id) }), undo: async () => homeLayoutPref.set(from), redo: async () => homeLayoutPref.set(to) });
       } },
-      { label: "Customise Home", icon: "layout", onClick: () => setHomeEditing(true) },
+      { label: t("Customise Home"), icon: "layout", onClick: () => setHomeEditing(true) },
     ])(e);
   };
 
@@ -101,7 +102,7 @@ function HomeFor({ game }: { game: GameState }) {
       case "hq": return <GbStrip game={game.id} title={WIDGETS.hq.title} query={{ hq: true, sort: "new" }} />;
       case "foryou": return <GbStrip game={game.id} title={WIDGETS.foryou.title} query={{ sort: "foryou" }} />;
       case "followed": return following ? <GbStrip game={game.id} title={WIDGETS.followed.title} query={{ followed: true }} />
-        : editing ? <Nothing title={WIDGETS.followed.title}>Follow a creator (right-click their name) and their new mods show here.</Nothing> : null;
+        : editing ? <Nothing title={WIDGETS.followed.title}>{t("Follow a creator (right-click their name) and their new mods show here.")}</Nothing> : null;
       case "characters": return <Characters game={game} mods={lib.mods} loaded={lib.loaded} editing={editing} />;
       case "recent": return <Recent game={game} mods={lib.mods} loaded={lib.loaded} editing={editing} />;
       case "browser": return <section className="home-w-browser" aria-label="GameBanana"><GbBrowser game={game.id} embedded onExpand={() => go("browse")} /></section>;
@@ -117,12 +118,12 @@ function HomeFor({ game }: { game: GameState }) {
   return (
     <div className={`page home${editing ? " is-editing" : ""}`}>
       {editing && (
-        <div className="home-edit-bar" role="toolbar" aria-label="Customise Home">
+        <div className="home-edit-bar" role="toolbar" aria-label={t("Customise Home")}>
           <Icon name="layout" />
-          <span className="home-edit-t">Show, hide and move what Home shows. Alt+Up and Alt+Down move the focused one.</span>
+          <span className="home-edit-t">{t("Show, hide and move what Home shows. Alt+Up and Alt+Down move the focused one.")}</span>
           <span className="grow" />
-          <Button size="sm" variant="ghost" icon="undo" onClick={() => put(DEFAULT_LAYOUT)} title="Every widget, in the order Home started with">Reset</Button>
-          <Button size="sm" variant="primary" icon="check" onClick={finish} title="Done (Esc)">Done</Button>
+          <Button size="sm" variant="ghost" icon="undo" onClick={() => put(DEFAULT_LAYOUT)} title={t("Every widget, in the order Home started with")}>{t("Reset")}</Button>
+          <Button size="sm" variant="primary" icon="check" onClick={finish} title={t("Done (Esc)")}>{t("Done")}</Button>
         </div>
       )}
       {shown.map((id, i) => {
@@ -138,12 +139,12 @@ function HomeFor({ game }: { game: GameState }) {
             <div className="home-w-edit">
               <Icon name={WIDGETS[id].icon} />
               <span className="home-w-edit-t" title={tipOf(id)}>{titleOf(id)}</span>
-              {hidden && <Badge tone="muted">Hidden</Badge>}
+              {hidden && <Badge tone="muted">{t("Hidden")}</Badge>}
               <span className="grow" />
-              <IconButton size="sm" icon="up" label={`Move ${titleOf(id)} up`} title="Move up (Alt+Up)" disabled={i === 0} onClick={() => put(move(layout, id, -1))} />
-              <IconButton size="sm" icon="down" label={`Move ${titleOf(id)} down`} title="Move down (Alt+Down)" disabled={i === shown.length - 1} onClick={() => put(move(layout, id, 1))} />
+              <IconButton size="sm" icon="up" label={t("Move {widget} up", { widget: titleOf(id) })} title={t("Move up (Alt+Up)")} disabled={i === 0} onClick={() => put(move(layout, id, -1))} />
+              <IconButton size="sm" icon="down" label={t("Move {widget} down", { widget: titleOf(id) })} title={t("Move down (Alt+Down)")} disabled={i === shown.length - 1} onClick={() => put(move(layout, id, 1))} />
               <Button size="sm" variant={hidden ? "primary" : "secondary"} icon={hidden ? "eye" : "hide"} onClick={() => put(setShown(layout, id, hidden))}
-                title={hidden ? "Show it on Home" : "Hide it from Home"}>{hidden ? "Show" : "Hide"}</Button>
+                title={hidden ? t("Show it on Home") : t("Hide it from Home")}>{hidden ? t("Show") : t("Hide")}</Button>
             </div>
             {!hidden && <div className="home-w-body">{body(id)}</div>}
           </div>
@@ -151,7 +152,7 @@ function HomeFor({ game }: { game: GameState }) {
       })}
       {!editing && (
         <div className="home-foot">
-          <Button size="sm" variant="ghost" icon="layout" onClick={() => setHomeEditing(true)} title="Show, hide and reorder what's on Home">Customise Home</Button>
+          <Button size="sm" variant="ghost" icon="layout" onClick={() => setHomeEditing(true)} title={t("Show, hide and reorder what's on Home")}>{t("Customise Home")}</Button>
         </div>
       )}
     </div>
@@ -186,42 +187,42 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
   const total = mods.length || game.modCount;
   const importerUpdate = !!(game.importerLatest && game.importerVersion && game.importerLatest !== game.importerVersion);
   const status = game.viaXxmi
-    ? `${game.importer}${game.importerVersion ? ` ${game.importerVersion}` : ""} via XXMI`
-    : game.importerDir ? `${game.importer} loader` : game.gameDir ? "No mod loader set" : "Not set up yet";
+    ? t("{loader} via XXMI", { loader: `${game.importer}${game.importerVersion ? ` ${game.importerVersion}` : ""}` })
+    : game.importerDir ? t("{loader} loader", { loader: game.importer ?? "" }) : game.gameDir ? t("No mod loader set") : t("Not set up yet");
 
   const job = (id: string, f: () => Promise<unknown>) => async () => {
     setBusy(id);
     try { await f(); } catch (e) { toast(errorText(e), true); } finally { setBusy(null); }
   };
   const importPack = async () => {
-    const r = await dialogs.pickFiles({ title: "Import a .gachamod", extensions: ["gachamod"] });
+    const r = await dialogs.pickFiles({ title: t("Import a .gachamod"), extensions: ["gachamod"] });
     if (r?.[0]) emitApp({ type: "open-pack", path: r[0] });
   };
 
   return (
-    <section className="home-quick" style={{ "--g-accent": game.accent } as CSSProperties} aria-label="Play and profiles">
+    <section className="home-quick" style={{ "--g-accent": game.accent } as CSSProperties} aria-label={t("Play and profiles")}>
       {banner && bannerOk && <LazyImg className="home-quick-img" src={banner} alt="" decoding="async" onError={() => setBannerOk(false)} />}
       <div className="home-quick-top">
         <div className="home-quick-game">
-          <h1 className="home-quick-name">{game.name}</h1>
+          <h1 className="home-quick-name">{gameName(game)}</h1>
           <p className="home-quick-status">
             <span>{status}</span>
             {total
-              ? <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+3)">{on} of {plural(total, "mod")} on</button>
-              : <button type="button" className="home-quick-count" onClick={() => go("browse")} title="Find mods on GameBanana (Ctrl+2)">No mods yet</button>}
-            {importerUpdate && <Badge tone="info" icon="update" title={`XXMI Launcher installs ${game.importer} ${game.importerLatest} when it next starts. Click for its settings`} onClick={() => go({ view: "settings", section: "xxmi" })}>{game.importerLatest} available</Badge>}
+              ? <button type="button" className="home-quick-count" onClick={() => go("library")} title={t("Open your mods (Ctrl+3)")}>{tn(total, "{on} of {n} mod on", "{on} of {n} mods on", { on })}</button>
+              : <button type="button" className="home-quick-count" onClick={() => go("browse")} title={t("Find mods on GameBanana (Ctrl+2)")}>{t("No mods yet")}</button>}
+            {importerUpdate && <Badge tone="info" icon="update" title={t("XXMI Launcher installs {loader} {version} when it next starts. Click for its settings", { loader: game.importer ?? "", version: game.importerLatest ?? "" })} onClick={() => go({ view: "settings", section: "xxmi" })}>{t("{version} available", { version: game.importerLatest ?? "" })}</Badge>}
           </p>
         </div>
         <PlayButton big />
       </div>
       <div className="home-quick-bar">
         <ProfileRow game={game} />
-        <div className="home-quick-acts" role="toolbar" aria-label="Quick actions">
-          <IconButton icon="refresh" label="Rescan" title="Reads the Mods folder again, then checks every mod for updates on GameBanana" disabled={!game.modsDir || busy === "scan"} onClick={() => void job("scan", () => rescan(game))()} />
-          <IconButton icon="update" label="Check for updates" title="Check your mods for updates on GameBanana" disabled={busy === "upd"} onClick={() => void job("upd", () => checkModUpdates(game))()} />
-          <IconButton icon="folder" label="Open the Mods folder" title={game.modsDir ? `Open the Mods folder (${game.modsDir})` : "No Mods folder yet"} disabled={!game.modsDir} onClick={() => openModsFolder(game)} />
-          <IconButton icon="import" label="Import .gachamod" title="Add mods from a .gachamod file" onClick={() => void job("imp", importPack)()} />
-          <IconButton icon="dice" label="Surprise me" title="Open a random mod you might like" disabled={busy === "dice"} onClick={() => void job("dice", () => surpriseMe(game.id))()} />
+        <div className="home-quick-acts" role="toolbar" aria-label={t("Quick actions")}>
+          <IconButton icon="refresh" label={t("Rescan")} title={t("Reads the Mods folder again, then checks every mod for updates on GameBanana")} disabled={!game.modsDir || busy === "scan"} onClick={() => void job("scan", () => rescan(game))()} />
+          <IconButton icon="update" label={t("Check for updates")} title={t("Check your mods for updates on GameBanana")} disabled={busy === "upd"} onClick={() => void job("upd", () => checkModUpdates(game))()} />
+          <IconButton icon="folder" label={t("Open the Mods folder")} title={game.modsDir ? t("Open the Mods folder ({path})", { path: game.modsDir }) : t("No Mods folder yet")} disabled={!game.modsDir} onClick={() => openModsFolder(game)} />
+          <IconButton icon="import" label={t("Import .gachamod")} title={t("Add mods from a .gachamod file")} onClick={() => void job("imp", importPack)()} />
+          <IconButton icon="dice" label={t("Surprise me")} title={t("Open a random mod you might like")} disabled={busy === "dice"} onClick={() => void job("dice", () => surpriseMe(game.id))()} />
           <AdultSwitch value={nsfw} />
         </div>
       </div>
@@ -243,12 +244,14 @@ function ProfileRow({ game }: { game: GameState }) {
   };
   return (
     <div className={`home-profiles-wrap${all ? " is-all" : ""}`}>
-    <div ref={row} className={`home-profiles${all ? " is-all" : ""}`} role="group" aria-label="Profiles" onKeyDown={(e) => rowKeys(e, ".home-pchip")}>
+    <div ref={row} className={`home-profiles${all ? " is-all" : ""}`} role="group" aria-label={t("Profiles")} onKeyDown={(e) => rowKeys(e, ".home-pchip")}>
       {list === null && <Skeleton className="home-pchip-skel" />}
       {(list ?? []).map((p) => (
         <button key={p.id} type="button" className={`home-pchip${p.active ? " on" : ""}`} aria-pressed={p.active}
           style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
-          title={busy === p.id ? `Switching to ${p.name}` : p.active ? `${p.name} is on${p.hotkey ? ` (${p.hotkey} in game)` : ""}. Click to see its mods` : `Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
+          title={busy === p.id ? t("Switching to {profile}", { profile: p.name })
+            : p.active ? (p.hotkey ? t("{profile} is on ({key} in game). Click to see its mods", { profile: p.name, key: p.hotkey }) : t("{profile} is on. Click to see its mods", { profile: p.name }))
+            : p.hotkey ? t("Switch to {profile} ({key} in game)", { profile: p.name, key: p.hotkey }) : t("Switch to {profile}", { profile: p.name })}
           onClick={() => void pick(p)} onContextMenu={menuHandler(() => withoutKeys(menuFor("profile", { game: game.id, id: p.id })))}>
           <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={26} />
           <span className="home-pchip-t">{p.name}</span>
@@ -256,11 +259,11 @@ function ProfileRow({ game }: { game: GameState }) {
         </button>
       ))}
       <button type="button" className="home-pchip add" onClick={() => void quickNewProfile(game.id)} onContextMenu={menuHandler(() => newProfileMenu(game.id))}
-        title="Save the mods on now as a new profile. Right-click for one with no mods, or to pick its name and icon first" aria-label="New profile">
+        title={t("Save the mods on now as a new profile. Right-click for one with no mods, or to pick its name and icon first")} aria-label={t("New profile")}>
         <Icon name="plus" />
       </button>
     </div>
-    <ShowAll open={all} onToggle={toggleAll} fits={!left && !right} label={`Show every profile (${list?.length ?? 0})`} />
+    <ShowAll open={all} onToggle={toggleAll} fits={!left && !right} label={t("Show every profile ({n})", { n: list?.length ?? 0 })} />
     </div>
   );
 }
@@ -286,11 +289,11 @@ function Row({ id, title, count, all: allLabel, more, moreLabel, moreTip, childr
         <h3 className="sub-h">{title}{count !== undefined && <span className="home-n">{count}</span>}</h3>
         <span className="grow" />
         {(left || right) && <>
-          <IconButton size="sm" icon="left" label="Scroll left" disabled={!left} onClick={() => page(-1)} />
-          <IconButton size="sm" icon="right" label="Scroll right" disabled={!right} onClick={() => page(1)} />
+          <IconButton size="sm" icon="left" label={t("Scroll left")} disabled={!left} onClick={() => page(-1)} />
+          <IconButton size="sm" icon="right" label={t("Scroll right")} disabled={!right} onClick={() => page(1)} />
         </>}
         <ShowAll open={all} onToggle={toggleAll} fits={!left && !right} label={allLabel} />
-        {more && <Button size="sm" variant="ghost" iconRight="chevron" onClick={more} title={moreTip}>{moreLabel ?? "See all"}</Button>}
+        {more && <Button size="sm" variant="ghost" iconRight="chevron" onClick={more} title={moreTip}>{moreLabel ?? t("See all")}</Button>}
       </header>
       <div ref={row} className={`home-row${all ? " is-all" : ""}`} role="list" onKeyDown={(e) => rowKeys(e, ".home-item")}>{children}</div>
     </section>
@@ -311,27 +314,27 @@ function Updates({ game, mods, editing }: { game: GameState; mods: ModEntry[]; e
   const nsfw = useNsfw();
   const [busy, setBusy] = useState(false);
   const list = mods.filter((m) => m.updateAvailable && m.source && !(m.nsfw && nsfw === "hide"));
-  if (!list.length) return editing ? <Nothing title={WIDGETS.updates.title}>Every mod is up to date. Mods with a newer version show here.</Nothing> : null;
+  if (!list.length) return editing ? <Nothing title={WIDGETS.updates.title}>{t("Every mod is up to date. Mods with a newer version show here.")}</Nothing> : null;
   const all = async () => {
     setBusy(true);
     try { for (const m of list) await getUpdate(game.id, m); } finally { setBusy(false); }
   };
   return (
-    <Row id="updates" title={WIDGETS.updates.title} count={list.length} all={`Show every update (${list.length})`} deps={[list.length]}
-      more={() => go("library")} moreLabel="Open Mods">
+    <Row id="updates" title={WIDGETS.updates.title} count={list.length} all={t("Show every update ({n})", { n: list.length })} deps={[list.length]}
+      more={() => go("library")} moreLabel={t("Open Mods")}>
       {list.map((m) => (
         <div key={m.id} role="listitem" className="home-tile" onContextMenu={menuHandler(() => withoutKeys(menuFor("mod", { game: game.id, mod: m }), ["Enter"]))}>
-          <button type="button" className="home-item home-tile-main" onClick={() => go({ view: "library", modId: m.id })} title={`${m.name}. Click for details`}>
+          <button type="button" className="home-item home-tile-main" onClick={() => go({ view: "library", modId: m.id })} title={t("{mod}. Click for details", { mod: m.name })}>
             <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
             <span className="home-tile-name">{m.name}</span>
           </button>
-          <Button size="sm" icon="downloads" className="home-tile-btn" onClick={() => void getUpdate(game.id, m)} title="Download the newest version">Update</Button>
+          <Button size="sm" icon="downloads" className="home-tile-btn" onClick={() => void getUpdate(game.id, m)} title={t("Download the newest version")}>{t("Update")}</Button>
         </div>
       ))}
       {list.length > 1 && (
         <div role="listitem" style={ITEM}>
-          <button type="button" className="home-item home-all" disabled={busy} onClick={() => void all()} title="Download every update listed here">
-            <Icon name="downloads" /><span>Update all {list.length}</span>
+          <button type="button" className="home-item home-all" disabled={busy} onClick={() => void all()} title={t("Download every update listed here")}>
+            <Icon name="downloads" /><span>{t("Update all {n}", { n: list.length })}</span>
           </button>
         </div>
       )}
@@ -345,19 +348,19 @@ function Characters({ game, mods, loaded, editing }: { game: GameState; mods: Mo
     .sort((a, b) => b.mods.length - a.mods.length || b.last - a.last).slice(0, 40);
   usePortraitBatch(game.id, withMods.map((c) => c.name));
   const noun = charNoun(game.id);
-  const title = `Your ${noun.toLowerCase()}`;
+  const title = t("Your {noun}", { noun: noun.toLowerCase() });
   if (!loaded) return null;
-  if (!withMods.length) return editing ? <Nothing title={title}>{noun} you have mods for show here.</Nothing> : null;
+  if (!withMods.length) return editing ? <Nothing title={title}>{t("{noun} you have mods for show here.", { noun })}</Nothing> : null;
   return (
-    <Row id="chars" title={title} count={withMods.length} all={`Show every ${charNoun(game.id, true).toLowerCase()} (${withMods.length})`} deps={[withMods.length]} more={() => go("characters")} moreLabel={`All ${noun.toLowerCase()}`}>
+    <Row id="chars" title={title} count={withMods.length} all={t("Show every {noun} ({n})", { noun: charNoun(game.id, true).toLowerCase(), n: withMods.length })} deps={[withMods.length]} more={() => go("characters")} moreLabel={t("All {noun}", { noun: noun.toLowerCase() })}>
       {withMods.map((c) => (
         <div key={c.name} role="listitem" style={ITEM}>
           <button type="button" className="home-item home-char" onClick={() => go({ view: "characters", character: c.name })}
-            title={`${c.name}: ${plural(c.mods.length, "mod")}, ${c.on} on. Click for their mods`}
+            title={tn(c.mods.length, "{name}: {n} mod, {on} on. Click for their mods", "{name}: {n} mods, {on} on. Click for their mods", { name: c.name, on: c.on })}
             onContextMenu={menuHandler(() => withoutKeys(menuFor("character", { game: game.id, name: c.name })))}>
             <Portrait game={game.id} name={c.name} icon={c.icon} size={64} />
             <span className="home-char-t">{c.name}</span>
-            <span className="home-char-n">{c.on ? `${c.on} of ${c.mods.length} on` : plural(c.mods.length, "mod")}</span>
+            <span className="home-char-n">{c.on ? t("{on} of {n} on", { on: c.on, n: c.mods.length }) : tn(c.mods.length, "{n} mod", "{n} mods")}</span>
           </button>
         </div>
       ))}
@@ -370,23 +373,23 @@ function Recent({ game, mods, loaded, editing }: { game: GameState; mods: ModEnt
   const recent = [...mods].sort((a, b) => b.installedAt - a.installedAt).filter((m) => !(m.nsfw && nsfw === "hide")).slice(0, 16);
   if (!loaded) return null;
   if (!recent.length) {
-    return editing ? <Nothing title={WIDGETS.recent.title}>Mods you install show here.</Nothing> : mods.length ? null : (
+    return editing ? <Nothing title={WIDGETS.recent.title}>{t("Mods you install show here.")}</Nothing> : mods.length ? null : (
       <section className="home-section home-first">
-        <header className="home-section-h"><h3 className="sub-h">No mods yet</h3></header>
-        <p className="hint">Install from Browse, or drop an archive anywhere on this window.</p>
-        <span><Button variant="primary" icon="browse" onClick={() => go("browse")}>Browse GameBanana</Button></span>
+        <header className="home-section-h"><h3 className="sub-h">{t("No mods yet")}</h3></header>
+        <p className="hint">{t("Install from Browse, or drop an archive anywhere on this window.")}</p>
+        <span><Button variant="primary" icon="browse" onClick={() => go("browse")}>{t("Browse GameBanana")}</Button></span>
       </section>
     );
   }
   return (
-    <Row id="recent" title={WIDGETS.recent.title} all={`Show all ${recent.length} recent mods`} deps={[recent.length]} more={() => go("library")} moreLabel="All mods">
+    <Row id="recent" title={WIDGETS.recent.title} all={t("Show all {n} recent mods", { n: recent.length })} deps={[recent.length]} more={() => go("library")} moreLabel={t("All mods")}>
       {recent.map((m) => (
         <div key={m.id} role="listitem" style={ITEM}>
           <button type="button" className={`home-item home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })}
-            title={`${m.name}${m.enabled ? "" : " (off)"}`} onContextMenu={menuHandler(() => withoutKeys(menuFor("mod", { game: game.id, mod: m }), ["Enter"]))}>
+            title={m.enabled ? m.name : t("{mod} (off)", { mod: m.name })} onContextMenu={menuHandler(() => withoutKeys(menuFor("mod", { game: game.id, mod: m }), ["Enter"]))}>
             <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
             <span className="home-tile-name">{m.name}</span>
-            <span className="hint home-tile-sub">{m.character ?? "No character"}, {timeAgo(m.installedAt)}</span>
+            <span className="hint home-tile-sub">{t("{character}, {when}", { character: m.character ?? t("No character"), when: timeAgo(m.installedAt) })}</span>
           </button>
         </div>
       ))}

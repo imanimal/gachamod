@@ -9,6 +9,7 @@ import { registerIngameDemo } from "./ingame";
 import { registerKeylistDemo } from "./keylist";
 import { demoDb } from "./db";
 import { registerLibraryDemo } from "./library";
+import { registerMigrateDemo } from "./migrate";
 import { registerModtoolsDemo } from "./modtools";
 import { registerOnlineDemo } from "./online";
 import { registerOtherKeysDemo } from "./otherkeys";
@@ -31,6 +32,7 @@ export function installDemo() {
   registerSystemDemo();
   registerLibraryDemo();
   registerModtoolsDemo();
+  registerMigrateDemo();
   registerOnlineDemo();
   registerAiDemo();
   registerIngameDemo();

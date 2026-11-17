@@ -7,6 +7,8 @@ import { useProfiles } from "../profiles/data";
 import { toast } from "../../ui/toast";
 import { HotkeyField } from "../profiles/HotkeyField";
 import { AdminRow } from "./Feedback";
+import { t } from "../../lib/i18n";
+import { gameShort } from "../../lib/games";
 
 const KEYS = { on: "hotkeys.enabled", next: "hotkeys.next", prev: "hotkeys.prev" } as const;
 
@@ -26,9 +28,9 @@ export function HotkeysSection() {
     setVals((x) => ({ ...x, [k]: v }));
     try {
       await settings.set(KEYS[k], v);
-      const t = await hotkeys.sync();
-      setTaken(t);
-      const mine = v && k !== "on" ? t.find((x) => x.combo === v) : undefined;
+      const now = await hotkeys.sync();
+      setTaken(now);
+      const mine = v && k !== "on" ? now.find((x) => x.combo === v) : undefined;
       if (mine) toast(mine.reason, true);
     } catch (e) { toast(errorText(e), true); }
   };
@@ -36,24 +38,24 @@ export function HotkeysSection() {
   const on = vals.on !== "0";
 
   return (
-    <Panel title="In-game profile hotkeys" icon="keyboard" id="hotkeys">
+    <Panel title={t("In-game profile hotkeys")} icon="keyboard" id="hotkeys">
       <div className="set-rows">
         <div className="set-row" id="set-hotkeys-on">
-          <span><b>Switch profiles with hotkeys</b><span className="hint">A key switches profile while a game runs, then reloads mods</span></span>
+          <span><b>{t("Switch profiles with hotkeys")}</b><span className="hint">{t("A key switches profile while a game runs, then reloads mods")}</span></span>
           <Toggle checked={on} onChange={(v) => void set("on", v ? "1" : "0")} />
         </div>
       </div>
       {on && (
         <div className="set-hotkeys">
-          <HotkeyField label="Next profile" value={vals.next} onChange={(v) => void set("next", v)} taken={takenFor(vals.next)} hint="Off until you set a key, like Ctrl+Alt+Right" />
-          <HotkeyField label="Previous profile" value={vals.prev} onChange={(v) => void set("prev", v)} taken={takenFor(vals.prev)} hint="Off until you set a key, like Ctrl+Alt+Left" />
+          <HotkeyField label={t("Next profile")} value={vals.next} onChange={(v) => void set("next", v)} taken={takenFor(vals.next)} hint={t("Off until you set a key, like Ctrl+Alt+Right")} />
+          <HotkeyField label={t("Previous profile")} value={vals.prev} onChange={(v) => void set("prev", v)} taken={takenFor(vals.prev)} hint={t("Off until you set a key, like Ctrl+Alt+Left")} />
         </div>
       )}
       {on && <ProfileKeys />}
       <div className="set-rows">
         <div className="set-row" id="set-hotkeys-menu">
-          <span><b>In-game menu keys</b><span className="hint">The key that opens the skin menu over the game (F7 at first) and the keys that move through it</span></span>
-          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "ingame" })} title="Opens Tools, Switch skins in game, where every menu key can be changed (Ctrl+7)">Menu keys</Button>
+          <span><b>{t("In-game menu keys")}</b><span className="hint">{t("The key that opens the skin menu over the game (F7 at first) and the keys that move through it")}</span></span>
+          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "ingame" })} title={t("Opens Tools, Switch skins in game, where every menu key can be changed (Ctrl+7)")}>{t("Menu keys")}</Button>
         </div>
       </div>
       {on && <AdminRow />}
@@ -70,10 +72,10 @@ function ProfileKeys() {
   return (
     <div className="set-rows">
       <div className="set-row" id="set-hotkeys-profiles">
-        <span><b>Profile keys</b><span className="hint">{list === null ? `Reading ${game.short}'s profiles`
-          : keyed.length ? keyed.map((p) => `${p.name}: ${p.hotkey}`).join(", ")
-          : `No ${game.short} profile has its own key yet. Set one in a profile's editor`}</span></span>
-        <Button size="sm" icon="profiles" onClick={() => go({ view: "profiles" })} title="Opens Profiles, where each profile's editor sets its key (Ctrl+6)">Manage profiles</Button>
+        <span><b>{t("Profile keys")}</b><span className="hint">{list === null ? t("Reading {game}'s profiles", { game: gameShort(game) })
+          : keyed.length ? keyed.map((p) => `${p.name}: ${p.hotkey}`).join(t(", "))
+          : t("No {game} profile has its own key yet. Set one in a profile's editor", { game: gameShort(game) })}</span></span>
+        <Button size="sm" icon="profiles" onClick={() => go({ view: "profiles" })} title={t("Opens Profiles, where each profile's editor sets its key (Ctrl+6)")}>{t("Manage profiles")}</Button>
       </div>
     </div>
   );

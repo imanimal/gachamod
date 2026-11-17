@@ -3,6 +3,7 @@
 // buttons has focus (F6 or the controller's View + Y reach the newest one, lib/keys.ts).
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icon";
+import { english, t, tb } from "../lib/i18n";
 
 export interface ToastAction { label: string; run: () => void | Promise<void> }
 /** `keep`: newer toasts never push it out (a one-time offer); it still times out. `onEnd` runs once when it leaves
@@ -35,11 +36,19 @@ const helpers: Array<{ test: (text: string) => boolean; action: ToastAction }> =
  *  backend gets "Restart as administrator" this way (lib/elevation.ts). */
 export function toastHelper(test: (text: string) => boolean, action: ToastAction) { helpers.push({ test, action }); }
 
+/** Hears every toast as it shows, with its English (the console in src/dev/console logs them). */
+const shown = new Set<(text: string, en: string, bad: boolean, action?: string) => void>();
+export function onToastShown(f: (text: string, en: string, bad: boolean, action?: string) => void): () => void { shown.add(f); return () => { shown.delete(f); }; }
+
 /** Show a short message. `tone`: true for a failure, "info" for news rather than a confirmation. With an action, it
  *  stays longer and offers its button; `more` adds a second, quieter one ("Don't show again"). Returns its id. */
 export function toast(text: string, tone: ToastTone = false, action?: ToastAction, more?: ToastAction, opts?: ToastOpts): number {
   const bad = tone === true, info = tone === "info";
-  action ??= helpers.find((h) => h.test(text))?.action;
+  // a message from the backend may still be English: show it in the user's language, but match helpers by its words
+  text = tb(text);
+  const en = english(text);
+  shown.forEach((f) => f(text, en, bad, action?.label));
+  action ??= helpers.find((h) => h.test(en))?.action;
   // the same message while it still shows (a retry, a key held down): restart that one
   if (!opts) {
     for (const [id, t] of texts) {
@@ -56,6 +65,7 @@ export function toast(text: string, tone: ToastTone = false, action?: ToastActio
  *  the second button when given. False when it has gone. */
 export function retoast(id: number, text: string, action?: ToastAction, bad = false, more?: ToastAction): boolean {
   if (!live.has(id)) return false;
+  text = tb(text);
   texts.set(id, text);
   updates.forEach((u) => u(id, { text, action, bad, ms: lifetime(action, bad), ...(more ? { more } : {}) }));
   return true;
@@ -128,17 +138,17 @@ export function Toasts() {
 
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {list.map((t) => (
-        <div key={t.id} className={`toast${t.bad ? " bad" : t.info ? " info" : ""}${t.action ? " act" : ""}${t.leaving ? " gone" : ""}`}
-          onMouseEnter={() => hold(t.id, "hover", true)} onMouseLeave={() => hold(t.id, "hover", false)}
-          onFocus={() => hold(t.id, "focus", true)}
-          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hold(t.id, "focus", false); }}>
-          <Icon name={t.bad ? "warn" : t.action?.label === "Redo" ? "redo" : t.info ? "info" : "check"} />
-          <span className="tt" key={t.text} title={t.text.length > 110 ? t.text : undefined}>{t.text}</span>
-          {t.action && <button type="button" className="toast-act" onClick={() => void t.action!.run()}>{t.action.label}</button>}
-          {t.more && <button type="button" className="toast-act toast-more" onClick={() => { void t.more!.run(); close(t.id); }}>{t.more.label}</button>}
-          <button type="button" className="toast-x" aria-label="Dismiss" title="Dismiss" onClick={() => close(t.id)}><Icon name="x" size={12} /></button>
-          <i key={`${t.text}-${t.ms}`} className="t-life" style={{ animationDuration: `${t.ms}ms` }} aria-hidden="true" />
+      {list.map((item) => (
+        <div key={item.id} className={`toast${item.bad ? " bad" : item.info ? " info" : ""}${item.action ? " act" : ""}${item.leaving ? " gone" : ""}`}
+          onMouseEnter={() => hold(item.id, "hover", true)} onMouseLeave={() => hold(item.id, "hover", false)}
+          onFocus={() => hold(item.id, "focus", true)}
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hold(item.id, "focus", false); }}>
+          <Icon name={item.bad ? "warn" : english(item.action?.label ?? "") === "Redo" ? "redo" : item.info ? "info" : "check"} />
+          <span className="tt" key={item.text} title={item.text.length > 110 ? item.text : undefined}>{item.text}</span>
+          {item.action && <button type="button" className="toast-act" onClick={() => void item.action!.run()}>{item.action.label}</button>}
+          {item.more && <button type="button" className="toast-act toast-more" onClick={() => { void item.more!.run(); close(item.id); }}>{item.more.label}</button>}
+          <button type="button" className="toast-x" aria-label={t("Dismiss")} title={t("Dismiss")} onClick={() => close(item.id)}><Icon name="x" size={12} /></button>
+          <i key={`${item.text}-${item.ms}`} className="t-life" style={{ animationDuration: `${item.ms}ms` }} aria-hidden="true" />
         </div>
       ))}
     </div>

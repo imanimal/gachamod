@@ -8,7 +8,9 @@ import {
   type ExportPlan, type GameId, type PackFiles, type PackPreview, type PackPreviewMod, type PackScope,
 } from "../../lib/api";
 import { modThumbs } from "../../lib/gamebanana";
-import { Badge, Button, Checkbox, Dialog, Progress, Segmented, Skeleton, TextField, Toggle, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { gameName, gameShort } from "../../lib/games";
+import { lang, t, tb, tn } from "../../lib/i18n";
+import { Badge, Button, Checkbox, Dialog, Progress, Segmented, Skeleton, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { notesText, oxford } from "../../lib/notes";
@@ -90,7 +92,7 @@ function useMounted() {
 
 // ── export ──
 
-const SCOPE_TITLE: Record<PackScope, string> = { mods: "Share mods", profile: "Share profile", game: "Share library", all: "Share every game" };
+const SCOPE_TITLE: Record<PackScope, string> = { mods: t("Share mods"), profile: t("Share profile"), game: t("Share library"), all: t("Share every game") };
 
 /** Files up to this size send in most chat apps (the size the user aimed for). */
 const SMALL_FILE = 20 * 1024 * 1024;
@@ -128,16 +130,17 @@ function PackExport({ job, onClose }: { job: ExportJob; onClose: () => void }) {
 
   const what = (() => {
     if (!plan) return "";
-    const parts = [plural(plan.mods, "mod"), plan.profiles ? plural(plan.profiles, "profile") : ""].filter(Boolean).join(" and ");
-    if (job.scope === "all") return `${parts} from ${plural(plan.games.length, "game")}`;
-    return g ? `${parts} for ${g.name}` : parts;
+    const mods = tn(plan.mods, "{n} mod", "{n} mods");
+    const parts = plan.profiles ? t("{mods} and {profiles}", { mods, profiles: tn(plan.profiles, "{n} profile", "{n} profiles") }) : mods;
+    if (job.scope === "all") return t("{what} from {games}", { what: parts, games: tn(plan.games.length, "{n} game", "{n} games") });
+    return g ? t("{what} for {game}", { what: parts, game: gameName(g) }) : parts;
   })();
 
   const save = async () => {
     if (!plan) return;
     const name = `${fileName(title)}.gachamod`;
     let dest: string | null;
-    try { dest = await dialogs.saveFile({ title: "Save as", defaultPath: name, extensions: ["gachamod"] }); }
+    try { dest = await dialogs.saveFile({ title: t("Save as"), defaultPath: name, extensions: ["gachamod"] }); }
     catch (e) { toast(errorText(e), true); return; }
     if (!dest && !inTauri()) dest = `C:\\Users\\Player\\Documents\\${name}`;
     if (!dest || !live.current) return;
@@ -147,8 +150,8 @@ function PackExport({ job, onClose }: { job: ExportJob; onClose: () => void }) {
         game: job.game, modIds: job.modIds, profileId: job.profileId, scope: job.scope, files, includeVars: vars, title: title.trim() || null, dest,
       });
       const file = r.path.split(/[\\/]/).pop() ?? r.path;
-      toast(`Saved ${file} (${formatBytes(r.size)})`, false, {
-        label: "Show in folder", run: () => { shell.revealPath(r.path).catch((e) => toast(errorText(e), true)); },
+      toast(t("Saved {file} ({size})", { file, size: formatBytes(r.size) }), false, {
+        label: t("Show in folder"), run: () => { shell.revealPath(r.path).catch((e) => toast(errorText(e), true)); },
       });
       if (live.current) onClose();
     } catch (e) {
@@ -160,62 +163,69 @@ function PackExport({ job, onClose }: { job: ExportJob; onClose: () => void }) {
   const copyLinks = () => {
     if (!plan?.links) return;
     navigator.clipboard.writeText(plan.links)
-      .then(() => toast(`Copied ${plural(plan.linked, "link")}`))
-      .catch(() => toast("Couldn't copy to the clipboard", true));
+      .then(() => toast(tn(plan.linked, "Copied {n} link", "Copied {n} links")))
+      .catch(() => toast(t("Couldn't copy to the clipboard"), true));
   };
 
   const est = plan ? estimate(plan, files) : null;
   const unnamed = plan && plan.unlinked > 0
     ? (() => {
       const list = plan.unlinkedNames.slice(0, 8);
-      return oxford(plan.unlinked > list.length ? [...list, `${plan.unlinked - list.length} more`] : list, 99);
+      return oxford(plan.unlinked > list.length ? [...list, t("{n} more", { n: plan.unlinked - list.length })] : list, 99);
     })()
     : "";
-  const them = plan?.unlinked === 1 ? "it" : "them";
+  const size = est ? formatBytes(est.size) : "";
   const note = !plan || !est ? "" : files === "links"
-    ? `About ${formatBytes(est.size)}. The other PC downloads each mod from GameBanana and sets it up like yours.`
-      + (plan.unlinked ? ` ${plural(plan.unlinked, "mod")} without a GameBanana link only get named, so send ${them} another way: ${unnamed}.` : "")
+    ? (plan.unlinked
+      ? tn(plan.unlinked, "About {size}. The other PC downloads each mod from GameBanana and sets it up like yours. {n} mod without a GameBanana link only gets named, so send it another way: {names}.",
+        "About {size}. The other PC downloads each mod from GameBanana and sets it up like yours. {n} mods without a GameBanana link only get named, so send them another way: {names}.", { size, names: unnamed })
+      : t("About {size}. The other PC downloads each mod from GameBanana and sets it up like yours.", { size }))
     : files === "unlinked"
-      ? `${est.upTo ? "Up to" : "About"} ${formatBytes(est.size)}. Mods from GameBanana go in as links`
-        + (plan.unlinked ? `, and the files of the ${plural(plan.unlinked, "mod")} without one go in whole (${unnamed}).` : ".")
+      ? (plan.unlinked
+        ? (est.upTo
+          ? tn(plan.unlinked, "Up to {size}. Mods from GameBanana go in as links, and the files of the {n} mod without one go in whole ({names}).",
+            "Up to {size}. Mods from GameBanana go in as links, and the files of the {n} mods without one go in whole ({names}).", { size, names: unnamed })
+          : tn(plan.unlinked, "About {size}. Mods from GameBanana go in as links, and the files of the {n} mod without one go in whole ({names}).",
+            "About {size}. Mods from GameBanana go in as links, and the files of the {n} mods without one go in whole ({names}).", { size, names: unnamed }))
+        : est.upTo ? t("Up to {size}. Mods from GameBanana go in as links.", { size }) : t("About {size}. Mods from GameBanana go in as links.", { size }))
       : plan.linked === 0
-        ? `Up to ${formatBytes(est.size)}. None of these mods have a GameBanana link, so their files go in.`
-        : `Up to ${formatBytes(est.size)}. Every mod's files go in, so the other PC doesn't download anything. Good for a backup.`;
+        ? t("Up to {size}. None of these mods have a GameBanana link, so their files go in.", { size })
+        : t("Up to {size}. Every mod's files go in, so the other PC doesn't download anything. Good for a backup.", { size });
   const big = !!est && est.size > SMALL_FILE && files !== "links";
   const choices = !plan ? [] : ([
-    plan.linked > 0 && { value: "links", label: "Links only", title: "GameBanana links and your settings. The smallest file" },
-    plan.linked > 0 && plan.unlinked > 0 && { value: "unlinked", label: "Links + files", title: "Links for GameBanana mods, and the files of mods without a link" },
-    { value: "files", label: "All files", title: "Every mod's files, so the other PC downloads nothing" },
+    plan.linked > 0 && { value: "links", label: t("Links only"), title: t("GameBanana links and your settings. The smallest file") },
+    plan.linked > 0 && plan.unlinked > 0 && { value: "unlinked", label: t("Links + files"), title: t("Links for GameBanana mods, and the files of mods without a link") },
+    { value: "files", label: t("All files"), title: t("Every mod's files, so the other PC downloads nothing") },
   ].filter(Boolean) as Array<{ value: PackFiles; label: string; title: string }>);
-  const heading = job.scope === "game" && g ? `Share ${g.short} library` : SCOPE_TITLE[job.scope];
+  const heading = job.scope === "game" && g ? t("Share {game} library", { game: gameShort(g) }) : SCOPE_TITLE[job.scope];
 
   return (
     <Dialog title={heading} icon="share" onClose={onClose} className="pack-dialog pack-export"
-      locked={busy ? "Saving the file" : undefined}
+      locked={busy ? t("Saving the file") : undefined}
       footer={<>
         {plan && plan.linked > 0 && (
-          <Button variant="ghost" icon="copy" disabled={busy} onClick={copyLinks} title="Copy the GameBanana links as text, to paste in a chat">Copy links</Button>
+          <Button variant="ghost" icon="copy" disabled={busy} onClick={copyLinks} title={t("Copy the GameBanana links as text, to paste in a chat")}>{t("Copy links")}</Button>
         )}
         <span className="grow" />
-        <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="primary" icon="export" busy={busy} disabled={!plan || !title.trim()} onClick={() => void save()}>Save as...</Button>
+        <Button variant="ghost" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
+        <Button variant="primary" icon="export" busy={busy} disabled={!plan || !title.trim()} onClick={() => void save()}>{t("Save as...")}</Button>
       </>}>
       {!plan ? (
         <div className="pack-body stack" aria-busy="true"><Skeleton h="1.2rem" w="60%" /><Skeleton h="2.4rem" /><Skeleton h="2.4rem" /></div>
       ) : (
         <div className="pack-body stack">
-          <p className="pack-what">{what}, in one .gachamod file. Open it in gachamod on another PC, or send it to a friend.</p>
-          <TextField label="Title" value={title} onChange={setTitle} placeholder="Ellen skins" hint="Shown when the file is opened, and used as the file name." disabled={busy} />
+          <p className="pack-what">{t("{what}, in one .gachamod file. Open it in gachamod on another PC, or send it to a friend.", { what })}</p>
+          <TextField label={t("Title")} value={title} onChange={setTitle} placeholder={t("Ellen skins")} hint={t("Shown when the file is opened, and used as the file name.")} disabled={busy} />
           <div className="pack-files">
-            <span className="field-l">What goes in the file</span>
-            {choices.length > 1 && <Segmented<PackFiles> label="What goes in the file" value={files} onChange={setFiles} options={choices} />}
+            <span className="field-l">{t("What goes in the file")}</span>
+            {choices.length > 1 && <Segmented<PackFiles> label={t("What goes in the file")} value={files} onChange={setFiles} options={choices} />}
             <p className={`hint${big ? " pack-big" : ""}`}>
-              {note}{big ? " Over 20 MB, so it may not fit in a Discord message." : ""}
+              {big ? t("{note} Over 20 MB, so it may not fit in a Discord message.", { note }) : note}
             </p>
           </div>
-          <Toggle checked={vars} onChange={setVars} disabled={busy} label="Include options and key changes"
-            hint="The jacket, colour and other picks made with each mod's toggles, and keys you rebound or turned off." />
-          {busy && <Progress value={progress} label="Saving" />}
+          <Toggle checked={vars} onChange={setVars} disabled={busy} label={t("Include options and key changes")}
+            hint={t("The jacket, colour and other picks made with each mod's toggles, and keys you rebound or turned off.")} />
+          {busy && <Progress value={progress} label={t("Saving")} />}
         </div>
       )}
     </Dialog>
@@ -255,7 +265,7 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
     const ids = pack.mods.filter((m) => !m.preview && m.gbModId).map((m) => m.gbModId!);
     if (!ids.length) return;
     const ac = new AbortController();
-    modThumbs(ids, ac.signal).then((t) => { if (live.current) setThumbs(t); }).catch(() => {});
+    modThumbs(ids, ac.signal).then((found) => { if (live.current) setThumbs(found); }).catch(() => {});
     return () => ac.abort();
   }, [pack, live]);
 
@@ -281,33 +291,33 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
       const every = all.length === chosen.size && all.every((m) => chosen.has(m.index));
       const r = await packs.import(path, { only: every ? [] : [...chosen].sort((a, b) => a - b), onExisting, applyProfile: useProfile && canProfile });
       for (const g of ready) emitApp({ type: "library-refresh", game: g });
-      const switched = r.profileId !== null ? (active?.name ?? "its profile") : null;
+      const switched = r.profileId !== null ? (active?.name ?? t("its profile")) : null;
       const parts = [
-        r.added.length ? `added ${plural(r.added.length, "mod")}` : "",
-        r.queued ? `${r.queued === 1 ? "1 download is" : `${r.queued} downloads are`} on the way` : "",
-        r.replaced.length ? `replaced ${r.replaced.length}` : "",
-        r.skipped ? `skipped ${r.skipped} you already have` : "",
-        r.profiles.length > 1 ? `made ${plural(r.profiles.length, "profile")}` : "",
-        switched ? `switched to ${switched}` : "",
+        r.added.length ? tn(r.added.length, "Added {n} mod.", "Added {n} mods.") : "",
+        r.queued ? tn(r.queued, "{n} download is on the way.", "{n} downloads are on the way.") : "",
+        r.replaced.length ? tn(r.replaced.length, "Replaced {n} mod.", "Replaced {n} mods.") : "",
+        r.skipped ? tn(r.skipped, "Skipped {n} mod you already have.", "Skipped {n} mods you already have.") : "",
+        r.profiles.length > 1 ? tn(r.profiles.length, "Made {n} profile.", "Made {n} profiles.") : "",
+        switched ? t("Switched to {name}.", { name: switched }) : "",
       ].filter(Boolean);
-      const text = parts.length ? `${parts.join(", ").replace(/^./, (c) => c.toUpperCase())}.` : "Nothing was imported.";
+      const text = parts.length ? parts.join(lang === "zh-CN" ? "" : " ") : t("Nothing was imported.");
       const added = r.added;
       const target = pack.game;
       if (r.queued) {
-        toast(text, false, { label: "Show downloads", run: () => go("downloads") });
+        toast(text, false, { label: t("Show downloads"), run: () => go("downloads") });
       } else if (added.length && !r.replaced.length && r.profileId === null && !several) {
         toast(text, false, {
-          label: "Undo",
+          label: t("Undo"),
           run: () => {
             library.remove(target, added)
-              .then(() => { emitApp({ type: "library-refresh", game: target }); toast(`Removed the imported ${added.length === 1 ? "mod" : "mods"}. They're in Recently removed.`); })
+              .then(() => { emitApp({ type: "library-refresh", game: target }); toast(tn(added.length, "Removed the imported mod. It's in the trash.", "Removed the imported mods. They're in the trash.")); })
               .catch((e) => toast(errorText(e), true));
           },
         });
       } else toast(text);
       if (r.notes.length) toast(notesText(r.notes), true);
       if (r.missing.length) {
-        toast(`The file only names ${oxford(r.missing, 12)}. Ask the sender for ${r.missing.length === 1 ? "it" : "those"}.`);
+        toast(tn(r.missing.length, "The file only names {names}. Ask the sender for it.", "The file only names {names}. Ask the sender for those.", { names: oxford(r.missing, 12) }));
       }
       if (live.current) onClose();
     } catch (e) {
@@ -318,24 +328,27 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
 
   const summary = (() => {
     if (!pack) return "";
-    const where = several ? plural(pack.games.length, "game") : (games.find((g) => g.id === pack.game)?.name ?? pack.game);
-    const profs = pack.profiles.length ? ` and ${plural(pack.profiles.length, "profile")}` : "";
-    return `${plural(pack.mods.length, "mod")}${profs} for ${where}${pack.createdAt ? `, made ${timeAgo(pack.createdAt)}` : ""}.`;
+    const where = several ? tn(pack.games.length, "{n} game", "{n} games") : (gameName(games.find((g) => g.id === pack.game)) || pack.game);
+    const mods = tn(pack.mods.length, "{n} mod", "{n} mods");
+    const what = pack.profiles.length ? t("{mods} and {profiles}", { mods, profiles: tn(pack.profiles.length, "{n} profile", "{n} profiles") }) : mods;
+    return pack.createdAt ? t("{what} for {where}, made {when}.", { what, where, when: timeAgo(pack.createdAt) }) : t("{what} for {where}.", { what, where });
   })();
   const fetchSize = fetched.reduce((s, m) => s + m.size, 0);
   const howNote = [
-    fetched.length ? `${plural(fetched.length, "mod")} will download from GameBanana${fetchSize ? ` (about ${formatBytes(fetchSize)})` : ""} and get the sender's settings` : "",
-    inside.length ? `${plural(inside.length, "mod")} ${inside.length === 1 ? "is" : "are"} inside the file` : "",
-  ].filter(Boolean).join(". ");
+    !fetched.length ? "" : fetchSize
+      ? tn(fetched.length, "{n} mod will download from GameBanana (about {size}) and get the sender's settings.", "{n} mods will download from GameBanana (about {size}) and get the sender's settings.", { size: formatBytes(fetchSize) })
+      : tn(fetched.length, "{n} mod will download from GameBanana and get the sender's settings.", "{n} mods will download from GameBanana and get the sender's settings."),
+    inside.length ? tn(inside.length, "{n} mod is inside the file.", "{n} mods are inside the file.") : "",
+  ].filter(Boolean).join(lang === "zh-CN" ? "" : " ");
 
   return (
-    <Dialog title={pack ? pack.title || "Import mods" : "Opening the file"} icon="import" size="lg" onClose={onClose} className="pack-dialog pack-import"
-      locked={busy ? "Importing" : undefined}
+    <Dialog title={pack ? pack.title || t("Import mods") : t("Opening the file")} icon="import" size="lg" onClose={onClose} className="pack-dialog pack-import"
+      locked={busy ? t("Importing") : undefined}
       footer={<>
-        <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button variant="ghost" onClick={onClose} disabled={busy}>{t("Cancel")}</Button>
         <Button variant="primary" icon="import" busy={busy} disabled={!pack || (toImport === 0 && !(useProfile && canProfile))} onClick={() => void run()}
-          title={chosen.size && !toImport ? "You already have every mod picked. Pick Replace or Keep both to import them anyway" : undefined}>
-          {toImport ? `Import ${plural(toImport, "mod")}` : "Import"}
+          title={chosen.size && !toImport ? t("You already have every mod picked. Pick Replace or Keep both to import them anyway") : undefined}>
+          {toImport ? tn(toImport, "Import {n} mod", "Import {n} mods") : t("Import")}
         </Button>
       </>}>
       {!pack ? (
@@ -344,42 +357,42 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
         <div className="pack-body stack">
           <p className="pack-what">{summary}</p>
           {pack.games.filter((g) => !g.ready).map((g) => (
-            <p key={g.game} className="hint pack-skip"><Icon name="warn" /> {g.note ?? `${g.name} isn't set up here.`} Its {plural(g.mods, "mod")} stay out.</p>
+            <p key={g.game} className="hint pack-skip"><Icon name="warn" /> {g.note ? tb(g.note) : t("{game} isn't set up here.", { game: gameName(g) })} {tn(g.mods, "Its {n} mod stays out.", "Its {n} mods stay out.")}</p>
           ))}
-          <ul className="pack-mods" aria-label="Mods in the file">
+          <ul className="pack-mods" aria-label={t("Mods in the file")}>
             {pack.mods.map((m, i) => (
               <PackRow key={m.index} m={m}
-                heading={several && pack.mods[i - 1]?.game !== m.game ? (games.find((g) => g.id === m.game)?.name ?? m.game) : null}
+                heading={several && pack.mods[i - 1]?.game !== m.game ? (gameName(games.find((g) => g.id === m.game)) || m.game) : null}
                 thumb={m.gbModId ? thumbs.get(m.gbModId) ?? null : null}
                 on={chosen.has(m.index)} disabled={busy || !usable(m)} onChange={(v) => flip(m.index, v)} />
             ))}
           </ul>
           {pack.mods.length > 1 && (
             <div className="pack-pick row">
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setChosen(new Set(pack.mods.filter(usable).map((m) => m.index)))}>Select all</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setChosen(new Set())}>Select none</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setChosen(new Set(pack.mods.filter(usable).map((m) => m.index)))}>{t("Select all")}</Button>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setChosen(new Set())}>{t("Select none")}</Button>
             </div>
           )}
           {existing > 0 && (
             <div className="pack-existing">
-              <span className="field-l">{plural(existing, "mod")} you already have</span>
-              <Segmented<OnExisting> label="Mods you already have" value={onExisting} onChange={setOnExisting} options={[
-                { value: "skip", label: "Skip", title: "Keep your copy and leave the file's out" },
-                { value: "replace", label: "Replace", title: "Use the file's copy, or download it again. Yours goes to Recently removed" },
-                { value: "keep_both", label: "Keep both", title: "Add the file's copy next to yours" },
+              <span className="field-l">{tn(existing, "{n} mod you already have", "{n} mods you already have")}</span>
+              <Segmented<OnExisting> label={t("Mods you already have")} value={onExisting} onChange={setOnExisting} options={[
+                { value: "skip", label: t("Skip"), title: t("Keep your copy and leave the file's out") },
+                { value: "replace", label: t("Replace"), title: t("Use the file's copy, or download it again. Yours goes to the trash") },
+                { value: "keep_both", label: t("Keep both"), title: t("Add the file's copy next to yours") },
               ]} />
             </div>
           )}
           {canProfile && pack.profiles.length === 1 && (
-            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={`Use its profile "${pack.profiles[0]!.name}"`}
-              hint="Makes a profile with these mods and switches to it. Your other profiles stay as they are." />
+            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={t("Use its profile \"{name}\"", { name: pack.profiles[0]!.name })}
+              hint={t("Makes a profile with these mods and switches to it. Your other profiles stay as they are.")} />
           )}
           {canProfile && pack.profiles.length > 1 && (
-            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={`Add its ${pack.profiles.length} profiles`}
-              hint={active ? `Switches to "${active.name}", the one in use when the file was made. Your own profiles stay as they are.` : "Your own profiles stay as they are."} />
+            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={tn(pack.profiles.length, "Add its {n} profile", "Add its {n} profiles")}
+              hint={active ? t("Switches to \"{name}\", the one in use when the file was made. Your own profiles stay as they are.", { name: active.name }) : t("Your own profiles stay as they are.")} />
           )}
-          {busy && <Progress value={progress} label="Importing" />}
-          {!busy && howNote && <p className="hint">{howNote}.</p>}
+          {busy && <Progress value={progress} label={t("Importing")} />}
+          {!busy && howNote && <p className="hint">{howNote}</p>}
         </div>
       )}
     </Dialog>
@@ -406,10 +419,10 @@ function PackRow({ m, heading, thumb, on, disabled, onChange }:
           </span>
         } />
         <span className="pack-mod-tags">
-          {m.how === "download" && <Badge tone="info" icon="downloads" title="Comes from GameBanana, then gets the sender's settings">Download</Badge>}
-          {m.how === "missing" && <Badge tone="warn" title="The file only names this mod. It has no GameBanana link and its files aren't inside">No link</Badge>}
-          {!m.enabled && <Badge tone="muted" title="Comes in turned off">Off</Badge>}
-          {m.existing && <Badge tone="ok" title="The same mod is already in your library">In library</Badge>}
+          {m.how === "download" && <Badge tone="info" icon="downloads" title={t("Comes from GameBanana, then gets the sender's settings")}>{t("Download")}</Badge>}
+          {m.how === "missing" && <Badge tone="warn" title={t("The file only names this mod. It has no GameBanana link and its files aren't inside")}>{t("No link")}</Badge>}
+          {!m.enabled && <Badge tone="muted" title={t("Comes in turned off")}>{t("Off")}</Badge>}
+          {m.existing && <Badge tone="ok" title={t("The same mod is already in your library")}>{t("In library")}</Badge>}
         </span>
       </li>
     </>

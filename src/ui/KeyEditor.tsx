@@ -15,6 +15,7 @@ import { Icon } from "./Icon";
 import { Button, Panel, Skeleton, Toggle } from "./kit";
 import { toast } from "./toast";
 import "./key-editor.css";
+import { t } from "../lib/i18n";
 
 // ── keys changed: the editor and the clashes list stay in step ──
 
@@ -30,11 +31,11 @@ export function recordBackups(label: string, taken: Array<{ game: string; modId:
   const flip = async () => {
     const out: typeof next = [];
     let failed: unknown = null;
-    for (const t of next) {
-      try { out.push({ ...t, backup: await backups.restore(t.backup.id) }); } catch (e) { failed ??= e; out.push(t); }
+    for (const tk of next) {
+      try { out.push({ ...tk, backup: await backups.restore(tk.backup.id) }); } catch (e) { failed ??= e; out.push(tk); }
     }
     next = out;
-    for (const t of next) keysChanged(t.game, t.modId);
+    for (const tk of next) keysChanged(tk.game, tk.modId);
     if (failed) throw failed;
   };
   record({ label, undo: flip, redo: flip });
@@ -217,14 +218,14 @@ export function KeyChip({ line, onBinding, disabled, title }:
     });
   };
   const tip = live !== null
-    ? "Press the new key, combination or controller buttons. Esc or B cancels"
+    ? t("Press the new key, combination or controller buttons. Esc or B cancels")
     : title ?? (line.original
-      ? `You changed this key. The mod's own key is ${line.originalLabel ?? line.original}. Click to change it again`
-      : "Change this key: click, then press the new key, combination or controller buttons");
+      ? t("You changed this key. The mod's own key is {key}. Click to change it again", { key: line.originalLabel ?? line.original })
+      : t("Change this key: click, then press the new key, combination or controller buttons"));
   return (
     <button type="button" className={`ke-chip${live !== null ? " capturing" : ""}${line.original ? " changed" : ""}${line.off ? " off" : ""}`}
-      onClick={start} disabled={disabled} title={tip} aria-label={live !== null ? "Waiting for keys" : `${line.field === "back" ? "Back key" : "Key"} ${line.label}. Change`}>
-      {live !== null ? <span className="ke-chip-live" aria-live="polite">{live || "Press keys"}</span>
+      onClick={start} disabled={disabled} title={tip} aria-label={live !== null ? t("Waiting for keys") : line.field === "back" ? t("Back key {key}. Change", { key: line.label }) : t("Key {key}. Change", { key: line.label })}>
+      {live !== null ? <span className="ke-chip-live" aria-live="polite">{live || t("Press keys")}</span>
         : <><span className="kbd">{line.label || "?"}</span><Icon name="edit" className="ke-chip-i" /></>}
     </button>
   );
@@ -259,10 +260,10 @@ function descFor(entry: KeyEntry, desc: DescKey[]): string | null {
 const what = (e: KeyEntry) => {
   const n = e.vars.find((v) => v.values.length > 1)?.values.length ?? 0;
   switch (e.kind) {
-    case "cycle": return n > 2 ? `Cycles ${n} options` : "Switches";
-    case "toggle": return "On or off";
-    case "hold": return "While held";
-    default: return "Press once";
+    case "cycle": return n > 2 ? t("Cycles {n} options", { n }) : t("Switches");
+    case "toggle": return t("On or off");
+    case "hold": return t("While held");
+    default: return t("Press once");
   }
 };
 
@@ -331,24 +332,27 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   }
   if (!keys.keys.length) return null;
 
-  const who = mod?.character ?? "its character";
+  const who = mod?.character;
+  const offScreenTip = who
+    ? t("Toggles do nothing while {name} isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again", { name: who })
+    : t("Toggles do nothing while its character isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again");
   const onScreen = keys.onScreen;
   const showAi = (onScreen === "cant" || onScreen === "partial") && aiShown("useful");
   const onScreenRow = onScreen === "global" ? (
-    <p className="ke-os ke-os-global hint">{keys.onScreenNote ?? "This mod doesn't draw a character, so its toggles work everywhere."}</p>
+    <p className="ke-os ke-os-global hint">{keys.onScreenNote ?? t("This mod doesn't draw a character, so its toggles work everywhere.")}</p>
   ) : (
-    <div className="ke-os" title={onScreen === "own" ? "The mod's own ini already checks that its character is drawn before a toggle does anything"
-      : `Toggles do nothing while ${who} isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again`}>
+    <div className="ke-os" title={onScreen === "own" ? t("The mod's own ini already checks that its character is drawn before a toggle does anything")
+      : offScreenTip}>
       <Toggle checked={onScreen === "on" || onScreen === "partial" || onScreen === "own"} disabled={busy !== null || onScreen === "own" || onScreen === "cant"}
-        label="Toggles only while on screen"
-        hint={onScreen === "own" ? "The mod does this itself"
+        label={t("Toggles only while on screen")}
+        hint={onScreen === "own" ? t("The mod does this itself")
           : onScreen === "cant" || onScreen === "partial" ? keys.onScreenNote ?? undefined
-          : onScreen === "on" ? "Added by gachamod. Turn it off if a toggle stops working in game"
-          : compact ? undefined : `Toggles do nothing while ${who} isn't on screen`}
-        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? "Its toggles already work only while on screen" : "Nothing to take out")} />
+          : onScreen === "on" ? t("Added by gachamod. Turn it off if a toggle stops working in game")
+          : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while its character isn't on screen")}
+        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("Its toggles already work only while on screen") : t("Nothing to take out"))} />
       {showAi && (
-        <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot"
-          onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>Ask the AI helper</Button>
+        <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot")}
+          onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>{t("Ask the AI helper")}</Button>
       )}
     </div>
   );
@@ -356,49 +360,50 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   const body = (
     <>
       {onScreenRow}
-      {running && !compact && <p className="ke-running hint">Changes load when you press F10 in game.</p>}
+      {running && !compact && <p className="ke-running hint">{t("Changes load when you press F10 in game.")}</p>}
       <ul className="ke-list">
         {keys.keys.map((e) => {
           const said = descFor(e, desc);
           const at = `${e.ini}|${e.section}`;
-          const where = `[${e.section}] in ${e.ini}${e.condition ? `, only when ${e.condition}` : ""}`;
+          const where = e.condition ? t("[{section}] in {file}, only when {condition}", { section: e.section, file: e.ini, condition: e.condition })
+            : t("[{section}] in {file}", { section: e.section, file: e.ini });
           return (
             <li key={at} className={`ke-row${e.off ? " off" : ""}`}>
-              <span className="ke-what" title={said ? `${where}. The description says: ${said}` : where}>
+              <span className="ke-what" title={said ? t("{where}. The description says: {said}", { where, said }) : where}>
                 <span className="ke-name">{said ?? e.name}</span>
-                {!compact && <span className="ke-kind hint">{said ? `${e.name}, ${what(e).toLowerCase()}` : what(e)}</span>}
+                {!compact && <span className="ke-kind hint">{said ? t("{name}, {kind}", { name: e.name, kind: what(e).toLowerCase() }) : what(e)}</span>}
               </span>
               <span className="ke-keys">
                 {e.lines.map((l) => (
                   <span key={`${l.field}-${l.index}`} className="ke-line">
-                    {l.field === "back" && <span className="ke-back hint" title="Steps back through the looks">Back</span>}
+                    {l.field === "back" && <span className="ke-back hint" title={t("Steps back through the looks")}>{t("Back")}</span>}
                     <KeyChip line={l} disabled={busy !== null || l.off}
-                      onBinding={(b) => run(`k${at}`, () => modKeys.rebind(game, modId, { ini: e.ini, section: e.section, field: l.field, index: l.index }, b), "That's already the key")} />
+                      onBinding={(b) => run(`k${at}`, () => modKeys.rebind(game, modId, { ini: e.ini, section: e.section, field: l.field, index: l.index }, b), t("That's already the key"))} />
                   </span>
                 ))}
               </span>
-              <span className="ke-on" title={e.off ? "Turn this toggle back on" : "Turn this toggle off. The mod stays on, only this toggle stops working"}>
-                <Toggle size="sm" checked={!e.off} disabled={busy !== null} ariaLabel={`${said ?? e.name} toggle`}
-                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), "No change")} />
+              <span className="ke-on" title={e.off ? t("Turn this toggle back on") : t("Turn this toggle off. The mod stays on, only this toggle stops working")}>
+                <Toggle size="sm" checked={!e.off} disabled={busy !== null} ariaLabel={t("{name} toggle", { name: said ?? e.name })}
+                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), t("No change"))} />
               </span>
             </li>
           );
         })}
       </ul>
-      <p className="ke-tip hint">Click a key to rebind it</p>
+      <p className="ke-tip hint">{t("Click a key to rebind it")}</p>
     </>
   );
 
   const ours =keys.changed || onScreen === "on" || onScreen === "partial";
   const reset = ours && (
     <Button size="sm" variant="ghost" icon="undo" busy={busy === "reset"} disabled={busy !== null && busy !== "reset"}
-      title="Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before its first change. Undo brings the changes back"
-      onClick={() => run("reset", () => modKeys.putBack(game, modId), "The files are already the author's")}>Put back original files</Button>
+      title={t("Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before its first change. Undo brings the changes back")}
+      onClick={() => run("reset", () => modKeys.putBack(game, modId), t("The files are already the author's"))}>{t("Put back original files")}</Button>
   );
 
   if (compact) return <div className="ke ke-compact">{body}{reset && <div className="ke-foot">{reset}</div>}</div>;
   return (
-    <Panel title="Toggles" icon="keyboard" className="ke mi-panel" count={keys.keys.length} actions={reset || undefined}>
+    <Panel title={t("Toggles")} icon="keyboard" className="ke mi-panel" count={keys.keys.length} actions={reset || undefined}>
       {body}
     </Panel>
   );

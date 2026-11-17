@@ -14,6 +14,8 @@ import { reloadLive, setAll, setTester, useLive } from "../ingame/data";
 import { play } from "../home/PlayButton";
 import "../ingame/ingame.css";
 import { LazyImg } from "../../ui/LazyImg";
+import { t, tb, tn, tx } from "../../lib/i18n";
+import { gameName } from "../../lib/games";
 
 /** Where the check shows (once, in App). It checks the game picked in the sidebar when it opened. */
 export function GameCheckHost() {
@@ -24,8 +26,8 @@ export function GameCheckHost() {
 /** Closes the check and opens Tools, Switch skins in game, where the menu's settings are. */
 function OpenInGameTools() {
   return (
-    <Button size="sm" icon="swap" title="Closes the check and opens Tools, Switch skins in game"
-      onClick={() => { closeGameCheck(); go({ view: "tools", section: "ingame" }); }}>Switch skins in game</Button>
+    <Button size="sm" icon="swap" title={t("Closes the check and opens Tools, Switch skins in game")}
+      onClick={() => { closeGameCheck(); go({ view: "tools", section: "ingame" }); }}>{t("Switch skins in game")}</Button>
   );
 }
 
@@ -34,8 +36,8 @@ function Opened() {
   const [game] = useState(now);
   if (!game) {
     return (
-      <Dialog title="Check this game" icon="check" onClose={closeGameCheck} footer={<Button onClick={closeGameCheck}>Close</Button>}>
-        <p>Pick a game in the sidebar first, then open this again.</p>
+      <Dialog title={t("Check this game")} icon="check" onClose={closeGameCheck} footer={<Button onClick={closeGameCheck}>{t("Close")}</Button>}>
+        <p>{t("Pick a game in the sidebar first, then open this again.")}</p>
       </Dialog>
     );
   }
@@ -45,8 +47,8 @@ function Opened() {
 const STEPS = ["start", "pick", "menu", "menuPick", "reload", "pad", "send"] as const;
 type Step = typeof STEPS[number];
 const TITLES: Record<Step, string> = {
-  start: "Before you start", pick: "Pick a skin from gachamod", menu: "Open the menu while you play", menuPick: "Pick a skin from the menu",
-  reload: "Reload the game's mods", pad: "Open the menu with a controller", send: "Send the results",
+  start: t("Before you start"), pick: t("Pick a skin from gachamod"), menu: t("Open the menu while you play"), menuPick: t("Pick a skin from the menu"),
+  reload: t("Reload the game's mods"), pad: t("Open the menu with a controller"), send: t("Send the results"),
 };
 
 /** Run `job` now and every `ms` while `on`. */
@@ -56,15 +58,15 @@ function useEvery(ms: number, job: () => void, on: boolean) {
   useEffect(() => {
     if (!on) return;
     ref.current();
-    const t = window.setInterval(() => ref.current(), ms);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(() => ref.current(), ms);
+    return () => window.clearInterval(timer);
   }, [ms, on]);
 }
 
 /** True once `ms` have passed since the component showed. */
 function useAfter(ms: number) {
   const [done, setDone] = useState(false);
-  useEffect(() => { const t = window.setTimeout(() => setDone(true), ms); return () => window.clearTimeout(t); }, [ms]);
+  useEffect(() => { const timer = window.setTimeout(() => setDone(true), ms); return () => window.clearTimeout(timer); }, [ms]);
   return done;
 }
 
@@ -86,15 +88,15 @@ function Check({ game, onClose }: { game: GameState; onClose: () => void }) {
 
   const groups = (info?.groups ?? []).filter((g) => g.mods.length >= 2);
   const group = groups.find((g) => g.group === groupN) ?? [...groups].sort((a, b) => b.mods.length - a.mods.length)[0] ?? null;
-  const name = setup?.name ?? game.name;
+  const name = gameName(setup ?? game);
   const ready = !!setup?.running && !!group;
 
   const body = (): ReactNode => {
-    if (!setup) return failed ? <p className="bad">{failed}</p> : <Waiting what={`Reading ${game.name}'s setup`} />;
+    if (!setup) return failed ? <p className="bad">{failed}</p> : <Waiting what={t("Reading {game}'s setup", { game: gameName(game) })} />;
     switch (at) {
       case "start": return <Start setup={setup} info={info} hasGroup={!!group} game={game} />;
       case "pick": return group ? <PickStep key="pick" game={game} setup={setup} group={group} groups={groups} onGroup={setGroupN} note={note} answer={answer} />
-        : <p>No character switches in game, so there's nothing to pick. Skip this step.</p>;
+        : <p>{t("No character switches in game, so there's nothing to pick. Skip this step.")}</p>;
       case "menu": return <MenuStep key="menu" setup={setup} answer={answer} />;
       case "menuPick": return <MenuPickStep key="menuPick" game={game} info={info} answer={answer} />;
       case "reload": return <ReloadStep setup={setup} answer={answer} chosen={steps.reload_kept} />;
@@ -111,30 +113,30 @@ function Check({ game, onClose }: { game: GameState; onClose: () => void }) {
     setSending(true);
     try {
       await gameCheck.send({ game: game.id, steps, notes: notes.trim() || undefined, contact: contact.trim() || undefined, logs });
-      toast("Thanks. The results were sent");
+      toast(t("Thanks. The results were sent"));
       onClose();
     } catch (e) { toast(errorText(e), true); setSending(false); }
   };
 
-  const skip = <Button variant="ghost" onClick={() => answer(`${STEP_KEY[at]}`, "skip")} title="Leave this one out and go on">Skip this step</Button>;
+  const skip = <Button variant="ghost" onClick={() => answer(`${STEP_KEY[at]}`, "skip")} title={t("Leave this one out and go on")}>{t("Skip this step")}</Button>;
   const footer = at === "start" ? <>
-    <Button variant="ghost" onClick={onClose}>Cancel</Button>
-    <Button variant="ghost" onClick={() => setAt("send")} disabled={!setup} title="Skip the steps and send only what gachamod read about the game">Send what was found</Button>
+    <Button variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
+    <Button variant="ghost" onClick={() => setAt("send")} disabled={!setup} title={t("Skip the steps and send only what gachamod read about the game")}>{t("Send what was found")}</Button>
     <Button variant="primary" icon="play" onClick={next} disabled={!ready} data-t="gamecheck-start"
-      title={ready ? "Goes through the steps one at a time" : !setup?.running ? `Start ${name} first` : "A character has to switch in game first"}>Start the check</Button>
+      title={ready ? t("Goes through the steps one at a time") : !setup?.running ? t("Start {game} first", { game: name }) : t("A character has to switch in game first")}>{t("Start the check")}</Button>
   </> : at === "send" ? <>
-    <Button variant="ghost" onClick={back} disabled={sending}>Back</Button>
+    <Button variant="ghost" onClick={back} disabled={sending}>{t("Back")}</Button>
     <Button variant="primary" icon="upload" busy={sending} disabled={sending || !setup} onClick={() => void send()} data-t="gamecheck-send"
-      title="Sends the answers and what gachamod read to gachamod's developer">Send</Button>
+      title={t("Sends the answers and what gachamod read to gachamod's developer")}>{t("Send")}</Button>
   </> : <>
-    <Button variant="ghost" onClick={back}>Back</Button>
+    <Button variant="ghost" onClick={back}>{t("Back")}</Button>
     {skip}
   </>;
 
   return (
-    <Dialog title={`Check ${name}`} icon="check" size="lg" onClose={onClose} locked={sending ? "Sending the results" : undefined} footer={footer}>
+    <Dialog title={t("Check {game}", { game: name })} icon="check" size="lg" onClose={onClose} locked={sending ? t("Sending the results") : undefined} footer={footer}>
       <div className="check-game">
-        <p className="hint check-at">{at === "start" || at === "send" ? TITLES[at] : `Step ${i} of ${STEPS.length - 2}: ${TITLES[at]}`}</p>
+        <p className="hint check-at">{at === "start" || at === "send" ? TITLES[at] : t("Step {step} of {steps}: {title}", { step: i, steps: STEPS.length - 2, title: TITLES[at] })}</p>
         {at === "send" ? (
           <SendStep steps={steps} setup={setup} notes={notes} setNotes={setNotes} contact={contact} setContact={setContact} logs={logs} setLogs={setLogs} />
         ) : body()}
@@ -149,14 +151,15 @@ const STEP_KEY: Record<Step, string> = { start: "start", pick: "pick_changed", m
 // ── the steps ──
 
 function Facts({ setup }: { setup: CheckSetup }) {
-  const keys = setup.foregroundCheck === "0" ? "Read" : setup.foregroundCheck === "1" ? "Ignored" : "Not set";
+  const keys = setup.foregroundCheck === "0" ? t("Read") : setup.foregroundCheck === "1" ? t("Ignored") : t("Not set");
+  const loader = setup.loaderVersion ? `${setup.importer} ${setup.loaderVersion}` : setup.importer;
   const rows: Array<[string, string, string?]> = [
-    ["Loader", `${setup.importer}${setup.loaderVersion ? ` ${setup.loaderVersion}` : ""}${setup.viaXxmi ? " through XXMI Launcher" : ""}`],
-    [setup.name, !setup.running ? "Not running" : setup.gameAdmin ? "Running as administrator" : "Running"],
-    ["gachamod", setup.appAdmin ? "Running as administrator" : "Not running as administrator"],
-    ["Keys while the game isn't in front", keys, "d3dx.ini check_foreground_window. Ignored means the loader only reads keys while the game is the window in front"],
-    ["Window", setup.windowMode ?? "Not known", "XXMI Launcher's window mode for this game"],
-    ["Characters that switch in game", String(setup.liveGroups)],
+    [t("Loader"), setup.viaXxmi ? t("{loader} through XXMI Launcher", { loader }) : loader],
+    [gameName(setup), !setup.running ? t("Not running") : setup.gameAdmin ? t("Running as administrator") : t("Running")],
+    ["gachamod", setup.appAdmin ? t("Running as administrator") : t("Not running as administrator")],
+    [t("Keys while the game isn't in front"), keys, t("d3dx.ini check_foreground_window. Ignored means the loader only reads keys while the game is the window in front")],
+    [t("Window"), setup.windowMode ? tb(setup.windowMode) : t("Not known"), t("XXMI Launcher's window mode for this game")],
+    [t("Characters that switch in game"), String(setup.liveGroups)],
   ];
   return (
     <dl className="check-facts">
@@ -167,37 +170,36 @@ function Facts({ setup }: { setup: CheckSetup }) {
 
 function Start({ setup, info, hasGroup, game }: { setup: CheckSetup; info: LiveInfo | null; hasGroup: boolean; game: GameState }) {
   const [busy, setBusy] = useState(false);
+  const name = gameName(setup);
   // checking a game where the drawn menu is a tester option is testing it: the button turns tester options on first
   const every = async () => {
     setBusy(true);
     try { if (info && !info.allowed && !(await setTester(true))) return; await setAll(game.id, true); } finally { setBusy(false); }
   };
   return <>
-    <p>This goes through switching skins in {setup.name} while you play, then sends what worked to gachamod's developer.
-      It takes about ten minutes, and every step can be skipped.</p>
+    <p>{t("This goes through switching skins in {game} while you play, then sends what worked to gachamod's developer. It takes about ten minutes, and every step can be skipped.", { game: name })}</p>
     <Facts setup={setup} />
     {!setup.running && (
       <div className="check-need">
-        <Icon name="play" /><span>Start {setup.name} with mods. gachamod notices when it's running.</span>
-        <Button size="sm" variant="primary" icon="play" onClick={() => void play(game)} title={`Starts ${setup.name} the way the Play button does`}>Start {setup.name}</Button>
+        <Icon name="play" /><span>{t("Start {game} with mods. gachamod notices when it's running.", { game: name })}</span>
+        <Button size="sm" variant="primary" icon="play" onClick={() => void play(game)} title={t("Starts {game} the way the Play button does", { game: name })}>{t("Start {game}", { game: name })}</Button>
       </div>
     )}
     {!hasGroup && info && (info.ready.length > 0 ? (
       <div className="check-need">
-        <Icon name="swap" /><span>No character switches in game yet. This keeps every character's skins loaded, so any one shows at once. Undo takes it back.</span>
+        <Icon name="swap" /><span>{t("No character switches in game yet. This keeps every character's skins loaded, so any one shows at once. Undo takes it back.")}</span>
         <Button size="sm" variant="primary" icon="swap" busy={busy} disabled={busy} onClick={() => void every()}
-          title="The same as the switch in Tools, Switch skins in game. The game reloads once to start it">Switch every character in game</Button>
+          title={t("The same as the switch in Tools, Switch skins in game. The game reloads once to start it")}>{t("Switch every character in game")}</Button>
       </div>
     ) : (
       <div className="check-need">
-        <Icon name="info" /><span>The steps need a character with two or more mods. You can still send what gachamod read.</span>
+        <Icon name="info" /><span>{t("The steps need a character with two or more mods. You can still send what gachamod read.")}</span>
       </div>
     ))}
     {setup.running && setup.gameAdmin && !setup.appAdmin && (
       <div className="check-need">
-        <Icon name="warn" /><span>{setup.name} runs as administrator and gachamod doesn't, so Windows keeps gachamod's keys away from it. That's worth checking too.
-          Restart gachamod as administrator first if you'd rather check that way.</span>
-        <Button size="sm" onClick={restartAsAdmin} title="Closes gachamod and opens it again as administrator. Windows asks you first. Start the check again after">Restart as administrator</Button>
+        <Icon name="warn" /><span>{t("{game} runs as administrator and gachamod doesn't, so Windows keeps gachamod's keys away from it. That's worth checking too. Restart gachamod as administrator first if you'd rather check that way.", { game: name })}</span>
+        <Button size="sm" onClick={restartAsAdmin} title={t("Closes gachamod and opens it again as administrator. Windows asks you first. Start the check again after")}>{t("Restart as administrator")}</Button>
       </div>
     )}
   </>;
@@ -215,7 +217,7 @@ function Ask({ question, answers, chosen, onAnswer }: { question: string; answer
   );
 }
 
-const YES_NO: Array<[string, string]> = [["yes", "Yes"], ["no", "No"]];
+const YES_NO: Array<[string, string]> = [["yes", t("Yes")], ["no", t("No")]];
 
 /** What gachamod saw by itself, next to the player's answer. */
 function Seen({ ok, children }: { ok: boolean; children: ReactNode }) {
@@ -229,6 +231,7 @@ function PickStep({ game, setup, group, groups, onGroup, note, answer }:
   const [picked, setPicked] = useState<{ slot: number; at: number; send: boolean } | null>(null);
   const [saved, setSaved] = useState<"wait" | "yes" | "no" | null>(null);
   const [busy, setBusy] = useState(false);
+  const name = gameName(setup);
   const pick = async (slot: number) => {
     setBusy(true);
     const at = Date.now();
@@ -250,18 +253,18 @@ function PickStep({ game, setup, group, groups, onGroup, note, answer }:
   }, saved === "wait");
   const done = (v: string) => answer("pick_changed", v, { pick_saved: saved === "yes" ? "yes" : saved === "no" ? "no" : picked ? "not seen" : "no pick" });
   return <>
-    <p>Get in game where {group.character} shows, then pick a skin below. gachamod brings {setup.name} to the front and switches it.</p>
+    <p>{t("Get in game where {character} shows, then pick a skin below. gachamod brings {game} to the front and switches it.", { character: group.character, game: name })}</p>
     {groups.length > 1 && (
-      <Select label="Character" value={String(group.group)} onChange={(v) => { onGroup(Number(v)); setPicked(null); setSaved(null); }}
-        options={groups.map((g) => ({ value: String(g.group), label: `${g.character} (${g.mods.length} skins)` }))} />
+      <Select label={t("Character")} value={String(group.group)} onChange={(v) => { onGroup(Number(v)); setPicked(null); setSaved(null); }}
+        options={groups.map((g) => ({ value: String(g.group), label: tn(g.mods.length, "{character} ({n} skin)", "{character} ({n} skins)", { character: g.character }) }))} />
     )}
-    <div className="live-chips" role="radiogroup" aria-label={`${group.character}'s skin`}>
+    <div className="live-chips" role="radiogroup" aria-label={t("{character}'s skin", { character: group.character })}>
       {group.mods.map((m) => {
         const src = fileUrl(m.preview);
         const on = group.active === m.slot;
         return (
           <button key={m.modId} type="button" role="radio" aria-checked={on} className={`live-chip${on ? " on" : ""}`} disabled={busy || on} onClick={() => void pick(m.slot)}
-            title={on ? `${m.name} is showing` : `Show ${m.name}`}>
+            title={on ? t("{mod} is showing", { mod: m.name }) : t("Show {mod}", { mod: m.name })}>
             <span className="live-thumb">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
             <span className="live-chip-t">{m.name}</span>
             {on && <Icon name="check" className="live-chip-on" />}
@@ -270,12 +273,12 @@ function PickStep({ game, setup, group, groups, onGroup, note, answer }:
       })}
     </div>
     {picked && !picked.send && setup.running && (
-      <Seen ok={false}>gachamod couldn't press keys in {setup.name}, so press F10 in the game to load the pick.</Seen>
+      <Seen ok={false}>{t("gachamod couldn't press keys in {game}, so press F10 in the game to load the pick.", { game: name })}</Seen>
     )}
-    {saved === "wait" && <Waiting what={`Waiting for ${setup.name} to save the pick`} hold="The loader saves picks to d3dx_user.ini 5 to 15 seconds after they change. If the skin didn't change, there's nothing for it to save." />}
-    {saved === "yes" && <Seen ok>{setup.name} saved the pick, so the game took it.</Seen>}
-    {saved === "no" && <Seen ok={false}>{setup.name} didn't save the pick within 45 seconds.</Seen>}
-    {picked && <Ask question={`Did ${group.character}'s look change in the game?`} answers={YES_NO} onAnswer={done} />}
+    {saved === "wait" && <Waiting what={t("Waiting for {game} to save the pick", { game: name })} hold={t("The loader saves picks to d3dx_user.ini 5 to 15 seconds after they change. If the skin didn't change, there's nothing for it to save.")} />}
+    {saved === "yes" && <Seen ok>{t("{game} saved the pick, so the game took it.", { game: name })}</Seen>}
+    {saved === "no" && <Seen ok={false}>{t("{game} didn't save the pick within 45 seconds.", { game: name })}</Seen>}
+    {picked && <Ask question={t("Did {character}'s look change in the game?", { character: group.character })} answers={YES_NO} onAnswer={done} />}
   </>;
 }
 
@@ -286,18 +289,18 @@ function MenuStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   useEvery(1000, () => { gameCheck.menu(setup.game, since).then((h) => { if (h) setHeard(h); }, () => {}); }, !heard && !off);
   if (off) {
     return <>
-      <p>The menu while you play is off for {setup.name}. Turn it on in Tools, Switch skins in game, or skip this step.</p>
+      <p>{t("The menu while you play is off for {game}. Turn it on in Tools, Switch skins in game, or skip this step.", { game: gameName(setup) })}</p>
       <OpenInGameTools />
     </>;
   }
   return <>
-    <p>In the game, press <kbd className="kbd">{setup.menuKey}</kbd>.</p>
-    {heard ? <Seen ok>gachamod heard the key and opened {heard === "window" ? "its menu over the game" : "the menu the game draws, since the game runs in exclusive fullscreen"}.</Seen>
-      : <Seen ok={false}>{setup.menuStyle === "game" ? "The game takes this key itself, so gachamod doesn't see it." : "gachamod hasn't heard the key yet."}</Seen>}
-    <Ask question="What opened?" onAnswer={(v) => answer("menu_opened", v, { menu_heard: heard ?? "none" })} answers={[
-      ["window", "gachamod's menu over the game", "A window with previews and search on top of the game"],
-      ["drawn", "A menu drawn in the game", "A plainer list the game draws itself"],
-      ["nothing", "Nothing"],
+    <p>{tx("In the game, press {key}.", { key: <kbd className="kbd">{setup.menuKey}</kbd> })}</p>
+    {heard ? <Seen ok>{heard === "window" ? t("gachamod heard the key and opened its menu over the game.") : t("gachamod heard the key and opened the menu the game draws, since the game runs in exclusive fullscreen.")}</Seen>
+      : <Seen ok={false}>{setup.menuStyle === "game" ? t("The game takes this key itself, so gachamod doesn't see it.") : t("gachamod hasn't heard the key yet.")}</Seen>}
+    <Ask question={t("What opened?")} onAnswer={(v) => answer("menu_opened", v, { menu_heard: heard ?? "none" })} answers={[
+      ["window", t("gachamod's menu over the game"), t("A window with previews and search on top of the game")],
+      ["drawn", t("A menu drawn in the game"), t("A plainer list the game draws itself")],
+      ["nothing", t("Nothing")],
     ]} />
   </>;
 }
@@ -307,21 +310,21 @@ function MenuPickStep({ game, info, answer }: { game: GameState; info: LiveInfo 
   const late = useAfter(60_000);
   const changed = info?.groups.find((g) => before.has(g.group) && before.get(g.group) !== g.active);
   useEvery(2000, () => { void reloadLive(game.id); }, !changed && !late);
-  const shows = changed ? (changed.mods.find((m) => m.slot === changed.active)?.name ?? "none of its skins") : "";
+  const shows = changed ? (changed.mods.find((m) => m.slot === changed.active)?.name ?? t("none of its skins")) : "";
   return <>
-    <p>In the menu, pick a different skin for a character, then close the menu.</p>
-    {changed ? <Seen ok>gachamod read the pick back from the game: {changed.character} wears {shows}.</Seen>
-      : late ? <Seen ok={false}>gachamod hasn't read a pick back from the game in a minute.</Seen>
-      : <Waiting what={`Waiting for ${game.name} to save the pick`} hold="The loader saves picks 5 to 15 seconds after they change, and gachamod reads them back from there." />}
-    <Ask question="Did the look change in the game?" answers={YES_NO} onAnswer={(v) => answer("menu_pick_changed", v, { menu_pick_read: changed ? "yes" : late ? "no" : "not seen" })} />
+    <p>{t("In the menu, pick a different skin for a character, then close the menu.")}</p>
+    {changed ? <Seen ok>{t("gachamod read the pick back from the game: {character} wears {mod}.", { character: changed.character, mod: shows })}</Seen>
+      : late ? <Seen ok={false}>{t("gachamod hasn't read a pick back from the game in a minute.")}</Seen>
+      : <Waiting what={t("Waiting for {game} to save the pick", { game: gameName(game) })} hold={t("The loader saves picks 5 to 15 seconds after they change, and gachamod reads them back from there.")} />}
+    <Ask question={t("Did the look change in the game?")} answers={YES_NO} onAnswer={(v) => answer("menu_pick_changed", v, { menu_pick_read: changed ? "yes" : late ? "no" : "not seen" })} />
   </>;
 }
 
 function ReloadStep({ setup, answer, chosen }: { setup: CheckSetup; answer: Answer; chosen?: string | number | boolean }) {
   const key = setup.reloadKey?.match(/VK_(\w+)/i)?.[1]?.toUpperCase() ?? "F10";
   return <>
-    <p>In the game, press <kbd className="kbd">{key}</kbd> to reload its mods. Wait for the game to catch up (it can stutter for a moment).</p>
-    <Ask question="Does each character still wear the skin picked last?" answers={YES_NO} chosen={chosen} onAnswer={(v) => answer("reload_kept", v)} />
+    <p>{tx("In the game, press {key} to reload its mods. Wait for the game to catch up (it can stutter for a moment).", { key: <kbd className="kbd">{key}</kbd> })}</p>
+    <Ask question={t("Does each character still wear the skin picked last?")} answers={YES_NO} chosen={chosen} onAnswer={(v) => answer("reload_kept", v)} />
   </>;
 }
 
@@ -331,25 +334,25 @@ function PadStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   const on = setup.menuPad && setup.menuStyle !== "off";
   useEvery(1000, () => { gameCheck.menu(setup.game, since).then((h) => { if (h) setHeard(true); }, () => {}); }, on && !heard);
   if (!on) return <>
-    <p>Opening the menu with a controller is off for {setup.name}. Turn on "Use a controller in the menu" in Tools, Switch skins in game, or skip this step.</p>
+    <p>{t("Opening the menu with a controller is off for {game}. Turn on \"Use a controller in the menu\" in Tools, Switch skins in game, or skip this step.", { game: gameName(setup) })}</p>
     <OpenInGameTools />
   </>;
   return <>
-    <p>With a controller, press both sticks in while you play.</p>
-    {heard && <Seen ok>gachamod saw both sticks pressed and opened the menu.</Seen>}
-    <Ask question="Did the menu open?" onAnswer={(v) => answer("pad_opened", v, { pad_heard: heard })} answers={[...YES_NO, ["no controller", "No controller here"]]} />
+    <p>{t("With a controller, press both sticks in while you play.")}</p>
+    {heard && <Seen ok>{t("gachamod saw both sticks pressed and opened the menu.")}</Seen>}
+    <Ask question={t("Did the menu open?")} onAnswer={(v) => answer("pad_opened", v, { pad_heard: heard })} answers={[...YES_NO, ["no controller", t("No controller here")]]} />
   </>;
 }
 
 const ANSWER_TEXT: Record<string, string> = {
-  yes: "Yes", no: "No", skip: "Skipped", window: "gachamod's menu over the game", drawn: "A menu drawn in the game", nothing: "Nothing", "no controller": "No controller",
+  yes: t("Yes"), no: t("No"), skip: t("Skipped"), window: t("gachamod's menu over the game"), drawn: t("A menu drawn in the game"), nothing: t("Nothing"), "no controller": t("No controller"),
 };
 const SUMMARY: Array<[string, string]> = [
-  ["pick_changed", "A pick from gachamod changed the skin"],
-  ["menu_opened", "The menu key opened"],
-  ["menu_pick_changed", "A pick from the menu changed the skin"],
-  ["reload_kept", "Skins stayed after a reload"],
-  ["pad_opened", "Both sticks opened the menu"],
+  ["pick_changed", t("A pick from gachamod changed the skin")],
+  ["menu_opened", t("The menu key opened")],
+  ["menu_pick_changed", t("A pick from the menu changed the skin")],
+  ["reload_kept", t("Skins stayed after a reload")],
+  ["pad_opened", t("Both sticks opened the menu")],
 ];
 
 function SendStep({ steps, setup, notes, setNotes, contact, setContact, logs, setLogs }:
@@ -361,13 +364,14 @@ function SendStep({ steps, setup, notes, setNotes, contact, setContact, logs, se
         {answered.map(([k, label]) => <div key={k}><dt>{label}</dt><dd>{ANSWER_TEXT[String(steps[k])] ?? String(steps[k])}</dd></div>)}
       </dl>
     )}
-    <TextField multiline rows={4} label="Anything else" value={notes} onChange={setNotes}
-      placeholder="For example: the menu showed on the other screen, or a skin needed two picks to change." />
-    <TextField label="How to reach you (optional)" value={contact} onChange={setContact} placeholder="A Discord name or an email, if you'd like an answer" />
-    <span title="d3d11_log.txt from the loader's folder and the end of gachamod.log. They name the mods the loader read. Your user folder's name is taken out first">
-      <Checkbox checked={logs} onChange={setLogs} label="Attach the loader's log and gachamod's log" />
+    <TextField multiline rows={4} label={t("Anything else")} value={notes} onChange={setNotes}
+      placeholder={t("For example: the menu showed on the other screen, or a skin needed two picks to change.")} />
+    <TextField label={t("How to reach you (optional)")} value={contact} onChange={setContact} placeholder={t("A Discord name or an email, if you'd like an answer")} />
+    <span title={t("d3d11_log.txt from the loader's folder and the end of gachamod.log. They name the mods the loader read. Your user folder's name is taken out first")}>
+      <Checkbox checked={logs} onChange={setLogs} label={t("Attach the loader's log and gachamod's log")} />
     </span>
-    <p className="hint">Along with your answers goes what gachamod read about {setup?.name ?? "the game"}: the loader and its version, the window
-      mode, whether the game and gachamod run as administrator, and the menu's key.</p>
+    <p className="hint">{setup
+      ? t("Along with your answers goes what gachamod read about {game}: the loader and its version, the window mode, whether the game and gachamod run as administrator, and the menu's key.", { game: gameName(setup) })
+      : t("Along with your answers goes what gachamod read about the game: the loader and its version, the window mode, whether the game and gachamod run as administrator, and the menu's key.")}</p>
   </>;
 }

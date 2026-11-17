@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useGame } from "../../lib/store";
 import type { GameId, ModProblems, Problem } from "../../lib/api";
-import { Badge, Button, Panel, Skeleton, Waiting, plural } from "../../ui/kit";
+import { t, tb, tn } from "../../lib/i18n";
+import { Badge, Button, Panel, Skeleton, Waiting } from "../../ui/kit";
 import { FixButton } from "./FixButton";
 import { severityHint, severityLabel, severityTone } from "./ModInsides";
 import {
@@ -48,23 +49,23 @@ export function ProblemsPanel() {
   const auto = list ? autoFixes(list, ign, game).length : 0;
 
   return (
-    <Panel id="problems" title="Problems" icon="warn" className="tp tp-problems" count={list ? badCount : undefined}
+    <Panel id="problems" title={t("Problems")} icon="warn" className="tp tp-problems" count={list ? badCount : undefined}
       actions={<>
         {auto > 1 && (
-          <Button size="sm" icon="wand" busy={busy === "all"} disabled={!!busy} title={`Make all ${auto} fixes that need no choice, as one step you can undo`}
-            onClick={() => void run("all", () => fixAll(game, list!, ign))}>Fix all</Button>
+          <Button size="sm" icon="wand" busy={busy === "all"} disabled={!!busy} title={t("Make all {n} fixes that need no choice, as one step you can undo", { n: auto })}
+            onClick={() => void run("all", () => fixAll(game, list!, ign))}>{t("Fix all")}</Button>
         )}
         {total > 0 && (
-          <Button size="sm" variant="ghost" icon="hide" disabled={!!busy} title="Hide everything listed here. It stops counting on Tools and moves to Ignored"
-            onClick={() => ignoreAll(game, list!)}>Ignore all</Button>
+          <Button size="sm" variant="ghost" icon="hide" disabled={!!busy} title={t("Hide everything listed here. It stops counting on Tools and moves to Ignored")}
+            onClick={() => ignoreAll(game, list!)}>{t("Ignore all")}</Button>
         )}
-        <Button size="sm" variant="ghost" icon="refresh" busy={checking} onClick={check} disabled={!list} title="Look for problems in every mod again">Check again</Button>
+        <Button size="sm" variant="ghost" icon="refresh" busy={checking} onClick={check} disabled={!list} title={t("Look for problems in every mod again")}>{t("Check again")}</Button>
       </>}>
-      <p className="hint tp-intro">What could stop a mod from showing right in game. Warnings, like a file the .ini names that the mod doesn't ship, usually make no difference, so they're folded away.</p>
+      <p className="hint tp-intro">{t("What could stop a mod from showing right in game. Warnings, like a file the .ini names that the mod doesn't ship, usually make no difference, so they're folded away.")}</p>
       {!list ? (
-        <Waiting what="Checking mods for problems" className="tp-loading"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></Waiting>
+        <Waiting what={t("Checking mods for problems")} className="tp-loading"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></Waiting>
       ) : brokenRows.length === 0 ? (
-        <p className="tp-none muted">{warnRows.length ? "Nothing broken. Only warnings, below." : ignored.length ? "Nothing else to fix. The problems you ignored are below." : "No problems found."}</p>
+        <p className="tp-none muted">{warnRows.length ? t("Nothing broken. Only warnings, below.") : ignored.length ? t("Nothing else to fix. The problems you ignored are below.") : t("No problems found.")}</p>
       ) : (
         <ul className="tp-list tp-problem-list">
           {brokenRows.map(({ m, shown }) => (
@@ -74,7 +75,7 @@ export function ProblemsPanel() {
       )}
       {list && warnRows.length > 0 && (
         <details className="tp-ignored">
-          <summary className="hint">Warnings ({warnRows.reduce((s, r) => s + r.shown.length, 0)})</summary>
+          <summary className="hint">{t("Warnings ({n})", { n: warnRows.reduce((s, r) => s + r.shown.length, 0) })}</summary>
           <ul className="tp-list tp-problem-list">
             {warnRows.map(({ m, shown }) => (
               <ModRow key={m.modId} game={game} m={m} shown={shown} busy={busy} run={run} />
@@ -84,13 +85,13 @@ export function ProblemsPanel() {
       )}
       {ignored.length > 0 && (
         <details className="tp-ignored">
-          <summary className="hint">Ignored ({ignored.reduce((s, r) => s + r.hidden.length, 0)})</summary>
+          <summary className="hint">{t("Ignored ({n})", { n: ignored.reduce((s, r) => s + r.hidden.length, 0) })}</summary>
           <ul className="tp-list">
             {ignored.map(({ m, hidden }) => (
               <li key={m.modId} className="tp-ignored-mod row">
                 <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
-                <span className="hint">{plural(hidden.length, "problem")}</span>
-                <Button size="sm" variant="ghost" icon="eye" title="List these problems again" onClick={() => unignore(game, m)}>Show again</Button>
+                <span className="hint">{tn(hidden.length, "{n} problem", "{n} problems")}</span>
+                <Button size="sm" variant="ghost" icon="eye" title={t("List these problems again")} onClick={() => unignore(game, m)}>{t("Show again")}</Button>
               </li>
             ))}
           </ul>
@@ -109,21 +110,21 @@ function ModRow({ game, m, shown, busy, run }: {
     <li className="tp-problem">
       <div className="tp-problem-h row">
         <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
-        {!m.enabled && <Badge tone="muted" title="This mod is off, so its problems don't count on Tools">Off</Badge>}
+        {!m.enabled && <Badge tone="muted" title={t("This mod is off, so its problems don't count on Tools")}>{t("Off")}</Badge>}
         {download && (m.source
           ? <Button size="sm" variant={broken ? undefined : "ghost"} icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}
-              title="Download this mod from GameBanana again, which can bring back a missing file. Its settings stay"
-              onClick={() => void run(`dl${m.modId}`, () => downloadAgain(game, m))}>Download again</Button>
-          : <Button size="sm" variant="ghost" icon="search" title="This mod isn't linked to GameBanana. Search for it there by name"
-              onClick={() => findOnline(m)}>Find on GameBanana</Button>)}
-        <Button size="sm" variant="ghost" icon="hide" disabled={!!busy} title="Stop listing these problems. They stop counting on Tools and move to Ignored"
-          onClick={() => ignore(game, m, shown)}>Ignore</Button>
+              title={t("Download this mod from GameBanana again, which can bring back a missing file. Its settings stay")}
+              onClick={() => void run(`dl${m.modId}`, () => downloadAgain(game, m))}>{t("Download again")}</Button>
+          : <Button size="sm" variant="ghost" icon="search" title={t("This mod isn't linked to GameBanana. Search for it there by name")}
+              onClick={() => findOnline(m)}>{t("Find on GameBanana")}</Button>)}
+        <Button size="sm" variant="ghost" icon="hide" disabled={!!busy} title={t("Stop listing these problems. They stop counting on Tools and move to Ignored")}
+          onClick={() => ignore(game, m, shown)}>{t("Ignore")}</Button>
       </div>
       <ul className="tp-problem-items">
         {shown.map((p, i) => (
           <li key={`${p.kind}-${p.ini}-${i}`} className="tp-problem-item row">
             <Badge tone={severityTone(p.severity)} title={severityHint(p.severity)}>{severityLabel(p.severity)}</Badge>
-            <span className="grow tp-problem-t">{p.detail}</span>
+            <span className="grow tp-problem-t">{tb(p.detail)}</span>
             {p.fix && <FixButton game={game} m={m} fix={p.fix} busyKey={`fx${m.modId}${i}`} busy={busy} run={run} />}
           </li>
         ))}

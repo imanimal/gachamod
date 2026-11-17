@@ -8,6 +8,7 @@ import { library, modtools, type GameId, type ModEntry } from "./api";
 import { record } from "./history";
 import { jsonPref } from "./prefs";
 import { emitApp } from "./store";
+import { t, tn } from "./i18n";
 
 export type HoldKind = "ignore" | "update";
 export interface Hold {
@@ -62,7 +63,6 @@ async function write(game: GameId, change: Change) {
   if (pair.length || unpair.length) emitApp({ type: "library-refresh", game });
 }
 
-const named = (list: Array<{ name: string }>) => (list.length === 1 ? list[0]!.name : `${list.length} mods`);
 
 /** Set these mods' problems aside. `label` false records no Undo step (the caller records its own); the returned
  *  pair undoes and redoes it. */
@@ -90,7 +90,9 @@ export async function holdMods(game: GameId, mods: Array<{ id: string; name: str
 }
 
 function defaultLabel(mods: Array<{ name: string }>, kind: HoldKind) {
-  return kind === "ignore" ? `Ignoring ${named(mods)}'s problems` : `Waiting for an update to ${named(mods)}`;
+  const one = mods.length === 1 ? mods[0]!.name : null;
+  if (kind === "ignore") return one ? t("Ignoring {name}'s problems", { name: one }) : tn(mods.length, "Ignoring {n} mod's problems", "Ignoring {n} mods' problems");
+  return one ? t("Waiting for an update to {name}", { name: one }) : tn(mods.length, "Waiting for an update to {n} mod", "Waiting for an update to {n} mods");
 }
 
 /** Show these mods' problems again. */
@@ -101,7 +103,7 @@ export async function releaseMods(game: GameId, mods: Array<{ id: string; name: 
   const before: Change = Object.fromEntries(held.map((m) => [m.id, holdsNow(game)[m.id]!]));
   const change: Change = Object.fromEntries(held.map((m) => [m.id, null]));
   await write(game, change);
-  record({ label: `Showing ${named(held)}'s problems again`, undo: () => write(game, before), redo: () => write(game, change) });
+  record({ label: held.length === 1 ? t("Showing {name}'s problems again", { name: held[0]!.name }) : tn(held.length, "Showing {n} mod's problems again", "Showing {n} mods' problems again"), undo: () => write(game, before), redo: () => write(game, change) });
 }
 
 /** Keep the holds in step with the mod list: a wait without a version takes the one the mod has now, and a wait whose

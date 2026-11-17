@@ -2,8 +2,10 @@
 // edited by ui/KeyEditor.tsx above it. Owner: MODTOOLS area. LIBRARY's mod drawer renders it.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { emitApp, go, useGame } from "../../lib/store";
-import { errorKind, errorText, modtools, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
-import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, Waiting, plural, type Tone } from "../../ui/kit";
+import { backups, errorKind, errorText, modtools, type MergedInfo, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
+import { record } from "../../lib/history";
+import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, Waiting, formatBytes, type Tone } from "../../ui/kit";
+import { t, tb, tn } from "../../lib/i18n";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
 import { dropShared, ignoreConflict, turnOff } from "./toolsBadge";
@@ -14,10 +16,10 @@ import "./modtools.css";
 const varKey = (v: { ini: string; var: string }) => `${v.ini}|${v.var}`;
 
 export const severityTone = (s: string): Tone => (s === "bad" ? "bad" : s === "warn" ? "warn" : "info");
-export const severityLabel = (s: string) => (s === "bad" ? "Broken" : s === "warn" ? "Warning" : "Note");
+export const severityLabel = (s: string) => (s === "bad" ? t("Broken") : s === "warn" ? t("Warning") : t("Note"));
 export const severityHint = (s: string) => (s === "bad"
-  ? "Part of the mod won't show, or shows wrong, in game"
-  : s === "warn" ? "The mod works, but this part may not, or only in some cases" : "Doesn't change how the mod looks in game");
+  ? t("Part of the mod won't show, or shows wrong, in game")
+  : s === "warn" ? t("The mod works, but this part may not, or only in some cases") : t("Doesn't change how the mod looks in game"));
 
 export function ModInsides({ mod }: { mod: ModEntry }) {
   const game = useGame();
@@ -34,7 +36,7 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
     setFailed(null);
     modtools.inspect(mod.game, mod.id)
       .then((d) => { if (live) setData(d); })
-      .catch((e) => { if (live) { setData(null); setFailed(errorKind(e) === "todo" ? "Toggles and options show here once the library is ready." : errorText(e)); } });
+      .catch((e) => { if (live) { setData(null); setFailed(errorKind(e) === "todo" ? t("Toggles and options show here once the library is ready.") : errorText(e)); } });
     return () => { live = false; };
   }, [mod.game, mod.id, mod.enabled, reload]);
   // a fix or its Undo changed this mod's files
@@ -44,7 +46,7 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
   if (failed) return <p className="mi mi-failed muted">{failed}</p>;
   if (!shown) {
     return (
-      <Waiting className="mi mi-loading" what="Reading the mod's files">
+      <Waiting className="mi mi-loading" what={t("Reading the mod's files")}>
         <Skeleton h="1.2rem" w="40%" /><Skeleton h="2.4rem" /><Skeleton h="2.4rem" />
       </Waiting>
     );
@@ -54,18 +56,19 @@ export function ModInsides({ mod }: { mod: ModEntry }) {
   return (
     <div className="mi">
       {shown.keys.length === 0 && options.length === 0 && (
-        <p className="mi-none muted">This mod has no toggles or options.</p>
+        <p className="mi-none muted">{t("This mod has no toggles or options.")}</p>
       )}
       {options.length > 0 && (
         <Options mod={mod} vars={options} running={running} stillCurrent={() => current.current === mod.id}
           onSaved={(v, value) => setData((d) => d && d.modId === mod.id ? { ...d, vars: d.vars.map((x) => varKey(x) === varKey(v) ? { ...x, current: value } : x) } : d)} />
       )}
+      {shown.merged && <Merged mod={mod} info={shown.merged} running={running} />}
       {shown.problems.length > 0 && <Problems mod={mod} problems={shown.problems} onFixed={() => setReload((n) => n + 1)} />}
       {shown.conflicts.length > 0 && (
         <Conflicts mod={mod} data={shown} onDone={() => { emitApp({ type: "library-refresh", game: mod.game }); setReload((n) => n + 1); }} />
       )}
       {shown.readmes.length > 0 && (
-        <Panel title="Readme" icon="file" className="mi-panel mi-readmes">
+        <Panel title={t("Readme")} icon="file" className="mi-panel mi-readmes">
           {shown.readmes.map(([name, text]) => (
             <details key={name} className="mi-readme">
               <summary className="mi-readme-h">{name}</summary>
@@ -99,15 +102,15 @@ function Options({ mod, vars, running, stillCurrent, onSaved }:
   }, [mod.game, mod.id, stillCurrent, onSaved]);
 
   return (
-    <Panel title="Options" icon="sliders" className="mi-panel mi-opts-panel">
-      {running && <p className="mi-running hint">Close the game to change options. It saves its own values when it closes.</p>}
-      {!mod.enabled && <p className="mi-off hint">This mod is off. Options you pick now apply when you turn it on.</p>}
+    <Panel title={t("Options")} icon="sliders" className="mi-panel mi-opts-panel">
+      {running && <p className="mi-running hint">{t("Close the game to change options. It saves its own values when it closes.")}</p>}
+      {!mod.enabled && <p className="mi-off hint">{t("This mod is off. Options you pick now apply when you turn it on.")}</p>}
       <fieldset className="mi-opts" disabled={running}>
         {vars.map((v) => {
           const k = varKey(v);
           const value = pending[k] ?? v.current ?? v.default ?? v.values[0] ?? "0";
           const ref = (el: HTMLElement | null) => { if (el) rows.current.set(k, el); else rows.current.delete(k); };
-          const title = `$${v.var} in ${v.ini}${v.default !== null ? `, default ${v.default}` : ""}`;
+          const title = v.default !== null ? t("${var} in {ini}, default {value}", { var: v.var, ini: v.ini, value: v.default }) : t("${var} in {ini}", { var: v.var, ini: v.ini });
           if (v.kind === "switch") {
             return (
               <div key={k} ref={ref} className="mi-opt mi-opt-switch" title={title}>
@@ -116,16 +119,52 @@ function Options({ mod, vars, running, stillCurrent, onSaved }:
             );
           }
           const values = v.values.includes(value) ? v.values : [...v.values, value];
+          // a merged mod's swap values are its variants: show their names
+          const opts = values.map((x) => ({ value: x, label: v.names?.[x] ?? x }));
           return (
             <div key={k} ref={ref} className="mi-opt mi-opt-list" title={title}>
               <span className="mi-opt-l">{v.label}</span>
-              {values.length <= 5
-                ? <Segmented size="sm" label={v.label} value={value} options={values.map((x) => ({ value: x, label: x }))} onChange={(x) => change(v, x)} />
-                : <Select title={v.label} value={value} options={values.map((x) => ({ value: x, label: x }))} onChange={(x) => change(v, x)} />}
+              {values.length <= 5 && !v.names
+                ? <Segmented size="sm" label={v.label} value={value} options={opts} onChange={(x) => change(v, x)} />
+                : <Select title={v.label} value={value} options={opts} onChange={(x) => change(v, x)} />}
             </div>
           );
         })}
       </fieldset>
+    </Panel>
+  );
+}
+
+// ── merged mods ──
+
+/** A mod made of several by the merge script: what's inside, and splitting it back into separate mods. */
+function Merged({ mod, info, running }: { mod: ModEntry; info: MergedInfo; running: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const n = info.variants.length;
+  const split = async () => {
+    setBusy(true);
+    try {
+      const r = await modtools.splitMerged(mod.game, mod.id);
+      emitApp({ type: "library-refresh", game: mod.game });
+      let backup = r.backup;
+      const flip = async () => { backup = await backups.restore(backup.id); emitApp({ type: "library-refresh", game: mod.game }); };
+      record({ label: tn(r.mods.length, "Split {name} into {n} mod", "Split {name} into {n} mods", { name: mod.name }), undo: flip, redo: flip });
+    } catch (e) { toast(errorText(e), true); } finally { setBusy(false); }
+  };
+  const why = running ? t("Close the game first. Mods can't move while it has them open") : info.blocked ? tb(info.blocked) : null;
+  return (
+    <Panel title={t("Merged mod")} icon="layers" className="mi-panel mi-merged">
+      <p className="hint">{tn(n, "Made from {n} mod with the merge script. Its key switches between them:", "Made from {n} mods with the merge script. Its key switches between them:")} {info.variants.map((v) => v.name).join(", ")}</p>
+      <div className="row">
+        <Button icon="layers" busy={busy} disabled={!!why} onClick={() => void split()}
+          title={why ?? t("Each one becomes a mod of its own with its own card. The one showing now stays on. Undo puts the merged mod back")}>
+          {tn(n, "Split into {n} mod", "Split into {n} mods")}
+        </Button>
+        {!why && info.copyFiles > 0 && (
+          <span className="hint">{tn(info.copyFiles, "Copies {n} shared file ({size})", "Copies {n} shared files ({size})", { size: formatBytes(info.copyBytes) })}</span>
+        )}
+        {why && <span className="hint">{why}</span>}
+      </div>
     </Panel>
   );
 }
@@ -142,12 +181,12 @@ function Problems({ mod, problems, onFixed }: { mod: ModEntry; problems: Problem
   };
   const m = { modId: mod.id, name: mod.name, enabled: mod.enabled, source: mod.source, problems };
   return (
-    <Panel title="Problems" icon="warn" className="mi-panel mi-problems" count={problems.length}>
+    <Panel title={t("Problems")} icon="warn" className="mi-panel mi-problems" count={problems.length}>
       <ul className="mi-prob-list">
         {problems.map((p, i) => (
           <li key={`${p.kind}-${i}`} className={`mi-prob mi-prob-${p.severity}`}>
             <Badge tone={severityTone(p.severity)} title={severityHint(p.severity)}>{severityLabel(p.severity)}</Badge>
-            <span className="mi-prob-t">{p.detail}</span>
+            <span className="mi-prob-t">{tb(p.detail)}</span>
             {p.fix && <FixButton game={mod.game} m={m} fix={p.fix} busyKey={`f${i}`} busy={busy} run={run} onDone={onFixed} />}
           </li>
         ))}
@@ -159,13 +198,13 @@ function Problems({ mod, problems, onFixed }: { mod: ModEntry; problems: Problem
 /** "14 shared parts", which opens to the list of them by the names the mod gives them. A few names usually say it
  *  all: "ZhuYuan.Body.IB" on an Anby mod means both mods also change Zhu Yuan. */
 export function SharedParts({ n, parts }: { n: number; parts?: string[] }) {
-  if (!parts?.length) return <span className="mi-conf-n hint">{plural(n, "shared part")}</span>;
+  if (!parts?.length) return <span className="mi-conf-n hint">{tn(n, "{n} shared part", "{n} shared parts")}</span>;
   return (
     <details className="mi-parts">
-      <summary className="hint" title="Show which parts these mods change">{plural(n, "shared part")}</summary>
+      <summary className="hint" title={t("Show which parts these mods change")}>{tn(n, "{n} shared part", "{n} shared parts")}</summary>
       <ul className="mi-parts-l mono">
         {parts.map((p) => <li key={p}>{p}</li>)}
-        {n > parts.length && <li className="muted">and {n - parts.length} more</li>}
+        {n > parts.length && <li className="muted">{t("and {n} more", { n: n - parts.length })}</li>}
       </ul>
     </details>
   );
@@ -184,24 +223,25 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
   };
   const off = (ids: string[], names: string[], tag: string) => act(tag, () => turnOff(mod.game, ids, names));
   return (
-    <Panel title="Conflicts" icon="layers" className="mi-panel mi-conflicts" count={data.conflicts.length}
+    <Panel title={t("Conflicts")} icon="layers" className="mi-panel mi-conflicts" count={data.conflicts.length}
       actions={<Button size="sm" busy={busy === "all"} disabled={!!busy || !mod.enabled} icon="check"
-        title="Turn off the other mods that change the same parts"
-        onClick={() => off(data.conflicts.map((c) => c.modId), data.conflicts.map((c) => c.name), "all")}>Keep this one</Button>}>
-      <p className="hint mi-conf-hint">These mods are on and change the same parts of the model, so only one of them shows.</p>
+        title={t("Turn off the other mods that change the same parts")}
+        onClick={() => off(data.conflicts.map((c) => c.modId), data.conflicts.map((c) => c.name), "all")}>{t("Keep this one")}</Button>}>
+      <p className="hint mi-conf-hint">{t("These mods are on and change the same parts of the model, so only one of them shows.")}</p>
       <ul className="mi-conf-list">
         {data.conflicts.map((c) => (
           <li key={c.modId} className="mi-conf">
             <div className="mi-conf-row">
-              <button type="button" className="tp-link mi-conf-name" title="Open in Mods" onClick={() => go({ view: "library", modId: c.modId })}>{c.name}</button>
+              <button type="button" className="tp-link mi-conf-name" title={t("Open in Mods")} onClick={() => go({ view: "library", modId: c.modId })}>{c.name}</button>
               {(c.hashes?.length ?? 0) > 0 && (
                 <Button size="sm" variant="ghost" busy={busy === `d:${c.modId}`} disabled={!!busy}
-                  title={`Take the ${plural(c.shared, "shared part")} out of ${mod.name}, so ${c.name} shows them and ${mod.name} keeps the rest. Undo puts them back`}
-                  onClick={() => act(`d:${c.modId}`, () => dropShared(mod.game, mod.id, c.hashes!))}>Remove from this mod</Button>
+                  title={tn(c.shared, "Take the {n} shared part out of {mod}, so {other} shows it and {mod} keeps the rest. Undo puts it back",
+                    "Take the {n} shared parts out of {mod}, so {other} shows them and {mod} keeps the rest. Undo puts them back", { mod: mod.name, other: c.name })}
+                  onClick={() => act(`d:${c.modId}`, () => dropShared(mod.game, mod.id, c.hashes!))}>{t("Remove from this mod")}</Button>
               )}
-              <IconButton icon="hide" size="sm" label={`Ignore the conflict with ${c.name}. Tools, Conflicts lists ignored ones`} disabled={!!busy}
+              <IconButton icon="hide" size="sm" label={t("Ignore the conflict with {name}. Tools, Conflicts lists ignored ones", { name: c.name })} disabled={!!busy}
                 onClick={() => act(`i:${c.modId}`, () => ignoreConflict(mod.game, [mod.id, c.modId], [mod.name, c.name]))} />
-              <IconButton icon="power" size="sm" label={`Turn off ${c.name}`} disabled={!!busy} onClick={() => off([c.modId], [c.name], c.modId)} />
+              <IconButton icon="power" size="sm" label={t("Turn off {name}", { name: c.name })} disabled={!!busy} onClick={() => off([c.modId], [c.name], c.modId)} />
             </div>
             <SharedParts n={c.shared} parts={c.parts} />
           </li>

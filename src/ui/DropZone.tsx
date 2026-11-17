@@ -5,6 +5,8 @@ import { Icon } from "./Icon";
 import { inTauri } from "../lib/tauri";
 import { currentGame, emitApp } from "../lib/store";
 import { toast } from "./toast";
+import { t } from "../lib/i18n";
+import { gameName } from "../lib/games";
 
 /** A part of a screen that takes some drops itself (a mod's preview takes images). It wins over the window-wide
  *  drop while the pointer is over its element and `accepts` the dragged paths. */
@@ -48,14 +50,14 @@ export function DropZone() {
       } else if (p.type === "leave") { setHot(null); setOver(false); }
       else if (p.type === "drop") {
         setOver(false);
-        const t = targetAt(p.position, p.paths);
+        const target = targetAt(p.position, p.paths);
         setHot(null);
-        if (t) { t.onDrop(p.paths); return; }
+        if (target) { target.onDrop(p.paths); return; }
         const packs = p.paths.filter((x) => x.toLowerCase().endsWith(".gachamod"));
         const rest = p.paths.filter((x) => !x.toLowerCase().endsWith(".gachamod"));
         packs.forEach((path) => emitApp({ type: "open-pack", path }));
         if (rest.length) {
-          if (!currentGame()) toast("Set up a game first, then drop mods on the window", true);
+          if (!currentGame()) toast(t("Set up a game first, then drop mods on the window"), true);
           else emitApp({ type: "install-paths", paths: rest });
         }
       }
@@ -68,8 +70,9 @@ export function DropZone() {
     <div className="dropzone" aria-hidden="true">
       <div className="dropzone-card">
         <Icon name="import" />
-        <strong>Drop to add</strong>
-        <span>Archives and folders install into {g?.name ?? "the current game"}, zips inside zips too. A .gachamod file opens to show what is inside.</span>
+        <strong>{t("Drop to add")}</strong>
+        <span>{g ? t("Archives and folders install into {game}, zips inside zips too. A .gachamod file opens to show what is inside.", { game: gameName(g) })
+          : t("Archives and folders install into the current game, zips inside zips too. A .gachamod file opens to show what is inside.")}</span>
       </div>
     </div>
   );

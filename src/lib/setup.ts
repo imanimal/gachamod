@@ -1,12 +1,14 @@
 // Getting games ready for mods without picking folders: one click installs XXMI Launcher and each game's mod loader
 // (gacha-core xxmi_setup.rs), and while a game is still missing its Mods folder the app looks again by itself, when the
 // window comes back to the front and every 30 seconds. Every place that offers setup uses this: the first start,
-// Settings, Games and mod loaders, and a download that had nowhere to go. Owner: SYSTEM area.
+// Settings, Games, and a download that had nowhere to go. Owner: SYSTEM area.
 import { oxford } from "./notes";
 import { useSyncExternalStore } from "react";
 import { dialogs, errorText, games as gamesApi, xxmi, type GameId, type GameState, type SetupProgress } from "./api";
 import { allGames, refreshGames, setGames } from "./store";
 import { toast } from "../ui/toast";
+import { gameName, gameShort } from "./games";
+import { t, tn } from "./i18n";
 
 export interface SetupState {
   running: boolean;
@@ -35,7 +37,7 @@ const hasMods = (g: GameState | undefined) => !!g?.modsDir && !g.modsMissing;
 /** XXMI Launcher can give this game a mod loader: the game is on this PC and has no Mods folder yet. */
 export const canInstallLoader = (g: GameState) => g.xxmi && !hasMods(g) && (g.installed || !!g.gameDir);
 
-const names = (list: GameState[]) => oxford(list.map((g) => g.short), 12);
+const names = (list: GameState[]) => oxford(list.map((g) => gameShort(g)), 12);
 
 /** Install XXMI Launcher and the mod loaders of `ids` (every XXMI game found on this PC when left out). Resolves with
  *  the games after, or null when it failed (the error is toasted with Try again). */
@@ -49,12 +51,14 @@ export async function installLoaders(ids?: GameId[]): Promise<GameState[] | null
     setGames(list);
     put({ running: false, step: null });
     const ready = list.filter((g) => hasMods(g) && !before.has(g.id));
-    toast(ready.length ? `${names(ready)} ${ready.length === 1 ? "is" : "are"} ready for mods` : "XXMI Launcher is installed. Games you install later get their mod loader here");
+    toast(ready.length
+      ? tn(ready.length, "{games} is ready for mods", "{games} are ready for mods", { games: names(ready) })
+      : t("XXMI Launcher is installed. Games you install later get their mod loader here"));
     return list;
   } catch (e) {
     const msg = errorText(e);
     put({ running: false, step: null, error: msg });
-    toast(`Couldn't install the mod loaders: ${msg}`, true, { label: "Try again", run: () => void installLoaders(ids) });
+    toast(t("Couldn't install the mod loaders: {error}", { error: msg }), true, { label: t("Try again"), run: () => void installLoaders(ids) });
     return null;
   }
 }
@@ -79,8 +83,8 @@ const missing = () => { const l = allGames(); return !l.some(hasMods) || l.some(
 export function watchSetup(): () => void {
   const onFocus = () => { if (missing()) void recheck(); };
   window.addEventListener("focus", onFocus);
-  const t = window.setInterval(() => { if (missing() && document.visibilityState === "visible") void recheck(); }, 30_000);
-  return () => { window.removeEventListener("focus", onFocus); window.clearInterval(t); };
+  const timer = window.setInterval(() => { if (missing() && document.visibilityState === "visible") void recheck(); }, 30_000);
+  return () => { window.removeEventListener("focus", onFocus); window.clearInterval(timer); };
 }
 
 /** Give one game a Mods folder the easy way: install its mod loader when XXMI can, else look for it again. True when
@@ -92,9 +96,9 @@ export async function getReady(id: GameId): Promise<boolean> {
   if (hasMods(g)) return true;
   if (canInstallLoader(g)) return has(await installLoaders([id]));
   if (has(await recheck(true))) return true;
-  toast(g.xxmi ? `Still no Mods folder for ${g.short}. Pick it, or open the game once with XXMI Launcher`
-    : `Still no Mods folder for ${g.short}. Install a 3DMigoto loader for it, then pick the Mods folder next to the loader's d3dx.ini`, false,
-    { label: "Pick folder", run: () => void pickModsFolder(id) });
+  toast(g.xxmi ? t("Still no Mods folder for {game}. Pick it, or open the game once with XXMI Launcher", { game: gameShort(g) })
+    : t("Still no Mods folder for {game}. Install a 3DMigoto loader for it, then pick the Mods folder next to the loader's d3dx.ini", { game: gameShort(g) }), false,
+    { label: t("Pick folder"), run: () => void pickModsFolder(id) });
   return false;
 }
 
@@ -103,8 +107,8 @@ export async function pickModsFolder(id: GameId): Promise<boolean> {
   const g = allGames().find((x) => x.id === id);
   if (!g) return false;
   try {
-    const dir = await dialogs.pickFolder(`Pick ${g.name}'s Mods folder`);
-    if (!dir) { if (!("__TAURI_INTERNALS__" in window)) toast("Picking folders works in the app"); return false; }
+    const dir = await dialogs.pickFolder(t("Pick {game}'s Mods folder", { game: gameName(g) }));
+    if (!dir) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Picking folders works in the app")); return false; }
     setGames(await gamesApi.setPaths(id, { gameDir: g.gameDir, importerDir: g.importerDir, modsDir: dir, viaXxmi: g.viaXxmi }));
     return true;
   } catch (e) { toast(errorText(e), true); return false; }

@@ -7,10 +7,10 @@ import { useSyncExternalStore } from "react";
 import { errorText, settings } from "./api";
 import { forgetModPage } from "./gamebanana";
 import { record } from "./history";
-import { creatorsPref, jsonPref, nsfwLabel, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type NsfwMode } from "./prefs";
+import { t, tb, tn } from "./i18n";
+import { creatorsPref, jsonPref, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type NsfwMode } from "./prefs";
 import { call, listen } from "./tauri";
 import { toast } from "../ui/toast";
-import { plural } from "../ui/kit";
 
 export interface GbAccount { id: number; name: string; avatar: string | null }
 export interface AccountState {
@@ -47,15 +47,15 @@ function start() {
     const was = state.user;
     setAccountState({ ...s, signing: false });
     if (s.user && !was) {
-      toast(`Signed in to GameBanana as ${s.user.name}`);
+      toast(t("Signed in to GameBanana as {name}", { name: s.user.name }));
       void matchAdult("signin");
-    } else if (!s.user && was) toast("You're signed out of GameBanana", false, { label: "Sign in", run: () => void signIn() });
+    } else if (!s.user && was) toast(t("You're signed out of GameBanana"), false, { label: t("Sign in"), run: () => void signIn() });
   }).catch(() => {});
   // the sign-in window closed without a sign-in: say so, and why when there was an error
   void listen<string | null>("gb-login-closed", (why) => {
     if (!state.signing) return;
     setAccountState({ ...state, signing: false });
-    toast(why ? `Couldn't finish signing in to GameBanana. ${why}` : "You're not signed in to GameBanana", !!why, { label: why ? "Try again" : "Sign in", run: () => void signIn() });
+    toast(why ? t("Couldn't finish signing in to GameBanana. {why}", { why: tb(why) }) : t("You're not signed in to GameBanana"), !!why, { label: why ? t("Try again") : t("Sign in"), run: () => void signIn() });
   }).catch(() => {});
 }
 export const useAccount = () => useSyncExternalStore((f) => { start(); subs.add(f); return () => { subs.delete(f); }; }, () => state);
@@ -76,7 +76,7 @@ export async function signOut() {
 
 /** Follow or unfollow on GameBanana. Errors are said once and don't undo the app's own follow. */
 async function followRemote(id: number, on: boolean): Promise<void> {
-  try { await call("gb_follow", { member: id, on }); } catch (e) { toast(`GameBanana didn't take the ${on ? "follow" : "unfollow"}: ${errorText(e)}`, true); }
+  try { await call("gb_follow", { member: id, on }); } catch (e) { toast(on ? t("GameBanana didn't take the follow: {error}", { error: errorText(e) }) : t("GameBanana didn't take the unfollow: {error}", { error: errorText(e) }), true); }
 }
 
 // ── content settings ──
@@ -86,6 +86,11 @@ export const matchGbAdultPref = pref<boolean>("gb.matchAdult", true, (r) => (r =
 /** What GameBanana's settings gave last time, so a change made in the app stays until the one there changes. */
 const gbAdultSeenPref = pref<string>("gb.adultSeen", "", (r) => r, (v) => v);
 const MODES: readonly string[] = ["hide", "blur", "show"];
+const MATCHED: Record<NsfwMode, string> = {
+  hide: t("Mods for adults: hidden, to match your GameBanana settings"),
+  blur: t("Mods for adults: blurred, to match your GameBanana settings"),
+  show: t("Mods for adults: shown, to match your GameBanana settings"),
+};
 
 /** Bring "Mods for adults" in line with the member's GameBanana content settings. At start it only acts when they
  *  changed there since last time; signing in always looks, but GameBanana's untouched defaults change nothing unless
@@ -102,13 +107,13 @@ async function matchAdult(when: "start" | "signin" | "asked") {
     await gbAdultSeenPref.set(mode);
     if (r.untouched && !seen && when !== "asked") return;
     if (mode === nsfwPref.get()) return;
-    await nsfwPref.set(mode, `Mods for adults: ${nsfwLabel(mode).toLowerCase()}, to match your GameBanana settings`);
+    await nsfwPref.set(mode, MATCHED[mode]);
   } catch { /* the app's setting stays as it is */ }
 }
 
 /** Turn matching on or off. Turning it on while signed in matches right away. */
 export async function setMatchGbAdult(on: boolean) {
-  await matchGbAdultPref.set(on, on ? "Mods for adults follow your GameBanana settings" : "Mods for adults no longer follow GameBanana");
+  await matchGbAdultPref.set(on, on ? t("Mods for adults follow your GameBanana settings") : t("Mods for adults no longer follow GameBanana"));
   if (on) await matchAdult("asked");
 }
 
@@ -159,7 +164,7 @@ export async function likeMod(modId: number, name: string, on: boolean) {
   };
   try {
     await put(on);
-    record({ label: `${on ? "Liked" : "Took back the like on"} ${name} on GameBanana`, undo: () => put(!on), redo: () => put(on) });
+    record({ label: on ? t("Liked {name} on GameBanana", { name }) : t("Took back the like on {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) });
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -173,7 +178,7 @@ export async function subscribeMod(modId: number, name: string, on: boolean) {
   };
   try {
     await put(on);
-    record({ label: `${on ? "Subscribed to" : "Unsubscribed from"} ${name} on GameBanana`, undo: () => put(!on), redo: () => put(on) });
+    record({ label: on ? t("Subscribed to {name} on GameBanana", { name }) : t("Unsubscribed from {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) });
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -184,7 +189,7 @@ export async function thankMod(modId: number, name: string, creator: string, poi
     await call("gb_thank", { modId, points });
     forgetModPage(modId);
     await mark(thankedPref, modId, true);
-    toast(free ? `Thanked ${creator} for ${name}` : `Thanked ${creator} for ${name} with ${plural(points, "point")}`);
+    toast(free ? t("Thanked {creator} for {name}", { creator, name }) : tn(points, "Thanked {creator} for {name} with {n} point", "Thanked {creator} for {name} with {n} points", { creator, name }));
     return true;
   } catch (e) { toast(errorText(e), true); return false; }
 }
@@ -202,9 +207,9 @@ export async function importFollowing() {
       list[String(p.id)] = { ...(old ?? {}), id: p.id, name: p.name, avatar: p.avatar ?? old?.avatar ?? null, sub: true, at: Date.now() };
       n++;
     }
-    if (!n) { toast(people.length ? "You already follow all of them here" : "You don't follow anyone on GameBanana yet"); return; }
+    if (!n) { toast(people.length ? t("You already follow all of them here") : t("You don't follow anyone on GameBanana yet")); return; }
     // set without pushing back to GameBanana: they're followed there already
     await creatorsPref.set(list);
-    record({ label: `Followed ${n === 1 ? "1 creator" : `${n} creators`} from GameBanana`, undo: () => creatorsPref.set(before), redo: () => creatorsPref.set(list) });
+    record({ label: tn(n, "Followed {n} creator from GameBanana", "Followed {n} creators from GameBanana"), undo: () => creatorsPref.set(before), redo: () => creatorsPref.set(list) });
   } catch (e) { toast(errorText(e), true); }
 }

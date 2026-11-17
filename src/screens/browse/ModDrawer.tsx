@@ -12,7 +12,7 @@ import { likeMod, useAccount, useLiked } from "../../lib/account";
 import { useNsfw } from "../../lib/prefs";
 import { go, goIn, useGames } from "../../lib/store";
 import { DescKeys } from "../../ui/DescKeys";
-import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Toggle, Waiting, formatBytes, plural, timeAgo } from "../../ui/kit";
+import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Toggle, Waiting, formatBytes, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CategoryLink, CharLink, CreatorLink } from "../../ui/Links";
 import { openMenu } from "../../ui/ContextMenu";
@@ -32,15 +32,17 @@ import { reveal, rowKeys, useSideScroll } from "./sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { LazyImg } from "../../ui/LazyImg";
 import { hintClass, useHint } from "../../shell/hints";
+import { gameShort } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 
 const activeStates = new Set(["waiting", "downloading", "installing", "needsChoice"]);
 
 export function queueLabel(i: QueueItem): string {
-  if (i.state === "downloading" && !i.received) return "Connecting";
-  if (i.state === "downloading") return i.total ? `Downloading ${Math.floor((i.received / i.total) * 100)}%` : "Downloading";
-  if (i.state === "installing") { const p = i.progress; return p && p.mods.length > 1 ? `Installing ${p.placed} of ${p.mods.length}` : "Installing"; }
-  if (i.state === "needsChoice") return "Pick variants";
-  return i.archive ? "Waiting to install" : "Waiting";
+  if (i.state === "downloading" && !i.received) return t("Connecting");
+  if (i.state === "downloading") return i.total ? t("Downloading {pct}%", { pct: Math.floor((i.received / i.total) * 100) }) : t("Downloading");
+  if (i.state === "installing") { const p = i.progress; return p && p.mods.length > 1 ? t("Installing {done} of {total}", { done: p.placed, total: p.mods.length }) : t("Installing"); }
+  if (i.state === "needsChoice") return t("Pick variants");
+  return i.archive ? t("Waiting to install") : t("Waiting");
 }
 
 /** Clicks and keys inside sanitized GameBanana HTML: links (GameBanana mods, tools and members open in the app,
@@ -49,10 +51,10 @@ export function descHandler(onImage?: (img: HTMLImageElement) => void) {
   return (e: MouseEvent | KeyboardEvent) => {
     const key = "key" in e;
     if (key && e.key !== "Enter" && e.key !== " ") return;
-    const t = e.target as HTMLElement;
-    const spoiler = t.closest<HTMLElement>(".gb-spoiler");
+    const el = e.target as HTMLElement;
+    const spoiler = el.closest<HTMLElement>(".gb-spoiler");
     if (spoiler && !spoiler.classList.contains("open")) { e.preventDefault(); spoiler.classList.add("open"); spoiler.removeAttribute("title"); return; }
-    const a = t.closest<HTMLElement>("[data-href]");
+    const a = el.closest<HTMLElement>("[data-href]");
     if (a) {
       e.preventDefault();
       const url = a.getAttribute("data-href");
@@ -64,7 +66,7 @@ export function descHandler(onImage?: (img: HTMLImageElement) => void) {
       else openExternal(url);
       return;
     }
-    if (!key && onImage && t instanceof HTMLImageElement && t.classList.contains("gb-dimg")) { e.preventDefault(); onImage(t); }
+    if (!key && onImage && el instanceof HTMLImageElement && el.classList.contains("gb-dimg")) { e.preventDefault(); onImage(el); }
   };
 }
 
@@ -96,7 +98,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
     const c = new AbortController();
     setMod(null); setError(null); setGone(false); setPosts(null); setShown(0); setReveal(false); setPostsOpen(false);
     (tool ? toolPage : modPage)(modId, c.signal)
-      .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError(`GameBanana didn't send this ${tool ? "tool" : "mod"}'s page.`); } })
+      .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError(tool ? t("GameBanana didn't send this tool's page.") : t("GameBanana didn't send this mod's page.")); } })
       .catch((e) => {
         if (c.signal.aborted || isAbort(e)) return;
         setGone(isNotFound(e));
@@ -126,19 +128,21 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
   const installed = tool ? [] : lib.byMod.get(modId) ?? [];
   const archived = installed.length || tool ? undefined : lib.archived.get(modId);
   const showInMods = (m: ModEntry | undefined = installed[0]) => { if (m && target) goIn(target.id, { view: "library", modId: m.id }); };
-  const elsewhere = target && target.id !== here.id ? ` (switches to ${target.short})` : "";
+  // set when the mod is for another game set up here: showing it in Mods switches to that game
+  const switches = target && target.id !== here.id ? gameShort(target) : null;
+  const openInMods = switches ? t("Open it in Mods (switches to {game})", { game: switches }) : t("Open it in Mods");
 
   // the newest file's action stays in the footer, picked the same way as a Browse card's quick button
   const queued = useQueueItem(target?.id ?? here.id, tool ? -1 : modId);
   const newest = mod && !tool && target ? newestFile(mod) : null;
   const upd = installed.find((m) => m.updateAvailable);
   const foot = !newest ? null
-    : queued?.state === "needsChoice" ? { icon: "layers" as const, label: "Pick parts", tip: "This download has several parts. Pick the ones to install", run: () => openVariantPicker(queued.id) }
-    : queued ? { icon: "downloads" as const, label: "Show in Downloads", tip: queueLabel(queued), run: () => go("downloads") }
-    : upd ? { icon: "update" as const, label: "Update", tip: `Replace ${upd.name} with ${newest.name}. Its options, tags and on/off state stay`, run: () => install(newest, upd.id) }
-    : installed.length ? { icon: "mods" as const, label: "Show in Mods", tip: `Open it in Mods${elsewhere}`, run: () => showInMods() }
-    : archived ? { icon: "install" as const, label: "Reinstall", tip: `Download ${newest.name} again. Your settings for it come back`, run: () => install(newest) }
-    : { icon: "install" as const, label: "Install", tip: `Download ${newest.name} and add it to Mods`, run: () => install(newest) };
+    : queued?.state === "needsChoice" ? { icon: "layers" as const, label: t("Pick parts"), tip: t("This download has several parts. Pick the ones to install"), run: () => openVariantPicker(queued.id) }
+    : queued ? { icon: "downloads" as const, label: t("Show in Downloads"), tip: queueLabel(queued), run: () => go("downloads") }
+    : upd ? { icon: "update" as const, label: t("Update"), tip: t("Replace {old} with {file}. Its options, tags and on/off state stay", { old: upd.name, file: newest.name }), run: () => install(newest, upd.id) }
+    : installed.length ? { icon: "mods" as const, label: t("Show in Mods"), tip: openInMods, run: () => showInMods() }
+    : archived ? { icon: "install" as const, label: t("Reinstall"), tip: t("Download {file} again. Your settings for it come back", { file: newest.name }), run: () => install(newest) }
+    : { icon: "install" as const, label: t("Install"), tip: t("Download {file} and add it to Mods", { file: newest.name }), run: () => install(newest) };
   const runFoot = async () => {
     if (!foot || footBusy) return;
     setFootBusy(true);
@@ -157,8 +161,13 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
     if (!mod || !target) return;
     try {
       await queueModFile(target.id, mod, file, replaces);
-      const verb = replaces ? "Updating" : archived ? "Reinstalling" : "Downloading";
-      toast(`${verb} ${mod.name}${target.id !== here.id ? ` for ${target.short}` : ""}`, false, { label: "Show", run: () => go("downloads") });
+      const name = mod.name, other = target.id !== here.id ? gameShort(target) : null;
+      const text = replaces
+        ? other ? t("Updating {name} for {game}", { name, game: other }) : t("Updating {name}", { name })
+        : archived
+        ? other ? t("Reinstalling {name} for {game}", { name, game: other }) : t("Reinstalling {name}", { name })
+        : other ? t("Downloading {name} for {game}", { name, game: other }) : t("Downloading {name}", { name });
+      toast(text, false, { label: t("Show"), run: () => go("downloads") });
     } catch (e) { toast(errorText(e), true); }
   };
 
@@ -167,34 +176,35 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
     document.getElementById(found.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const what = tool ? "fixer" : "mod";
-  const title = mod?.name ?? (gone ? `This ${what} was removed` : error ? `Couldn't open this ${what}` : `Opening this ${what}`);
+  const title = mod?.name ?? (gone ? tool ? t("This fixer was removed") : t("This mod was removed")
+    : error ? tool ? t("Couldn't open this fixer") : t("Couldn't open this mod")
+    : tool ? t("Opening this fixer") : t("Opening this mod"));
   const url = mod?.url ?? `https://gamebanana.com/${tool ? "tools" : "mods"}/${modId}`;
   const blurred = !!mod?.nsfw && !reveal && nsfw !== "show";
   return (
     <Drawer title={title} onClose={onClose} width="min(60rem, 94vw)" className="gb-drawer"
       footer={foot && newest && <>
-        <span className="hint" style={{ marginRight: "auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={newest.name}>Newest file: {newest.name}</span>
+        <span className="hint" style={{ marginRight: "auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={newest.name}>{t("Newest file: {file}", { file: newest.name })}</span>
         <Button variant="primary" icon={foot.icon} busy={footBusy} title={foot.tip} onClick={() => void runFoot()}>{foot.label}</Button>
       </>}
       actions={<>
         {mod?.nsfw && <span className="gb-drawer-adult"><AdultSwitch value={nsfw} /></span>}
-        {mod && !tool && <IconButton icon="more" label="More actions (right-click or Shift+F10)" onClick={(e) => openMenu(e.currentTarget, gbModItems(target?.id ?? here.id, mod, true))} />}
+        {mod && !tool && <IconButton icon="more" label={t("More actions (right-click or Shift+F10)")} onClick={(e) => openMenu(e.currentTarget, gbModItems(target?.id ?? here.id, mod, true))} />}
         {mod && !tool && <LikeButton id={mod.id} name={mod.name} />}
-        <IconButton icon="external" label="Open on GameBanana" onClick={() => openExternal(url)} />
+        <IconButton icon="external" label={t("Open on GameBanana")} onClick={() => openExternal(url)} />
       </>}>
       {error && (gone
-        ? <Empty icon="warn" title={`This ${what} was removed from GameBanana`} actions={<>
-            {installed.length > 0 && <Button variant="primary" icon="mods" title={`Open your copy in Mods${elsewhere}`} onClick={() => showInMods()}>Show in Mods</Button>}
-            <Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>
+        ? <Empty icon="warn" title={tool ? t("This fixer was removed from GameBanana") : t("This mod was removed from GameBanana")} actions={<>
+            {installed.length > 0 && <Button variant="primary" icon="mods" title={switches ? t("Open your copy in Mods (switches to {game})", { game: switches }) : t("Open your copy in Mods")} onClick={() => showInMods()}>{t("Show in Mods")}</Button>}
+            <Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</Button>
           </>}>
-            {installed.length > 0 ? "GameBanana no longer has its page. Your installed copy stays in Mods." : "GameBanana no longer has its page."}
+            {installed.length > 0 ? t("GameBanana no longer has its page. Your installed copy stays in Mods.") : t("GameBanana no longer has its page.")}
           </Empty>
-        : <Empty icon="warn" title={`Couldn't load this ${what}`} actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>}>{error}</Empty>)}
+        : <Empty icon="warn" title={tool ? t("Couldn't load this fixer") : t("Couldn't load this mod")} actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</Button>}>{error}</Empty>)}
       {!mod && !error && (
-        <Waiting className="gb-drawer-skel" what={`Asking GameBanana for this ${what}`}
-          hold={`GameBanana may be slow right now. You can open the ${what} on GameBanana instead`}>
-          <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>Open on GameBanana</Button>
+        <Waiting className="gb-drawer-skel" what={tool ? t("Asking GameBanana for this fixer") : t("Asking GameBanana for this mod")}
+          hold={tool ? t("GameBanana may be slow right now. You can open the fixer on GameBanana instead") : t("GameBanana may be slow right now. You can open the mod on GameBanana instead")}>
+          <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>{t("Open on GameBanana")}</Button>
         </Waiting>
       )}
       {mod && (
@@ -216,33 +226,33 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             {mod.category && mod.category.name !== mod.character && (target && !tool
               ? <CategoryLink game={target.id} category={mod.category} className="badge" />
               : <Badge>{mod.category.name}</Badge>)}
-            {mod.version && <Badge title="Version">{mod.version}</Badge>}
+            {mod.version && <Badge title={t("Version")}>{mod.version}</Badge>}
             {mod.nsfw && (nsfw === "show"
-              ? <span className="gb-nsfw-mark is-inline" title={mod.ratings.join(", ") || "Marked for adults"}>18+</span>
-              : <Badge tone="bad" title={mod.ratings.join(", ") || "Marked for adults"}>18+</Badge>)}
+              ? <span className="gb-nsfw-mark is-inline" title={mod.ratings.join(", ") || t("Marked for adults")}>18+</span>
+              : <Badge tone="bad" title={mod.ratings.join(", ") || t("Marked for adults")}>18+</Badge>)}
             {installed.length > 0 && (target?.id === here.id
               ? <>
-                <Badge tone="ok" icon="check" title="In your mods. Click to see it there" onClick={() => go({ view: "library", modId: installed[0]!.id })}>Installed</Badge>
-                <span className="gb-mod-on" title={installed[0]!.enabled ? "Turn it off" : "Turn it on. Settings, Mods and downloads decides whether new mods start on"}>
-                  <Toggle size="sm" checked={installed[0]!.enabled} onChange={(v) => void setOn(here.id, [installed[0]!], v)} label={installed[0]!.enabled ? "On" : "Off"} ariaLabel={mod.name} />
+                <Badge tone="ok" icon="check" title={t("In your mods. Click to see it there")} onClick={() => go({ view: "library", modId: installed[0]!.id })}>{t("Installed")}</Badge>
+                <span className="gb-mod-on" title={installed[0]!.enabled ? t("Turn it off") : t("Turn it on. Settings, Mods decides whether new mods start on")}>
+                  <Toggle size="sm" checked={installed[0]!.enabled} onChange={(v) => void setOn(here.id, [installed[0]!], v)} label={installed[0]!.enabled ? t("On") : t("Off")} ariaLabel={mod.name} />
                 </span>
               </>
-              : <Badge tone="ok" icon="check" title={`In your mods. Click to see it there${elsewhere}`} onClick={() => showInMods()}>Installed</Badge>)}
+              : <Badge tone="ok" icon="check" title={switches ? t("In your mods. Click to see it there (switches to {game})", { game: switches }) : t("In your mods. Click to see it there")} onClick={() => showInMods()}>{t("Installed")}</Badge>)}
             {archived && (target?.id === here.id
-              ? <Badge tone="info" icon="trash" title="You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash" onClick={() => go({ view: "library", tab: "archive" })}>Removed</Badge>
-              : <Badge tone="info" icon="trash" title="You removed it before. Reinstalling brings back its settings">Removed</Badge>)}
+              ? <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash")} onClick={() => go({ view: "library", tab: "archive" })}>{t("Removed")}</Badge>
+              : <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back its settings")}>{t("Removed")}</Badge>)}
           </div>
           {mod.summary && <p className="gb-summary">{mod.summary}</p>}
 
-          <section ref={filesRef} className="gb-files" aria-label="Files">
-            <h3 className="sub-h">Files</h3>
+          <section ref={filesRef} className="gb-files" aria-label={t("Files")}>
+            <h3 className="sub-h">{t("Files")}</h3>
             {tool ? (
               <ToolFiles tool={mod} game={target ?? here} older={older} setOlder={setOlder} />
             ) : (
               <>
-                {!target && mod.game && <p className="hint">This is a mod for {mod.game.name}, which isn't set up in gachamod.</p>}
+                {!target && mod.game && <p className="hint">{t("This is a mod for {game}, which isn't set up in gachamod.", { game: mod.game.name })}</p>}
                 <FileList mod={mod} game={target} installed={installed} archived={!!archived} snap={snap} older={older} setOlder={setOlder}
-                  onInstall={install} onShow={showInMods} showTitle={`Open it in Mods${elsewhere}`} onMenu={(el, file, base, same) => setMenu({ el, file, base, same })} />
+                  onInstall={install} onShow={showInMods} showTitle={openInMods} onMenu={(el, file, base, same) => setMenu({ el, file, base, same })} />
               </>
             )}
           </section>
@@ -256,18 +266,18 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
           {mod.updatesCount > 0 && (
             <section className="gb-posts">
               <button type="button" className="gb-posts-t" aria-expanded={postsOpen} onClick={() => setPostsOpen((o) => !o)}>
-                <Icon name={postsOpen ? "down" : "chevron"} /><span>Update posts</span><span className="muted">{mod.updatesCount}</span>
+                <Icon name={postsOpen ? "down" : "chevron"} /><span>{t("Update posts")}</span><span className="muted">{mod.updatesCount}</span>
               </button>
-              {postsOpen && (posts === null ? <Waiting what="Loading update posts" hold="GameBanana may be slow right now. The posts are on the mod's GameBanana page too" /> : posts === "error" ? (
+              {postsOpen && (posts === null ? <Waiting what={t("Loading update posts")} hold={t("GameBanana may be slow right now. The posts are on the mod's GameBanana page too")} /> : posts === "error" ? (
                 <div className="row">
-                  <span className="muted">Couldn't load the update posts.</span>
-                  <Button size="sm" icon="refresh" onClick={() => setPosts(null)}>Try again</Button>
-                  <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>Open on GameBanana</Button>
+                  <span className="muted">{t("Couldn't load the update posts.")}</span>
+                  <Button size="sm" icon="refresh" onClick={() => setPosts(null)}>{t("Try again")}</Button>
+                  <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>{t("Open on GameBanana")}</Button>
                 </div>
               ) : posts.length === 0 ? (
                 <div className="row">
-                  <span className="muted">GameBanana sent no update posts for this mod.</span>
-                  <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>Open on GameBanana</Button>
+                  <span className="muted">{t("GameBanana sent no update posts for this mod.")}</span>
+                  <Button size="sm" variant="ghost" icon="external" onClick={() => openExternal(url)}>{t("Open on GameBanana")}</Button>
                 </div>
               ) : (
                 <ol className="gb-posts-list">
@@ -288,15 +298,15 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
       )}
       {lightbox && <Lightbox images={lightbox.images} start={lightbox.start} onClose={closeLightbox} />}
       {menu && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="File actions" width="14em">
+        <Popover anchor={menu.el} onClose={() => setMenu(null)} label={t("File actions")} width="14em">
           <Menu items={menu.same ? [
-            { label: "Reinstall", icon: "refresh", hint: "Download this file again and replace the installed copy", onClick: () => { const m = menu; setMenu(null); void install(m.file, m.same!.id); } },
-            { label: "Install alongside", icon: "plus", hint: "Add this file again as a second mod, keeping the installed one", onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
+            { label: t("Reinstall"), icon: "refresh", hint: t("Download this file again and replace the installed copy"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.same!.id); } },
+            { label: t("Install alongside"), icon: "plus", hint: t("Add this file again as a second mod, keeping the installed one"), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
             "-",
-            { label: "Move to trash", icon: "trash", danger: true, hint: "Remove it from Mods. It stays in the trash, with Undo in the toast", onClick: () => { const m = menu; setMenu(null); if (target) void trashMods(target.id, [m.same!]); } },
+            { label: t("Move to trash"), icon: "trash", danger: true, hint: t("Remove it from Mods. It stays in the trash, with Undo in the toast"), onClick: () => { const m = menu; setMenu(null); if (target) void trashMods(target.id, [m.same!]); } },
           ] : [
-            { label: "Install alongside", icon: "plus", hint: `Add this file as its own mod and keep ${menu.base.name}`, onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
-            { label: `Replace ${menu.base.name}`, icon: "swap", hint: "Install this file in its place. Its options, tags and on/off state stay", onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
+            { label: t("Install alongside"), icon: "plus", hint: t("Add this file as its own mod and keep {name}", { name: menu.base.name }), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
+            { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Install this file in its place. Its options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
           ]} />
         </Popover>
       )}
@@ -317,27 +327,27 @@ function Gallery({ mod, blurred, shown, setShown, onOpen, onReveal }: {
     if (row && on) reveal(row, on);
   }, [shown, mod.id]);
   const img = mod.images[shown];
-  if (!img) return <div className="gb-gallery gb-gallery-empty"><Icon name="image" /><span>No pictures</span></div>;
+  if (!img) return <div className="gb-gallery gb-gallery-empty"><Icon name="image" /><span>{t("No pictures")}</span></div>;
   return (
     <div className={`gb-gallery${blurred ? " is-nsfw" : ""}`}>
-      <button type="button" className="gb-gallery-main" title={blurred ? "Show the pictures" : "Open full size"} onClick={() => (blurred ? onReveal() : onOpen(shown))}>
+      <button type="button" className="gb-gallery-main" title={blurred ? t("Show the pictures") : t("Open full size")} onClick={() => (blurred ? onReveal() : onOpen(shown))}>
         {broken.has(shown)
           ? <span className="gb-img-broken"><Icon name="image" /></span>
           : <LazyImg src={imageAt(img, 800)} alt={img.caption ?? mod.name} decoding="async"
               onError={() => setBroken((b) => new Set(b).add(shown))} />}
-        {blurred && <span className="gb-nsfw-cover"><span className="gb-nsfw-badge is-inline">18+</span><span className="gb-nsfw-show on-img">Show pictures</span></span>}
+        {blurred && <span className="gb-nsfw-cover"><span className="gb-nsfw-badge is-inline">18+</span><span className="gb-nsfw-show on-img">{t("Show pictures")}</span></span>}
       </button>
       {mod.images.length > 1 && (
         <div className={`gb-gallery-thumbs-wrap${all ? " is-all" : ""}`}>
-        <div ref={thumbs} className={`gb-gallery-thumbs${all ? " is-all" : ""}`} role="listbox" aria-label="Pictures" onKeyDown={(e) => rowKeys(e, ".gb-thumb")}>
+        <div ref={thumbs} className={`gb-gallery-thumbs${all ? " is-all" : ""}`} role="listbox" aria-label={t("Pictures")} onKeyDown={(e) => rowKeys(e, ".gb-thumb")}>
           {mod.images.map((m, i) => (
             <button key={`${m.full}-${i}`} type="button" role="option" aria-selected={i === shown} className={`gb-thumb${i === shown ? " on" : ""}`}
-              title={m.caption ?? `Picture ${i + 1}`} onClick={() => setShown(i)}>
+              title={m.caption ?? t("Picture {n}", { n: i + 1 })} onClick={() => setShown(i)}>
               <LazyImg src={imageAt(m, 100)} alt="" decoding="async" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
             </button>
           ))}
         </div>
-        <ShowAll open={all} onToggle={toggleAll} fits={!edges.left && !edges.right} label={`Show all ${mod.images.length} pictures`} />
+        <ShowAll open={all} onToggle={toggleAll} fits={!edges.left && !edges.right} label={t("Show all {n} pictures", { n: mod.images.length })} />
         </div>
       )}
     </div>
@@ -358,7 +368,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
   const installHint = useHint("install");
   const current = mod.files.filter((f) => !f.archived);
   const old = mod.files.filter((f) => f.archived);
-  if (!mod.files.length) return <p className="muted">This {mod.tool ? "fixer" : "mod"} has no files to download.</p>;
+  if (!mod.files.length) return <p className="muted">{mod.tool ? t("This fixer has no files to download.") : t("This mod has no files to download.")}</p>;
   const row = (f: GbFile) => {
     const q = game ? snap.items.find((i) => i.req.game === game.id && i.req.fileId === f.id && activeStates.has(i.state)) : undefined;
     const same = installed.find((m) => m.source?.fileId === f.id);
@@ -382,8 +392,8 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
     } else if (same) {
       action = (
         <div className="row">
-          <Badge tone="ok" icon="check" title={onShow ? (showTitle ?? "Open it in Mods") : undefined} onClick={onShow && (() => onShow(same))}>Installed</Badge>
-          <IconButton icon="more" label="Reinstall, install alongside or move to trash" onClick={(e) => onMenu(e.currentTarget, f, same, same)} />
+          <Badge tone="ok" icon="check" title={onShow ? (showTitle ?? t("Open it in Mods")) : undefined} onClick={onShow && (() => onShow(same))}>{t("Installed")}</Badge>
+          <IconButton icon="more" label={t("Reinstall, install alongside or move to trash")} onClick={(e) => onMenu(e.currentTarget, f, same, same)} />
         </div>
       );
     } else if (base) {
@@ -391,17 +401,17 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
       action = (
         <div className="row">
           <Button variant={f === newest && isNewer ? "primary" : "secondary"} icon={isNewer ? "update" : "swap"}
-            title={isNewer ? `Replace ${base.name} with this file. Its options, tags and on/off state stay` : `Install this file in place of ${base.name}. Its options, tags and on/off state stay`}
-            onClick={() => onInstall(f, base.id)}>{isNewer ? "Update" : "Use this file"}</Button>
-          <IconButton icon="more" label="Install alongside, or replace the installed copy" onClick={(e) => onMenu(e.currentTarget, f, base)} />
+            title={isNewer ? t("Replace {name} with this file. Its options, tags and on/off state stay", { name: base.name }) : t("Install this file in place of {name}. Its options, tags and on/off state stay", { name: base.name })}
+            onClick={() => onInstall(f, base.id)}>{isNewer ? t("Update") : t("Use this file")}</Button>
+          <IconButton icon="more" label={t("Install alongside, or replace the installed copy")} onClick={(e) => onMenu(e.currentTarget, f, base)} />
         </div>
       );
     } else if (archived) {
-      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" title="Download it again. Your settings, tags and profile places for it come back"
-        onClick={() => onInstall(f)}>Reinstall</Button>;
+      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" title={t("Download it again. Your settings, tags and profile places for it come back")}
+        onClick={() => onInstall(f)}>{t("Reinstall")}</Button>;
     } else {
-      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)} title="Download this file and add it to Mods"
-        className={hintClass(installHint && f === newest).trim() || undefined}>Install</Button>;
+      action = <Button variant={f === newest ? "primary" : "secondary"} icon="install" onClick={() => onInstall(f)} title={t("Download this file and add it to Mods")}
+        className={hintClass(installHint && f === newest).trim() || undefined}>{t("Install")}</Button>;
     }
     const scan = f.analysis === "clean" ? null : f.analysis;
     return (
@@ -411,9 +421,9 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
           <div className="gb-file-meta hint">
             <span>{formatBytes(f.size)}</span>
             <span title={new Date(f.added * 1000).toLocaleString()}>{timeAgo(f.added)}</span>
-            <span>{plural(f.downloads, "download")}</span>
-            {scan && <Badge tone={scan === "pending" ? "info" : "warn"} title="GameBanana's file check">{scan === "pending" ? "Being checked" : `Check: ${scan}`}</Badge>}
-            {f.warnings?.map((w) => <Badge key={w} tone="muted" title="GameBanana's file check noticed this">{w}</Badge>)}
+            <span>{tn(f.downloads, "{n} download", "{n} downloads")}</span>
+            {scan && <Badge tone={scan === "pending" ? "info" : "warn"} title={t("GameBanana's file check")}>{scan === "pending" ? t("Being checked") : t("Check: {result}", { result: scan })}</Badge>}
+            {f.warnings?.map((w) => <Badge key={w} tone="muted" title={t("GameBanana's file check noticed this")}>{w}</Badge>)}
           </div>
           {f.description && <p className="gb-file-desc">{f.description}</p>}
         </div>
@@ -427,7 +437,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
       {old.length > 0 && (
         <>
           <button type="button" className="gb-older" aria-expanded={older} onClick={() => setOlder(!older)}>
-            <Icon name={older ? "down" : "chevron"} /><span>Older files</span><span className="muted">{old.length}</span>
+            <Icon name={older ? "down" : "chevron"} /><span>{t("Older files")}</span><span className="muted">{old.length}</span>
           </button>
           {older && <ul className="gb-file-list">{old.map(row)}</ul>}
         </>
@@ -447,37 +457,37 @@ function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameSta
   const busy = useFixerBusy();
   const action = (f: GbFile, newest: boolean) => {
     const got = have.find((x) => x.fileId === f.id);
-    if (busy.has(`file:${f.id}`)) return <Button busy disabled>Downloading</Button>;
+    if (busy.has(`file:${f.id}`)) return <Button busy disabled>{t("Downloading")}</Button>;
     if (got) {
       return (
         <div className="row">
-          <span className="hint">Downloaded</span>
-          <IconButton icon="refresh" label="Download it again" onClick={() => void downloadFixer(game.id, tool, f)} />
+          <span className="hint">{t("Downloaded")}</span>
+          <IconButton icon="refresh" label={t("Download it again")} onClick={() => void downloadFixer(game.id, tool, f)} />
         </div>
       );
     }
     return (
-      <Button variant={newest ? "primary" : "secondary"} icon="downloads" title="Save it in gachamod's fixers folder"
-        onClick={() => void downloadFixer(game.id, tool, f)}>Download</Button>
+      <Button variant={newest ? "primary" : "secondary"} icon="downloads" title={t("Save it in gachamod's fixers folder")}
+        onClick={() => void downloadFixer(game.id, tool, f)}>{t("Download")}</Button>
     );
   };
   return (
     <>
-      <p className="hint">You don't need to download it yourself. Fix on a broken mod gets the fixer it needs and runs it on that mod.</p>
+      <p className="hint">{t("You don't need to download it yourself. Fix on a broken mod gets the fixer it needs and runs it on that mod.")}</p>
       <FileList mod={tool} game={game} installed={[]} archived={false} snap={NO_QUEUE} older={older} setOlder={setOlder}
         onInstall={() => {}} onMenu={() => {}} actionFor={action} />
     </>
   );
 }
 
-/** Like on GameBanana, shown while signed in (Settings, Account, links and AI). */
+/** Like on GameBanana, shown while signed in (Settings, Account). */
 function LikeButton({ id, name }: { id: number; name: string }) {
   const acc = useAccount();
   const liked = useLiked(id);
   const [busy, setBusy] = useState(false);
   if (!acc.available || !acc.user) return null;
   return (
-    <IconButton icon="heart" on={liked} disabled={busy} label={liked ? "Take back your like on GameBanana" : "Like on GameBanana. Nobody is notified"}
+    <IconButton icon="heart" on={liked} disabled={busy} label={liked ? t("Take back your like on GameBanana") : t("Like on GameBanana. Nobody is notified")}
       onClick={() => { setBusy(true); void likeMod(id, name, !liked).finally(() => setBusy(false)); }} />
   );
 }

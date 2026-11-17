@@ -3,13 +3,14 @@
 // (KeyListPanel.tsx). Owner: INGAME area.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText, keyList, library, type GameId, type KeyList, type KeyListSettings, type KeyRow, type ModKeyList } from "../../lib/api";
+import { t } from "../../lib/i18n";
 import { onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
 import { onKeysChanged } from "../../ui/KeyEditor";
 import "./keylist.css";
 
 /** Mods with no character sit under this name, last. */
-export const OTHER_MODS = "Other mods";
+export const OTHER_MODS = t("Other mods");
 
 /** The game's key list (null while reading), read again when `tick` changes, when the library changes and when a
  *  mod's keys change (a rebind, its Undo). */
@@ -41,15 +42,14 @@ export function useKeyList(game: GameId, tick = 0) {
 
 /** The dim note after what a key does: "Hold", or how many values a cycle steps through. */
 export const rowNote = (r: KeyRow): string | null =>
-  r.kind === "hold" ? "Hold" : r.kind === "cycle" && r.options > 2 ? `${r.options} options` : null;
+  r.kind === "hold" ? t("Hold") : r.kind === "cycle" && r.options > 2 ? t("{n} options", { n: r.options }) : null;
 
 /** The hover tip of a key's row. */
 export function rowTip(r: KeyRow, character: string | null): string | undefined {
-  const parts = [
-    r.kind === "hold" ? "Works while you hold the key" : r.kind === "cycle" && r.options > 2 ? `Each press steps to the next of ${r.options} options` : null,
-    r.onScreen ? `Only while ${character ?? "its character"} is on screen` : null,
-  ].filter(Boolean);
-  return parts.length ? parts.join(". ") : undefined;
+  const how = r.kind === "hold" ? t("Works while you hold the key")
+    : r.kind === "cycle" && r.options > 2 ? t("Each press steps to the next of {n} options", { n: r.options }) : null;
+  const when = r.onScreen ? t("Only while {character} is on screen", { character: character ?? t("its character") }) : null;
+  return how && when ? t("{how}. {when}", { how, when }) : how ?? when ?? undefined;
 }
 
 /** The rows of a mod that match the search: all of them when its name or character matches, else the rows whose key

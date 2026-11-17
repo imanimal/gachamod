@@ -14,38 +14,40 @@ import { registerCommands, type Command } from "../../lib/search";
 import { GI_KICK_GUIDE, openKickGuide, setKickFixDone, useKick } from "../../lib/kickFix";
 import { XxmiDll, lockNote } from "../tools/XxmiDll";
 import { KickSteps } from "../tools/KickSteps";
+import { t } from "../../lib/i18n";
+import { gameName, gameShort } from "../../lib/games";
 import "../tools/tools.css";
 
 /** `max`: the highest number the field takes (launch.rs caps the same value when it saves and before a start). */
 type ExtraInfo = { label: string; hint?: string; max?: number };
 /** Plain labels for XXMI's game switches, in the order they show. Anything else shows under "Other" with its raw key. */
 const EXTRA_LABELS: Record<string, ExtraInfo> = {
-  configure_game: { label: "Set in-game graphics for mods", hint: "XXMI sets the graphics options mods need before each start" },
-  disable_wounded_fx: { label: "Turn off wounded effect", hint: "Most mods' textures break after a few hits while it's on" },
-  force_max_lod_bias: { label: "LOD bias on Ultra High", hint: "Mod textures are made for this setting" },
-  mesh_lod_distance_lod_base_fov: { label: "Mesh LOD base FOV", hint: "Higher keeps the full character model, the one mods replace, at farther camera distances. 165 by default" },
-  resource_tier: { label: "Client resource quality", hint: "Pick a tier you have installed. A missing one crashes the game while loading" },
-  unlock_fps: { label: "Raise FPS limit", hint: "Sets the game's frame rate limit to the value below before each start" },
-  unlock_fps_value: { label: "FPS limit", hint: "120, 180 or 240 cause the fewest glitches" },
-  enable_hdr: { label: "HDR", hint: "Needs an HDR display with HDR on in Windows" },
+  configure_game: { label: t("Set in-game graphics for mods"), hint: t("XXMI sets the graphics options mods need before each start") },
+  disable_wounded_fx: { label: t("Turn off wounded effect"), hint: t("Most mods' textures break after a few hits while it's on") },
+  force_max_lod_bias: { label: t("LOD bias on Ultra High"), hint: t("Mod textures are made for this setting") },
+  mesh_lod_distance_lod_base_fov: { label: t("Mesh LOD base FOV"), hint: t("Higher keeps the full character model, the one mods replace, at farther camera distances. 165 by default") },
+  resource_tier: { label: t("Client resource quality"), hint: t("Pick a tier you have installed. A missing one crashes the game while loading") },
+  unlock_fps: { label: t("Raise FPS limit"), hint: t("Sets the game's frame rate limit to the value below before each start") },
+  unlock_fps_value: { label: t("FPS limit"), hint: t("120, 180 or 240 cause the fewest glitches") },
+  enable_hdr: { label: t("HDR"), hint: t("Needs an HDR display with HDR on in Windows") },
 };
 /** Where XXMI does something different for one game. */
 const GAME_LABELS: Record<string, Record<string, ExtraInfo>> = {
   gi: {
-    configure_game: { label: "Turn off dynamic character resolution", hint: "XXMI turns it off before each start. Mods break with it on" },
-    unlock_fps: { label: "Raise FPS limit", hint: "Starts the game through an FPS unlocker that stays open in the background" },
-    unlock_fps_value: { label: "FPS limit", max: 120,
-      hint: "120 at most. Above 120 Genshin Impact stops the game with \"Illegal tool detected\" (10612-4001), so gachamod sets a higher limit back to 120 before each start" },
+    configure_game: { label: t("Turn off dynamic character resolution"), hint: t("XXMI turns it off before each start. Mods break with it on") },
+    unlock_fps: { label: t("Raise FPS limit"), hint: t("Starts the game through an FPS unlocker that stays open in the background") },
+    unlock_fps_value: { label: t("FPS limit"), max: 120,
+      hint: t("120 at most. Above 120 Genshin Impact stops the game with \"Illegal tool detected\" (10612-4001), so gachamod sets a higher limit back to 120 before each start") },
   },
   ww: {
-    configure_game: { label: "Set in-game graphics for mods", hint: "Before each start, sets graphics quality to Quality and turns off ray tracing. The options below need this on" },
-    unlock_fps: { label: "Force 120 FPS", hint: "Allows 120 FPS on PCs the game doesn't offer it on. Turning this off doesn't change it back" },
+    configure_game: { label: t("Set in-game graphics for mods"), hint: t("Before each start, sets graphics quality to Quality and turns off ray tracing. The options below need this on") },
+    unlock_fps: { label: t("Force 120 FPS"), hint: t("Allows 120 FPS on PCs the game doesn't offer it on. Turning this off doesn't change it back") },
   },
   zzz: {
-    configure_game: { label: "Set in-game graphics for mods", hint: "Before each start, sets character quality to High and turns off high-precision character animation. Mods break with other settings" },
+    configure_game: { label: t("Set in-game graphics for mods"), hint: t("Before each start, sets character quality to High and turns off high-precision character animation. Mods break with other settings") },
   },
   hsr: {
-    unlock_fps: { label: "Force 120 FPS", hint: "Sets the game's FPS option to 120 before each start. Turning this off doesn't change it back" },
+    unlock_fps: { label: t("Force 120 FPS"), hint: t("Sets the game's FPS option to 120 before each start. Turning this off doesn't change it back") },
   },
 };
 /** Switches XXMI only applies while configure_game is on. */
@@ -53,22 +55,22 @@ const NEEDS_CONFIGURE = new Set(["disable_wounded_fx", "force_max_lod_bias", "me
 const extraInfo = (game: string, k: string): ExtraInfo => GAME_LABELS[game]?.[k] ?? EXTRA_LABELS[k] ?? { label: k };
 const RESOURCE_TIERS = ["UHD", "HD", "SD"];
 const PRIORITIES = ["LOW", "BELOW_NORMAL", "NORMAL", "ABOVE_NORMAL", "HIGH", "REALTIME"];
-const PRIORITY_LABEL: Record<string, string> = { LOW: "Low", BELOW_NORMAL: "Below normal", NORMAL: "Normal", ABOVE_NORMAL: "Above normal", HIGH: "High", REALTIME: "Realtime" };
-const WINDOW_MODES = [{ value: "WINDOWED", label: "Window" }, { value: "BORDERLESS", label: "Borderless" }, { value: "FULLSCREEN", label: "Full screen" }];
+const PRIORITY_LABEL: Record<string, string> = { LOW: t("Low"), BELOW_NORMAL: t("Below normal"), NORMAL: t("Normal"), ABOVE_NORMAL: t("Above normal"), HIGH: t("High"), REALTIME: t("Realtime") };
+const WINDOW_MODES = [{ value: "WINDOWED", label: t("Window") }, { value: "BORDERLESS", label: t("Borderless") }, { value: "FULLSCREEN", label: t("Full screen") }];
 // XXMI's own levels (it has no ERROR)
 const LOG_LEVELS = ["DISABLED", "WARNING", "INFO", "DEBUG"];
-const LOG_LABEL: Record<string, string> = { DISABLED: "Off", WARNING: "Warnings", INFO: "Info", DEBUG: "Debug" };
+const LOG_LABEL: Record<string, string> = { DISABLED: t("Off"), WARNING: t("Warnings"), INFO: t("Info"), DEBUG: t("Debug") };
 
-const WHERE = "Settings › Launch options";
+const WHERE = t("Settings › Launch options");
 
 // what only some games have, in the global search (the panels themselves are in settingsSearch.ts)
 registerCommands("settings.launch", () => {
   const g = currentGame();
   if (!g) return [];
   const list: Command[] = [];
-  if (g.id === "gi") list.push({ id: "launch:gi-kick", title: "Illegal tool detected", section: "Pages", icon: "warn", where: WHERE,
+  if (g.id === "gi") list.push({ id: "launch:gi-kick", title: t("Illegal tool detected"), section: "Pages", icon: "warn", where: WHERE,
     keywords: "genshin kicked anti cheat 10612 4001 10310 disconnect banned d3d11 gimi", run: () => go({ view: "settings", section: "launch" }) });
-  if (g.viaXxmi) list.push({ id: "launch:xxmi-dll", title: "How XXMI loads mods", section: "Pages", icon: "play", where: WHERE,
+  if (g.viaXxmi) list.push({ id: "launch:xxmi-dll", title: t("How XXMI loads mods"), section: "Pages", icon: "play", where: WHERE,
     keywords: "unsafe mode injection inject mode hook direct skip inject libraries extra dll reshade d3d11", run: () => go({ view: "settings", section: "launch" }) });
   return list;
 });
@@ -83,15 +85,15 @@ export function LaunchSections() {
   const game = list.find((g) => g.id === pick) ?? current ?? list[0];
   if (!game) {
     return (
-      <Panel title="Launch options" icon="play" id="launch">
-        <p className="hint row"><span>Set up a game first.</span>
-          <Button size="sm" icon="folder" onClick={() => go({ view: "settings", section: "games" })}>Game folders</Button></p>
+      <Panel title={t("Launch options")} icon="play" id="launch">
+        <p className="hint row"><span>{t("Set up a game first.")}</span>
+          <Button size="sm" icon="folder" onClick={() => go({ view: "settings", section: "games" })}>{t("Game folders")}</Button></p>
       </Panel>
     );
   }
   const picker = list.length > 1 && (
     <span>
-      <Select title="Game whose options these are. It follows the game picked in the sidebar" value={game.id} onChange={(v) => setPick(v)} options={list.map((g) => ({ value: g.id, label: g.name }))} />
+      <Select title={t("Game whose options these are. It follows the game picked in the sidebar")} value={game.id} onChange={(v) => setPick(v)} options={list.map((g) => ({ value: g.id, label: gameName(g) }))} />
     </span>
   );
   // a fresh form per game, so one game's edit can't land on another
@@ -198,10 +200,10 @@ function SavedTag({ at }: { at: number }) {
     if (!at || !el) return;
     saved(el);
     el.classList.add("show");
-    const t = window.setTimeout(() => el.classList.remove("show"), 1600);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => el.classList.remove("show"), 1600);
+    return () => window.clearTimeout(timer);
   }, [at]);
-  return <span ref={ref} className="tools-saved" aria-live="polite">Saved</span>;
+  return <span ref={ref} className="tools-saved" aria-live="polite">{t("Saved")}</span>;
 }
 
 /** The backend refused a save because something else holds the file: say so, with a way to try again. */
@@ -212,7 +214,7 @@ function Blocked({ l }: { l: Launch }) {
     <div className="tools-blocked" role="alert">
       <span>{l.blocked}</span>
       {place && <Button size="sm" variant="ghost" onClick={() => void place.run()}>{place.label}</Button>}
-      <Button size="sm" onClick={() => void l.save()}>Try again</Button>
+      <Button size="sm" onClick={() => void l.save()}>{t("Try again")}</Button>
     </div>
   );
 }
@@ -230,50 +232,50 @@ function LoadError({ text }: { text: string }) {
 
 function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: ReactNode }) {
   const { cfg, update } = l;
-  if (l.loadError) return <Panel title="Launch options" icon="play" id="launch" actions={picker}><LoadError text={l.loadError} /></Panel>;
-  if (!cfg) return <Panel title="Launch options" icon="play" id="launch" actions={picker}><Waiting what="Reading launch options" /></Panel>;
+  if (l.loadError) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><LoadError text={l.loadError} /></Panel>;
+  if (!cfg) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><Waiting what={t("Reading launch options")} /></Panel>;
 
   const lock = (k: string) => lockNote(cfg.locked[k]);
   const known = Object.keys(EXTRA_LABELS).filter((k) => k in cfg.extras).map((k) => [k, cfg.extras[k]] as const);
   const other = Object.entries(cfg.extras).filter(([k]) => !EXTRA_LABELS[k]);
   const configureOff = cfg.extras.configure_game === false;
-  const extraLock = (k: string) => configureOff && NEEDS_CONFIGURE.has(k) ? `Turn on "${extraInfo(game.id, "configure_game").label}" first` : undefined;
+  const extraLock = (k: string) => configureOff && NEEDS_CONFIGURE.has(k) ? t("Turn on \"{option}\" first", { option: extraInfo(game.id, "configure_game").label }) : undefined;
   const viaXxmi = cfg.via === "xxmi";
 
   return (
-    <Panel title="Launch options" icon="play" id="launch" actions={<>{picker}<SavedTag at={l.savedAt} /></>}>
+    <Panel title={t("Launch options")} icon="play" id="launch" actions={<>{picker}<SavedTag at={l.savedAt} /></>}>
       <Blocked l={l} />
       <div className="tools-grid">
-        {game.xxmi && <Field label="Start with" hint={lock("via") ?? (viaXxmi ? "XXMI Launcher loads the mods and applies these settings" : "gachamod starts the game's exe. Mods need another loader")}>
-          <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label="Start with" disabled={!!cfg.locked.via}
-            options={[{ value: "xxmi", label: "XXMI" }, { value: "direct", label: "Game exe" }]} />
+        {game.xxmi && <Field label={t("Start with")} hint={lock("via") ?? (viaXxmi ? t("XXMI Launcher loads the mods and applies these settings") : t("gachamod starts the game's exe. Mods need another loader"))}>
+          <Segmented value={cfg.via} onChange={(v) => update({ via: v })} label={t("Start with")} disabled={!!cfg.locked.via}
+            options={[{ value: "xxmi", label: "XXMI" }, { value: "direct", label: t("Game exe") }]} />
         </Field>}
-        <TextField label="Arguments" mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
-          hint="Added to the game's command line" />
+        <TextField label={t("Arguments")} mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
+          hint={t("Added to the game's command line")} />
         {cfg.via === "direct" && (
-          <TextField label="Different exe" mono value={cfg.customExe ?? ""} placeholder="Leave empty for the game's own exe"
+          <TextField label={t("Different exe")} mono value={cfg.customExe ?? ""} placeholder={t("Leave empty for the game's own exe")}
             onChange={(v) => update({ customExe: v || null })} disabled={!!lock("customExe")} hint={lock("customExe")} />
         )}
-        <Select label="Priority" value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })} disabled={!!cfg.locked.processPriority}
-          options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] ?? p }))} hint={lock("processPriority") ?? "Which programs Windows runs first when the CPU is busy. It doesn't raise FPS. Normal is best: High and Realtime can make sound, input and other apps stutter"} />
-        <Select label="Window" value={cfg.windowMode || "BORDERLESS"} onChange={(v) => update({ windowMode: v })}
+        <Select label={t("Priority")} value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })} disabled={!!cfg.locked.processPriority}
+          options={PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] ?? p }))} hint={lock("processPriority") ?? t("Which programs Windows runs first when the CPU is busy. It doesn't raise FPS. Normal is best: High and Realtime can make sound, input and other apps stutter")} />
+        <Select label={t("Window")} value={cfg.windowMode || "BORDERLESS"} onChange={(v) => update({ windowMode: v })}
           options={WINDOW_MODES} hint={lock("windowMode")} disabled={!!cfg.locked.windowMode} />
       </div>
       <div className="tools-hooks">
-        <HookField title="Before the game starts" hook={cfg.preLaunch} locked={lock("preLaunch")} onChange={(h) => update({ preLaunch: h })} />
-        <HookField title="After mods load" hook={cfg.postLoad} locked={lock("postLoad")} onChange={(h) => update({ postLoad: h })} />
+        <HookField label={t("Run a command before the game starts")} hook={cfg.preLaunch} locked={lock("preLaunch")} onChange={(h) => update({ preLaunch: h })} />
+        <HookField label={t("Run a command after mods load")} hook={cfg.postLoad} locked={lock("postLoad")} onChange={(h) => update({ postLoad: h })} />
       </div>
       {known.length > 0 && (
         <div className="tools-extras">
-          <h3 className="sub-h">{game.short} options</h3>
+          <h3 className="sub-h">{t("{game} options", { game: gameShort(game) })}</h3>
           {known.map(([k, v]) => <Extra key={k} k={k} v={v} info={extraInfo(game.id, k)} locked={extraLock(k)} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
         </div>
       )}
       {game.id === "gi" && (
-        <KickFix name={game.name}>
+        <KickFix name={gameName(game)}>
           {viaXxmi && cfg.dll && (
             <details className="tools-other">
-              <summary>Steps from the guide</summary>
+              <summary>{t("Steps from the guide")}</summary>
               <KickSteps dll={cfg.dll} locked={cfg.locked} onChange={(d) => update({ dll: { ...cfg.dll!, ...d } })} />
             </details>
           )}
@@ -282,12 +284,12 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
       {viaXxmi && cfg.dll && <XxmiDll dll={cfg.dll} locked={cfg.locked} onChange={(d) => update({ dll: { ...cfg.dll!, ...d } })} onUnsafeOff={() => void l.unsafeOff()} />}
       {other.length > 0 && (
         <details className="tools-other">
-          <summary>Other</summary>
+          <summary>{t("Other")}</summary>
           {other.map(([k, v]) => <Extra key={k} k={k} v={v} info={{ label: k }} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
         </details>
       )}
-      <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label="Close gachamod when the game starts"
-        hint="Automatic reloads stop while gachamod is closed" />
+      <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label={t("Close gachamod when the game starts")}
+        hint={t("Automatic reloads stop while gachamod is closed")} />
     </Panel>
   );
 }
@@ -297,19 +299,17 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
 function KickFix({ name, children }: { name: string; children?: ReactNode }) {
   const k = useKick();
   const on = !!k?.said && !k.undone;
-  const hint = k?.undone ? "XXMI has put its own d3d11.dll back since, most likely in an update. Do the fix again, then turn this on"
-    : k?.fixed && !on ? "GIMI's d3d11.dll isn't XXMI's own, so the fix looks done and gachamod doesn't warn"
-    : "Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts its own d3d11.dll back";
+  const hint = k?.undone ? t("XXMI has put its own d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
+    : k?.fixed && !on ? t("GIMI's d3d11.dll isn't XXMI's own, so the fix looks done and gachamod doesn't warn")
+    : t("Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts its own d3d11.dll back");
   return (
     <div className="tools-kick">
       <p className="hint row">
-        <span>If {name} stops with "Illegal tool detected" even with the FPS limit at 120, the usual cause is its anti-cheat
-          flagging XXMI's d3d11.dll. A GameBanana guide shows a way around it by hand. It goes against the game's terms and can get
-          your account banned.</span>
-        <Button size="sm" variant="ghost" icon="external" title={`Open ${GI_KICK_GUIDE} in your browser`} onClick={openKickGuide}>Open the guide</Button>
+        <span>{t("If {game} stops with \"Illegal tool detected\" even with the FPS limit at 120, the usual cause is its anti-cheat flagging XXMI's d3d11.dll. A GameBanana guide shows a way around it by hand. It goes against the game's terms and can get your account banned.", { game: name })}</span>
+        <Button size="sm" variant="ghost" icon="external" title={t("Open {url} in your browser", { url: GI_KICK_GUIDE })} onClick={openKickGuide}>{t("Open the guide")}</Button>
       </p>
       {children}
-      <Toggle checked={on} onChange={(v) => void setKickFixDone(v)} label="I did this fix" hint={hint} />
+      <Toggle checked={on} onChange={(v) => void setKickFixDone(v)} label={t("I did this fix")} hint={hint} />
     </div>
   );
 }
@@ -318,41 +318,41 @@ function KickFix({ name, children }: { name: string; children?: ReactNode }) {
  *  itself and looking up a hash are in Tools › Mod makers. */
 function MigotoPanel({ l, picker }: { l: Launch; picker: ReactNode }) {
   const { cfg, update } = l;
-  if (l.loadError) return <Panel title="Mod maker switches" icon="code" id="migoto" actions={picker}><LoadError text={l.loadError} /></Panel>;
-  if (!cfg) return <Panel title="Mod maker switches" icon="code" id="migoto" actions={picker}><Waiting what="Reading 3DMigoto's settings" /></Panel>;
+  if (l.loadError) return <Panel title={t("Mod maker switches")} icon="code" id="migoto" actions={picker}><LoadError text={l.loadError} /></Panel>;
+  if (!cfg) return <Panel title={t("Mod maker switches")} icon="code" id="migoto" actions={picker}><Waiting what={t("Reading 3DMigoto's settings")} /></Panel>;
 
   const lock = (k: string) => lockNote(cfg.locked[k]);
   const setMig = (patch: Partial<MigotoConfig>) => update({ migoto: { ...cfg.migoto, ...patch } });
   const migLock = (k: string) => lock("migoto") ?? lock(`migoto.${k}`);
 
   return (
-    <Panel title="Mod maker switches" icon="code" id="migoto" actions={<>{picker}<SavedTag at={l.savedAt} /></>}>
+    <Panel title={t("Mod maker switches")} icon="code" id="migoto" actions={<>{picker}<SavedTag at={l.savedAt} /></>}>
       <Blocked l={l} />
       {lock("migoto") && <p className="hint">{lock("migoto")}</p>}
       <div className="tools-switches">
-        <Toggle checked={cfg.migoto.hunting} disabled={!!migLock("hunting")} onChange={(v) => setMig({ hunting: v })} label="Hunting mode"
-          hint={migLock("hunting") ?? "Numpad 0 turns it on in game, then numpad keys step through shaders and buffers to find hashes"} />
-        <Toggle checked={cfg.migoto.dumpShaders} disabled={!!migLock("dumpShaders")} onChange={(v) => setMig({ dumpShaders: v })} label="Dump shaders"
-          hint={migLock("dumpShaders") ?? "Marking a shader in hunting mode also saves its code to ShaderFixes"} />
-        <Toggle checked={cfg.migoto.muteWarnings} disabled={!!migLock("muteWarnings")} onChange={(v) => setMig({ muteWarnings: v })} label="Hide warnings"
-          hint={migLock("muteWarnings") ?? "No mod error text or beeps in game"} />
-        {cfg.xxmiAvailable && <Toggle checked={cfg.migoto.enforceRendering} disabled={!!migLock("enforceRendering")} onChange={(v) => setMig({ enforceRendering: v })} label="Enforce rendering"
-          hint={migLock("enforceRendering") ?? "Writes the [Rendering] values mods need into d3dx.ini before each start. Turn off to edit them by hand"} />}
-        <Toggle checked={cfg.migoto.callsLogging} disabled={!!migLock("callsLogging")} onChange={(v) => setMig({ callsLogging: v })} label="Log calls"
-          hint={migLock("callsLogging") ?? "Writes every DirectX call to d3d11_log.txt. Slow, for debugging"} />
-        <Toggle checked={cfg.migoto.debugLogging} disabled={!!migLock("debugLogging")} onChange={(v) => setMig({ debugLogging: v })} label="Debug logging"
-          hint={migLock("debugLogging") ?? "More detail in d3d11_log.txt"} />
+        <Toggle checked={cfg.migoto.hunting} disabled={!!migLock("hunting")} onChange={(v) => setMig({ hunting: v })} label={t("Hunting mode")}
+          hint={migLock("hunting") ?? t("Numpad 0 turns it on in game, then numpad keys step through shaders and buffers to find hashes")} />
+        <Toggle checked={cfg.migoto.dumpShaders} disabled={!!migLock("dumpShaders")} onChange={(v) => setMig({ dumpShaders: v })} label={t("Dump shaders")}
+          hint={migLock("dumpShaders") ?? t("Marking a shader in hunting mode also saves its code to ShaderFixes")} />
+        <Toggle checked={cfg.migoto.muteWarnings} disabled={!!migLock("muteWarnings")} onChange={(v) => setMig({ muteWarnings: v })} label={t("Hide warnings")}
+          hint={migLock("muteWarnings") ?? t("No mod error text or beeps in game")} />
+        {cfg.xxmiAvailable && <Toggle checked={cfg.migoto.enforceRendering} disabled={!!migLock("enforceRendering")} onChange={(v) => setMig({ enforceRendering: v })} label={t("Enforce rendering")}
+          hint={migLock("enforceRendering") ?? t("Writes the [Rendering] values mods need into d3dx.ini before each start. Turn off to edit them by hand")} />}
+        <Toggle checked={cfg.migoto.callsLogging} disabled={!!migLock("callsLogging")} onChange={(v) => setMig({ callsLogging: v })} label={t("Log calls")}
+          hint={migLock("callsLogging") ?? t("Writes every DirectX call to d3d11_log.txt. Slow, for debugging")} />
+        <Toggle checked={cfg.migoto.debugLogging} disabled={!!migLock("debugLogging")} onChange={(v) => setMig({ debugLogging: v })} label={t("Debug logging")}
+          hint={migLock("debugLogging") ?? t("More detail in d3d11_log.txt")} />
       </div>
       {!migLock("logLevel") && (
         <div className="tools-loglevel">
-          <Select label="Log" value={cfg.migoto.logLevel || "DISABLED"} onChange={(v) => setMig({ logLevel: v })}
-            options={LOG_LEVELS.map((lv) => ({ value: lv, label: LOG_LABEL[lv] ?? lv }))} hint="What goes in d3d11_log.txt. Warnings logs mod errors, Info adds DirectX calls, Debug adds much more" />
+          <Select label={t("Log")} value={cfg.migoto.logLevel || "DISABLED"} onChange={(v) => setMig({ logLevel: v })}
+            options={LOG_LEVELS.map((lv) => ({ value: lv, label: LOG_LABEL[lv] ?? lv }))} hint={t("What goes in d3d11_log.txt. Warnings logs mod errors, Info adds DirectX calls, Debug adds much more")} />
         </div>
       )}
       <p className="hint row">
-        <span>The log, the shader cache and 3DMigoto's files are in Tools.</span>
+        <span>{t("The log, the shader cache and 3DMigoto's files are in Tools.")}</span>
         <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "dev" })}
-          title="Opens Tools, Mod makers, with the log, the shader cache and d3dx.ini of the game picked in the sidebar">View log</Button>
+          title={t("Opens Tools, Mod makers, with the log, the shader cache and d3dx.ini of the game picked in the sidebar")}>{t("View log")}</Button>
       </p>
     </Panel>
   );
@@ -362,14 +362,14 @@ function Field({ label, hint, children }: { label: string; hint?: ReactNode; chi
   return <div className="field"><span className="field-l">{label}</span>{children}{hint && <span className="hint">{hint}</span>}</div>;
 }
 
-function HookField({ title, hook, locked, onChange }: { title: string; hook: Hook; locked?: ReactNode; onChange: (h: Hook) => void }) {
+function HookField({ label, hook, locked, onChange }: { label: string; hook: Hook; locked?: ReactNode; onChange: (h: Hook) => void }) {
   return (
     <div className="tools-hook">
-      <Toggle checked={hook.enabled} disabled={!!locked} onChange={(v) => onChange({ ...hook, enabled: v })} label={`Run a command ${title.toLowerCase()}`} hint={locked} />
+      <Toggle checked={hook.enabled} disabled={!!locked} onChange={(v) => onChange({ ...hook, enabled: v })} label={label} hint={locked} />
       {hook.enabled && (
         <>
           <TextField mono value={hook.command} disabled={!!locked} placeholder='"C:\Tools\ReShade launcher.exe"' onChange={(v) => onChange({ ...hook, command: v })} />
-          <Toggle size="sm" checked={hook.wait} disabled={!!locked} onChange={(v) => onChange({ ...hook, wait: v })} label="Wait for it to finish" />
+          <Toggle size="sm" checked={hook.wait} disabled={!!locked} onChange={(v) => onChange({ ...hook, wait: v })} label={t("Wait for it to finish")} />
         </>
       )}
     </div>

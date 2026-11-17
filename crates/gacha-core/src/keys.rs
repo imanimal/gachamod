@@ -190,6 +190,8 @@ const OS_SECTION: &str = "; gachamod added this section (keys only while on scre
 const FLAG: &str = "gachamod_onscreen";
 
 fn marker<'a>(line: &'a str, prefix: &str) -> Option<&'a str> { line.trim_start().strip_prefix(prefix) }
+/// A key line gachamod turned off, as it was when on.
+pub(crate) fn off_line(line: &str) -> Option<&str> { marker(line, KEY_OFF) }
 fn is_marker(line: &str, exact: &str) -> bool { line.trim() == exact }
 
 // ── a file, line by line ──
@@ -903,6 +905,36 @@ pub(crate) fn with_value(raw: &str, value: &str) -> String {
 
 // ── edits on one document ──
 
+/// A key line as another manager left it (nrmm.rs): the section, "key" or "back", its place among the section's lines
+/// of that field, its binding and whether the user turned it off there.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct KeyChoice { pub section: String, pub field: &'static str, pub index: u32, pub value: String, pub off: bool }
+
+/// Put another manager's key choices onto the author's file, marked as gachamod's own changes so they show in the key
+/// list and "put the author's keys back" undoes them. True when anything changed.
+pub(crate) fn carry_key_choices(doc: &mut Doc, choices: &[KeyChoice]) -> bool {
+    let norm = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ").to_ascii_lowercase();
+    let mut changed = false;
+    for c in choices {
+        let secs = sections(doc);
+        let Some(sec) = find_section(&secs, &c.section).filter(|s| is_key_section(&s.lower)) else { continue };
+        let Some(line) = key_lines(doc, sec).into_iter().find(|l| l.field == c.field && l.index == c.index) else { continue };
+        if line.off { continue; }
+        let mut at = line.at;
+        if !c.value.trim().is_empty() && norm(&line_value(&line.raw)) != norm(&c.value) {
+            doc.lines[at] = with_value(&line.raw, c.value.trim());
+            doc.insert(at, format!("{KEY_WAS}{}", line.raw));
+            at += 1;
+            changed = true;
+        }
+        if c.off {
+            doc.lines[at] = format!("{KEY_OFF}{}", doc.lines[at]);
+            changed = true;
+        }
+    }
+    changed
+}
+
 fn find_section<'a>(secs: &'a [Sec], name: &str) -> Option<&'a Sec> { secs.iter().find(|s| s.name.eq_ignore_ascii_case(name)) }
 
 fn not_found(section: &str, ini: &str) -> Error {
@@ -1220,7 +1252,7 @@ pub fn put_back(db: &Db, game: &str, id: &str) -> Result<KeyEdit> {
     let m = mod_of(db, game, id)?;
     let mut docs = load(Path::new(&m.path));
     for d in docs.iter_mut() {
-        if originals::original(db, game, &m.id, &d.rel, &d.raw).is_some_and(|o| d.take(o)) { continue; }
+        if originals::author(db, game, &m.id, &d.rel, &d.raw).is_some_and(|o| d.take(o)) { continue; }
         reset_doc(&mut d.doc);
         strip_on_screen(&mut d.doc);
     }

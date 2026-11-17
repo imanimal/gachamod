@@ -7,6 +7,7 @@ import { characters as charactersApi, library, type Character, type GameId, type
 import { characterList, useCharacterList } from "../../lib/gamebanana";
 import { jsonPref } from "../../lib/prefs";
 import { useOwned } from "./owned";
+import { t } from "../../lib/i18n";
 
 export interface RosterChar {
   name: string;
@@ -37,7 +38,7 @@ export function setCharHidden(game: GameId, name: string, hidden: boolean) {
   const set = new Set(all[game] ?? []);
   if (hidden) set.add(norm(name)); else set.delete(norm(name));
   all[game] = [...set];
-  void hiddenCharsPref.set(all, hidden ? `Hid ${name} from the roster` : `Showing ${name} in the roster again`);
+  void hiddenCharsPref.set(all, hidden ? t("Hid {name} from the roster", { name }) : t("Showing {name} in the roster again", { name }));
 }
 
 // ── the backend's list, kept for the session so the roster draws at once when you come back to it ──

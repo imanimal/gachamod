@@ -6,20 +6,21 @@ import { library, profiles, type GameId } from "../lib/api";
 import { extensionsNow } from "../lib/extensions";
 import { modPage } from "../lib/gamebanana";
 import { charNoun } from "../lib/games";
+import { t } from "../lib/i18n";
 import { creatorOf } from "../lib/prefs";
 import type { Route, View } from "../lib/store";
 import type { IconName } from "../ui/Icon";
 
 export const VIEW_INFO: Record<View, { label: string; icon: IconName }> = {
-  home: { label: "Home", icon: "home" },
-  library: { label: "Mods", icon: "mods" },
-  characters: { label: "Characters", icon: "characters" },
-  browse: { label: "Browse", icon: "browse" },
-  downloads: { label: "Downloads", icon: "downloads" },
-  profiles: { label: "Profiles", icon: "profiles" },
-  tools: { label: "Tools", icon: "tools" },
-  settings: { label: "Settings", icon: "settings" },
-  extensions: { label: "Extensions", icon: "puzzle" },
+  home: { label: t("Home"), icon: "home" },
+  library: { label: t("Mods"), icon: "mods" },
+  characters: { label: t("Characters"), icon: "characters" },
+  browse: { label: t("Browse"), icon: "browse" },
+  downloads: { label: t("Downloads"), icon: "downloads" },
+  profiles: { label: t("Profiles"), icon: "profiles" },
+  tools: { label: t("Tools"), icon: "tools" },
+  settings: { label: t("Settings"), icon: "settings" },
+  extensions: { label: t("Extensions"), icon: "puzzle" },
 };
 
 /** Ctrl+1 … Ctrl+8, in this order. The sidebar lists the same views but Profiles, which has its own list there. */
@@ -30,22 +31,25 @@ export function viewLabel(view: View, game?: GameId | null): string {
   return view === "characters" ? charNoun(game) : VIEW_INFO[view].label;
 }
 
-/** Settings' pages and panels (settings/settingsSearch.ts has the same names) and Tools' pages, by route section. */
+/** Settings' and Tools' pages and panels by route section, with the names settings/settingsSearch.ts and
+ *  tools/toolsSearch.ts give them. Where a page and a panel share an id, the page's name wins. */
 const SECTIONS: Record<string, string> = {
-  games: "Games and mod loaders", "game-start": "Run as administrator", xxmi: "XXMI Launcher", migoto: "Mod maker switches",
-  mods: "Mods and downloads", adult: "Mods for adults", "mod-folders": "Mods folders", installing: "Downloads and installing",
-  automatic: "Mod update checks and rescans", "broken-mods": "Mods a game update broke", storage: "Trash and removed mods",
-  creators: "Creators", hotkeys: "In-game profile hotkeys",
-  appearance: "Appearance", layout: "Layout, text size and animations", themes: "Custom themes", graphics: "Hardware acceleration and rendering log",
-  fun: "Fun extras", account: "GameBanana account", integrations: "1-click installs and .gachamod files", ai: "AI helper",
-  feedback: "Feedback, privacy and logs", privacy: "Usage counts and crash reports", logs: "Log files",
-  about: "About and updates", updates: "gachamod updates", transfer: "Back up or move your settings", repair: "Repair, reset or uninstall",
-  launch: "Launch options", fixes: "Mod fixers", ingame: "In-game menu", makers: "Mod makers",
-  history: "History", dev: "Dev tools", extensions: "Extensions",
+  games: t("Games"), "game-start": t("Run as administrator"), xxmi: "XXMI Launcher", migoto: t("Mod maker switches"),
+  mods: t("Mods"), adult: t("Mods for adults"), "mod-folders": t("Mods folders"), installing: t("Downloads and installing"),
+  automatic: t("Mod update checks and rescans"), "broken-mods": t("Mods a game update broke"), storage: t("Trash and removed mods"),
+  creators: t("Creators"), hotkeys: t("Hotkeys"),
+  appearance: t("Appearance"), layout: t("Layout, text size and animations"), themes: t("Custom themes"), graphics: t("Hardware acceleration and rendering log"),
+  fun: t("Fun"), account: t("Account"), integrations: t("1-click installs and .gachamod files"), ai: t("AI helper"),
+  feedback: t("Feedback"), privacy: t("Usage counts and crash reports"), logs: t("Log files"),
+  about: t("About"), updates: t("gachamod updates"), transfer: t("Back up or move your settings"), repair: t("Repair, reset or uninstall"),
+  launch: t("Launch"), problems: t("Problems"), fixes: t("Fixes"), conflicts: t("Conflicts"), "key-clashes": t("Key clashes"),
+  ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Sharing"), imm: t("Mods from Integrated Mod Manager"),
+  makers: t("Mod makers"), hash: t("Find a hash"),
+  history: t("History"), dev: t("Dev tools"), extensions: t("Extensions"),
 };
 /** "set-trash-days" (one setting in Settings) reads "Trash days". */
 const sectionLabel = (id: string) => SECTIONS[id] ?? cap(id.replace(/^set-/, "").replace(/-/g, " "));
-const TABS: Record<string, string> = { archive: "Trash", online: "Online", all: "All games", installed: "Installed", every: "Add mods" };
+const TABS: Record<string, string> = { archive: t("Trash"), online: t("Online"), all: t("All games"), installed: t("Installed"), every: t("Add mods") };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── names that need a lookup ──
@@ -96,24 +100,24 @@ export function subCrumbs(route: Route, game: GameId | null): Crumb[] {
   let r: Route = { view: route.view };
   if (route.character) {
     r = { ...r, character: route.character };
-    out.push({ label: route.character, route: r, title: route.view === "characters" ? undefined : `Only ${route.character}` });
+    out.push({ label: route.character, route: r, title: route.view === "characters" ? undefined : t("Only {name}", { name: route.character }) });
   }
   if (route.user) {
     r = { ...r, user: route.user };
-    out.push({ label: creatorOf(route.user)?.name ?? names.get(`user:${route.user}`) ?? "Creator", route: r });
+    out.push({ label: creatorOf(route.user)?.name ?? names.get(`user:${route.user}`) ?? t("Creator"), route: r });
   }
   if (route.profile !== undefined) {
     r = { ...r, profile: route.profile };
-    out.push({ label: profileName(game, route.profile) ?? "Profile", route: r });
+    out.push({ label: profileName(game, route.profile) ?? t("Profile"), route: r });
   }
   if (route.ext) {
     r = { ...r, ext: route.ext };
     const e = extensionsNow().find((x) => x.id === route.ext);
-    out.push({ label: e?.manifest?.page?.title ?? e?.manifest?.name ?? "Extension", route: r });
+    out.push({ label: e?.manifest?.page?.title ?? e?.manifest?.name ?? t("Extension"), route: r });
   }
   if (route.section) {
     r = { ...r, section: route.section };
-    const label = route.view === "extensions" ? (route.section === "themes" ? "Themes" : "Extensions") : sectionLabel(route.section);
+    const label = route.view === "extensions" ? (route.section === "themes" ? t("Themes") : t("Extensions")) : sectionLabel(route.section);
     out.push({ label, route: r });
   }
   if (route.tab) {
@@ -123,9 +127,9 @@ export function subCrumbs(route: Route, game: GameId | null): Crumb[] {
   }
   if (route.modId !== undefined && route.modId !== "") {
     r = { ...r, modId: route.modId };
-    out.push({ label: modName(game, route.modId) ?? (typeof route.modId === "number" ? "Mod" : "Mod details"), route: r });
+    out.push({ label: modName(game, route.modId) ?? (typeof route.modId === "number" ? t("Mod") : t("Mod details")), route: r });
   }
-  if (route.search && !out.length) out.push({ label: `"${route.search}"`, route: { ...r, search: route.search } });
+  if (route.search && !out.length) out.push({ label: t("\"{text}\"", { text: route.search }), route: { ...r, search: route.search } });
   return out;
 }
 

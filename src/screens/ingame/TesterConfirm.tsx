@@ -4,6 +4,7 @@
 // use. Owner: INGAME area.
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
+import { t } from "../../lib/i18n";
 import { Confirm } from "../../ui/kit";
 
 let answer: ((yes: boolean) => void) | null = null;
@@ -30,14 +31,14 @@ function Host() {
   const open = useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => answer !== null);
   if (!open) return null;
   return (
-    <Confirm title="Turn on tester options?" yes="Turn on" onYes={() => done(true)} onClose={() => done(false)}>
+    <Confirm title={t("Turn on tester options?")} yes={t("Turn on")} onYes={() => done(true)} onClose={() => done(false)}>
       <p>
-        Tester options add the menu the game draws itself to Switch skins in game in Wuthering Waves, Endfield and
-        the other games. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd always have it. It opens
-        in exclusive fullscreen, where gachamod's menu over the game can't.
+        {t("Tester options add the menu the game draws itself to Switch skins in game in {ww}, {ef} and the other games. {zzz}, {gi}, {hsr} and {hi3} always have it. It opens in exclusive fullscreen, where gachamod's menu over the game can't.", {
+          ww: t("Wuthering Waves"), ef: t("Endfield"), zzz: t("Zenless Zone Zero"), gi: t("Genshin Impact"), hsr: t("Star Rail"), hi3: t("Honkai Impact 3rd"),
+        })}
       </p>
-      <p>Its pictures load with the game's mods, so the game takes a little longer to load them and uses more memory.</p>
-      <p>Check this game sends what worked and what didn't to the developer.</p>
+      <p>{t("Its pictures load with the game's mods, so the game takes a little longer to load them and uses more memory.")}</p>
+      <p>{t("Check this game sends what worked and what didn't to the developer.")}</p>
     </Confirm>
   );
 }

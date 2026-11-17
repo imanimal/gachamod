@@ -2,7 +2,7 @@
 // search's characters and installed mods. Imported once by the Mods screen so they register at start.
 // Owner: LIBRARY area.
 import { errorText, library, settings, type GameId, type ModEntry } from "../../lib/api";
-import { trashDaysPref, trashPhrase } from "../settings/automatic";
+import { trashDaysPref } from "../settings/automatic";
 import type { ModHealth } from "../../lib/fixes";
 import { charNoun } from "../../lib/games";
 import { holdMods, holdOn, holdsNow, releaseMods } from "../../lib/holds";
@@ -23,7 +23,7 @@ import { liveCharacterOf, liveShownInstead } from "../ingame/data";
 import { changeStates, onPublish } from "./data";
 import { toast } from "../../ui/toast";
 import { queueLatest } from "../../lib/gamebanana";
-import { plural } from "../../ui/kit";
+import { stops, t, tn } from "../../lib/i18n";
 
 // what the mod screens saw last, so menus opened anywhere know a mod's health and a character's mods
 const lastHealth = new Map<GameId, Map<string, ModHealth>>();
@@ -50,9 +50,13 @@ export async function getUpdates(game: GameId, list: ModEntry[]) {
     catch { missed.push(m.name); }
   }
   const got = due.length - missed.length;
-  const text = [got && `Downloading ${plural(got, "update")}`, missed.length && `Couldn't find a newer file for ${missed.slice(0, 3).join(", ")}${missed.length > 3 ? ` and ${missed.length - 3} more` : ""}`]
-    .filter(Boolean).join(". ");
-  toast(text, !got, got ? { label: "Downloads", run: () => go("downloads") } : undefined);
+  const first = missed.slice(0, 3).join(", ");
+  const names = missed.length > 3 ? t("{names} and {n} more", { names: first, n: missed.length - 3 }) : first;
+  const downloading = tn(got, "Downloading {n} update", "Downloading {n} updates");
+  const text = !missed.length ? downloading
+    : got ? t("{text}. Couldn't find a newer file for {names}", { text: downloading, names })
+    : t("Couldn't find a newer file for {names}", { names });
+  toast(text, !got, got ? { label: t("Downloads"), run: () => go("downloads") } : undefined);
 }
 
 /** "Make sub-mod of" with the mods it could go with (the same character's first), or "Unlink" for a sub-mod. */
@@ -60,29 +64,33 @@ function subModItem(game: GameId, mod: ModEntry): MenuEntry {
   const all = lastMods.get(game) ?? [];
   if (mod.parent) {
     const p = all.find((m) => m.id === mod.parent);
-    return { label: p ? `Unlink from ${p.name}` : "Unlink from its mod", icon: "link",
-      title: "Make it a mod of its own again, so turning it on asks about the character's other mods", onClick: () => void setParent(game, mod, "", all) };
+    return { label: p ? t("Unlink from {mod}", { mod: p.name }) : t("Unlink from its mod"), icon: "link",
+      title: t("Make it a mod of its own again, so turning it on asks about the character's other mods"), onClick: () => void setParent(game, mod, "", all) };
   }
-  if (all.some((m) => m.parent === mod.id)) return { label: "Make sub-mod of", icon: "link", disabled: true, title: "It has sub-mods of its own" };
+  if (all.some((m) => m.parent === mod.id)) return { label: t("Make sub-mod of"), icon: "link", disabled: true, title: t("It has sub-mods of its own") };
   const same = (m: ModEntry) => !!mod.character && m.character?.toLowerCase() === mod.character.toLowerCase();
   const picks = all.filter((m) => m.id !== mod.id && !m.parent)
     .sort((a, b) => Number(same(b)) - Number(same(a)) || Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name))
     .slice(0, 40);
   return {
-    label: "Make sub-mod of", icon: "link",
-    title: "For an add-on that goes with another mod, like a hair recolour for one outfit. It turns off with that mod, comes back with it, and never counts as another skin",
-    items: picks.map((m) => ({ label: m.name, title: `${m.character ?? "No character"}${m.enabled ? ", on" : ", off"}`, onClick: () => void setParent(game, mod, m.id, all) })),
+    label: t("Make sub-mod of"), icon: "link",
+    title: t("For an add-on that goes with another mod, like a hair recolour for one outfit. It turns off with that mod, comes back with it, and never counts as another skin"),
+    items: picks.map((m) => ({ label: m.name, title: m.enabled ? t("{name}, on", { name: m.character ?? t("No character") }) : t("{name}, off", { name: m.character ?? t("No character") }), onClick: () => void setParent(game, mod, m.id, all) })),
   };
 }
 
 export function profileItems(game: GameId, list: ModEntry[]): MenuEntry[] {
   const c = cachedProfiles(game);
-  if (!c) return [{ label: "Loading profiles", disabled: true }];
+  if (!c) return [{ label: t("Loading profiles"), disabled: true }];
   return c.list.map((p) => {
     const inIt = (m: ModEntry) => (p.active ? m.enabled : c.members.get(p.id)?.has(m.id) ?? false);
     const all = list.every(inIt);
+    const one = list.length === 1, profile = p.name;
+    const title = all ? (one ? t("Take it out of {profile}", { profile }) : t("Take them out of {profile}", { profile }))
+      : p.active ? (one ? t("Add it to {profile} (turns them on, it's the profile in use)", { profile }) : t("Add them to {profile} (turns them on, it's the profile in use)", { profile }))
+      : one ? t("Add it to {profile}", { profile }) : t("Add them to {profile}", { profile });
     return {
-      label: p.name, checked: all, title: all ? `Take ${list.length === 1 ? "it" : "them"} out of ${p.name}` : `Add ${list.length === 1 ? "it" : "them"} to ${p.name}${p.active ? " (turns them on, it's the profile in use)" : ""}`,
+      label: p.name, checked: all, title,
       onClick: () => void setInProfile(game, p, list, !all).then(() => warmProfiles(game, true)),
     };
   });
@@ -109,51 +117,60 @@ registerMenu("mod", ({ game, mod, selection }) => {
   const beside = !allOn && going.length ? overlappingAll(going, lastMods.get(game) ?? []).filter((o) => !liveCharacterOf(game, o.id)) : [];
   const shownInstead = liveShownInstead(game, mod.id);
   return [
-    many && { header: `${list.length} mods selected` },
-    { label: allOn ? "Turn off" : "Turn on", icon: "power", keys: "Space", onClick: () => void setOn(game, list, !allOn) },
-    !many && !mod.enabled && !!shownInstead && { label: `Show next to ${shownInstead}`, icon: "layers", keys: "Shift+Space",
-      title: `Turns it on next to ${shownInstead} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods`,
+    many && { header: tn(list.length, "{n} mod selected", "{n} mods selected") },
+    { label: allOn ? t("Turn off") : t("Turn on"), icon: "power", keys: "Space", onClick: () => void setOn(game, list, !allOn) },
+    !many && !mod.enabled && !!shownInstead && { label: t("Show next to {mod}", { mod: shownInstead }), icon: "layers", keys: "Shift+Space",
+      title: t("Turns it on next to {mod} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods", { mod: shownInstead }),
       onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
-    beside.length > 0 && { label: "Turn on with others", icon: "layers", keys: "Shift+Space",
-      title: `Turns ${many ? "them" : "it"} on and keeps ${beside.length === 1 ? beside[0]!.name : `the ${beside.length} other mods`} on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same`,
+    beside.length > 0 && { label: t("Turn on with others"), icon: "layers", keys: "Shift+Space",
+      title: beside.length === 1
+        ? (many ? t("Turns them on and keeps {mod} on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { mod: beside[0]!.name })
+          : t("Turns it on and keeps {mod} on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { mod: beside[0]!.name }))
+        : (many ? t("Turns them on and keeps the {n} other mods on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { n: beside.length })
+          : t("Turns it on and keeps the {n} other mods on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { n: beside.length })),
       onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
-    !many && { label: "Details", icon: "info", keys: "Enter", onClick: () => openDetails(mod) },
-    !many && (mod.parts ?? 0) > 0 && { label: "Parts", icon: "layers", title: "Folders inside it that turn on and off by themselves", onClick: () => openDetails(mod, "parts") },
-    !many && mod.hasKeys && { label: "Toggles", icon: "key", title: "Its toggles, to change their keys or turn them off", onClick: () => openDetails(mod, "keys") },
-    !many && mod.conflicts > 0 && { label: "Conflicts", icon: "warn", title: "Mods that change the same parts as this one, to pick which one wins", onClick: () => openDetails(mod, "conflicts") },
-    !many && mod.iniCount > 0 && { label: "View in 3D", icon: "box", title: "Turn the mod's model around, as its toggles are set now", onClick: () => openDetails(mod, "model") },
-    broken.length > 0 && { label: "Attempt fix for the game update", icon: "wand", title: reasons.slice(0, 3).join(". ") || "A game update broke it. Swaps its outdated hashes, or runs the fixer it needs", onClick: () => void fixForUpdate(game, broken) },
-    canWait.length > 0 && { label: "Wait for an update", icon: "bell-off",
-      title: `Stops the game update warning until you install a newer version of ${many ? "them" : "it"} from ${many ? "their" : "its"} author. If that one is still broken, it warns again`,
+    !many && { label: t("Details"), icon: "info", keys: "Enter", onClick: () => openDetails(mod) },
+    !many && (mod.parts ?? 0) > 0 && { label: t("Parts"), icon: "layers", title: t("Folders inside it that turn on and off by themselves"), onClick: () => openDetails(mod, "parts") },
+    !many && mod.hasKeys && { label: t("Toggles"), icon: "key", title: t("Its toggles, to change their keys or turn them off"), onClick: () => openDetails(mod, "keys") },
+    !many && mod.conflicts > 0 && { label: t("Conflicts"), icon: "warn", title: t("Mods that change the same parts as this one, to pick which one wins"), onClick: () => openDetails(mod, "conflicts") },
+    !many && mod.iniCount > 0 && { label: t("View in 3D"), icon: "box", title: t("Turn the mod's model around, as its toggles are set now"), onClick: () => openDetails(mod, "model") },
+    broken.length > 0 && { label: t("Attempt fix for the game update"), icon: "wand", title: stops(reasons.slice(0, 3)) || t("A game update broke it. Swaps its outdated hashes, or runs the fixer it needs"), onClick: () => void fixForUpdate(game, broken) },
+    canWait.length > 0 && { label: t("Wait for an update"), icon: "bell-off",
+      title: many ? t("Stops the game update warning until you install a newer version of them from their author. If that one is still broken, it warns again")
+        : t("Stops the game update warning until you install a newer version of it from its author. If that one is still broken, it warns again"),
       onClick: () => void holdMods(game, canWait, "update") },
-    loud.length > 0 && { label: "Ignore problems", icon: "hide",
-      title: `Stops every warning about ${many ? "them" : "it"}: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back`,
+    loud.length > 0 && { label: t("Ignore problems"), icon: "hide",
+      title: many ? t("Stops every warning about them: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back")
+        : t("Stops every warning about it: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back"),
       onClick: () => void holdMods(game, loud, "ignore") },
-    heldList.length > 0 && { label: "Show problems again", icon: "eye",
-      title: heldList.every((m) => holds[m.id]?.kind === "update") ? "Stop waiting for an update and warn about it again now" : "Warn about its problems again",
+    heldList.length > 0 && { label: t("Show problems again"), icon: "eye",
+      title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about its problems again"),
       onClick: () => void releaseMods(game, heldList) },
-    onScreen && mod.hasKeys && { label: "Toggles only while on screen", icon: "keyboard", title: "Its toggles only work while its character is on screen, so they stop taking keys meant for other mods", onClick: () => void keysOnlyOnScreen(game, list) },
+    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("Its toggles only work while its character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
-    !many && { label: "Rename", icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
-    { label: "Set character", icon: "characters", onClick: () => askLib({ kind: "character", game, mods: list }) },
-    { label: "Tags", icon: "tag", onClick: () => askLib({ kind: "tags", game, mods: list }) },
-    { label: "Favourite", icon: "star", checked: allFav, onClick: () => void setFavourite(game, list, !allFav) },
-    { label: "Profiles", icon: "profiles", items: profileItems(game, list) },
+    !many && { label: t("Rename"), icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
+    { label: t("Set character"), icon: "characters", onClick: () => askLib({ kind: "character", game, mods: list }) },
+    { label: t("Tags"), icon: "tag", onClick: () => askLib({ kind: "tags", game, mods: list }) },
+    { label: t("Favourite"), icon: "star", checked: allFav, onClick: () => void setFavourite(game, list, !allFav) },
+    { label: t("Profiles"), icon: "profiles", items: profileItems(game, list) },
     !many && subModItem(game, mod),
     "-",
-    !many && !mod.preview && mod.source && { label: "Get preview from GameBanana", icon: "image", onClick: () => void previewFromGb(game, mod) },
-    !many && mod.customPreview && { label: "Reset preview", icon: "undo", title: "Go back to the picture the mod came with", onClick: () => void resetPreview(game, mod) },
-    !many && { label: "Open folder", icon: "folder", onClick: () => openFolder(mod) },
-    !many && mod.source && { label: "Open on GameBanana", icon: "external", onClick: () => openOnGb(mod) },
-    due.length > 0 && { label: due.length === 1 ? "Update" : `Update (${due.length})`, icon: "update",
-      title: many && due.length === 1 ? `Only ${due[0]!.name} has one` : undefined, onClick: () => void getUpdates(game, due) },
-    fromGb.length > 0 && { label: "Check for updates", icon: "refresh", onClick: () => void checkForUpdates(game, fromGb) },
-    many && { label: "Combine into one mod", icon: "layers", title: "One mod with each of these as a part you can turn on or off in its details. For mods that came in the same download", onClick: () => void combineMods(game, list) },
-    { label: "Share as .gachamod", icon: "share", title: "A small file with GameBanana links and your settings, to send to a friend or another PC", onClick: () => exportMods(game, list) },
+    !many && !mod.preview && mod.source && { label: t("Get preview from GameBanana"), icon: "image", onClick: () => void previewFromGb(game, mod) },
+    !many && mod.customPreview && { label: t("Reset preview"), icon: "undo", title: t("Go back to the picture the mod came with"), onClick: () => void resetPreview(game, mod) },
+    !many && { label: t("Open folder"), icon: "folder", onClick: () => openFolder(mod) },
+    !many && mod.source && { label: t("Open on GameBanana"), icon: "external", onClick: () => openOnGb(mod) },
+    due.length > 0 && { label: due.length === 1 ? t("Update") : t("Update ({n})", { n: due.length }), icon: "update",
+      title: many && due.length === 1 ? t("Only {mod} has one", { mod: due[0]!.name }) : undefined, onClick: () => void getUpdates(game, due) },
+    fromGb.length > 0 && { label: t("Check for updates"), icon: "refresh", onClick: () => void checkForUpdates(game, fromGb) },
+    many && { label: t("Combine into one mod"), icon: "layers", title: t("One mod with each of these as a part you can turn on or off in its details. For mods that came in the same download"), onClick: () => void combineMods(game, list) },
+    { label: t("Share as .gachamod"), icon: "share", title: t("A small file with GameBanana links and your settings, to send to a friend or another PC"), onClick: () => exportMods(game, list) },
     "-",
     trashDaysPref.get() > 0
-      ? { label: "Move to trash", icon: "trash", danger: true, keys: "Del", title: `The files ${trashPhrase()}. Undo or Mods, Trash puts ${many ? "them" : "it"} back`, onClick: () => void trashMods(game, list) }
-      : { label: "Delete", icon: "trash", danger: true, keys: "Del", title: `The files ${trashPhrase()}. Mods from GameBanana can be downloaded again from Undo or Mods, Trash; others are asked about first`, onClick: () => void trashMods(game, list) },
+      ? { label: t("Move to trash"), icon: "trash", danger: true, keys: "Del",
+        title: many ? tn(trashDaysPref.get(), "The files stay on your PC for {n} day. Undo or Mods, Trash puts them back", "The files stay on your PC for {n} days. Undo or Mods, Trash puts them back")
+          : tn(trashDaysPref.get(), "The files stay on your PC for {n} day. Undo or Mods, Trash puts it back", "The files stay on your PC for {n} days. Undo or Mods, Trash puts it back"),
+        onClick: () => void trashMods(game, list) }
+      : { label: t("Delete"), icon: "trash", danger: true, keys: "Del", title: t("The files are deleted right away. Mods from GameBanana can be downloaded again from Undo or Mods, Trash; others are asked about first"), onClick: () => void trashMods(game, list) },
   ];
 });
 
@@ -178,25 +195,25 @@ registerMenu("character", ({ game, name }) => {
       const mod = all.find((m) => m.id === id);
       if (!mod) return;
       const offs = all.filter((m) => same(m) && !m.parent && m.enabled && m.id !== id).map((m) => m.id);
-      await changeStates(game, `${name} wears ${mod.name}`, mod.enabled ? [] : [id], offs, all);
+      await changeStates(game, t("{name} wears {mod}", { name, mod: mod.name }), mod.enabled ? [] : [id], offs, all);
     } catch (e) { toast(errorText(e), true); }
   };
   const outfits = mods.filter((m) => !m.parent).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
   return [
     { header: name },
-    { label: "Open page", icon: "characters", onClick: () => go({ view: "characters", character: name }) },
-    { label: "Find mods online", icon: "browse", onClick: () => go({ view: "characters", character: name, tab: "online" }) },
+    { label: t("Open page"), icon: "characters", onClick: () => go({ view: "characters", character: name }) },
+    { label: t("Find mods online"), icon: "browse", onClick: () => go({ view: "characters", character: name, tab: "online" }) },
     "-",
-    { label: "Wear", icon: "layers", disabled: known && !outfits.length, title: known && !outfits.length ? `No mods for ${name} yet` : `Pick the mod ${name} wears. The others turn off`,
+    { label: t("Wear"), icon: "layers", disabled: known && !outfits.length, title: known && !outfits.length ? t("No mods for {name} yet", { name }) : t("Pick the mod {name} wears. The others turn off", { name }),
       items: outfits.slice(0, 40).map((m) => ({ label: m.name, checked: m.enabled, onClick: () => void wear(m.id) })) },
-    togetherOk.get(game) && { label: "Turn on all mods", icon: "power", disabled: known && (!mods.length || mods.every((m) => m.enabled)), onClick: () => void forAll(true) },
-    { label: "Default outfit", icon: "undo", disabled: known && !mods.some((m) => m.enabled), title: `Turns off every mod for ${name}`, onClick: () => void forAll(false) },
+    togetherOk.get(game) && { label: t("Turn on all mods"), icon: "power", disabled: known && (!mods.length || mods.every((m) => m.enabled)), onClick: () => void forAll(true) },
+    { label: t("Default outfit"), icon: "undo", disabled: known && !mods.some((m) => m.enabled), title: t("Turns off every mod for {name}", { name }), onClick: () => void forAll(false) },
     "-",
-    { label: "Owned", keys: "O", checked: isOwned(game, name), title: `Owned ones show under Owned on the ${charNoun(game)} page`, onClick: () => void toggleOwned(game, name) },
-    { label: "Set a picture", icon: "image", title: `A file, a link or one of ${name}'s mod previews`, onClick: () => askLib({ kind: "portrait", game, name }) },
+    { label: t("Owned"), keys: "O", checked: isOwned(game, name), title: t("Owned ones show under Owned on the {page} page", { page: charNoun(game) }), onClick: () => void toggleOwned(game, name) },
+    { label: t("Set a picture"), icon: "image", title: t("A file, a link or one of {name}'s mod previews", { name }), onClick: () => askLib({ kind: "portrait", game, name }) },
     hidden
-      ? { label: "Show in the roster", icon: "eye", onClick: () => setCharHidden(game, name, false) }
-      : { label: "Hide from the roster", icon: "hide", onClick: () => setCharHidden(game, name, true) },
+      ? { label: t("Show in the roster"), icon: "eye", onClick: () => setCharHidden(game, name, false) }
+      : { label: t("Hide from the roster"), icon: "hide", onClick: () => setCharHidden(game, name, true) },
   ];
 });
 
@@ -254,11 +271,11 @@ registerCommands("library.characters", async (query) => {
     const n = count.get(c.name.toLowerCase()) ?? 0;
     const img = portraitNow(g.id, c.name, c.icon);
     // the character page goes before "<name> mods online" even with no mods
-    out.push({ id: `char:${g.id}:${c.name}`, title: c.name, section: many, img, icon: "characters",
-      keywords: `${one} ${many} character page skins outfits`, hint: n ? `${n} ${n === 1 ? "mod" : "mods"}` : undefined, priority: n ? 4 : 1,
+    out.push({ id: `char:${g.id}:${c.name}`, title: c.name, section: "Characters", img, icon: "characters",
+      keywords: `${one} ${many} character page skins outfits`, hint: n ? tn(n, "{n} mod", "{n} mods") : undefined, priority: n ? 4 : 1,
       run: () => go({ view: "characters", character: c.name }), menu: () => menuFor("character", { game: g.id, name: c.name }) });
-    if (n) out.push({ id: `charmods:${g.id}:${c.name}`, title: `${c.name}'s mods`, section: "Mods", img, icon: "mods",
-      keywords: `${one} installed mods skins my`, hint: `${n}`, where: "Mods", priority: 5, run: () => go({ view: "library", character: c.name }) });
+    if (n) out.push({ id: `charmods:${g.id}:${c.name}`, title: t("{name}'s mods", { name: c.name }), section: "Mods", img, icon: "mods",
+      keywords: `${one} installed mods skins my`, hint: `${n}`, where: t("Mods"), priority: 5, run: () => go({ view: "library", character: c.name }) });
   }
   return out;
 });
@@ -273,7 +290,7 @@ registerCommands("library.mods", async (query) => {
     .map((m): Command => ({
       id: `mod:${g.id}:${m.id}`, title: m.name, section: "Mods", icon: "mods",
       keywords: `${m.character ?? ""} ${one} installed mod ${m.tags.join(" ")} ${m.source?.submitter ?? ""}`,
-      hint: m.enabled ? "On" : "Off", where: `Mods › ${m.character ?? "No character"}`, run: () => go({ view: "library", modId: m.id }),
+      hint: m.enabled ? t("On") : t("Off"), where: `${t("Mods")} › ${m.character ?? t("No character")}`, run: () => go({ view: "library", modId: m.id }),
       menu: () => menuFor("mod", { game: g.id, mod: m }),
     }))
     .map((c) => ({ c, s: scoreCommand(query, c) }))

@@ -3,7 +3,7 @@
 // picker (event variants-needed), GameBanana links (app event open-gb-link), installing dropped files (app event
 // install-paths), and the Downloads badge (failures count until seen, downloads/seen.ts). Owner: BROWSE area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Checkbox, Dialog, formatBytes, plural } from "../../ui/kit";
+import { Badge, Button, Checkbox, Dialog, formatBytes } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { errorText, fileUrl, installs, queue, type Candidate, type QueueItem } from "../../lib/api";
@@ -24,6 +24,8 @@ import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { notesText } from "../../lib/notes";
+import { gameShort } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 
 registerBrowseMenus();
 
@@ -75,7 +77,10 @@ export function OnlineOverlays() {
     seen.add(id);
     const here = onScreen.current;
     if (modId != null && here.modId === modId && here.game === itemGame) { setPickId((cur) => cur ?? id); return; }
-    toast(`${name || "A download"} has ${parts} parts inside. Pick the ones to install`, false, { label: "Pick", run: () => openVariantPicker(id) });
+    toast(name
+      ? tn(parts, "{name} has {n} part inside. Pick the ones to install", "{name} has {n} parts inside. Pick the ones to install", { name })
+      : tn(parts, "A download has {n} part inside. Pick the ones to install", "A download has {n} parts inside. Pick the ones to install"),
+      false, { label: t("Pick"), run: () => openVariantPicker(id) });
   }, []);
   useEffect(() => {
     if (pickId !== null && !snap.items.some((i) => i.id === pickId && i.state === "needsChoice")) setPickId(null);
@@ -88,7 +93,7 @@ export function OnlineOverlays() {
         announced.current.delete(i.id);
         announce(i.id, i.req.game, i.req.gbModId, i.req.meta.name || i.req.fileName || "", i.candidates.length);
       } else if (waiting.length > 1) {
-        toast(`${plural(waiting.length, "download")} wait for you to pick their parts`, false, { label: "Show", run: () => go("downloads") });
+        toast(tn(waiting.length, "{n} download waits for you to pick its parts", "{n} downloads wait for you to pick their parts"), false, { label: t("Show"), run: () => go("downloads") });
       }
       return;
     }
@@ -110,9 +115,9 @@ export function OnlineOverlays() {
   useEffect(() => onApp((e) => {
     if (e.type === "install-paths") {
       const game = currentGame();
-      if (!game) { toast("Set up a game first, then add mods", true); return; }
+      if (!game) { toast(t("Set up a game first, then add mods"), true); return; }
       installs.local(game.id, e.paths)
-        .then((o) => toast(o.notes.length ? notesText(o.notes) : `Installing ${plural(e.paths.length, "mod")}`, false, { label: "Show", run: () => go("downloads") }))
+        .then((o) => toast(o.notes.length ? notesText(o.notes) : tn(e.paths.length, "Installing {n} mod", "Installing {n} mods"), false, { label: t("Show"), run: () => go("downloads") }))
         .catch((err) => toast(errorText(err), true));
     } else if (e.type === "open-gb-link") {
       void openLink(e.url, gamesRef.current);
@@ -170,24 +175,25 @@ function BrowseCommands() {
 async function openLink(url: string, games: ReturnType<typeof useGames>) {
   const link = parseGbLink(url);
   if (!link) {
-    if (fileIdFromLink(url)) toast("That's a link to a file without its mod page. Open the mod's page on GameBanana and copy that link instead", true);
-    else toast("That isn't a GameBanana mod link", true);
+    if (fileIdFromLink(url)) toast(t("That's a link to a file without its mod page. Open the mod's page on GameBanana and copy that link instead"), true);
+    else toast(t("That isn't a GameBanana mod link"), true);
     return;
   }
   const here = currentGame();
   try {
     const mod = await modPage(link.modId);
-    if (!mod) { toast("GameBanana didn't send that mod's page", true); return; }
+    if (!mod) { toast(t("GameBanana didn't send that mod's page"), true); return; }
     // the mod's own game, when it isn't the one on screen
     const target = mod.game ? games.find((g) => g.gamebananaId === mod.game!.id) : here;
-    if (mod.game && !target) { toast(`${mod.name} is a mod for ${mod.game.name}, which isn't set up here`, true); return; }
+    if (mod.game && !target) { toast(t("{name} is a mod for {game}, which isn't set up here", { name: mod.name, game: mod.game.name }), true); return; }
     const game = target ?? here;
-    if (!game) { toast("Set up a game first, then open the link again", true); return; }
+    if (!game) { toast(t("Set up a game first, then open the link again"), true); return; }
     if (link.fileId) {
       const file = mod.files.find((f) => f.id === link.fileId);
-      if (!file) { toast(`That file isn't on ${mod.name}'s page anymore`, true); return; }
+      if (!file) { toast(t("That file isn't on {name}'s page anymore", { name: mod.name }), true); return; }
       await queueModFile(game.id, mod, file);
-      toast(`Downloading ${mod.name}${game.id !== here?.id ? ` for ${game.short}` : ""}`, false, { label: "Show", run: () => go("downloads") });
+      toast(game.id !== here?.id ? t("Downloading {name} for {game}", { name: mod.name, game: gameShort(game) }) : t("Downloading {name}", { name: mod.name }),
+        false, { label: t("Show"), run: () => go("downloads") });
       return;
     }
     if (game.id !== here?.id) setGame(game.id);
@@ -201,7 +207,7 @@ async function openLink(url: string, games: ReturnType<typeof useGames>) {
 function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candidates: Candidate[]; onClose: () => void }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(candidates[0] ? [candidates[0].key] : []));
   const [busy, setBusy] = useState(false);
-  const name = item.req.meta.name || item.req.fileName || "This archive";
+  const name = item.req.meta.name || item.req.fileName || t("This archive");
   const toggle = (k: string, on: boolean) => setPicked((p) => { const n = new Set(p); if (on) n.add(k); else n.delete(k); return n; });
   const all = picked.size === candidates.length;
   const keys = useMemo(() => candidates.filter((c) => picked.has(c.key)).map((c) => c.key), [candidates, picked]);
@@ -217,11 +223,11 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
     try {
       await queue.choose(item.id, candidates.map((c) => c.key));
       await installAllPartsPref.set(true);
-      const label = "Archives with several parts now install all of them without asking";
+      const label = t("Archives with several parts now install all of them without asking");
       const undo = () => installAllPartsPref.set(false);
       record({ label, undo, redo: () => installAllPartsPref.set(true) }, true);
-      toast(label, false, { label: "Undo", run: () => void undo() },
-        { label: "Download settings", run: () => go({ view: "settings", section: "set-all-parts" }) });
+      toast(label, false, { label: t("Undo"), run: () => void undo() },
+        { label: t("Download settings"), run: () => go({ view: "settings", section: "set-all-parts" }) });
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }
   };
@@ -233,19 +239,19 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
 
   return (
     <Dialog icon="layers" size="lg" className="gb-picker" onClose={onClose}
-      title={`${name} has ${candidates.length} parts inside`}
+      title={tn(candidates.length, "{name} has {n} part inside", "{name} has {n} parts inside", { name })}
       footer={<>
-        <Button variant="ghost" onClick={() => setPicked(all ? new Set() : new Set(candidates.map((c) => c.key)))}>{all ? "Pick none" : "Pick all"}</Button>
+        <Button variant="ghost" onClick={() => setPicked(all ? new Set() : new Set(candidates.map((c) => c.key)))}>{all ? t("Pick none") : t("Pick all")}</Button>
         <Button variant="ghost" icon="layers" disabled={busy} onClick={() => void always()}
-          title="Installs all of these now, and from now on every archive with several parts installs all of them without this window. Settings, Downloads and installing turns it off">Always install all</Button>
+          title={t("Installs all of these now, and from now on every archive with several parts installs all of them without this window. Settings, Downloads and installing turns it off")}>{t("Always install all")}</Button>
         <span className="sp" />
-        <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title="Cancels this download. Esc closes the window and keeps it waiting in Downloads">Don't install</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title={t("Cancels this download. Esc closes the window and keeps it waiting in Downloads")}>{t("Don't install")}</Button>
         <Button variant="primary" icon="install" busy={busy} disabled={!keys.length} onClick={() => void choose()}>
-          {keys.length > 1 ? `Install ${keys.length}` : "Install chosen"}
+          {keys.length > 1 ? t("Install {n}", { n: keys.length }) : t("Install chosen")}
         </Button>
       </>}>
       <p className="hint gb-picker-hint">
-        Pick the parts you want. They install as one mod, and you can turn each part on or off in its details.
+        {t("Pick the parts you want. They install as one mod, and you can turn each part on or off in its details.")}
       </p>
       <div className="gb-picker-grid">
         {candidates.map((c) => {
@@ -258,7 +264,7 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
               </span>
               <Checkbox checked={on} onChange={(v) => toggle(c.key, v)} label={<span className="gb-variant-t">{c.label}</span>} />
               <span className="gb-variant-meta hint">
-                <Badge>{plural(c.iniCount, "ini")}</Badge><span>{formatBytes(c.size)}</span>
+                <Badge>{tn(c.iniCount, "{n} ini", "{n} inis")}</Badge><span>{formatBytes(c.size)}</span>
               </span>
               {c.key && <span className="gb-variant-path hint mono" title={c.key}>{c.key}</span>}
             </div>

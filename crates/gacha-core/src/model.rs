@@ -246,6 +246,8 @@ pub mod events {
     pub const DEEP_LINK: &str = "deep-link";
     /// `{ path }`: a .gachamod file was opened with the app.
     pub const OPEN_FILE: &str = "open-file";
+    /// `{ level, text }`: a line just written to gachamod.log ("info", "warn" or "error").
+    pub const APP_LOG: &str = "app-log";
     /// `{ text, bad }`: a quiet note for a toast from background work.
     pub const TOAST: &str = "toast";
 }

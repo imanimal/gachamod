@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import type { GameId } from "../../lib/api";
 import { record } from "../../lib/history";
 import { DEFAULTS, getFilters, kindLabel, setFilters, sortLabel, type BrowseFilters } from "./state";
+import { t } from "../../lib/i18n";
 
 export interface SavedFilter { id: string; name: string; f: BrowseFilters }
 
@@ -38,9 +39,9 @@ export function describe(f: BrowseFilters, full = false): string {
     f.search && `"${f.search}"`,
     f.character ?? f.category?.name,
     f.kind && kindLabel(f.kind),
-    f.hq && "High quality",
-    f.followed && "Following",
-    f.hideInstalled && "Not installed",
+    f.hq && t("High quality"),
+    f.followed && t("Following"),
+    f.hideInstalled && t("Not installed"),
     (full || f.sort !== DEFAULTS.sort) && f.sort !== "relevance" && sortLabel(f.sort),
   ].filter(Boolean) as string[];
   return parts.join(", ") || sortLabel(f.sort);
@@ -65,7 +66,7 @@ export function saveFilters(game: GameId): SavedFilter {
   if (have) return have;
   const s: SavedFilter = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: describe(f), f };
   write(game, [...list, s]);
-  record({ label: `Saved the filters "${s.name}"`, undo: async () => write(game, read(game).filter((x) => x.id !== s.id)), redo: async () => write(game, [...read(game), s]) });
+  record({ label: t("Saved the filters \"{name}\"", { name: s.name }), undo: async () => write(game, read(game).filter((x) => x.id !== s.id)), redo: async () => write(game, [...read(game), s]) });
   return s;
 }
 
@@ -79,7 +80,7 @@ export function renameSaved(game: GameId, id: string, name: string) {
   if (!old || !n || n === old.name) return;
   const put = (v: string) => write(game, read(game).map((x) => (x.id === id ? { ...x, name: v } : x)));
   put(n);
-  record({ label: `Renamed saved filters to "${n}"`, undo: async () => put(old.name), redo: async () => put(n) });
+  record({ label: t("Renamed saved filters to \"{name}\"", { name: n }), undo: async () => put(old.name), redo: async () => put(n) });
 }
 
 export function removeSaved(game: GameId, id: string) {
@@ -89,7 +90,7 @@ export function removeSaved(game: GameId, id: string) {
   const s = list[i]!;
   write(game, list.filter((x) => x.id !== id));
   record({
-    label: `Removed saved filters "${s.name}"`,
+    label: t("Removed saved filters \"{name}\"", { name: s.name }),
     undo: async () => { const now = read(game); write(game, [...now.slice(0, i), s, ...now.slice(i)]); },
     redo: async () => write(game, read(game).filter((x) => x.id !== id)),
   });

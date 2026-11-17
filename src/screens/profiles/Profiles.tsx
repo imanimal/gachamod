@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } f
 import type { GameId, Profile } from "../../lib/api";
 import { go, useGame, useRoute } from "../../lib/store";
 import { useHistory } from "../../lib/history";
+import { english, t, tn } from "../../lib/i18n";
 import { Badge, Button, Empty, IconButton, PageHeader, Skeleton, timeAgo, Waiting } from "../../ui/kit";
 import { menuFor, menuHandler, openMenu } from "../../ui/ContextMenu";
 import { moveInGrid } from "../library/gridNav";
@@ -77,17 +78,17 @@ export function Profiles() {
     // Undo is only offered when this session deleted it and that delete is still undoable
     const gone = seenNames.get(route.profile);
     const undoable = gone !== undefined && history.entries.some((e) => e.state === "done"
-      && (e.label === `Deleted ${gone}` || e.label.startsWith(`Deleted ${gone}. `)));
+      && (english(e.label) === `Deleted ${gone}` || english(e.label).startsWith(`Deleted ${gone}. `)));
     return (
       <div className="page profiles">
-        {page === undefined ? <Waiting what="Reading your profiles"><Skeleton className="char-hero-skel" /></Waiting>
+        {page === undefined ? <Waiting what={t("Reading your profiles")}><Skeleton className="char-hero-skel" /></Waiting>
           : error && !list?.length ? (
-            <Empty icon="profiles" title="Couldn't read your profiles" actions={<Button variant="primary" icon="refresh" onClick={reload}>Try again</Button>}>
+            <Empty icon="profiles" title={t("Couldn't read your profiles")} actions={<Button variant="primary" icon="refresh" onClick={reload}>{t("Try again")}</Button>}>
               {error}
             </Empty>
           ) : page === null ? (
-            <Empty icon="profiles" title="That profile is gone" actions={<Button variant="primary" onClick={() => go("profiles")}>All profiles</Button>}>
-              {undoable ? "It was deleted. Undo (Ctrl+Z) brings it back." : "It was deleted."}
+            <Empty icon="profiles" title={t("That profile is gone")} actions={<Button variant="primary" onClick={() => go("profiles")}>{t("All profiles")}</Button>}>
+              {undoable ? t("It was deleted. Undo (Ctrl+Z) brings it back.") : t("It was deleted.")}
             </Empty>
           ) : <ProfilePage game={gid} p={page} chars={chars} busy={busy === page.id} onSwitch={() => pick(page)} onEdit={(f) => open(page, f)} />}
         {editor}
@@ -109,24 +110,24 @@ export function Profiles() {
 
   return (
     <div className="page profiles">
-      <PageHeader title="Profiles" icon="profiles"
-        sub="A profile remembers which mods are on and their options. Switching turns mods on and off to match."
+      <PageHeader title={t("Profiles")} icon="profiles"
+        sub={t("A profile remembers which mods are on and their options. Switching turns mods on and off to match.")}
         actions={<>
-          <Button icon="plus" onClick={() => startNewProfile(gid, "empty")} title="A profile with every mod off, for playing without mods">Empty profile</Button>
-          <Button variant="primary" icon="plus" onClick={() => startNewProfile(gid)} title="Saves the mods on now as a new profile">New profile</Button>
+          <Button icon="plus" onClick={() => startNewProfile(gid, "empty")} title={t("A profile with every mod off, for playing without mods")}>{t("Empty profile")}</Button>
+          <Button variant="primary" icon="plus" onClick={() => startNewProfile(gid)} title={t("Saves the mods on now as a new profile")}>{t("New profile")}</Button>
         </>} />
 
       {list === null ? (
-        <Waiting what="Reading your profiles">
+        <Waiting what={t("Reading your profiles")}>
           <div className="profile-grid">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="profile-card-skel" />)}</div>
         </Waiting>
       ) : error && !list.length ? (
-        <Empty icon="profiles" title="Couldn't read your profiles" actions={<Button variant="primary" icon="refresh" onClick={reload}>Try again</Button>}>
+        <Empty icon="profiles" title={t("Couldn't read your profiles")} actions={<Button variant="primary" icon="refresh" onClick={reload}>{t("Try again")}</Button>}>
           {error}
         </Empty>
       ) : !list.length ? (
-        <Empty icon="profiles" title="No profiles yet" actions={<Button variant="primary" icon="plus" onClick={() => startNewProfile(gid)}>New profile</Button>}>
-          A profile keeps a set of mods to switch to in one click, like "Story mode" with no mods at all.
+        <Empty icon="profiles" title={t("No profiles yet")} actions={<Button variant="primary" icon="plus" onClick={() => startNewProfile(gid)}>{t("New profile")}</Button>}>
+          {t("A profile keeps a set of mods to switch to in one click, like \"Story mode\" with no mods at all.")}
         </Empty>
       ) : (
         <div ref={gridRef} className="profile-grid">
@@ -171,13 +172,14 @@ function ProfileCard({ game, p, chars, busy, held, renaming, onPick, onOpen, onK
         <ProfileIcon profile={p} chars={chars} size={44} />
         <span className="profile-card-t">
           {renaming
-            ? <input className="profile-rename" value={name} autoFocus aria-label="Profile name" maxLength={60}
+            ? <input className="profile-rename" value={name} autoFocus aria-label={t("Profile name")} maxLength={60}
                 onChange={(e) => setName(e.target.value)} onFocus={(e) => e.currentTarget.select()} onBlur={() => finish(true)}
                 onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") finish(true); else if (e.key === "Escape") finish(false); }} />
             : <span className="profile-card-name" title={p.name}>{p.name}</span>}
-          <span className="profile-card-sub">{p.modCount === 1 ? "1 mod on" : `${p.modCount} mods on`}{p.updatedAt ? `, changed ${timeAgo(p.updatedAt)}` : ""}</span>
+          <span className="profile-card-sub">{p.updatedAt ? tn(p.modCount, "{n} mod on, changed {when}", "{n} mods on, changed {when}", { when: timeAgo(p.updatedAt) })
+            : tn(p.modCount, "{n} mod on", "{n} mods on")}</span>
         </span>
-        {p.active && <Badge tone="accent" icon="check" title="The profile in use. Turning mods on or off saves here">On now</Badge>}
+        {p.active && <Badge tone="accent" icon="check" title={t("The profile in use. Turning mods on or off saves here")}>{t("On now")}</Badge>}
       </span>
       {p.description && <span className="profile-card-desc">{p.description}</span>}
     </>
@@ -189,17 +191,17 @@ function ProfileCard({ game, p, chars, busy, held, renaming, onPick, onOpen, onK
       {renaming
         ? <div className="profile-card-main">{body}</div>
         : <button ref={mainRef} type="button" className="profile-card-main" onClick={onOpen} onKeyDown={onKey}
-            title={`See and change the mods in ${p.name}. F2 renames, Del deletes, right-click for more`}>
+            title={t("See and change the mods in {name}. F2 renames, Del deletes, right-click for more", { name: p.name })}>
             {body}
           </button>}
       <span className="profile-card-a">
-        {busy ? <span className="hint">Switching</span>
-          : p.hotkey ? <kbd className="kbd" title="Switches to this profile while the game runs">{p.hotkey}</kbd>
-          : <button type="button" className="link-btn hint" onClick={() => onEdit("hotkey")} title="A key combo that switches to it in game, like Ctrl+Alt+1">No hotkey</button>}
+        {busy ? <span className="hint">{t("Switching")}</span>
+          : p.hotkey ? <kbd className="kbd" title={t("Switches to this profile while the game runs")}>{p.hotkey}</kbd>
+          : <button type="button" className="link-btn hint" onClick={() => onEdit("hotkey")} title={t("A key combo that switches to it in game, like Ctrl+Alt+1")}>{t("No hotkey")}</button>}
         <span className="grow" />
-        {!p.active && <Button size="sm" icon="swap" disabled={held} onClick={onPick} title={held && !busy ? "Waiting for the other switch to finish" : `Turns mods on and off to match ${p.name}`}>Switch</Button>}
-        <IconButton icon="edit" size="sm" label="Edit" title="Edit the name, icon, colour, banner and hotkey" onClick={() => onEdit()} />
-        <IconButton icon="more" size="sm" label="More" title="More (right-click the card works too)" onClick={(e) => openMenu(e.currentTarget, menu())} />
+        {!p.active && <Button size="sm" icon="swap" disabled={held} onClick={onPick} title={held && !busy ? t("Waiting for the other switch to finish") : t("Turns mods on and off to match {name}", { name: p.name })}>{t("Switch")}</Button>}
+        <IconButton icon="edit" size="sm" label={t("Edit")} title={t("Edit the name, icon, colour, banner and hotkey")} onClick={() => onEdit()} />
+        <IconButton icon="more" size="sm" label={t("More")} title={t("More (right-click the card works too)")} onClick={(e) => openMenu(e.currentTarget, menu())} />
       </span>
     </article>
   );

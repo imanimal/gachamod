@@ -6,17 +6,18 @@ import { registerCommands, type Command } from "../../lib/search";
 import { currentGame, go } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { setHomeEditing } from "./layout";
+import { t } from "../../lib/i18n";
 
 registerCommands("home", () => {
   const g = currentGame();
   const list: Command[] = [
-    { id: "home:customise", title: "Customise Home", section: "Actions", icon: "layout",
+    { id: "home:customise", title: t("Customise Home"), section: "Actions", icon: "layout",
       keywords: "home widgets layout edit arrange reorder hide show dashboard customize personalise personalize",
       run: () => { go("home"); setHomeEditing(true); } },
   ];
   if (g) {
-    list.unshift({ id: "home:surprise", title: "Surprise me", section: "Actions", icon: "dice",
-      keywords: "random mod lucky roll dice discover shuffle anything suggest recommend", hint: "Opens a random mod",
+    list.unshift({ id: "home:surprise", title: t("Surprise me"), section: "Actions", icon: "dice",
+      keywords: "random mod lucky roll dice discover shuffle anything suggest recommend", hint: t("Opens a random mod"),
       run: () => { surpriseMe(g.id).catch((e) => toast(errorText(e), true)); } });
   }
   return list;

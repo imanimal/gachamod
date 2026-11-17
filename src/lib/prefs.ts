@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from "react";
 import { settings } from "./api";
 import { record } from "./history";
+import { t } from "./i18n";
 
 interface Pref<T> {
   get: () => T;
@@ -51,13 +52,14 @@ export const jsonPref = <T>(key: string, fallback: T) => pref<T>(key, fallback, 
 // ── mods for adults ──
 
 export type NsfwMode = "hide" | "blur" | "show";
-const NSFW_LABEL: Record<NsfwMode, string> = { hide: "Hidden", blur: "Blurred", show: "Shown" };
+const NSFW_LABEL: Record<NsfwMode, string> = { hide: t("Hidden"), blur: t("Blurred"), show: t("Shown") };
+const NSFW_UNDO: Record<NsfwMode, string> = { hide: t("Mods for adults: hidden"), blur: t("Mods for adults: blurred"), show: t("Mods for adults: shown") };
 export const nsfwPref = pref<NsfwMode>("ui.nsfw", "blur", (r) => (r === "hide" || r === "show" || r === "blur" ? r : undefined), (v) => v);
 export const useNsfw = () => nsfwPref.use();
 /** Change how mods for adults show, everywhere at once, with Undo. */
 export function setNsfw(v: NsfwMode) {
   if (v === nsfwPref.get()) return;
-  void nsfwPref.set(v, `Mods for adults: ${NSFW_LABEL[v].toLowerCase()}`);
+  void nsfwPref.set(v, NSFW_UNDO[v]);
 }
 export const nsfwLabel = (v: NsfwMode) => NSFW_LABEL[v];
 
@@ -79,9 +81,11 @@ export interface CreatorFlags extends CreatorRef {
   seen?: number;
 }
 export type CreatorFlag = "sub" | "fav" | "prio" | "blocked";
-const FLAG_WORDS: Record<CreatorFlag, [string, string]> = {
-  sub: ["Following", "Stopped following"], fav: ["Added to favourite creators:", "Removed from favourite creators:"],
-  prio: ["Prioritized", "Stopped prioritizing"], blocked: ["Blocked", "Unblocked"],
+const FLAG_WORDS: Record<CreatorFlag, [(name: string) => string, (name: string) => string]> = {
+  sub: [(name) => t("Following {name}", { name }), (name) => t("Stopped following {name}", { name })],
+  fav: [(name) => t("Added to favourite creators: {name}", { name }), (name) => t("Removed from favourite creators: {name}", { name })],
+  prio: [(name) => t("Prioritized {name}", { name }), (name) => t("Stopped prioritizing {name}", { name })],
+  blocked: [(name) => t("Blocked {name}", { name }), (name) => t("Unblocked {name}", { name })],
 };
 
 export const creatorsPref = jsonPref<Record<string, CreatorFlags>>("creators", {});
@@ -98,21 +102,21 @@ export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean) {
   const before = creatorsPref.get();
   const list = { ...before };
   const old = list[String(c.id)];
-  const next: CreatorFlags = { ...(old ?? {}), id: c.id, name: c.name || old?.name || `Member ${c.id}`, avatar: c.avatar ?? old?.avatar ?? null, [flag]: on, at: Date.now() };
+  const next: CreatorFlags = { ...(old ?? {}), id: c.id, name: c.name || old?.name || t("Member {id}", { id: String(c.id) }), avatar: c.avatar ?? old?.avatar ?? null, [flag]: on, at: Date.now() };
   if (flag === "blocked" && on) { next.sub = false; next.prio = false; next.fav = false; }
   if (flag !== "blocked" && on) next.blocked = false;
   if (flag === "prio" && on) next.sub = true;
   if (!next.sub && !next.fav && !next.prio && !next.blocked && next.seen === undefined) delete list[String(c.id)];
   else list[String(c.id)] = next;
   const [yes, no] = FLAG_WORDS[flag];
-  const label = `${on ? yes : no} ${next.name}`;
+  const label = (on ? yes : no)(next.name);
   const subBefore = !!old?.sub, subAfter = !!list[String(c.id)]?.sub;
   const rf = remoteFollow;
   if (rf && subBefore !== subAfter) {
     // one request per click, and Undo sends the opposite one
     const put = async (v: Record<string, CreatorFlags>, sub: boolean) => { await creatorsPref.set(v); await rf(c.id, sub); };
     void put(list, subAfter);
-    record({ label: `${label}, on GameBanana too`, undo: () => put(before, subBefore), redo: () => put(list, subAfter) });
+    record({ label: t("{label}, on GameBanana too", { label }), undo: () => put(before, subBefore), redo: () => put(list, subAfter) });
     return;
   }
   void creatorsPref.set(list, label);
@@ -122,9 +126,9 @@ export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean) {
 export function markCreatorsSeen(times: Record<string, number>) {
   const list = { ...creatorsPref.get() };
   let changed = false;
-  for (const [id, t] of Object.entries(times)) {
+  for (const [id, time] of Object.entries(times)) {
     const c = list[id];
-    if (c && (c.seen ?? 0) < t) { list[id] = { ...c, seen: t }; changed = true; }
+    if (c && (c.seen ?? 0) < time) { list[id] = { ...c, seen: time }; changed = true; }
   }
   if (changed) void creatorsPref.set(list);
 }
@@ -136,7 +140,7 @@ export const useHiddenMods = () => hiddenModsPref.use();
 export function hideMod(id: number, name: string, hide = true) {
   const now = new Set(hiddenModsPref.get());
   if (hide) now.add(id); else now.delete(id);
-  void hiddenModsPref.set([...now], hide ? `Hid ${name} from Browse` : `Showing ${name} in Browse again`);
+  void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }));
 }
 
 // ── custom character portraits (a mod preview or an image the user picked), per game ──
@@ -148,5 +152,5 @@ export function setCustomPortrait(game: string, name: string, src: string | null
   const list = { ...portraitPref.get() };
   const k = portraitKey(game, name);
   if (src) list[k] = src; else delete list[k];
-  void portraitPref.set(list, src ? `New picture for ${name}` : `${name}'s picture is back to the default`);
+  void portraitPref.set(list, src ? t("New picture for {name}", { name }) : t("{name}'s picture is back to the default", { name }));
 }

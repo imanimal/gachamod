@@ -9,7 +9,7 @@ import { oxford } from "../../lib/notes";
 import { ideasTask, recommend, surpriseMe } from "../../lib/recommend";
 import { setNsfw, useCreators, useHiddenMods, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
-import { Button, Chip, Empty, IconButton, Menu, SearchField, Segmented, Toggle, Waiting, plural } from "../../ui/kit";
+import { Button, Chip, Empty, IconButton, Menu, SearchField, Segmented, Toggle, Waiting } from "../../ui/kit";
 import { openMenu } from "../../ui/ContextMenu";
 import { Icon } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
@@ -24,6 +24,8 @@ import type { GbCategoryRef as Cat } from "../../lib/gamebanana";
 import "./browse.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { useHint } from "../../shell/hints";
+import { gameShort } from "../../lib/games";
+import { t, tn } from "../../lib/i18n";
 
 export interface GbBrowserProps {
   game: GameId;
@@ -234,12 +236,12 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   }, [query, step]);
 
   /** Why a card is left out, or null when it shows. */
-  const leftOut = useCallback((c: GbCard): string | null => {
-    if (c.submitter && creators[String(c.submitter.id)]?.blocked) return "from creators you blocked";
-    if (!showHidden && hidden.includes(c.id)) return "you hid";
-    if (nsfw === "hide" && c.nsfw) return "for adults";
-    if (f.hideInstalled && lib.byMod.has(c.id)) return "you have";
-    if (f.kind && (c.kind ?? "outfit") !== f.kind) return "of other types";
+  const leftOut = useCallback((c: GbCard): LeftOut | null => {
+    if (c.submitter && creators[String(c.submitter.id)]?.blocked) return "blocked";
+    if (!showHidden && hidden.includes(c.id)) return "hid";
+    if (nsfw === "hide" && c.nsfw) return "adults";
+    if (f.hideInstalled && lib.byMod.has(c.id)) return "have";
+    if (f.kind && (c.kind ?? "outfit") !== f.kind) return "types";
     return null;
   }, [creators, hidden, showHidden, nsfw, f.hideInstalled, f.kind, lib]);
   const shown = useCallback((c: GbCard) => leftOut(c) === null, [leftOut]);
@@ -309,16 +311,16 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   useEffect(() => {
     const want = resume.current;
     if (!want) return;
-    const t = window.setTimeout(() => { resume.current = null; }, 15000);
-    if (waiting || (items.length < want.limit && !pages.complete && !pages.error)) return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => { resume.current = null; }, 15000);
+    if (waiting || (items.length < want.limit && !pages.complete && !pages.error)) return () => window.clearTimeout(timer);
     resume.current = null;
     const el = sentinel.current && scroller(sentinel.current);
     if (el) { el.style.scrollBehavior = "auto"; el.scrollTop = want.scroll; el.style.scrollBehavior = ""; scrollAt.current = el.scrollTop; }
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
   }, [waiting, items.length, pages.complete, pages.error]);
 
   const toggleFollowed = () => {
-    if (!f.followed && !subIds.length) { toast("You don't follow anyone yet. Right-click a creator's name and pick Follow"); return; }
+    if (!f.followed && !subIds.length) { toast(t("You don't follow anyone yet. Right-click a creator's name and pick Follow")); return; }
     set({ followed: !f.followed });
   };
   const expand = () => { openWithFilters(game); (onExpand ?? (() => go({ view: "browse" })))(); };
@@ -328,9 +330,9 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   if (!fixedChar && f.character) chips.push({ key: "c", label: f.character, img: charRef?.icon, icon: "characters", clear: () => set({ character: null }) });
   if (f.category && !f.character) chips.push({ key: "k", label: f.category.name, icon: "filter", clear: () => set({ category: null }) });
   if (f.kind) chips.push({ key: "t", label: kindLabel(f.kind), icon: "shirt", clear: () => set({ kind: null }) });
-  if (f.followed) chips.push({ key: "f", label: "Creators you follow", icon: "feed", clear: () => set({ followed: false }) });
-  if (f.hideInstalled) chips.push({ key: "i", label: "Not installed", icon: "check", clear: () => set({ hideInstalled: false }) });
-  if (showHidden) chips.push({ key: "h", label: "Mods you hid", icon: "eye", clear: () => setShowHidden(false) });
+  if (f.followed) chips.push({ key: "f", label: t("Creators you follow"), icon: "feed", clear: () => set({ followed: false }) });
+  if (f.hideInstalled) chips.push({ key: "i", label: t("Not installed"), icon: "check", clear: () => set({ hideInstalled: false }) });
+  if (showHidden) chips.push({ key: "h", label: t("Mods you hid"), icon: "eye", clear: () => setShowHidden(false) });
   // filters inside the Filters button (High quality and the search show in the bar)
   // any set that isn't the plain view can be saved, High quality or a sort on its own too
   const canSave = !embedded && !savedNow && !isPlain(f);
@@ -341,20 +343,20 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   const clearAll = () => { setClearText((n) => n + 1); setShowHidden(false); set({ search: "", character: fixedChar ? f.character : null, category: null, kind: null, hq: false, followed: false, hideInstalled: false }); };
 
   const hqTip = f.kind && f.kind !== "outfit"
-    ? `The best-liked ${kindLabel(f.kind).toLowerCase()} for their age, about the top fifth. Creators you prioritize always show`
-    : "The best-liked outfits for their age, about the top fifth. Recolors, tools and UI are left out unless you pick that type. Creators you prioritize always show";
+    ? t("The best-liked {kind} for their age, about the top fifth. Creators you prioritize always show", { kind: kindLabel(f.kind).toLowerCase() })
+    : t("The best-liked outfits for their age, about the top fifth. Recolors, tools and UI are left out unless you pick that type. Creators you prioritize always show");
   const surprise = () => { void surpriseMe(game); };
   const surpriseMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     openMenu({ x: e.clientX, y: e.clientY }, [
-      { label: "Surprise me", icon: "dice", onClick: surprise },
-      { label: "Show all picks for you", icon: "sparkle", onClick: () => set({ sort: "foryou" }) },
-      aiShown("extra", aiShow) && { label: "Ask your chatbot for ideas", icon: "ai", onClick: () => { void ideasTask(game).then(askAi); } },
+      { label: t("Surprise me"), icon: "dice", onClick: surprise },
+      { label: t("Show all picks for you"), icon: "sparkle", onClick: () => set({ sort: "foryou" }) },
+      aiShown("extra", aiShow) && { label: t("Ask your chatbot for ideas"), icon: "ai", onClick: () => { void ideasTask(game).then(askAi); } },
     ]);
   };
   /** "8 you have, 3 for adults, and 1 from creators you blocked" */
   const outWhy = () => {
-    const n = new Map<string, number>();
+    const n = new Map<LeftOut, number>();
     const seen = new Set<number>();
     for (const c of [...pages.pinned, ...pages.items]) {
       if (seen.has(c.id)) continue;
@@ -362,13 +364,13 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
       const w = leftOut(c);
       if (w) n.set(w, (n.get(w) ?? 0) + 1);
     }
-    return oxford([...n].map(([w, k]) => `${k} ${w}`));
+    return oxford([...n].map(([w, k]) => leftOutText(w, k)));
   };
-  const emptyText = f.followed && !subIds.length ? "Right-click a creator's name and pick Follow, and their mods show here."
-    : filteredOut > 0 ? `${plural(filteredOut, "mod")} ${filteredOut === 1 ? "is" : "are"} hidden: ${outWhy()}.`
-    : f.hq && pages.dropped > 0 ? `${plural(pages.dropped, "mod")} ${pages.dropped === 1 ? "was" : "were"} left out by High quality.`
-    : f.sort === "foryou" && !lib.byMod.size ? "Install a few mods and this fills with ones that suit them."
-    : search ? "Try fewer or different words." : "Try another category or sort.";
+  const emptyText = f.followed && !subIds.length ? t("Right-click a creator's name and pick Follow, and their mods show here.")
+    : filteredOut > 0 ? tn(filteredOut, "{n} mod is hidden: {why}.", "{n} mods are hidden: {why}.", { why: outWhy() })
+    : f.hq && pages.dropped > 0 ? tn(pages.dropped, "{n} mod was left out by High quality.", "{n} mods were left out by High quality.")
+    : f.sort === "foryou" && !lib.byMod.size ? t("Install a few mods and this fills with ones that suit them.")
+    : search ? t("Try fewer or different words.") : t("Try another category or sort.");
 
   // the search box's ArrowDown, and Enter once the results are for what's typed, go to the first result
   const firstCard = () => document.querySelector<HTMLElement>(".gbb .gb-grid .gb-card")?.focus();
@@ -376,17 +378,17 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   return (
     <div className={`gbb${embedded ? " is-embedded" : ""}`}>
       <div className="gbb-bar">
-        <BrowseSearch search={f.search} set={set} clear={clearText} placeholder={`Search ${gs.short} mods or creators`} firstCard={firstCard} />
-        <Button className="gbb-sort" variant="secondary" icon="sort" iconRight="down" title="Sort" onClick={(e) => setMenu(menu?.kind === "sort" ? null : { el: e.currentTarget, kind: "sort" })}>{sortLabel(f.sort)}</Button>
-        <Chip on={f.hq} icon="quality" onClick={() => set({ hq: !f.hq })} title={hqTip}>High quality</Chip>
+        <BrowseSearch search={f.search} set={set} clear={clearText} placeholder={t("Search {game} mods or creators", { game: gameShort(gs) })} firstCard={firstCard} />
+        <Button className="gbb-sort" variant="secondary" icon="sort" iconRight="down" title={t("Sort")} onClick={(e) => setMenu(menu?.kind === "sort" ? null : { el: e.currentTarget, kind: "sort" })}>{sortLabel(f.sort)}</Button>
+        <Chip on={f.hq} icon="quality" onClick={() => set({ hq: !f.hq })} title={hqTip}>{t("High quality")}</Chip>
         <Button className={`gbb-filters${hidden_n ? " is-on" : ""}`} variant="secondary" icon="filter" iconRight="down"
-          title="Type, category, creators you follow, mods you have, mods for adults and saved filters"
+          title={t("Type, category, creators you follow, mods you have, mods for adults and saved filters")}
           onClick={(e) => setMenu(menu?.kind === "filters" ? null : { el: e.currentTarget, kind: "filters" })}>
-          {savedNow ? savedNow.name : "Filters"}{hidden_n > 0 && !savedNow && <span className="chip-n">{hidden_n}</span>}
+          {savedNow ? savedNow.name : t("Filters")}{hidden_n > 0 && !savedNow && <span className="chip-n">{hidden_n}</span>}
         </Button>
-        <IconButton className="gbb-surprise" icon="dice" label="Surprise me: open a mod you don't have that suits your library (right-click for more)"
+        <IconButton className="gbb-surprise" icon="dice" label={t("Surprise me: open a mod you don't have that suits your library (right-click for more)")}
           onClick={surprise} onContextMenu={surpriseMenu} />
-        {embedded && <IconButton className="gbb-expand" icon="expand" label="Open the full browser (keeps these filters)" onClick={expand} />}
+        {embedded && <IconButton className="gbb-expand" icon="expand" label={t("Open the full browser (keeps these filters)")} onClick={expand} />}
       </div>
 
       {!embedded && !fixedChar && (
@@ -394,40 +396,40 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
       )}
 
       {(chips.length > 0 || canSave || charHit) && (
-        <div className="gbb-chips" aria-label="Active filters">
+        <div className="gbb-chips" aria-label={t("Active filters")}>
           {charHit && (
-            <Button size="sm" variant="secondary" icon="characters" title={`Clear the search and list ${charHit.name}'s mods`}
-              onClick={() => { setClearText((n) => n + 1); set({ character: charHit.name, search: "" }); }}>Show only {charHit.name}</Button>
+            <Button size="sm" variant="secondary" icon="characters" title={t("Clear the search and list {name}'s mods", { name: charHit.name })}
+              onClick={() => { setClearText((n) => n + 1); set({ character: charHit.name, search: "" }); }}>{t("Show only {name}", { name: charHit.name })}</Button>
           )}
           {chips.map((c) => (
             <span key={c.key} className="chip on gbb-fchip">
               {c.img ? <LazyImg className="chip-img" src={c.img} alt="" /> : c.icon && <Icon name={c.icon} />}
               <span className="chip-t">{c.label}</span>
-              <button type="button" className="gbb-fchip-x" aria-label={`Remove ${c.label}`} title="Remove this filter" onClick={c.clear}><Icon name="x" /></button>
+              <button type="button" className="gbb-fchip-x" aria-label={t("Remove {name}", { name: c.label })} title={t("Remove this filter")} onClick={c.clear}><Icon name="x" /></button>
             </span>
           ))}
-          {chips.length > 1 && <Button size="sm" variant="ghost" icon="x" className="gbb-clear" onClick={clearAll} title="Remove every filter">Clear all</Button>}
+          {chips.length > 1 && <Button size="sm" variant="ghost" icon="x" className="gbb-clear" onClick={clearAll} title={t("Remove every filter")}>{t("Clear all")}</Button>}
           {canSave && (
             <Button size="sm" variant="ghost" icon="pin" className="gbb-clear" onClick={() => saveFilters(game)}
-              title="Keep this set of filters under Saved, to put it back in one click">Save filters</Button>
+              title={t("Keep this set of filters under Saved, to put it back in one click")}>{t("Save filters")}</Button>
           )}
         </div>
       )}
 
       <div>
         {pages.error && !items.length && !pinned.length ? (
-          <Empty icon="warn" title="Couldn't load GameBanana" actions={<Button icon="refresh" onClick={pages.retry}>Try again</Button>}>{pages.error}</Empty>
+          <Empty icon="warn" title={t("Couldn't load GameBanana")} actions={<Button icon="refresh" onClick={pages.retry}>{t("Try again")}</Button>}>{pages.error}</Empty>
         ) : !loading && pages.complete && !items.length && !pinned.length ? (
-          <Empty icon="browse" title={f.followed && !subIds.length ? "You don't follow anyone yet" : search ? `Nothing found for "${search}"` : "No mods here"}
+          <Empty icon="browse" title={f.followed && !subIds.length ? t("You don't follow anyone yet") : search ? t("Nothing found for \"{search}\"", { search }) : t("No mods here")}
             actions={chips.length || filteredOut > 0 ? <>
-              {chips.length > 0 && <Button icon="x" onClick={clearAll}>Clear filters</Button>}
+              {chips.length > 0 && <Button icon="x" onClick={clearAll}>{t("Clear filters")}</Button>}
               {!showHidden && [...pages.pinned, ...pages.items].some((c) => hidden.includes(c.id)) && (
-                <Button icon="eye" title="Show the mods you picked Not interested on. Their menu has Show in Browse again" onClick={() => setShowHidden(true)}>Show mods you hid</Button>
+                <Button icon="eye" title={t("Show the mods you picked Not interested on. Their menu has Show in Browse again")} onClick={() => setShowHidden(true)}>{t("Show mods you hid")}</Button>
               )}
-              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title="Settings, Mods and downloads" onClick={() => go({ view: "settings", section: "set-nsfw" })}>Mods for adults</Button>}
+              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title={t("Settings, Mods")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button>}
             </> : undefined}>{emptyText}</Empty>
         ) : waiting && !items.length && !pinned.length ? (
-          <Waiting what="Asking GameBanana for mods">
+          <Waiting what={t("Asking GameBanana for mods")}>
             <div ref={gridRef} className="cards gb-grid" aria-hidden="true">
               {Array.from({ length: embedded ? cap : 12 }, (_, i) => <CardSkeleton key={`s${i}`} />)}
             </div>
@@ -442,27 +444,27 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
         <div ref={sentinel} className="gb-sentinel" aria-hidden="true" />
         {hasMore && (items.length > 0 || pinned.length > 0) && (
           <div className="gb-more">
-            {embedded ? <Button variant="ghost" iconRight="chevron" onClick={expand} title="Open the full browser (keeps these filters)">More in Browse</Button>
-              : pages.error && ready.length <= limit ? <Button icon="refresh" onClick={pages.retry}>Couldn't load more. Try again</Button>
-              : <Button variant="ghost" busy={waiting} onClick={showMore}>Load more</Button>}
+            {embedded ? <Button variant="ghost" iconRight="chevron" onClick={expand} title={t("Open the full browser (keeps these filters)")}>{t("More in Browse")}</Button>
+              : pages.error && ready.length <= limit ? <Button icon="refresh" onClick={pages.retry}>{t("Couldn't load more. Try again")}</Button>
+              : <Button variant="ghost" busy={waiting} onClick={showMore}>{t("Load more")}</Button>}
           </div>
         )}
         {f.hq && pages.dropped > 0 && (items.length > 0 || pinned.length > 0) && (
-          <p className="hint gbb-note">High quality left out {plural(pages.dropped, "mod")}. <button type="button" className="link-btn" onClick={() => set({ hq: false })} title="Turn off High quality">Show them</button></p>
+          <p className="hint gbb-note">{tn(pages.dropped, "High quality left out {n} mod.", "High quality left out {n} mods.")} <button type="button" className="link-btn" onClick={() => set({ hq: false })} title={t("Turn off High quality")}>{t("Show them")}</button></p>
         )}
       </div>
 
       {menu?.kind === "filters" && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Filters" width="24em">
+        <Popover anchor={menu.el} onClose={() => setMenu(null)} label={t("Filters")} width="24em">
           <FiltersPanel game={game} f={f} set={set} cats={fixedChar ? [] : cats ?? []} nsfw={nsfw} following={subIds.length > 0}
             hiddenCount={hidden.length} showHidden={showHidden} onShowHidden={setShowHidden}
             onFollowed={toggleFollowed} onClear={hidden_n || chips.length ? () => { clearAll(); } : null} onPick={() => setMenu(null)} />
         </Popover>
       )}
       {menu?.kind === "sort" && (
-        <Popover anchor={menu.el} onClose={() => setMenu(null)} label="Sort" width="15em">
+        <Popover anchor={menu.el} onClose={() => setMenu(null)} label={t("Sort")} width="15em">
           <Menu items={SORTS.filter((s) => s.value !== "relevance" || f.search).map((s) => ({
-            label: s.label, hint: s.value === "foryou" && f.search ? "Only the mods picked for you that match the search" : s.title,
+            label: s.label, hint: s.value === "foryou" && f.search ? t("Only the mods picked for you that match the search") : s.title,
             icon: s.value === f.sort ? "check" : undefined, onClick: () => { set({ sort: s.value }); setMenu(null); },
           }))} />
         </Popover>
@@ -481,6 +483,19 @@ function scroller(el: HTMLElement): HTMLElement | null {
 
 const NO_CHARS: Cat[] = [];
 
+/** Why a card is left out of the grid. */
+type LeftOut = "blocked" | "hid" | "adults" | "have" | "types";
+/** "3 for adults", "1 from creators you blocked": one part of the hidden-mods line. */
+function leftOutText(why: LeftOut, n: number): string {
+  switch (why) {
+    case "blocked": return tn(n, "{n} from creators you blocked", "{n} from creators you blocked");
+    case "hid": return tn(n, "{n} you hid", "{n} you hid");
+    case "adults": return tn(n, "{n} for adults", "{n} for adults");
+    case "have": return tn(n, "{n} you have", "{n} you have");
+    case "types": return tn(n, "{n} of other types", "{n} of other types");
+  }
+}
+
 /** The search box. What's typed stays in here, so typing doesn't redraw the grid: it reaches the filter once typing
  *  pauses (350 ms), or on Enter. It follows the filter when a search comes from elsewhere, and empties when `clear`
  *  changes. */
@@ -493,8 +508,8 @@ function BrowseSearch({ search, set, clear, placeholder, firstCard }: {
   useEffect(() => { if (cleared.current !== clear) { cleared.current = clear; setText(""); } }, [clear]);
   useEffect(() => {
     if (text.trim() === search) return;
-    const t = window.setTimeout(() => set({ search: text.trim() }), 350);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => set({ search: text.trim() }), 350);
+    return () => window.clearTimeout(timer);
   }, [text, search, set]);
   return (
     <SearchField className="gbb-search" value={text} onChange={setText} placeholder={placeholder}
@@ -505,10 +520,10 @@ function BrowseSearch({ search, set, clear, placeholder, firstCard }: {
 /** Hide, Blur, Show for mods for adults (the app-wide setting, with Undo). */
 export function AdultSwitch({ value, size = "sm" }: { value: NsfwMode; size?: "sm" | "md" }) {
   return (
-    <Segmented<NsfwMode> label="Mods for adults" size={size} value={value} onChange={setNsfw} options={[
-      { value: "hide", label: "Hide", title: nsfwTip("hide") },
-      { value: "blur", label: "Blur", title: nsfwTip("blur") },
-      { value: "show", label: "Show", title: nsfwTip("show") },
+    <Segmented<NsfwMode> label={t("Mods for adults")} size={size} value={value} onChange={setNsfw} options={[
+      { value: "hide", label: t("Hide"), title: nsfwTip("hide") },
+      { value: "blur", label: t("Blur"), title: nsfwTip("blur") },
+      { value: "show", label: t("Show"), title: nsfwTip("show") },
     ]} />
   );
 }
@@ -524,43 +539,43 @@ function FiltersPanel({ game, f, set, cats, nsfw, following, hiddenCount, showHi
 }) {
   return (
     <div className="gbb-fp">
-      <div className="gbb-fp-s" role="group" aria-label="Type">
-        <span className="gbb-fp-h">Type</span>
+      <div className="gbb-fp-s" role="group" aria-label={t("Type")}>
+        <span className="gbb-fp-h">{t("Type")}</span>
         <div className="gbb-fp-o">
-          <Chip on={!f.kind} onClick={() => set({ kind: null })} title="Every type of mod">All</Chip>
+          <Chip on={!f.kind} onClick={() => set({ kind: null })} title={t("Every type of mod")}>{t("All")}</Chip>
           {KINDS.map((k) => <Chip key={k.value} on={f.kind === k.value} onClick={() => set({ kind: f.kind === k.value ? null : k.value })} title={kindTitle(k, game)}>{k.label}</Chip>)}
         </div>
       </div>
       {cats.length > 0 && (
-        <div className="gbb-fp-s" role="group" aria-label="GameBanana category">
-          <span className="gbb-fp-h" title="The section the creator filed the mod under on GameBanana. Type sorts mods by what they change, whatever their section">GameBanana category</span>
+        <div className="gbb-fp-s" role="group" aria-label={t("GameBanana category")}>
+          <span className="gbb-fp-h" title={t("The section the creator filed the mod under on GameBanana. Type sorts mods by what they change, whatever their section")}>{t("GameBanana category")}</span>
           <div className="gbb-fp-o">
-            <Chip on={!f.category} onClick={() => set({ category: null })} title="Every category">All</Chip>
-            {cats.filter((c) => !KINDS.some((k) => k.label.toLowerCase() === c.name.toLowerCase())).map((c) => (
+            <Chip on={!f.category} onClick={() => set({ category: null })} title={t("Every category")}>{t("All")}</Chip>
+            {cats.filter((c) => !KINDS.some((k) => k.en.toLowerCase() === c.name.toLowerCase())).map((c) => (
               <Chip key={c.id} on={f.category?.id === c.id} onClick={() => set(f.category?.id === c.id ? { category: null } : { category: c, character: null })}
-                title={`Only mods filed under ${c.name} on GameBanana`}>{c.name}</Chip>
+                title={t("Only mods filed under {name} on GameBanana", { name: c.name })}>{c.name}</Chip>
             ))}
           </div>
         </div>
       )}
       <div className="gbb-fp-s gbb-fp-t">
-        <Toggle size="sm" checked={f.followed} onChange={onFollowed} label="Only creators you follow"
-          hint={following ? undefined : "Right-click a creator's name and pick Follow"} />
-        <Toggle size="sm" checked={f.hideInstalled} onChange={(v) => set({ hideInstalled: v })} label="Hide mods you have" />
+        <Toggle size="sm" checked={f.followed} onChange={onFollowed} label={t("Only creators you follow")}
+          hint={following ? undefined : t("Right-click a creator's name and pick Follow")} />
+        <Toggle size="sm" checked={f.hideInstalled} onChange={(v) => set({ hideInstalled: v })} label={t("Hide mods you have")} />
         {(hiddenCount > 0 || showHidden) && (
-          <Toggle size="sm" checked={showHidden} onChange={onShowHidden} label={`Show mods you hid (${hiddenCount})`}
-            hint="Mods you picked Not interested on. Right-click one and pick Show in Browse again to keep it" />
+          <Toggle size="sm" checked={showHidden} onChange={onShowHidden} label={t("Show mods you hid ({n})", { n: hiddenCount })}
+            hint={t("Mods you picked Not interested on. Right-click one and pick Show in Browse again to keep it")} />
         )}
       </div>
       <div className="gbb-fp-s gbb-fp-row">
-        <span className="gbb-fp-h">Mods for adults</span>
+        <span className="gbb-fp-h">{t("Mods for adults")}</span>
         <AdultSwitch value={nsfw} />
       </div>
       <div className="gbb-fp-s">
-        <span className="gbb-fp-h">Saved filters</span>
+        <span className="gbb-fp-h">{t("Saved filters")}</span>
         <SavedPanel game={game} f={f} onPick={onPick} />
       </div>
-      {onClear && <Button size="sm" variant="ghost" icon="x" className="gbb-fp-clear" onClick={onClear}>Clear filters</Button>}
+      {onClear && <Button size="sm" variant="ghost" icon="x" className="gbb-fp-clear" onClick={onClear}>{t("Clear filters")}</Button>}
     </div>
   );
 }
@@ -575,9 +590,9 @@ function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPic
   return (
     <div className="gbb-saved">
       <Button size="sm" variant="secondary" icon="plus" disabled={isPlain(f) || !!cur} onClick={() => saveFilters(game)}
-        title={cur ? `These are saved as "${cur.name}"` : isPlain(f) ? "Pick some filters first" : `Save as "${describe(f)}"`}>Save these filters</Button>
+        title={cur ? t("These are saved as \"{name}\"", { name: cur.name }) : isPlain(f) ? t("Pick some filters first") : t("Save as \"{name}\"", { name: describe(f) })}>{t("Save these filters")}</Button>
       {list.length === 0
-        ? <p className="hint">Saved sets show here. Picking one puts back its sort, type, character, search and the rest.</p>
+        ? <p className="hint">{t("Saved sets show here. Picking one puts back its sort, type, character, search and the rest.")}</p>
         : (
           <ul className="gbb-saved-l">
             {list.map((s) => (
@@ -587,15 +602,15 @@ function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPic
                 else if (e.key === "Delete") { e.preventDefault(); removeSaved(game, s.id); }
               }}>
                 {edit === s.id
-                  ? <input className="gbb-saved-in" autoFocus value={name} aria-label="New name" onChange={(e) => setName(e.target.value)} onBlur={() => finish(s.id)}
+                  ? <input className="gbb-saved-in" autoFocus value={name} aria-label={t("New name")} onChange={(e) => setName(e.target.value)} onBlur={() => finish(s.id)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); finish(s.id); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEdit(null); } }} />
                   : (
-                    <button type="button" className="gbb-saved-b" title={s.name === describe(s.f) || s.name === describe(s.f, true) ? undefined : `Puts back: ${describe(s.f, true)}`} onClick={() => { applySaved(game, s); onPick(); }}>
+                    <button type="button" className="gbb-saved-b" title={s.name === describe(s.f) || s.name === describe(s.f, true) ? undefined : t("Puts back: {filters}", { filters: describe(s.f, true) })} onClick={() => { applySaved(game, s); onPick(); }}>
                       <Icon name={cur?.id === s.id ? "check" : "pin"} /><span>{s.name}</span>
                     </button>
                   )}
-                <IconButton size="sm" icon="edit" label="Rename (F2)" onClick={() => { setEdit(s.id); setName(s.name); }} />
-                <IconButton size="sm" icon="x" label="Remove (Del). Ctrl+Z brings it back" onClick={() => removeSaved(game, s.id)} />
+                <IconButton size="sm" icon="edit" label={t("Rename (F2)")} onClick={() => { setEdit(s.id); setName(s.name); }} />
+                <IconButton size="sm" icon="x" label={t("Remove (Del). Ctrl+Z brings it back")} onClick={() => removeSaved(game, s.id)} />
               </li>
             ))}
           </ul>

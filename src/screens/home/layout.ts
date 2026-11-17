@@ -3,18 +3,19 @@
 import { useSyncExternalStore } from "react";
 import { jsonPref } from "../../lib/prefs";
 import type { IconName } from "../../ui/Icon";
+import { t } from "../../lib/i18n";
 
 export type WidgetId = "start" | "updates" | "hq" | "foryou" | "followed" | "characters" | "recent" | "browser";
 
 export const WIDGETS: Record<WidgetId, { title: string; icon: IconName; tip: string }> = {
-  start: { title: "Play and profiles", icon: "play", tip: "Play, your profiles and quick actions" },
-  updates: { title: "Updates", icon: "update", tip: "Installed mods with a newer version on GameBanana" },
-  hq: { title: "New high-quality mods", icon: "quality", tip: "New mods that pass the High quality filter" },
-  foryou: { title: "For you", icon: "sparkle", tip: "Picks based on the mods you have and the creators you follow" },
-  followed: { title: "From creators you follow", icon: "feed", tip: "New mods by creators you follow. Hidden until you follow someone" },
-  characters: { title: "Your characters", icon: "characters", tip: "Characters you have mods for" },
-  recent: { title: "Recently installed", icon: "clock", tip: "Your newest mods" },
-  browser: { title: "GameBanana", icon: "browse", tip: "A small mod browser. Expand opens Browse with the same filters" },
+  start: { title: t("Play and profiles"), icon: "play", tip: t("Play, your profiles and quick actions") },
+  updates: { title: t("Updates"), icon: "update", tip: t("Installed mods with a newer version on GameBanana") },
+  hq: { title: t("New high-quality mods"), icon: "quality", tip: t("New mods that pass the High quality filter") },
+  foryou: { title: t("For you"), icon: "sparkle", tip: t("Picks based on the mods you have and the creators you follow") },
+  followed: { title: t("From creators you follow"), icon: "feed", tip: t("New mods by creators you follow. Hidden until you follow someone") },
+  characters: { title: t("Your characters"), icon: "characters", tip: t("Characters you have mods for") },
+  recent: { title: t("Recently installed"), icon: "clock", tip: t("Your newest mods") },
+  browser: { title: "GameBanana", icon: "browse", tip: t("A small mod browser. Expand opens Browse with the same filters") },
 };
 
 export const DEFAULT_ORDER: WidgetId[] = ["start", "updates", "hq", "foryou", "characters", "followed", "recent", "browser"];

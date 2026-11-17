@@ -10,6 +10,7 @@ import { konamiBusy } from "../lib/fun";
 import { pickTip, tipNodes } from "./tips";
 import type { Intro, IntroCtx } from "./types";
 import { intro as plain } from "./intros/plain";
+import { t } from "../lib/i18n";
 
 // each game's intro (script and CSS) loads only when it plays; the plain one is always here, and stands in when one
 // fails to load
@@ -33,9 +34,9 @@ function loadIntro(id: string): Promise<Intro> {
 }
 /** Every intro by name, for Settings. Each theme with one shares its id. */
 export const INTRO_LIST: Array<{ id: string; name: string }> = [
-  { id: "zzz", name: "New Eridu" }, { id: "gi", name: "Teyvat" },
-  { id: "hsr", name: "Astral Express" }, { id: "ww", name: "Solaris" },
-  { id: "ef", name: "Talos-II" }, { id: "plain", name: "Default" },
+  { id: "zzz", name: t("New Eridu") }, { id: "gi", name: t("Teyvat") },
+  { id: "hsr", name: t("Astral Express") }, { id: "ww", name: t("Solaris") },
+  { id: "ef", name: t("Talos-II") }, { id: "plain", name: t("Default") },
 ];
 /** An intro id as given, else the plain one. */
 export const introFor = (id: string | null | undefined) => (id && id in INTROS ? id : "plain");

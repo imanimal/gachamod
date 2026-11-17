@@ -2,6 +2,7 @@
 // Owner: SYSTEM area.
 import { admin, errorText } from "./api";
 import { toast, toastHelper } from "../ui/toast";
+import { t } from "./i18n";
 
 /** devtools::f10_note's line for a game that runs as administrator. */
 const isAdminNote = (text: string) => /^Press \S+ in the game to load changes/.test(text) && text.includes("administrator");
@@ -11,7 +12,7 @@ export function restartAsAdmin() {
   admin.restart().catch((e) => toast(errorText(e), true));
 }
 
-toastHelper(isAdminNote, { label: "Restart as administrator", run: restartAsAdmin });
+toastHelper(isAdminNote, { label: t("Restart as administrator"), run: restartAsAdmin });
 
 /** Show the F10 note on its own toast, where it gets its button, and return the other notes (for a toast that already
  *  has Undo). */
