@@ -5,22 +5,24 @@ import "./styles/base.css";
 import "./styles/kit.css";
 import "./styles/shell.css";
 import "./styles/themes/default.css";
+// every game theme's CSS comes in here, before any screen's CSS, so a screen rule wins a tie with a theme rule
+import "./styles/themes/zzz.css";
+import "./styles/themes/zzz-shell.css";
+import "./styles/themes/zzz-screens.css";
+import "./styles/themes/gi.css";
+import "./styles/themes/hsr.css";
+import "./styles/themes/ww.css";
+import "./styles/themes/ef.css";
+import "./styles/themes/clay.css";
 import "./styles/fun.css";
 import { installIdle } from "./lib/idle";
 import { installTips } from "./lib/keys";
 import { installTelemetry } from "./lib/telemetry";
 import { installRenderWatch } from "./lib/renderWatch";
 import { inTauri, isMenuWindow } from "./lib/tauri";
-import { loadAllThemeCss, loadThemeCss } from "./lib/theme";
 import { startSplash } from "./splash/splash";
 
 const root = () => document.getElementById("root")!;
-/** The game theme index.html picked before the first paint loads (lib/theme.ts) before the app draws, so its first
- *  frame isn't in Default. Two seconds at most. */
-const themeReady = () => Promise.race([
-  loadThemeCss(document.documentElement.dataset.theme ?? "default"),
-  new Promise<void>((res) => setTimeout(res, 2000)),
-]);
 
 async function boot() {
   // outside Tauri (npm run dev in a browser) the demo backend answers every call; a Tauri release build leaves it out
@@ -30,7 +32,6 @@ async function boot() {
 
   // dev only: #kit shows every kit component in each theme (src/dev/KitShowcase.tsx)
   if (import.meta.env.DEV && location.hash === "#kit") {
-    await loadAllThemeCss();
     (await import("./dev/KitShowcase")).mount(root());
     return;
   }
@@ -38,7 +39,7 @@ async function boot() {
   if (isMenuWindow()) {
     installTelemetry("overlay");
     installRenderWatch("overlay");
-    const [m] = await Promise.all([import("./screens/ingame/Overlay"), themeReady()]);
+    const m = await import("./screens/ingame/Overlay");
     createRoot(root()).render(<StrictMode><m.Overlay /></StrictMode>);
     return;
   }
@@ -46,7 +47,7 @@ async function boot() {
   installTelemetry("main");
   installRenderWatch("main");
   const [m, eb, fb, t] = await Promise.all([
-    import("./App"), import("./ui/ErrorBoundary"), import("./screens/settings/Feedback"), import("./ui/toast"), themeReady(), splash,
+    import("./App"), import("./ui/ErrorBoundary"), import("./screens/settings/Feedback"), import("./ui/toast"), splash,
   ]);
   // App draws its own whole-window boundary; this one catches App itself failing before it gets there, so it brings
   // the feedback form and toasts its "Tell the developer" button needs

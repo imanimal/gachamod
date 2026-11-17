@@ -78,29 +78,6 @@
     </script>
   </head>
   <body>
-    <script>
-      // The game theme's CSS as lib/theme.ts kept it ("gm.css.<id>": the app version, a newline, then the CSS), so the
-      // first frame is in that theme while its files load. Here rather than in <head> so it comes after the app's own
-      // stylesheets, as the files do. No copy, or one from another version: nothing changes.
-      (function () {
-        try {
-          var t = document.documentElement.getAttribute("data-theme") || "default";
-          if (t === "default") return;
-          var v = localStorage.getItem("gm.css." + t);
-          var at = v ? v.indexOf("\n") : -1;
-          if (at < 1 || v.slice(0, at) !== "%VITE_APP_VERSION%") return;
-          var st = document.createElement("style");
-          st.id = "gm-theme-copy-" + t;
-          var nonce = document.querySelector("style[nonce]");
-          if (nonce && nonce.nonce) st.nonce = nonce.nonce;
-          st.textContent = v.slice(at + 1);
-          document.head.appendChild(st);
-          // a custom theme's CSS stays last
-          var custom = document.getElementById("gm-custom-theme");
-          if (custom) document.head.appendChild(custom);
-        } catch (e) { /* the theme's files load as usual */ }
-      })();
-    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

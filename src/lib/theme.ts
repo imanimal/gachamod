@@ -74,46 +74,6 @@ export function schemeChoiceFor(themeId: string): SchemeChoice {
 }
 const resolve = (c: SchemeChoice): Scheme => (c === "system" ? systemScheme() : c);
 
-// ── a game theme's stylesheet ──
-// Base, kit, shell and Default CSS come with the app (main.tsx). Each game theme's files (60 to 100 KB) load the
-// first time something shows that theme: the window, a preview in Settings, the menu over a game. main.tsx waits for
-// the one the pre-paint script in index.html picked before it draws the app.
-// Once a theme's files have loaded, a copy of its CSS is kept in localStorage ("gm.css.<id>": the app version, a
-// newline, then the CSS), so the next start shows it from the first frame (the script at the top of <body> in
-// index.html) and the first switch to it shows it at once. The copy only stands in: the files still load, and the copy
-// goes when they do. A missing copy or one from another version is skipped, which is how it worked before.
-const THEME_CSS: Record<string, () => Promise<unknown>> = {
-  // one after another, so they cascade in the order they were written
-  zzz: () => import("../styles/themes/zzz.css").then(() => import("../styles/themes/zzz-shell.css")).then(() => import("../styles/themes/zzz-screens.css")),
-  gi: () => import("../styles/themes/gi.css"),
-  hsr: () => import("../styles/themes/hsr.css"),
-  ww: () => import("../styles/themes/ww.css"),
-  ef: () => import("../styles/themes/ef.css"),
-  clay: () => import("../styles/themes/clay.css"),
-};
-/** The same files as text, for the kept copy. Only read once the app is idle. */
-const THEME_TEXT: Record<string, () => Promise<string>> = {
-  zzz: () => Promise.all([
-    import("../styles/themes/zzz.css?inline"), import("../styles/themes/zzz-shell.css?inline"), import("../styles/themes/zzz-screens.css?inline"),
-  ]).then((ms) => ms.map((m) => m.default).join("\n")),
-  gi: () => import("../styles/themes/gi.css?inline").then((m) => m.default),
-  hsr: () => import("../styles/themes/hsr.css?inline").then((m) => m.default),
-  ww: () => import("../styles/themes/ww.css?inline").then((m) => m.default),
-  ef: () => import("../styles/themes/ef.css?inline").then((m) => m.default),
-  clay: () => import("../styles/themes/clay.css?inline").then((m) => m.default),
-};
-const VERSION: string = import.meta.env.VITE_APP_VERSION ?? "";
-const cssKey = (id: string) => `gm.css.${id}`;
-const copyId = (id: string) => `gm-theme-copy-${id}`;
-// dev server: a theme file changed, so drop the kept copies (the next load keeps them again) without reloading the page
-if (import.meta.hot) {
-  import.meta.hot.accept([
-    "../styles/themes/zzz.css?inline", "../styles/themes/zzz-shell.css?inline", "../styles/themes/zzz-screens.css?inline",
-    "../styles/themes/gi.css?inline", "../styles/themes/hsr.css?inline", "../styles/themes/ww.css?inline",
-    "../styles/themes/ef.css?inline", "../styles/themes/clay.css?inline",
-  ], () => { for (const id of Object.keys(THEME_TEXT)) write(cssKey(id), null); });
-}
-
 /** A <style> element the page's CSP lets in. A release build allows inline styles only with the nonce Tauri gives
  *  index.html's own <style>, so a new one carries that nonce. */
 function newStyle(id: string): HTMLStyleElement {
@@ -124,75 +84,10 @@ function newStyle(id: string): HTMLStyleElement {
   return el;
 }
 
-/** The kept copy of a theme's CSS when it is from this version of the app, else null. */
-function keptCss(id: string): string | null {
-  const v = read(cssKey(id));
-  const at = v ? v.indexOf("\n") : -1;
-  return v && VERSION && at > 0 && v.slice(0, at) === VERSION ? v.slice(at + 1) : null;
-}
-
-/** Show a theme's kept copy until its files load: the one index.html put in, or a new one. Either way it goes last in
- *  <head> (the dev server adds the app's own stylesheets after index.html ran), before a custom theme's CSS. */
-function showKept(id: string) {
-  try {
-    let el = document.getElementById(copyId(id));
-    if (!el) {
-      const css = keptCss(id);
-      if (css === null) return;
-      el = newStyle(copyId(id));
-      el.textContent = css;
-    }
-    document.head.appendChild(el);
-    const custom = document.getElementById(STYLE_ID);
-    if (custom) document.head.appendChild(custom);
-  } catch (e) { console.error(`theme ${id} copy`, e); }
-}
-
-/** Keep a theme's CSS for the next start, once the app is idle. A release build reads the text only when the kept copy
- *  is missing or from another version; the dev server reads it every time, since the files change while it runs. */
-function keepCss(id: string) {
-  const text = THEME_TEXT[id];
-  if (!text || !VERSION || (!import.meta.env.DEV && keptCss(id) !== null)) return;
-  const run = () => {
-    text().then((css) => {
-      const v = `${VERSION}\n${css}`;
-      if (read(cssKey(id)) === v) return;
-      // storage full: no copy rather than an old one
-      try { localStorage.setItem(cssKey(id), v); } catch { write(cssKey(id), null); }
-    }, (e: unknown) => console.error(`theme ${id} text`, e));
-  };
-  if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(run, { timeout: 10_000 });
-  else window.setTimeout(run, 2000);
-}
-
-const cssLoads = new Map<string, Promise<void>>();
-/** Load a theme's stylesheet once (Default's is always in). Resolves when it applies; a failed load can be tried again.
- *  The kept copy shows meanwhile. */
-export function loadThemeCss(id: string): Promise<void> {
-  const load = THEME_CSS[id];
-  if (!load) return Promise.resolve();
-  let p = cssLoads.get(id);
-  if (!p) {
-    showKept(id);
-    p = load().then(() => {
-      document.getElementById(copyId(id))?.remove();
-      // a custom theme's CSS stays after the theme files
-      const custom = document.getElementById(STYLE_ID);
-      if (custom) document.head.appendChild(custom);
-      keepCss(id);
-    }, (e: unknown) => { cssLoads.delete(id); console.error(`theme ${id}`, e); });
-    cssLoads.set(id, p);
-  }
-  return p;
-}
-/** Every theme's stylesheet (the kit page shows them all side by side). */
-export const loadAllThemeCss = () => Promise.all(Object.keys(THEME_CSS).map(loadThemeCss)).then(() => {});
-
 /** Attributes that show theme `id` inside one element, e.g. `<div {...themeAttrs("zzz")}>` for a preview. Without a
     scheme it shows the one the user would see for that theme. */
 export function themeAttrs(id: string, scheme?: Scheme): { "data-theme": string; "data-scheme": Scheme } {
   const info = THEMES.find((t) => t.id === id) ?? THEMES[0]!;
-  void loadThemeCss(info.id);
   const want = scheme ?? resolve(schemeChoiceFor(info.id));
   return { "data-theme": info.id, "data-scheme": info.schemes.includes(want) ? want : info.native };
 }
@@ -208,7 +103,6 @@ export function applyGameTheme(game: GameState | null) {
   const choice = custom ? custom.scheme : schemeChoiceFor(info.id);
   const want = resolve(choice);
   const scheme = info.schemes.includes(want) ? want : info.native;
-  void loadThemeCss(info.id);
   const r = document.documentElement;
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;
@@ -627,7 +521,6 @@ export function applyCustomTheme(input: CustomTheme | null): string[] {
   const info = THEMES.find((t) => t.id === theme.base) ?? THEMES[0]!;
   const want = resolve(theme.scheme);
   const scheme = info.schemes.includes(want) ? want : info.native;
-  void loadThemeCss(info.id);
   const r = document.documentElement;
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;
