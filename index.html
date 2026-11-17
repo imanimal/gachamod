@@ -6,6 +6,22 @@
     <!-- Fandom wikis answer image requests that name another site with a "not found" stand-in, so portraits go without one -->
     <meta name="referrer" content="no-referrer" />
     <title>gachamod</title>
+    <!-- before the scripts: a release build gives this <style> the nonce its CSP lets inline styles in with, and the
+         scripts below copy it onto the styles they add -->
+    <style>
+      /* first frame before the stylesheets load */
+      html { background: #0c0e13; }
+      html[data-scheme="light"] { background: #f3f4f7; }
+      html[data-theme="zzz"]:not([data-scheme="light"]) { background: #000; }
+      /* the opening screen's colour (each must match its intro's bg in src/splash/intros) */
+      html[data-splash="plain"] { background: #0c0e13; }
+      html[data-splash="plain"][data-scheme="light"] { background: #f3f4f7; }
+      html[data-splash="zzz"] { background: #000; }
+      html[data-splash="gi"] { background: #0d1328; }
+      html[data-splash="hsr"] { background: #090b18; }
+      html[data-splash="ww"] { background: #080b13; }
+      html[data-splash="ef"] { background: #1b1b1b; }
+    </style>
     <script>
       // Apply the last game's theme before first paint (lib/theme.ts does the same once the game list loads).
       (function () {
@@ -53,27 +69,38 @@
           for (var n in lay) r.setAttribute("data-" + n, lay[n]);
           var st = document.createElement("style");
           st.id = "gm-custom-theme";
+          var nonce = document.querySelector("style[nonce]");
+          if (nonce && nonce.nonce) st.nonce = nonce.nonce;
           st.textContent = custom.css || "";
           document.head.appendChild(st);
         }
       })();
     </script>
-    <style>
-      /* first frame before the stylesheets load */
-      html { background: #0c0e13; }
-      html[data-scheme="light"] { background: #f3f4f7; }
-      html[data-theme="zzz"]:not([data-scheme="light"]) { background: #000; }
-      /* the opening screen's colour (each must match its intro's bg in src/splash/intros) */
-      html[data-splash="plain"] { background: #0c0e13; }
-      html[data-splash="plain"][data-scheme="light"] { background: #f3f4f7; }
-      html[data-splash="zzz"] { background: #000; }
-      html[data-splash="gi"] { background: #0d1328; }
-      html[data-splash="hsr"] { background: #090b18; }
-      html[data-splash="ww"] { background: #080b13; }
-      html[data-splash="ef"] { background: #1b1b1b; }
-    </style>
   </head>
   <body>
+    <script>
+      // The game theme's CSS as lib/theme.ts kept it ("gm.css.<id>": the app version, a newline, then the CSS), so the
+      // first frame is in that theme while its files load. Here rather than in <head> so it comes after the app's own
+      // stylesheets, as the files do. No copy, or one from another version: nothing changes.
+      (function () {
+        try {
+          var t = document.documentElement.getAttribute("data-theme") || "default";
+          if (t === "default") return;
+          var v = localStorage.getItem("gm.css." + t);
+          var at = v ? v.indexOf("\n") : -1;
+          if (at < 1 || v.slice(0, at) !== "%VITE_APP_VERSION%") return;
+          var st = document.createElement("style");
+          st.id = "gm-theme-copy-" + t;
+          var nonce = document.querySelector("style[nonce]");
+          if (nonce && nonce.nonce) st.nonce = nonce.nonce;
+          st.textContent = v.slice(at + 1);
+          document.head.appendChild(st);
+          // a custom theme's CSS stays last
+          var custom = document.getElementById("gm-custom-theme");
+          if (custom) document.head.appendChild(custom);
+        } catch (e) { /* the theme's files load as usual */ }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

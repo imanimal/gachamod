@@ -1,11 +1,11 @@
 /* fonts.css: bundled fonts, latin subset, OFL licences beside the files in fonts/. Owner: THEME area.
-   Manrope: Default theme text. Rubik (with italics): New Eridu text. Anton: New Eridu condensed headings.
-   JetBrains Mono: code, hashes and logs in every theme. */
-@font-face { font-family: "Manrope"; font-weight: 400; font-display: swap; src: url("./fonts/manrope-latin-400-normal.woff2") format("woff2"); }
-@font-face { font-family: "Manrope"; font-weight: 500; font-display: swap; src: url("./fonts/manrope-latin-500-normal.woff2") format("woff2"); }
-@font-face { font-family: "Manrope"; font-weight: 600; font-display: swap; src: url("./fonts/manrope-latin-600-normal.woff2") format("woff2"); }
-@font-face { font-family: "Manrope"; font-weight: 700; font-display: swap; src: url("./fonts/manrope-latin-700-normal.woff2") format("woff2"); }
-@font-face { font-family: "Manrope"; font-weight: 800; font-display: swap; src: url("./fonts/manrope-latin-800-normal.woff2") format("woff2"); }
+   Manrope: Default theme text, one variable file for every weight from 200 to 800 (so 550 and 650 render as written).
+   Rubik (with italics): New Eridu text. Anton: New Eridu condensed headings. JetBrains Mono: code, hashes and logs in
+   every theme. */
+@font-face {
+  font-family: "Manrope"; font-weight: 200 800; font-display: swap;
+  src: url("./fonts/manrope-latin-wght-normal.woff2") format("woff2-variations"), url("./fonts/manrope-latin-wght-normal.woff2") format("woff2");
+}
 
 @font-face { font-family: "Rubik"; font-weight: 400; font-display: swap; src: url("./fonts/rubik-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "Rubik"; font-weight: 500; font-display: swap; src: url("./fonts/rubik-latin-500-normal.woff2") format("woff2"); }

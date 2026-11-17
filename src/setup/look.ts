@@ -50,7 +50,14 @@ export function applyLook(look: Look, pick?: { theme?: string; scheme?: Scheme }
   const custom = own ? look.custom : null;
   let style = document.getElementById("gm-custom-theme");
   if (custom?.css) {
-    if (!style) { style = document.createElement("style"); style.id = "gm-custom-theme"; document.head.appendChild(style); }
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "gm-custom-theme";
+      // a release build's CSP carries a nonce, which makes the browser ignore 'unsafe-inline' for styles added later
+      const nonce = document.querySelector<HTMLStyleElement>("style[nonce]")?.nonce;
+      if (nonce) (style as HTMLStyleElement).nonce = nonce;
+      document.head.appendChild(style);
+    }
     style.textContent = custom.css;
     r.dataset.custom = custom.id;
   } else { style?.remove(); delete r.dataset.custom; }
