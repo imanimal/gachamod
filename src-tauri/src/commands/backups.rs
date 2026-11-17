@@ -8,7 +8,13 @@ use tauri::State;
 #[tauri::command]
 pub async fn backup_restore(st: State<'_, AppState>, id: String) -> Result<Backup> {
     let db = st.db.clone();
-    blocking(move || backups::restore(&db.lock().unwrap(), &id)).await
+    blocking(move || {
+        let db = db.lock().unwrap();
+        let before = backups::restore(&db, &id)?;
+        // an undone rebind: the key list the game draws shows the keys again as they are now
+        if before.files.iter().any(|f| f.to_ascii_lowercase().ends_with(".ini")) { gacha_core::keylist::keys_changed(&db, &before.game); }
+        Ok(before)
+    }).await
 }
 
 #[tauri::command]

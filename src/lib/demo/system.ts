@@ -202,7 +202,8 @@ export function registerSystemDemo() {
     dev_reload: ({ game }) => {
       if (!running.has(String(game))) throw { kind: "invalid", message: `${demoDb.games.find((g) => g.id === game)?.name ?? "The game"} isn't running` };
     },
-    dev_wipe_user_config: () => undefined,
+    dev_wipe_user_config: () => true,
+    dev_unwipe_user_config: () => undefined,
     app_data_dir: () => ROOT.replace("XXMI Launcher", "gachamod"),
     save_look: () => undefined,
     setup_available: () => true,

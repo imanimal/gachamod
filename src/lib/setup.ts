@@ -29,8 +29,11 @@ function wire() {
   void xxmi.onSetup((p) => { if (state.running) put({ step: p }); }).catch(() => {});
 }
 
+/** The game has a Mods folder that is on disk. A saved one that went missing (a drive not plugged in) counts as none. */
+const hasMods = (g: GameState | undefined) => !!g?.modsDir && !g.modsMissing;
+
 /** XXMI Launcher can give this game a mod loader: the game is on this PC and has no Mods folder yet. */
-export const canInstallLoader = (g: GameState) => g.xxmi && !g.modsDir && (g.installed || !!g.gameDir);
+export const canInstallLoader = (g: GameState) => g.xxmi && !hasMods(g) && (g.installed || !!g.gameDir);
 
 const names = (list: GameState[]) => oxford(list.map((g) => g.short), 12);
 
@@ -39,13 +42,13 @@ const names = (list: GameState[]) => oxford(list.map((g) => g.short), 12);
 export async function installLoaders(ids?: GameId[]): Promise<GameState[] | null> {
   if (state.running) return null;
   wire();
-  const before = new Set(allGames().filter((g) => g.modsDir).map((g) => g.id));
+  const before = new Set(allGames().filter(hasMods).map((g) => g.id));
   put({ running: true, step: null, since: Date.now(), error: null });
   try {
     const list = await xxmi.install(ids);
     setGames(list);
     put({ running: false, step: null });
-    const ready = list.filter((g) => g.modsDir && !before.has(g.id));
+    const ready = list.filter((g) => hasMods(g) && !before.has(g.id));
     toast(ready.length ? `${names(ready)} ${ready.length === 1 ? "is" : "are"} ready for mods` : "XXMI Launcher is installed. Games you install later get their mod loader here");
     return list;
   } catch (e) {
@@ -70,7 +73,7 @@ export function recheck(force = false): Promise<GameState[] | null> {
 }
 
 /** Something to look for: no game has a Mods folder, or a game in the sidebar has none. */
-const missing = () => { const l = allGames(); return !l.some((g) => g.modsDir) || l.some((g) => g.shown && !g.modsDir); };
+const missing = () => { const l = allGames(); return !l.some(hasMods) || l.some((g) => g.shown && !hasMods(g)); };
 
 /** While something is missing, look again when the window comes back to the front and every 30 seconds. */
 export function watchSetup(): () => void {
@@ -83,10 +86,10 @@ export function watchSetup(): () => void {
 /** Give one game a Mods folder the easy way: install its mod loader when XXMI can, else look for it again. True when
  *  the game has a Mods folder after. */
 export async function getReady(id: GameId): Promise<boolean> {
-  const has = (list: GameState[] | null) => !!list?.find((g) => g.id === id)?.modsDir;
+  const has = (list: GameState[] | null) => hasMods(list?.find((g) => g.id === id));
   const g = allGames().find((x) => x.id === id);
   if (!g) return false;
-  if (g.modsDir) return true;
+  if (hasMods(g)) return true;
   if (canInstallLoader(g)) return has(await installLoaders([id]));
   if (has(await recheck(true))) return true;
   toast(g.xxmi ? `Still no Mods folder for ${g.short}. Pick it, or open the game once with XXMI Launcher`

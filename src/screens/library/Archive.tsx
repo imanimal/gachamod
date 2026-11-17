@@ -10,12 +10,13 @@ import { useNsfw } from "../../lib/prefs";
 import { trashPhrase, useTrashDays } from "../settings/automatic";
 import { go, onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
-import { menuHandler, type MenuEntry } from "../../ui/ContextMenu";
-import { Button, Confirm, Empty, PageHeader, SearchField, Skeleton, formatBytes, timeAgo } from "../../ui/kit";
+import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { Button, Confirm, Empty, IconButton, PageHeader, SearchField, Skeleton, formatBytes, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink, CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
 import { publish } from "./data";
+import { moveInGrid } from "./gridNav";
 import { Preview } from "./Preview";
 
 const FORGET_AFTER = 7000;
@@ -28,6 +29,8 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [ask, setAsk] = useState<ArchiveEntry | null>(null);
+  const [askAll, setAskAll] = useState(false);
+  const grid = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const pending = useRef(new Map<string, number>());
 
@@ -114,7 +117,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
 
   return (
     <>
-    <PageHeader title="My Mods" icon="mods" sub="Mods you removed"
+    <PageHeader title="Mods" icon="mods" sub="Mods you removed"
       actions={<>{tabs}<SearchField value={search} onChange={setSearch} placeholder="Search removed mods" className="library-search" /></>} />
     <div className="archive">
       {items !== null && items.length > 0 && (
@@ -125,6 +128,8 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
               : "Removing a mod deletes its files. "}
             Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.
           </span>
+          <Button size="sm" variant="ghost" icon="trash" title="Deletes every removed mod's files and saved settings. You're asked first"
+            onClick={() => setAskAll(true)}>Empty trash</Button>
           <Button size="sm" variant="ghost" icon="settings" title="Keep removed mods' files (Settings, Trash and removed mods)"
             onClick={() => go({ view: "settings", section: "set-trash-days" })}>{trashDays > 0 ? "Change" : "Keep files"}</Button>
         </div>
@@ -136,18 +141,22 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
           {items.length ? "Try another search." : "Mods you remove show up here, so you can put them back or download them again with their settings."}
         </Empty>
       ) : (
-        <div className="tiles archive-grid">
+        <div ref={grid} className="tiles archive-grid" onKeyDown={(k) => moveInGrid(k, grid.current, ".archive-card")}>
           {shown.map((e) => {
             const files = e.trashId !== null;
+            // what the Files on PC or Record only tag means, also on the tile so keyboard and controller users see it
+            const kept = files
+              ? `Its files are still on your PC${e.filesUntil ? ` until ${new Date(e.filesUntil * 1000).toLocaleDateString()}` : ""}. Put back restores them as they were`
+              : "Its files were deleted from your PC. Only its name, settings and GameBanana link are kept, so Download again gets it back with its settings";
             return (
-              <div key={e.key} className={`tile archive-card${e.nsfw && nsfw === "blur" ? " blur" : ""}`} onContextMenu={menuHandler(() => menu(e))}>
+              <div key={e.key} className={`tile archive-card${e.nsfw && nsfw === "blur" ? " blur" : ""}`} tabIndex={0} data-pad-x
+                title={`${e.name}. ${kept}. Enter ${files ? "puts it back" : "downloads it again"}, arrow keys move between mods`}
+                onKeyDown={(k) => { if (k.key === "Enter" && k.target === k.currentTarget && (files || e.source)) { k.preventDefault(); void reinstall(e); } }}
+                onContextMenu={menuHandler(() => menu(e))}>
                 <div className="tile-img">
                   <Preview className="archive-img" src={e.preview} icon="archive" alt={e.name} />
                   <span className="tile-tr">
-                    <span className={`badge ${files ? "t-ok" : "t-muted"}`}
-                      title={files
-                        ? `Its files are still on your PC${e.filesUntil ? ` until ${new Date(e.filesUntil * 1000).toLocaleDateString()}` : ""}. Put back restores them as they were`
-                        : "Its files were deleted from your PC. Only its name, settings and GameBanana link are kept, so Download again gets it back with its settings"}>
+                    <span className={`badge ${files ? "t-ok" : "t-muted"}`} title={kept}>
                       <Icon name={files ? "folder" : "archive"} />{files ? "Files on PC" : "Record only"}
                     </span>
                   </span>
@@ -170,12 +179,20 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
                     {files
                       ? <Button size="sm" variant="ghost" onClick={() => forget(e)} title="Deletes its files from your PC and forgets its settings">Delete</Button>
                       : <Button size="sm" variant="ghost" onClick={() => forget(e)} title="Deletes this record and its saved settings">Forget</Button>}
+                    <IconButton icon="more" size="sm" label="More actions (right-click or Shift+F10)" data-pad-x-target
+                      onClick={(k) => openMenu(k.currentTarget, menu(e))} />
                   </span>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+      {askAll && items && (
+        <Confirm danger yes="Empty trash" title={`Delete all ${items.length} removed ${items.length === 1 ? "mod" : "mods"}?`}
+          onYes={() => { setLeaving(new Set(items.map((x) => x.key))); commit(items.map((x) => x.key)); }} onClose={() => setAskAll(false)}>
+          This deletes their files still on your PC and their saved settings, so Download again can't bring them back as they were. It can't be undone.
+        </Confirm>
       )}
       {ask && (
         <Confirm danger yes="Delete" title={`Delete ${ask.name}?`} onYes={() => commit([ask.key])} onClose={() => setAsk(null)}>

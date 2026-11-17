@@ -1,11 +1,13 @@
 // The UI kit: every screen builds from these, so the app looks and behaves the same everywhere and a theme only has
 // to style this list of classes (docs/spec.md, "UI kit"). Props are the contract; markup may gain decoration spans.
-import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { leave } from "./motion";
 import { STUCK_MS, seconds, useActivity, useElapsed } from "../lib/activity";
 import { LazyImg } from "./LazyImg";
+import { Popover } from "./Popover";
+import { openFeedback } from "../lib/feedback";
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
@@ -51,12 +53,18 @@ export function useBusy(): [boolean, (job: () => Promise<unknown>) => Promise<vo
 
 // ── inputs ──
 
-/** `onChange` gets whether Shift was held (Shift+click on a mod's switch keeps its character's other mods on). */
-export function Toggle({ checked, onChange, label, hint, disabled, size = "md", title }:
-  { checked: boolean; onChange: (v: boolean, shift: boolean) => void; label?: ReactNode; hint?: ReactNode; disabled?: boolean; size?: "sm" | "md"; title?: string }) {
+/** `onChange` gets whether Shift was held (Shift+click on a mod's switch keeps its character's other mods on).
+ *  `ariaLabel` names a switch that has no `label` of its own. */
+/** The id of a row label that names the control in it (a settings row's title), so a bare Toggle there gets a name. */
+export const RowLabel = createContext<string | undefined>(undefined);
+
+export function Toggle({ checked, onChange, label, hint, disabled, size = "md", title, ariaLabel }:
+  { checked: boolean; onChange: (v: boolean, shift: boolean) => void; label?: ReactNode; hint?: ReactNode; disabled?: boolean; size?: "sm" | "md"; title?: string; ariaLabel?: string }) {
+  const rowLabel = useContext(RowLabel);
+  const labelledBy = !ariaLabel && !label ? rowLabel : undefined;
   return (
     <label className={cx("toggle", `toggle-${size}`, checked && "on", disabled && "off")} title={title}>
-      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked, (e.nativeEvent as { shiftKey?: boolean }).shiftKey === true)} />
+      <input type="checkbox" role="switch" checked={checked} disabled={disabled} aria-label={ariaLabel} aria-labelledby={labelledBy} onChange={(e) => onChange(e.target.checked, (e.nativeEvent as { shiftKey?: boolean }).shiftKey === true)} />
       <span className="toggle-track" aria-hidden="true"><span className="toggle-knob" /></span>
       {(label || hint) && <span className="toggle-l">{label && <span className="toggle-t">{label}</span>}{hint && <span className="hint">{hint}</span>}</span>}
     </label>
@@ -73,10 +81,10 @@ export function Checkbox({ checked, onChange, label, disabled, title }: { checke
   );
 }
 
-export function Chip({ on, onClick, icon, img, count, children, title, className }:
-  { on?: boolean; onClick?: () => void; icon?: IconName; img?: string | null; count?: number; children: ReactNode; title?: string; className?: string }) {
+export function Chip({ on, onClick, onContextMenu, icon, img, count, children, title, className }:
+  { on?: boolean; onClick?: () => void; onContextMenu?: (e: MouseEvent<HTMLElement>) => void; icon?: IconName; img?: string | null; count?: number; children: ReactNode; title?: string; className?: string }) {
   return (
-    <button type="button" className={cx("chip", on && "on", className)} onClick={onClick} title={title} aria-pressed={on}>
+    <button type="button" className={cx("chip", on && "on", className)} onClick={onClick} onContextMenu={onContextMenu} title={title} aria-pressed={on}>
       {img ? <LazyImg className="chip-img" src={img} alt="" /> : icon && <Icon name={icon} />}
       <span className="chip-t">{children}</span>
       {count !== undefined && <span className="chip-n">{count}</span>}
@@ -110,14 +118,19 @@ export function Tabs<T extends string>({ value, tabs, onChange }: { value: T; ta
   );
 }
 
-/** A search box. "/" and Ctrl+F focus it (lib/keys.ts). */
-export function SearchField({ value, onChange, placeholder = "Search", onEnter, autoFocus, className }:
-  { value: string; onChange: (v: string) => void; placeholder?: string; onEnter?: () => void; autoFocus?: boolean; className?: string }) {
+/** A search box. "/" and Ctrl+F focus it (lib/keys.ts). ArrowDown runs `onDown`, or `onEnter` when there is none,
+ *  so it can move to the results. */
+export function SearchField({ value, onChange, placeholder = "Search", onEnter, onDown, autoFocus, className, title }:
+  { value: string; onChange: (v: string) => void; placeholder?: string; onEnter?: () => void; onDown?: () => void; autoFocus?: boolean; className?: string; title?: string }) {
   return (
-    <label className={cx("search", className)}>
+    <label className={cx("search", className)} title={title}>
       <Icon name="search" />
       <input type="search" value={value} placeholder={placeholder} autoFocus={autoFocus} spellCheck={false}
-        onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") onEnter?.(); if (e.key === "Escape" && value) { e.stopPropagation(); onChange(""); } }} />
+        onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => {
+          if (e.key === "Enter") onEnter?.();
+          if (e.key === "ArrowDown" && (onDown ?? onEnter)) { e.preventDefault(); (onDown ?? onEnter)!(); }
+          if (e.key === "Escape" && value) { e.stopPropagation(); onChange(""); }
+        }} />
       {value ? <button type="button" className="search-x" aria-label="Clear" title="Clear (Esc)" onClick={() => onChange("")}><Icon name="x" /></button> : <kbd className="search-k">/</kbd>}
     </label>
   );
@@ -126,25 +139,66 @@ export function SearchField({ value, onChange, placeholder = "Search", onEnter, 
 /** A labelled text field. `multiline` makes a textarea. */
 export function TextField({ label, value, onChange, placeholder, hint, multiline, type = "text", mono, onBlur, autoFocus, disabled, rows = 3 }:
   { label?: ReactNode; value: string; onChange: (v: string) => void; placeholder?: string; hint?: ReactNode; multiline?: boolean; type?: string; mono?: boolean; onBlur?: () => void; autoFocus?: boolean; disabled?: boolean; rows?: number }) {
+  // the hint sits outside the label, so it is read as the field's description and not as part of its name
+  const id = useId();
+  const hintId = hint ? `${id}-hint` : undefined;
+  const common = { id, value, placeholder, onBlur, autoFocus, disabled, spellCheck: !mono, "aria-describedby": hintId };
   return (
-    <label className={cx("field", mono && "mono")}>
-      {label && <span className="field-l">{label}</span>}
+    <div className={cx("field", mono && "mono")}>
+      {label && <label className="field-l" htmlFor={id}>{label}</label>}
       {multiline
-        ? <textarea value={value} placeholder={placeholder} rows={rows} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} autoFocus={autoFocus} disabled={disabled} spellCheck={!mono} />
-        : <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} autoFocus={autoFocus} disabled={disabled} spellCheck={!mono} />}
-      {hint && <span className="hint">{hint}</span>}
-    </label>
+        ? <textarea {...common} rows={rows} onChange={(e) => onChange(e.target.value)} />
+        : <input {...common} type={type} onChange={(e) => onChange(e.target.value)} />}
+      {hint && <span className="hint" id={hintId}>{hint}</span>}
+    </div>
   );
 }
 
-export function Select<T extends string>({ label, value, options, onChange, hint, disabled }:
-  { label?: ReactNode; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; hint?: ReactNode; disabled?: boolean }) {
+/** A drop-down list. Clicking it, Enter, Space or A on a controller opens a menu of the options by it (the system's
+ *  own list can't be opened from a controller). `title` is a hover tip, and the accessible name when there is no
+ *  `label`; with neither, a settings row's title names it (RowLabel). */
+export function Select<T extends string>({ label, value, options, onChange, hint, disabled, title }:
+  { label?: ReactNode; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void; hint?: ReactNode; disabled?: boolean; title?: string }) {
+  const rowLabel = useContext(RowLabel);
+  const id = useId();
+  const hintId = hint ? `${id}-hint` : undefined;
+  const [open, setOpen] = useState<HTMLSelectElement | null>(null);
+  // a second click, Enter or Space on the list closes the menu it opened
+  const toggle = (el: HTMLSelectElement) => { if (!disabled) setOpen((o) => (o ? null : el)); };
+  const name = typeof label === "string" ? label : title;
   return (
-    <label className="field">
-      {label && <span className="field-l">{label}</span>}
-      <span className="select"><select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>{options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select><Icon name="down" /></span>
-      {hint && <span className="hint">{hint}</span>}
-    </label>
+    <div className="field" title={title}>
+      {label && <label className="field-l" htmlFor={id}>{label}</label>}
+      <span className="select">
+        <select id={id} value={value} disabled={disabled} aria-label={label ? undefined : title} aria-labelledby={!label && !title ? rowLabel : undefined}
+          aria-describedby={hintId} onChange={(e) => onChange(e.target.value as T)}
+          // the system's list opens on mousedown: stop it there and open the app's menu on click instead
+          onMouseDown={(e) => { if (e.button !== 0) return; e.preventDefault(); e.currentTarget.focus({ preventScroll: true }); }}
+          onClick={(e) => toggle(e.currentTarget)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " " || e.key === "F4" || (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp"))) { e.preventDefault(); toggle(e.currentTarget); }
+          }}>
+          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <Icon name="down" />
+      </span>
+      {hint && <span className="hint" id={hintId}>{hint}</span>}
+      {open && (
+        <Popover anchor={open} onClose={() => setOpen(null)} role="menu" label={name} labelledBy={name ? undefined : rowLabel}
+          align="start" width={`${Math.max(open.offsetWidth, 160)}px`}>
+          {/* the .menu wrapper takes the same theme rules as every other menu; the popover stays the menu role */}
+          <div className="menu" role="none">
+            {options.map((o) => (
+              <button key={o.value} type="button" role="menuitemradio" aria-checked={o.value === value} className={cx("menu-i", o.value === value && "on")}
+                onClick={() => { setOpen(null); if (o.value !== value) onChange(o.value); }}>
+                <span className="menu-c">{o.value === value && <Icon name="check" />}</span>
+                <span className="menu-t">{o.label}</span>
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
+    </div>
   );
 }
 
@@ -267,12 +321,14 @@ export function Waiting({ what, hold, className, children }: { what: string; hol
   const s = useElapsed(since);
   const running = useActivity()[0];
   const long = s * 1000 >= STUCK_MS;
+  const fault = !hold && !running;
   const why = hold ?? (running ? `It's waiting on this: ${running.what.toLowerCase()}. ${running.hold}`
-    : "Nothing is running in the background, so this may be a fault in gachamod. Go to another page and back, or report it from Help.");
+    : "Nothing is running in the background, so this may be a fault in gachamod. Go to another page and back, or send feedback.");
   return (
     <div className={cx("waiting", className)} role="status" aria-live="polite" aria-busy="true">
       <p className="waiting-t"><Spinner /><span>{what}{s >= 3 ? ` (${seconds(s)})` : ""}</span></p>
       {long && <p className="waiting-hold">{why}</p>}
+      {long && fault && <Button size="sm" icon="help" onClick={() => openFeedback({ text: `Stuck on "${what}" for ${seconds(s)}.` })}>Send feedback</Button>}
       {children}
     </div>
   );
@@ -308,28 +364,89 @@ export function Kbd({ children }: { children: ReactNode }) { return <kbd classNa
 
 // ── layers ──
 
-function useEscape(on: boolean, close: () => void) {
+/** Escape closes the layer, but only while its `.overlay` is the top one: with a dialog open over a drawer, one
+ *  press closes the dialog and leaves the drawer. Every layer listens on window, so stopping the event can't do this. */
+function useEscape(layer: RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
-    if (!on) return;
-    const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const layers = document.querySelectorAll(".overlay");
+      if (!layer.current || layers[layers.length - 1] !== layer.current) return;
+      e.stopPropagation();
+      close();
+    };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [on, close]);
+  }, [layer, close]);
 }
 
 const layerHost = () => document.querySelector(".app") ?? document.body;
+
+export const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+/** True when a window or drawer is open and `el` is on the screen behind it, so its keys shouldn't act. */
+export function behindLayer(el: Element): boolean {
+  const layers = document.querySelectorAll(".overlay");
+  const top = layers[layers.length - 1];
+  return !!top && !top.contains(el);
+}
+
+const shown = (el: HTMLElement) => el.offsetParent !== null || el.getClientRects().length > 0;
+
+/** Keyboard focus for a window or drawer: it moves in when the layer opens (unless something inside took it with
+ *  autoFocus), Tab and Shift+Tab go round inside it while it is the top layer, and closing puts focus back on
+ *  whatever opened it. `box` is the window itself, `layer` the overlay around it. */
+function useLayerFocus(box: RefObject<HTMLElement | null>, layer: RefObject<HTMLElement | null>) {
+  // read during the first render, before any autoFocus inside the layer moves it
+  const [opener] = useState(() => document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null);
+  useEffect(() => {
+    const el = box.current;
+    if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    const tab = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+      const own = layer.current, inner = box.current;
+      if (!own || !inner) return;
+      // only the layer on top, and not while a menu that floats above it has the keys
+      const layers = document.querySelectorAll(".lightbox, .overlay");
+      if (layers[layers.length - 1] !== own) return;
+      const at = document.activeElement as HTMLElement | null;
+      if (at && !own.contains(at) && at.closest(".popover, .ctx")) return;
+      const items = [...inner.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(shown);
+      if (!items.length) { e.preventDefault(); inner.focus({ preventScroll: true }); return; }
+      const first = items[0]!, last = items[items.length - 1]!;
+      const inside = !!at && inner.contains(at);
+      if (e.shiftKey ? (!inside || at === first || at === inner) : (!inside || at === last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    };
+    window.addEventListener("keydown", tab);
+    return () => {
+      window.removeEventListener("keydown", tab);
+      // back to the opener once the layer is gone, unless focus already went somewhere on purpose
+      const now = document.activeElement;
+      const lost = !now || now === document.body || !now.isConnected || !!(box.current && box.current.contains(now));
+      if (lost && opener?.isConnected) window.setTimeout(() => {
+        const a = document.activeElement;
+        if ((!a || a === document.body) && opener.isConnected) opener.focus({ preventScroll: true });
+      }, 0);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 /** A centred window over a scrim. `locked` says why it can't close yet (work is running). */
 export function Dialog({ title, icon, onClose, children, footer, size = "md", locked, className }:
   { title: ReactNode; icon?: IconName; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "sm" | "md" | "lg" | "xl"; locked?: string; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLElement>(null);
   const close = useCallback(() => { if (!locked) leave(ref.current, onClose); }, [onClose, locked]);
-  useEscape(true, close);
+  const titleId = useId();
+  useEscape(ref, close);
+  useLayerFocus(box, ref);
   return createPortal(
     <div ref={ref} className="overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <section className={cx("dialog", `dialog-${size}`, className)} role="dialog" aria-modal="true">
+      <section ref={box} className={cx("dialog", `dialog-${size}`, className)} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} style={{ outline: "none" }}>
         <header className="dialog-h">
-          <h2>{icon && <Icon name={icon} />}<span>{title}</span></h2>
+          <h2 id={titleId}>{icon && <Icon name={icon} />}<span>{title}</span></h2>
           <IconButton icon="x" label={locked ?? "Close (Esc)"} onClick={close} disabled={!!locked} />
         </header>
         <div className="dialog-b">{children}</div>
@@ -342,13 +459,21 @@ export function Dialog({ title, icon, onClose, children, footer, size = "md", lo
 export function Drawer({ title, onClose, children, footer, width = "min(46rem, 92vw)", actions, className }:
   { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; width?: string; actions?: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => leave(ref.current, onClose), [onClose]);
-  useEscape(true, close);
+  const box = useRef<HTMLElement>(null);
+  const close = useCallback(() => {
+    // a field that saves when it loses focus (a mod's name, notes, tags) saves now, before the drawer goes
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && box.current?.contains(a)) { a.blur(); box.current.focus({ preventScroll: true }); }
+    leave(ref.current, onClose);
+  }, [onClose]);
+  const titleId = useId();
+  useEscape(ref, close);
+  useLayerFocus(box, ref);
   return createPortal(
     <div ref={ref} className="overlay overlay-side" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
-      <aside className={cx("drawer", className)} style={{ width }} role="dialog" aria-modal="true">
+      <aside ref={box} className={cx("drawer", className)} style={{ width, outline: "none" }} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <header className="drawer-h">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           {actions}
           <IconButton icon="x" label="Close (Esc)" onClick={close} />
         </header>
@@ -364,8 +489,9 @@ export function Confirm({ title, children, yes = "OK", danger, onYes, onClose }:
   const [busy, run] = useBusy();
   return (
     <Dialog title={title} onClose={onClose} size="sm" footer={<>
-      <Button variant="ghost" onClick={onClose}>Cancel</Button>
-      <Button variant={danger ? "danger" : "primary"} busy={busy} autoFocus onClick={() => void run(async () => { await onYes(); onClose(); })}>{yes}</Button>
+      {/* a risky question starts on Cancel, so a stray Enter or A press doesn't do it */}
+      <Button variant="ghost" autoFocus={danger} onClick={onClose}>Cancel</Button>
+      <Button variant={danger ? "danger" : "primary"} busy={busy} autoFocus={!danger} onClick={() => void run(async () => { await onYes(); onClose(); })}>{yes}</Button>
     </>}>
       {children}
     </Dialog>

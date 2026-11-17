@@ -4,9 +4,10 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { dialogs, errorText, extensions as api, settings, shell, type ExtInstallResult, type ExtRepo, type IndexEntry, type InstalledExt, type Packed } from "./api";
 import { DEFAULT_EXT_SOURCE } from "./api/extensions";
-import { record } from "./history";
+import { record, undo } from "./history";
+import { currentGame } from "./store";
 import { accountState } from "./account";
-import { applyCustomTheme, customThemesPref, validateCustomTheme, type CustomTheme } from "./theme";
+import { applyCustomTheme, customThemesPref, setThemePick, themePick, validateCustomTheme, type CustomTheme } from "./theme";
 import { toast } from "../ui/toast";
 
 function store<T>(initial: T) {
@@ -141,12 +142,30 @@ async function after(id: string | null) {
 
 // ── changes, each with Undo ──
 
-/** Record an install or update: Undo puts back what was there before (or removes it), Redo installs it again. */
+/** For a theme package that's on: "Use for <game>", which picks its first theme for the game on screen. */
+function useThemeAction(id: string) {
+  const e = installed.get()?.find((x) => x.id === id);
+  const game = currentGame();
+  const theme = customThemesPref.get().find((t) => t.pkg === id);
+  if (!e?.enabled || !e.manifest?.themes.length || !game || !theme || themePick(game.id) === theme.id) return undefined;
+  return {
+    label: `Use for ${game.name}`,
+    run: () => {
+      const before = themePick(game.id);
+      setThemePick(game, theme.id);
+      record({ label: `Used the theme ${theme.name} for ${game.name}`, undo: async () => setThemePick(game, before), redo: async () => setThemePick(game, theme.id) });
+    },
+  };
+}
+
+/** Record an install or update: Undo puts back what was there before (or removes it), Redo installs it again. A theme
+ *  package's toast also offers to use it. */
 function recordInstall(r: ExtInstallResult, label: string) {
   const id = r.extension.id;
   let back = r.replaced;
   let fwd: string | null = null;
-  record({
+  const use = useThemeAction(id);
+  const entry = record({
     label,
     undo: async () => {
       if (back) fwd = (await api.restore(back)).replaced;
@@ -157,7 +176,8 @@ function recordInstall(r: ExtInstallResult, label: string) {
       if (fwd) back = (await api.restore(fwd)).replaced;
       await after(id);
     },
-  });
+  }, !!use);
+  if (use) toast(`${label}.`, false, use, { label: "Undo", run: () => void undo(entry) });
 }
 
 export async function installListed(p: Listed): Promise<boolean> {

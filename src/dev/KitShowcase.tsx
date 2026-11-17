@@ -437,7 +437,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
       </Drawer>
     )}
     {menuAt && (
-      <Popover anchor={menuAt} onClose={() => setMenuAt(null)} width="15rem">
+      <Popover anchor={menuAt} onClose={() => setMenuAt(null)} width="15rem" label="Menu">
         <Menu items={[{ label: "Open folder", icon: "folder", onClick: () => setMenuAt(null) }, { label: "Move to character", icon: "characters", onClick: () => setMenuAt(null) },
           { label: "Export as .gachamod", icon: "export", onClick: () => setMenuAt(null) }, { label: "Disabled item", icon: "lock", onClick: () => {}, disabled: true }, "-",
           { label: "Remove", icon: "trash", danger: true, onClick: () => setMenuAt(null) }]} />

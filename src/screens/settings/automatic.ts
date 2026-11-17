@@ -6,9 +6,10 @@ import { pref } from "../../lib/prefs";
 const flag = (key: string, fallback: boolean) =>
   pref<boolean>(key, fallback, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
-/** Look for a new gachamod at start and every 6 hours, download it and install it at quit (src-tauri commands/app.rs
- *  reads the same key). */
-export const appUpdateCheckPref = flag("app.updateCheck", true);
+/** What gachamod does about its own new versions, looking at start and every 6 hours (src-tauri commands/app.rs
+ *  reads the same key): "1" downloads them and installs at quit, "tell" only says one is out, "0" never looks. */
+export type AppUpdateMode = "1" | "tell" | "0";
+export const appUpdateModePref = pref<AppUpdateMode>("app.updateCheck", "1", (r) => (r === "1" || r === "tell" || r === "0" ? r : undefined), (v) => v);
 /** Look up installed GameBanana mods for updates when Mods opens and every 30 minutes. */
 export const modUpdateCheckPref = flag("updates.check", true);
 /** Read the Mods folder again when Mods opens, so files added by hand show up. */
@@ -24,6 +25,9 @@ export const otherServersPref = flag("downloads.otherServers", true);
 /** A mod turns on as soon as it installs (screens/library/afterInstall.ts). Its character's other skin goes off, by
  *  the "<game>.oneSkin" rule. Off, new mods wait in Mods, turned off. */
 export const enableNewPref = flag("mods.enableNew", true);
+/** A download whose files gachamod couldn't place (no .ini, nothing that says where they go) goes in Mods as it came;
+ *  this asks to look at them (App.tsx). Off, the Downloads row still says so. */
+export const reviewUnsurePref = flag("downloads.reviewUnsure", true);
 /** Look on GameBanana for new fixer tools (Tools > Fixes lists them; nothing is downloaded). */
 export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 

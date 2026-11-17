@@ -207,8 +207,13 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
           if (it === "-") return <hr key={`-${n}`} />;
           if ("header" in it) return <div key={`h${n}`} className="menu-h">{it.header}</div>;
           const hasSub = !!it.items && visible(it.items);
+          const check = it.checked !== undefined ? <span className="menu-c" aria-hidden="true">{it.checked && <Icon name="check" />}</span> : null;
+          // the check takes the icon's place; an item with its own icon or picture shows it after the label instead,
+          // so every icon stays in one column
+          const lead = it.img ? <LazyImg className="menu-img" src={it.img} alt="" /> : it.icon ? <Icon name={it.icon} /> : check ?? <span className="menu-ni" aria-hidden="true" />;
+          const trail = (it.img || it.icon) ? check : null;
           return (
-            <button key={`${it.label}-${n}`} type="button" role="menuitem" data-idx={n} className={`menu-i${it.danger ? " danger" : ""}${it.checked !== undefined ? " has-check" : ""}${sub?.index === n ? " on" : ""}`}
+            <button key={`${it.label}-${n}`} type="button" role={it.checked !== undefined ? "menuitemcheckbox" : "menuitem"} data-idx={n} className={`menu-i${it.danger ? " danger" : ""}${it.checked !== undefined ? " has-check" : ""}${sub?.index === n ? " on" : ""}`}
               disabled={it.disabled || (!!it.items && !hasSub)} title={it.title} aria-haspopup={hasSub ? "menu" : undefined} aria-checked={it.checked}
               onMouseEnter={(e) => {
                 window.clearTimeout(hoverTimer.current);
@@ -220,9 +225,9 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
                 closeMenu();
                 it.onClick?.();
               }}>
-              {it.checked !== undefined ? <span className="menu-c" aria-hidden="true">{it.checked && <Icon name="check" />}</span> : null}
-              {it.img ? <LazyImg className="menu-img" src={it.img} alt="" /> : it.icon ? <Icon name={it.icon} /> : it.checked === undefined ? <span className="menu-ni" aria-hidden="true" /> : null}
+              {lead}
               <span className="menu-t">{it.label}</span>
+              {trail}
               {it.keys && <kbd className="menu-k">{it.keys}</kbd>}
               {hasSub && <Icon name="chevron" className="menu-sub" />}
             </button>

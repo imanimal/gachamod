@@ -5,15 +5,18 @@
 // key and slow ones (installed mods, characters) join when they answer. Enter pressed before every source has
 // answered for what is typed waits for them, then opens the best match, so typing "raiden" and pressing Enter at
 // once never opens a match for "rai" or the GameBanana search. Owner: SHELL area.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { commandSources, noteRecent, recentIds, scoreCommand, type Command } from "../lib/search";
 import { onApp } from "../lib/store";
+import { openMenu, type MenuEntry } from "../ui/ContextMenu";
 import { Icon } from "../ui/Icon";
 import { Spinner } from "../ui/kit";
 import { LazyImg } from "../ui/LazyImg";
 
 const ORDER = ["Recent", "Pages", "Actions", "Characters", "Mods", "Profiles", "Settings", "Creators", "Games", "Online"];
+/** Settings match on many words ("update", "zzz"), so they rank below the pages, actions and games people want most. */
+const WEIGHT: Record<string, number> = { Settings: 0.6 };
 const PER_SECTION = 6;
 const PER_SECTION_ALONE = 30;
 /** How long Enter waits for slow sources before it stops and leaves the pick to you. */
@@ -32,7 +35,7 @@ function rank(query: string, list: Command[]): Group[] {
     const pages = list.filter((c) => c.section === "Pages" && !used.has(c.id)).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)).slice(0, 8);
     return [{ section: "Recent", items: recent }, { section: "Pages", items: pages }].filter((g) => g.items.length);
   }
-  const scored = list.map((c) => ({ c, s: scoreCommand(query, c) })).filter((x) => x.s > 0)
+  const scored = list.map((c) => ({ c, s: scoreCommand(query, c) * (WEIGHT[c.section] ?? 1) })).filter((x) => x.s > 0)
     // a fallback ("Search GameBanana for ...") matches every query, so it goes after every other match
     .map((x) => (x.c.fallback ? { c: x.c, s: 0.001 } : x))
     .sort((a, b) => b.s - a.s);
@@ -45,6 +48,15 @@ function rank(query: string, list: Command[]): Group[] {
     .map(([section, xs]) => ({ section, items: xs.slice(0, alone ? PER_SECTION_ALONE : PER_SECTION).map((x) => x.c) }));
 }
 const idx = (s: string) => { const i = ORDER.indexOf(s); return i < 0 ? ORDER.length : i; };
+
+/** A result's menu, with every entry closing the search first so its action shows on the page behind. */
+function closingFirst(items: MenuEntry[], close: () => void): MenuEntry[] {
+  return items.map((m) => {
+    if (!m || m === "-" || "header" in m) return m;
+    const { onClick } = m;
+    return { ...m, onClick: onClick && (() => { close(); onClick(); }), items: m.items && closingFirst(m.items, close) };
+  });
+}
 
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
@@ -184,9 +196,26 @@ export function CommandPalette() {
   const starts = useMemo(() => { const out: number[] = []; let n = 0; for (const g of groups) { out.push(n); n += g.items.length; } return out; }, [groups]);
 
   const pick = (f: (s: number) => number) => { moved.current = true; setPending(false); setSel(f); };
+  // a result's own menu, at the pointer or by the highlighted row (keyboard, controller)
+  const showMenu = (c: Command | undefined, at: { x: number; y: number } | null) => {
+    const items = c?.menu?.();
+    if (!items) return false;
+    const done = () => { isOpen.current = false; setOpen(false); setPending(false); };
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-i="${sel}"]`);
+    if (!at && !row) return false;
+    openMenu(at ?? row!, closingFirst(items, done));
+    return true;
+  };
+  const rowMenu = (c: Command, n: number) => (e: ReactMouseEvent) => {
+    if (!c.menu) return;
+    e.preventDefault(); e.stopPropagation();
+    setSel(n);
+    showMenu(c, e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null);
+  };
   const onKey = (e: ReactKeyboardEvent) => {
     const n = flat.length;
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (text) setText(""); else close(); }
+    else if ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu") { if (showMenu(flat[sel], null)) { e.preventDefault(); e.stopPropagation(); } }
     else if (e.key === "ArrowDown") { e.preventDefault(); if (n) pick((s) => (s + 1) % n); }
     else if (e.key === "ArrowUp") { e.preventDefault(); if (n) pick((s) => (s - 1 + n) % n); }
     else if (e.key === "PageDown") { e.preventDefault(); if (n) pick((s) => Math.min(n - 1, s + 8)); }
@@ -215,7 +244,9 @@ export function CommandPalette() {
           <Icon name="search" />
           <input ref={input} type="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search pages, mods, characters, settings, actions"
             aria-label="Search everything" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-activedescendant={flat[sel] ? `pc-${sel}` : undefined}
-            spellCheck={false} autoComplete="off" />
+            spellCheck={false} autoComplete="off"
+            // the controller's menu button: the highlighted result's menu
+            onContextMenu={(e) => { if (!e.nativeEvent.isTrusted && showMenu(flat[sel], null)) { e.preventDefault(); e.stopPropagation(); } }} />
           <kbd className="kbd" title="Close (Escape)">Esc</kbd>
         </div>
         <div className="palette-list" id="palette-list" ref={listRef} role="listbox">
@@ -228,7 +259,7 @@ export function CommandPalette() {
                 return (
                   <button key={c.id} id={`pc-${n}`} type="button" role="option" aria-selected={n === sel} data-i={n} tabIndex={-1}
                     className={`palette-i${n === sel ? " on" : ""}`}
-                    onMouseMove={() => { if (sel !== n && !pending) pick(() => n); }} onFocus={() => setSel(n)} onClick={() => run(c)}>
+                    onMouseMove={() => { if (sel !== n && !pending) pick(() => n); }} onFocus={() => setSel(n)} onClick={() => run(c)} onContextMenu={rowMenu(c, n)}>
                     {c.img ? <LazyImg className="palette-img" src={c.img} alt="" /> : <Icon name={c.icon ?? "chevron"} />}
                     <span className="palette-tw">
                       <span className="palette-t">{c.title}</span>

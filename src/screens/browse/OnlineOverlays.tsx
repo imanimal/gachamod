@@ -1,7 +1,7 @@
 // App-wide BROWSE layers: a GameBanana mod's page over any screen (a numeric route.modId), finding a creator by name
 // (window event gm-find-creator from CreatorLink), the gbmod and creator menus, the search commands, the variant
 // picker (event variants-needed), GameBanana links (app event open-gb-link), installing dropped files (app event
-// install-paths), and the Downloads badge. Owner: BROWSE area.
+// install-paths), and the Downloads badge (failures count until seen, downloads/seen.ts). Owner: BROWSE area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Checkbox, Dialog, formatBytes, plural } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
@@ -10,11 +10,15 @@ import { errorText, fileUrl, installs, queue, type Candidate, type QueueItem } f
 import { held } from "../../lib/tauri";
 import { fileIdFromLink, modPage, parseGbLink, queueModFile } from "../../lib/gamebanana";
 import { closeRoute, currentGame, emitApp, go, onApp, setBadge, setGame, useGame, useGames, useRoute } from "../../lib/store";
+import { record } from "../../lib/history";
 import { registerBrowseCommands } from "./commands";
 import { registerBrowseMenus } from "./menus";
 import { ModDrawer } from "./ModDrawer";
 import { closeGbTool, gbModOfRoute } from "./state";
 import { useQueue } from "./useQueue";
+import { setDownloadsCounts } from "./downloadsTip";
+import { PICK_EVENT, openVariantPicker } from "./cardQueue";
+import { pruneSeen, unseen, useSeen } from "../downloads/seen";
 import { withCreator, openCreator } from "./actions";
 import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
@@ -23,27 +27,35 @@ import { notesText } from "../../lib/notes";
 
 registerBrowseMenus();
 
-const PICK_EVENT = "gm-pick-variants";
-
-/** Open the variant picker for a queue item that waits for a choice (Downloads' "Pick variants" button). */
-export function openVariantPicker(id: number) { window.dispatchEvent(new CustomEvent(PICK_EVENT, { detail: id })); }
-
 export function OnlineOverlays() {
   const snap = useQueue();
   const games = useGames();
   const gamesRef = useRef(games);
   gamesRef.current = games;
   const [pickId, setPickId] = useState<number | null>(null);
-  const dismissed = useRef(new Set<number>());
+  // the mod page on screen: a pick for that mod opens the picker, any other waits behind a toast
+  const route = useRoute();
+  const game = useGame();
+  const onScreen = useRef<{ game: string | undefined; modId: number | null }>({ game: undefined, modId: null });
+  onScreen.current = { game: game?.id, modId: gbModOfRoute(route) };
+  const announced = useRef<Set<number> | null>(null);
 
-  // the Downloads badge
+  // the Downloads badge: failures the user hasn't looked at yet come first (they need something done, a running
+  // download doesn't), then running and waiting downloads and choices to make. A pick counts until it's made, seen
+  // or not, since it still needs you
+  const seen = useSeen();
   useEffect(() => {
     const s = snap.summary;
-    const busy = s.running + s.waiting + s.needsChoice;
-    if (busy > 0) setBadge("downloads", { count: busy, tone: "run" });
-    else if (s.failed > 0) setBadge("downloads", { count: s.failed, tone: "bad" });
+    const fresh = unseen(snap.items, seen);
+    const downloading = s.running + s.waiting;
+    const picks = snap.items.filter((i) => i.state === "needsChoice").length;
+    const failed = fresh.filter((i) => i.state === "failed").length;
+    setDownloadsCounts({ downloading, picks, failed });
+    if (failed > 0) setBadge("downloads", { count: failed, tone: "bad" });
+    else if (downloading + picks > 0) setBadge("downloads", { count: downloading + picks, tone: "run" });
     else setBadge("downloads", null);
-  }, [snap.summary]);
+  }, [snap, seen]);
+  useEffect(() => { pruneSeen(snap.items); }, [snap]);
 
   // tell the library when an install finished (it also hears the backend's library-changed event)
   const doneSeen = useRef<Set<number> | null>(null);
@@ -55,15 +67,41 @@ export function OnlineOverlays() {
     for (const g of new Set(fresh.map((i) => i.req.game))) emitApp({ type: "library-refresh", game: g });
   }, [snap]);
 
-  // a choice to make: from the event, or found in the queue (after a restart)
+  // a choice to make: the picker opens by itself only for the mod whose page is open; the rest get a toast with Pick,
+  // and wait on the card's Pick badge and in Downloads until asked for
+  const announce = useCallback((id: number, itemGame: string, modId: number | null | undefined, name: string, parts: number) => {
+    const seen = announced.current ??= new Set();
+    if (seen.has(id)) return;
+    seen.add(id);
+    const here = onScreen.current;
+    if (modId != null && here.modId === modId && here.game === itemGame) { setPickId((cur) => cur ?? id); return; }
+    toast(`${name || "A download"} has ${parts} parts inside. Pick the ones to install`, false, { label: "Pick", run: () => openVariantPicker(id) });
+  }, []);
   useEffect(() => {
-    if (pickId !== null && !snap.items.some((i) => i.id === pickId && i.state === "needsChoice")) { setPickId(null); return; }
-    const next = snap.items.find((i) => i.state === "needsChoice" && !dismissed.current.has(i.id));
-    if (pickId === null && next) setPickId(next.id);
-  }, [snap, pickId]);
-  useEffect(() => held(queue.onVariantsNeeded((p) => { dismissed.current.delete(p.id); setPickId((cur) => cur ?? p.id); })), []);
+    if (pickId !== null && !snap.items.some((i) => i.id === pickId && i.state === "needsChoice")) setPickId(null);
+    const waiting = snap.items.filter((i) => i.state === "needsChoice");
+    if (announced.current === null) {
+      // after a restart: one toast for whatever still waits
+      announced.current = new Set(waiting.map((i) => i.id));
+      if (waiting.length === 1) {
+        const i = waiting[0]!;
+        announced.current.delete(i.id);
+        announce(i.id, i.req.game, i.req.gbModId, i.req.meta.name || i.req.fileName || "", i.candidates.length);
+      } else if (waiting.length > 1) {
+        toast(`${plural(waiting.length, "download")} wait for you to pick their parts`, false, { label: "Show", run: () => go("downloads") });
+      }
+      return;
+    }
+    for (const i of waiting) announce(i.id, i.req.game, i.req.gbModId, i.req.meta.name || i.req.fileName || "", i.candidates.length);
+  }, [snap, pickId, announce]);
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
+  useEffect(() => held(queue.onVariantsNeeded((p) => {
+    const i = snapRef.current.items.find((x) => x.id === p.id);
+    announce(p.id, p.game, i?.req.gbModId, p.name, p.candidates.length);
+  })), [announce]);
   useEffect(() => {
-    const h = (e: Event) => { const id = (e as CustomEvent<number>).detail; dismissed.current.delete(id); setPickId(id); };
+    const h = (e: Event) => { const id = (e as CustomEvent<number>).detail; announced.current?.add(id); setPickId(id); };
     window.addEventListener(PICK_EVENT, h);
     return () => window.removeEventListener(PICK_EVENT, h);
   }, []);
@@ -92,7 +130,7 @@ export function OnlineOverlays() {
   }, []);
 
   const item = pickId === null ? undefined : snap.items.find((i) => i.id === pickId);
-  const close = useCallback(() => { if (pickId !== null) dismissed.current.add(pickId); setPickId(null); }, [pickId]);
+  const close = useCallback(() => setPickId(null), []);
   return (
     <>
       <GbModHost />
@@ -178,7 +216,12 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
     setBusy(true);
     try {
       await queue.choose(item.id, candidates.map((c) => c.key));
-      await installAllPartsPref.set(true, "Archives with several mods now install all of them without asking");
+      await installAllPartsPref.set(true);
+      const label = "Archives with several parts now install all of them without asking";
+      const undo = () => installAllPartsPref.set(false);
+      record({ label, undo, redo: () => installAllPartsPref.set(true) }, true);
+      toast(label, false, { label: "Undo", run: () => void undo() },
+        { label: "Download settings", run: () => go({ view: "settings", section: "set-all-parts" }) });
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }
   };
@@ -190,19 +233,19 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
 
   return (
     <Dialog icon="layers" size="lg" className="gb-picker" onClose={onClose}
-      title={`${name} has ${candidates.length} mods inside`}
+      title={`${name} has ${candidates.length} parts inside`}
       footer={<>
         <Button variant="ghost" onClick={() => setPicked(all ? new Set() : new Set(candidates.map((c) => c.key)))}>{all ? "Pick none" : "Pick all"}</Button>
         <Button variant="ghost" icon="layers" disabled={busy} onClick={() => void always()}
-          title="Installs all of these now, and from now on every archive with several mods installs all of them without this window. Turn it off in Settings, Downloads and installing">Always install all</Button>
+          title="Installs all of these now, and from now on every archive with several parts installs all of them without this window. Settings, Downloads and installing turns it off">Always install all</Button>
         <span className="sp" />
-        <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title="Don't install anything from this archive">Cancel</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => void cancel()} title="Cancels this download. Esc closes the window and keeps it waiting in Downloads">Don't install</Button>
         <Button variant="primary" icon="install" busy={busy} disabled={!keys.length} onClick={() => void choose()}>
           {keys.length > 1 ? `Install ${keys.length}` : "Install chosen"}
         </Button>
       </>}>
       <p className="hint gb-picker-hint">
-        Pick the ones you want. They install as one mod, and you can turn each part on or off in its details.
+        Pick the parts you want. They install as one mod, and you can turn each part on or off in its details.
       </p>
       <div className="gb-picker-grid">
         {candidates.map((c) => {

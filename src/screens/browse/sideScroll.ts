@@ -2,7 +2,8 @@
 // time, and it says whether there is more to the left or right for those arrows. Owner: BROWSE area.
 //
 // A wheel gesture belongs to whatever it started over. Scrolling the page down past a row keeps scrolling the page,
-// however fast or bumpy the wheel is, because the row only slid under a pointer that stayed put. The row takes the
+// however fast or bumpy the wheel is, because the row only slid under a pointer that stayed put, and so does going
+// on a notch at a time with short pauses (PAGE_HOLD) like on Home. The row takes the
 // wheel when a gesture starts on it, as soon as the pointer moves onto it, or with Shift. A row that runs out of
 // room mid-gesture stops there instead of throwing the rest of a fast spin at the page; a gesture that starts at its
 // end goes on to the page, and turning the wheel back brings it to the row again.
@@ -10,7 +11,7 @@
 // A row always rests exactly on its first or last item, never a pixel or two short of it (which cuts off the item's
 // outline): the glide lands on the edge, and a scroll heading for an end that stops just short of it goes the rest of
 // the way.
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { glideTarget, glideTo } from "../../lib/smoothScroll";
 
 /** A gap this long between wheel events starts a new gesture. Free-spinning and "jumpy" wheels send events closer
@@ -18,6 +19,9 @@ import { glideTarget, glideTo } from "../../lib/smoothScroll";
 const GESTURE_GAP = 450;
 /** The pointer moving this far from where a gesture started means it was aimed at something new. */
 const MOVED = 6;
+/** After the page had the wheel, a pause shorter than this with the pointer still keeps it the page's, so scrolling
+ *  down one notch at a time doesn't hand the wheel to a row that came to rest under the pointer. */
+const PAGE_HOLD = 1500;
 /** Resting this close to an end counts as the end. */
 const EDGE = 2;
 /** A scroll heading for an end that stops this close to it goes the rest of the way, so the first or last item is
@@ -38,7 +42,12 @@ function wireGestures() {
   // capture runs before any row's handler: a pause or a pointer that moved starts a new gesture nobody owns yet
   window.addEventListener("wheel", (e) => {
     const moved = Math.abs(e.clientX - anchor.x) + Math.abs(e.clientY - anchor.y) > MOVED;
-    if (e.timeStamp - lastWheel > GESTURE_GAP || moved) { owner = null; passed = null; anchor = { x: e.clientX, y: e.clientY }; }
+    const gap = e.timeStamp - lastWheel;
+    if (gap > GESTURE_GAP || moved) {
+      // the page scrolling a notch at a time with the pointer held still: a row that slid under it stays out of it
+      if (owner === "page" && !moved && gap < PAGE_HOLD) { lastWheel = e.timeStamp; return; }
+      owner = null; passed = null; anchor = { x: e.clientX, y: e.clientY };
+    }
     lastWheel = e.timeStamp;
   }, { capture: true, passive: true });
   // bubbling ends after the rows: a gesture no row claimed is the page's
@@ -178,4 +187,34 @@ export function rowKeys(e: React.KeyboardEvent<HTMLElement>, itemSelector: strin
     t.focus({ preventScroll: true });
     reveal(row, t);
   } else t.focus();
+}
+
+/** Makes a row one Tab stop: the picked item (class "on"), else the last one focused, else the first, keeps
+ *  tabIndex 0 and the rest get -1. The arrow keys (rowKeys) move inside it, and a controller still reaches every item. */
+export function useRovingTab(ref: RefObject<HTMLElement | null>, itemSelector: string) {
+  const last = useRef<HTMLElement | null>(null);
+  const apply = useCallback(() => {
+    const row = ref.current;
+    if (!row) return;
+    const items = [...row.querySelectorAll<HTMLElement>(itemSelector)];
+    const focused = items.find((x) => x === document.activeElement);
+    const keep = focused ?? items.find((x) => x.classList.contains("on"))
+      ?? (last.current && items.includes(last.current) ? last.current : undefined) ?? items[0];
+    for (const x of items) {
+      const want = x === keep ? 0 : -1;
+      if (x.tabIndex !== want) x.tabIndex = want;
+    }
+  }, [ref, itemSelector]);
+  // every render, since items come and go with the filters
+  useLayoutEffect(apply);
+  useEffect(() => {
+    const row = ref.current;
+    if (!row) return;
+    const onFocus = (e: FocusEvent) => {
+      const t = (e.target as HTMLElement | null)?.closest?.<HTMLElement>(itemSelector);
+      if (t && row.contains(t)) { last.current = t; apply(); }
+    };
+    row.addEventListener("focusin", onFocus);
+    return () => row.removeEventListener("focusin", onFocus);
+  }, [ref, itemSelector, apply]);
 }

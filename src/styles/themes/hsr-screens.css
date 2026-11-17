@@ -103,7 +103,7 @@
   .char-tile.is-empty:hover .char-tile-portrait { opacity: 1; filter: none; }
   .char-tile-count .badge, .char-tile-count { font-family: var(--font-num); }
   /* the side panel for the picked character */
-  .char-panel { top: 5.2rem; padding: .8rem .8rem .9rem; gap: .7rem; border-radius: var(--cut-lg); background: linear-gradient(180deg, rgb(20 21 26 / .92), rgb(16 17 22 / .94)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), 0 10px 30px rgb(0 0 0 / .4); backdrop-filter: blur(14px); }
+  .char-panel { top: 5.2rem; padding: .8rem .8rem .9rem; gap: .7rem; border-radius: var(--cut-lg); background: linear-gradient(180deg, rgb(20 21 26 / .92), rgb(16 17 22 / .94)); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), 0 10px 30px rgb(0 0 0 / .4); }
   .char-panel-h { position: relative; padding-bottom: .7rem; }
   .char-panel-h::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 9px; color: var(--line-2); background: var(--dot-line); }
   .char-panel-t h2 { font-weight: 700; }
@@ -248,3 +248,7 @@
   .portraits > .portrait.on { outline-color: var(--ink); }
   .char-panel { background: linear-gradient(180deg, rgb(236 237 240 / .94), rgb(229 230 234 / .95)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .1), 0 10px 30px rgb(30 34 60 / .2); }
 }
+
+/* nobody looking (lib/idle.ts): the screens' turning orbits hold still, like the backdrop's in hsr-shell.css */
+[data-theme="hsr"][data-idle] .home-hero::before, [data-theme="hsr"][data-idle] .char-tile.sel .char-tile-portrait::after,
+[data-theme="hsr"][data-idle] .empty-i::before { animation-play-state: paused; }

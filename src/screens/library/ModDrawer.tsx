@@ -2,15 +2,17 @@
 // links, a warning with Fix when a game update broke it, a quick switch for how mods for adults show, name,
 // character, tags and notes (every edit with Undo), its parts, keys and in-game options, then the files.
 // Owner: LIBRARY area.
-import { Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent } from "react";
-import { dialogs, errorText, library, type GameId, type ModEntry } from "../../lib/api";
+import { Component, Suspense, lazy, useEffect, useId, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { dialogs, errorKind, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { fixLabel, stopWaiting, triedNote, useFixerBusy, useModHealth } from "../../lib/fixes";
+import { holdMods, holdOn, releaseMods, useHolds } from "../../lib/holds";
 import { gbToolId } from "../../lib/gamebanana";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { trashPhrase } from "../settings/automatic";
 import { closeRoute, go, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
 import { Button, Drawer, IconButton, Row, Segmented, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { nsfwTip } from "../browse/menus";
 import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
 import { KeyEditor } from "../../ui/KeyEditor";
@@ -25,12 +27,17 @@ import {
   clearDrawerSection, drawerSectionFor, ownPreview, previewSaved, resetPreview, setFavourite, setOn, setParent, trashMods,
 } from "./actions";
 import { publish } from "./data";
+import { libraryTags } from "./LibDialogs";
 import { KindLink } from "./ModCard";
 import { ModParts } from "./ModParts";
 import { Preview } from "./Preview";
 
-// three.js is large: the 3D view loads the first time it opens
-const ModViewer = lazy(() => import("./ModViewer"));
+// three.js is large: the 3D view loads the first time it opens. lazy keeps a failed load, so a failed load is
+// forgotten and Try again makes a new lazy component that loads it again
+let viewerLoad: Promise<typeof import("./ModViewer")> | null = null;
+const loadViewer = () => (viewerLoad ??= import("./ModViewer").catch((e: unknown) => { viewerLoad = null; throw e; }));
+let ModViewer = lazy(loadViewer);
+const retryViewer = () => { if (!viewerLoad) ModViewer = lazy(loadViewer); };
 
 /** Shows the drawer for the route's modId. `mods` is the game's whole library. */
 export function ModDrawerHost({ game, mods, loaded }: { game: GameId; mods: ModEntry[]; loaded: boolean }) {
@@ -41,21 +48,50 @@ export function ModDrawerHost({ game, mods, loaded }: { game: GameId; mods: ModE
     if (!id || !loaded || mod) return;
     let live = true;
     library.get(game, id).then((m) => { if (live) publish(game, { changed: [m], removed: [], notes: [] }); })
-      .catch(() => { if (live) { toast("That mod isn't installed anymore"); closeRoute(["modId"]); } });
+      .catch((e) => {
+        if (!live) return;
+        closeRoute(["modId"]);
+        // "invalid" is the library's answer for a mod it has no row for; anything else is a failed read, said as it is
+        if (errorKind(e) === "invalid") toast("That mod isn't installed anymore", false, { label: "View trash", run: () => go({ view: "library", tab: "archive" }) });
+        else toast(errorText(e), true);
+      });
     return () => { live = false; };
   }, [game, id, loaded, mod]);
   return mod ? <ModDrawer game={game} mod={mod} mods={mods} onClose={() => closeRoute(["modId"])} /> : null;
 }
 
+/** Keeps a failing 3D view (three.js didn't load, the model broke it) inside its box, with a way back to the picture. */
+class ViewerBoundary extends Component<{ children: () => ReactNode; onClose: () => void }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error("3D view failed:", error); }
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children();
+    return (
+      <div className="mod-viewer-wrap">
+        <div className="mod-viewer is-wait" role="alert">
+          <span className="mod-viewer-msg">Couldn't show the 3D view. {error.message}</span>
+          <div className="mod-drawer-picact">
+            <Button size="sm" className="on-img" icon="refresh" onClick={() => { retryViewer(); this.setState({ error: null }); }} title="Open the 3D view again">Try again</Button>
+            <IconButton size="sm" variant="secondary" className="on-img" icon="x" label="Close the 3D view" onClick={this.props.onClose} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 const NSFW_OPTIONS: Array<{ value: NsfwMode; label: string; title: string }> = [
-  { value: "hide", label: nsfwLabel("hide"), title: "Mods for adults don't show anywhere" },
-  { value: "blur", label: nsfwLabel("blur"), title: "Their pictures are blurred until you click Show" },
-  { value: "show", label: nsfwLabel("show"), title: "Pictures show unblurred. Warning: No panic button, sorry" },
+  { value: "hide", label: nsfwLabel("hide"), title: nsfwTip("hide") },
+  { value: "blur", label: nsfwLabel("blur"), title: nsfwTip("blur") },
+  { value: "show", label: nsfwLabel("show"), title: nsfwTip("show") },
 ];
 
 export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: ModEntry; mods: ModEntry[]; onClose: () => void }) {
   const nsfw = useNsfw();
   const health = useModHealth(game).get(mod.id);
+  const hold = holdOn(useHolds(game), mod);
   const [name, setName] = useState(mod.name);
   const [character, setChar] = useState(mod.character ?? "");
   const [notes, setNotes] = useState(mod.notes ?? "");
@@ -72,6 +108,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
     setModel(drawerSectionFor(mod.id) === "model");
   }, [mod.id]);
   const listId = useId();
+  const tagListId = useId();
   const pic = usePreviewSetter(game, mod);
   // follow the mod when it changes elsewhere (a toggle, an undo)
   useEffect(() => { setName(mod.name); }, [mod.name]);
@@ -115,7 +152,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
   const fixerBusy = useFixerBusy();
   return (
     <Drawer className="mod-drawer" title={mod.name} onClose={onClose}
-      actions={<Toggle checked={mod.enabled} onChange={(v, shift) => void setOn(game, [mod], v, mods, undefined, shift)} label={mod.enabled ? "On" : "Off"}
+      actions={<Toggle checked={mod.enabled} onChange={(v, shift) => void setOn(game, [mod], v, mods, undefined, shift)} label={mod.enabled ? "On" : "Off"} ariaLabel={mod.name}
         title={mod.enabled || !mod.character ? undefined : `Shift+click keeps ${mod.character}'s other mods on too`} />}
       footer={<>
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
@@ -125,10 +162,12 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
       </>}>
       {model && !blurred ? (
         <div className="mod-drawer-hero">
-          <Suspense fallback={<div className="mod-viewer-wrap"><div className="mod-viewer is-wait"><span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />Opening the 3D view</span></div></div>}>
-            <ModViewer game={game} modId={mod.id} onClose={() => setModel(false)} saving={pic.busy}
-              onSnapshot={(png) => void pic.fromBlob(png, "preview.png")} />
-          </Suspense>
+          <ViewerBoundary key={mod.id} onClose={() => setModel(false)}>
+            {() => <Suspense fallback={<div className="mod-viewer-wrap"><div className="mod-viewer is-wait"><span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />Opening the 3D view</span></div></div>}>
+              <ModViewer game={game} modId={mod.id} onClose={() => setModel(false)} saving={pic.busy}
+                onSnapshot={(png) => void pic.fromBlob(png, "preview.png")} />
+            </Suspense>}
+          </ViewerBoundary>
         </div>
       ) : (
       <div ref={pic.heroRef} className={`mod-drawer-hero${pic.over ? " is-drop" : ""}`}
@@ -155,7 +194,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
         {blurred && <Button size="sm" className="mod-drawer-reveal on-img" icon="eye" onClick={() => setReveal(true)} title="The picture is blurred because the mod is marked for adults">Show</Button>}
         {mod.updateAvailable && mod.source && (
           <div className="mod-drawer-badges">
-            <Button size="sm" variant="primary" icon="update" onClick={() => void getUpdate(game, mod)} title="Download the newest version from GameBanana">Get the update</Button>
+            <Button size="sm" variant="primary" icon="update" onClick={() => void getUpdate(game, mod)} title="Download the newest version from GameBanana">Update</Button>
           </div>
         )}
       </div>
@@ -214,15 +253,41 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
               )}
               {(health.tried || health.needsAuthor) && mod.source && (<>
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
-                  title="Looks on GameBanana for a newer file of this mod and downloads it">Check for an update</Button>
+                  title="Looks on GameBanana for a newer file of this mod and downloads it">Update</Button>
                 <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
-                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Mod page</Button>
+                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Open on GameBanana</Button>
               </>)}
               {(health.tried || health.needsAuthor) && !mod.source && (
                 <Button size="sm" icon="search" onClick={() => go({ view: "browse", search: mod.name })}
                   title="Search GameBanana for a newer version of this mod">Search GameBanana</Button>
               )}
               <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title="Open the mod fixers in Tools">Mod fixers</Button>
+              <Button size="sm" variant="ghost" icon="bell-off" onClick={() => void holdMods(game, [mod], "update")}
+                title="Stops this warning until you install a newer version from its author. If that one is still broken, it warns again">Wait for an update</Button>
+              <Button size="sm" variant="ghost" icon="hide" onClick={() => void holdMods(game, [mod], "ignore")}
+                title="Stops every warning about this mod: the red marks, the Problems filter and Tools. Its conflicts are ignored too">Ignore problems</Button>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {hold && (
+        <div className="note mod-drawer-health" role="status">
+          <Icon name={hold.kind === "update" ? "bell-off" : "hide"} />
+          <div className="mod-drawer-health-t">
+            <strong>{hold.kind === "update" ? "Waiting for an update from its author" : "Ignoring this mod's problems"}</strong>
+            <span>{hold.kind === "update"
+              ? "The game update warning is hidden until you install a newer version. If that one is still broken, it warns again."
+              : "No red marks, no Problems filter and nothing in Tools for this mod."}</span>
+            <span className="mod-drawer-health-a">
+              {hold.kind === "update" && mod.source && (<>
+                <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
+                  title="Looks on GameBanana for a newer file of this mod and downloads it">Update</Button>
+                <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
+                  title="Open the mod's GameBanana page. Its author or the comments often say when a fix is coming">Open on GameBanana</Button>
+              </>)}
+              <Button size="sm" variant="ghost" icon="eye" onClick={() => void releaseMods(game, [mod])}
+                title={hold.kind === "update" ? "Stop waiting and show the warning again now" : "Warn about its problems again"}>Show problems again</Button>
             </span>
           </div>
         </div>
@@ -250,13 +315,19 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
           <span className="field-l">Tags</span>
           <span className="mod-drawer-taglist">
             {mod.tags.map((t) => (
-              <button key={t} type="button" className="chip mod-tag" title={`Remove the tag "${t}"`} onClick={() => void removeTag(game, [mod], t)}>
-                <span className="chip-t">{t}</span><Icon name="x" />
-              </button>
+              <span key={t} className="chip mod-tag">
+                <button type="button" className="chip-t" title={`Show every mod tagged "${t}" in Mods`}
+                  onClick={() => go({ view: "library", search: t })}>{t}</button>
+                <button type="button" aria-label={`Remove the tag "${t}"`} title={`Remove the tag "${t}"`}
+                  onClick={() => void removeTag(game, [mod], t)}><Icon name="x" /></button>
+              </span>
             ))}
-            <input className="mod-drawer-tagin" value={tag} placeholder="Add a tag" spellCheck={false}
+            <input className="mod-drawer-tagin" list={tagListId} value={tag} placeholder="Add a tag" spellCheck={false}
               onChange={(e) => setTag(e.target.value)} onBlur={saveTag}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); saveTag(); } }} />
+            <datalist id={tagListId}>
+              {libraryTags(mods).filter((t) => !mod.tags.some((x) => x.toLowerCase() === t.toLowerCase())).map((t) => <option key={t} value={t} />)}
+            </datalist>
           </span>
         </div>
 
@@ -265,7 +336,7 @@ export function ModDrawer({ game, mod, mods, onClose }: { game: GameId; mod: Mod
 
         <div className="mod-drawer-flags">
           <Toggle checked={mod.favorite} onChange={(v) => void setFavourite(game, [mod], v)} label="Favourite" />
-          <span title="Hidden, blurred or shown as set for mods for adults (Settings, Mods and downloads)"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
+          <span title="Marks it for adults, so it's hidden, blurred or shown like every other mod for adults"><Toggle checked={mod.nsfw} onChange={(v) => void setAdult(game, [mod], v)} label="For adults" /></span>
         </div>
       </div>
 

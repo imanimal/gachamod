@@ -420,6 +420,7 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         file_count: facts.files,
         ini_count: if qf.ini_count > 0 { qf.ini_count } else { facts.inis },
         preview: pick_preview(&dir, &facts.root_files, sc),
+        thumb: None,
         custom_preview: custom_preview_path(&dir, sc).is_some(),
         tags: sc.tags.clone(),
         notes: sc.notes.clone(),
@@ -431,6 +432,27 @@ fn build_entry(game: &str, root: &Path, rel: &str, enabled: bool, sc: &Sidecar, 
         parts: parts_in(&dir).len() as u32,
         parent: sc.parent.clone().filter(|p| !p.is_empty() && *p != sc.id),
     }
+}
+
+/// Where mod card thumbnails are kept (previews::find_thumb).
+fn thumbs_dir(db: &Db) -> PathBuf { crate::pack::data_dir_of(db).join("cache").join("thumbs") }
+
+/// Fill each entry's `thumb` from the cache. Ones not made yet are made right away (`now`, for one mod) or on a
+/// background thread, ready for the next scan.
+fn attach_thumbs(cache: &Path, entries: &mut [ModEntry], now: bool) {
+    use previews::Thumb;
+    let mut later = Vec::new();
+    for e in entries.iter_mut() {
+        let Some(p) = e.preview.clone() else { e.thumb = None; continue };
+        let t = match previews::find_thumb(cache, &p) {
+            Thumb::Ready(t) => Some(t),
+            Thumb::NotNeeded => None,
+            Thumb::ToMake if now => previews::thumb_now(cache, &p),
+            Thumb::ToMake => { later.push(p); None }
+        };
+        e.thumb = t.map(|t| t.to_string_lossy().into_owned());
+    }
+    previews::make_thumbs_later(cache, later);
 }
 
 /// The user's own preview file inside `dir`, when the sidecar names one and it is still there.
@@ -540,6 +562,27 @@ fn compute_conflicts(entries: &mut [ModEntry], hashes: &[Vec<String>], live: &Ha
     for (i, e) in entries.iter_mut().enumerate() { e.conflicts = others[i].len() as u32; }
 }
 
+/// Count conflicts again for every mod in the list, without a full scan, after something that changes them: a mod
+/// turned on or off, a conflict ignored, shared parts taken out or put back. Saves the rows whose count moved.
+pub(crate) fn recount_conflicts(db: &Db, game: &str) {
+    let Ok(mut entries) = list(db, game) else { return };
+    let before: Vec<u32> = entries.iter().map(|e| e.conflicts).collect();
+    let hashes: Vec<Vec<String>> = entries.iter()
+        .map(|e| if e.enabled { ini::quick_facts(Path::new(&e.path)).active } else { Vec::new() }).collect();
+    let live = crate::live::groups_by_mod(db, game);
+    compute_conflicts(&mut entries, &hashes, &live, &ini::ignored_pairs(db, game));
+    for (e, was) in entries.iter().zip(before) {
+        if e.conflicts != was { let _ = save_row(db, e); }
+    }
+}
+
+/// `recount_conflicts`, then the new counts on the entries a change hands back.
+fn recount_into(db: &Db, game: &str, change: &mut ModChange) {
+    if change.changed.is_empty() && change.removed.is_empty() { return; }
+    recount_conflicts(db, game);
+    for e in &mut change.changed { if let Ok(now) = get(db, game, &e.id) { e.conflicts = now.conflicts; } }
+}
+
 fn lock(db: &Shared) -> Result<std::sync::MutexGuard<'_, Db>> {
     db.lock().map_err(|_| Error::Db("The local database is stuck after an earlier error. Restart gachamod".into()))
 }
@@ -549,14 +592,16 @@ fn lock(db: &Shared) -> Result<std::sync::MutexGuard<'_, Db>> {
 /// Walk the game's Mods folder, adopt new mod folders (write a sidecar), drop rows for folders that are gone, refresh
 /// the `mods` table, and return every mod. Rules for what counts as a mod are in docs/spec.md ("Finding mods").
 pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
-    let (root, prev, chars) = {
+    let (root, prev, chars, thumbs) = {
         let d = lock(db)?;
         parts::merge_split_installs(&d, game);
         let root = games::mods_dir(&d, game)?;
         let prev: HashMap<String, ModEntry> = list(&d, game)?.into_iter().map(|m| (m.id.clone(), m)).collect();
-        (root, prev, matcher(&d, game)?)
+        (root, prev, matcher(&d, game)?, thumbs_dir(&d))
     };
 
+    // a Mods folder that can't be read lists nothing, and saving that would forget every mod's row
+    fs::read_dir(&root)?;
     let mut w = Walk { canon_root: fs::canonicalize(&root).ok(), found: Vec::new(), links: HashSet::new() };
     walk_dir(&mut w, &root, "", None, 0);
 
@@ -611,8 +656,11 @@ pub fn scan(db: &Shared, game: &str) -> Result<Vec<ModEntry>> {
         (crate::live::groups_by_mod(&d, game), ini::ignored_pairs(&d, game))
     }).unwrap_or_default();
     compute_conflicts(&mut entries, &hashes, &live, &ignored);
+    attach_thumbs(&thumbs, &mut entries, false);
 
     let d = lock(db)?;
+    // the folder went away during the walk (a drive pulled out): keep the rows for when it comes back
+    if !root.is_dir() { return Err(games::mods_gone(game, &root)); }
     let stamp = now();
     let tx = d.conn.unchecked_transaction()?;
     {
@@ -905,6 +953,8 @@ pub fn set_enabled_with(db: &Db, game: &str, ids: &[String], on: bool, turn_off_
     }
     for (id, flag) in flags { let _ = set_off_with_parent(db, game, &id, flag); }
     change.notes.splice(0..0, notes);
+    // the mods it shared parts with gain or lose their Conflict tag too
+    recount_into(db, game, &mut change);
     Ok(change)
 }
 
@@ -1078,6 +1128,7 @@ fn apply(db: &Db, game: &str, targets: &[(String, bool)], one_skin: bool) -> Res
     } else {
         for (name, err) in errors { change.notes.push(format!("Couldn't change {name}: {err}")); }
     }
+    recount_into(db, game, &mut change);
     finish(db, game, &change);
     if !cx.running { flush_mod_vars(db, &cx, None); }
     Ok(change)
@@ -1170,6 +1221,7 @@ fn save_preview(db: &Db, game: &str, mut e: ModEntry, dir: &Path, sc: &Sidecar) 
     write_sidecar(dir, sc)?;
     e.preview = pick_preview(dir, &root_files(dir), sc);
     e.custom_preview = custom_preview_path(dir, sc).is_some();
+    attach_thumbs(&thumbs_dir(db), std::slice::from_mut(&mut e), true);
     save_row(db, &e)?;
     finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
     Ok(e)
@@ -1363,10 +1415,13 @@ pub fn add_folder(db: &Db, game: &str, dir: &Path, sidecar: Option<Sidecar>) -> 
     let qf = ini::quick_facts(dir);
     let mut e = build_entry(game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(dir), &sc, &qf, &chars);
     crate::live::overlay(db, game, std::slice::from_mut(&mut e));
+    attach_thumbs(&thumbs_dir(db), std::slice::from_mut(&mut e), true);
     save_row(db, &e)?;
     if e.loaded() && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
-    finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
-    Ok(e)
+    let mut change = ModChange { changed: vec![e], ..Default::default() };
+    recount_into(db, game, &mut change);
+    finish(db, game, &change);
+    Ok(change.changed.remove(0))
 }
 
 // ── trash ──
@@ -1410,6 +1465,7 @@ pub fn remove(db: &Db, data_dir: &Path, game: &str, ids: &[String], reason: &str
     } else {
         for err in errors { change.notes.push(format!("Couldn't remove one: {err}")); }
     }
+    recount_into(db, game, &mut change);
     finish(db, game, &change);
     // "trash.days" at 0: the files go now and only the details stay
     if trash_days(db) == 0 { let _ = purge_expired(db); }
@@ -1461,10 +1517,12 @@ pub fn trash_restore(db: &Db, trash_id: i64) -> Result<ModChange> {
     let mut e = build_entry(&game, &cx.root, &rel, !rel_disabled(&rel) && !only_off_inis(&target), &sc, &qf, &chars);
     e.update_available = prev.is_some_and(|p| p.update_available);
     crate::live::restored(db, &game, &mut e);
+    attach_thumbs(&thumbs_dir(db), std::slice::from_mut(&mut e), true);
     save_row(db, &e)?;
     db.conn.execute("DELETE FROM trash WHERE id = ?1", [trash_id])?;
     if e.loaded() && !cx.running { flush_mod_vars(db, &cx, Some(&e.id)); }
-    let change = ModChange { changed: vec![e], ..Default::default() };
+    let mut change = ModChange { changed: vec![e], ..Default::default() };
+    recount_into(db, &game, &mut change);
     finish(db, &game, &change);
     Ok(change)
 }

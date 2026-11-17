@@ -245,9 +245,15 @@ pub async fn dev_reload(st: State<'_, AppState>, game: String) -> Result<()> {
 }
 
 #[tauri::command]
-pub async fn dev_wipe_user_config(st: State<'_, AppState>, game: String) -> Result<()> {
+pub async fn dev_wipe_user_config(st: State<'_, AppState>, game: String) -> Result<bool> {
     let db = st.db.clone();
     blocking(move || devtools::wipe_user_config_in(&importer(&db, &game)?, &game)).await
+}
+
+#[tauri::command]
+pub async fn dev_unwipe_user_config(st: State<'_, AppState>, game: String) -> Result<()> {
+    let db = st.db.clone();
+    blocking(move || devtools::unwipe_user_config_in(&importer(&db, &game)?, &game)).await
 }
 
 #[tauri::command]

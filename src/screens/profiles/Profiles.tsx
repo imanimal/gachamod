@@ -5,12 +5,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { GameId, Profile } from "../../lib/api";
 import { go, useGame, useRoute } from "../../lib/store";
-import { Badge, Button, Empty, IconButton, PageHeader, Skeleton, timeAgo } from "../../ui/kit";
+import { useHistory } from "../../lib/history";
+import { Badge, Button, Empty, IconButton, PageHeader, Skeleton, timeAgo, Waiting } from "../../ui/kit";
 import { menuFor, menuHandler, openMenu } from "../../ui/ContextMenu";
 import { moveInGrid } from "../library/gridNav";
 import { Preview } from "../library/Preview";
 import { deleteProfile, renameProfile, startNewProfile, switchTo, takeEditRequest, useEditRequest, type EditFocus } from "./actions";
-import { useCharacters, useProfiles } from "./data";
+import { useCharacters, useProfiles, useSwitching } from "./data";
 import { ProfileEditor } from "./ProfileEditor";
 import { ProfileIcon } from "./ProfileIcon";
 import { ProfilePage } from "./ProfilePage";
@@ -19,14 +20,18 @@ import "./menus";
 import "../library/library.css";
 import "./profiles.css";
 
+// names of the profiles shown this session, so a deleted one's page can find its delete in the history
+const seenNames = new Map<number, string>();
+
 export function Profiles() {
   const game = useGame()!;
   const gid = game.id;
-  const { list } = useProfiles(gid);
+  const { list, reload, error } = useProfiles(gid);
   const chars = useCharacters(gid);
-  const [editing, setEditing] = useState<{ p: Profile; focus?: "hotkey" | "icon" | "banner" } | null>(null);
+  const history = useHistory();
+  useEffect(() => { list?.forEach((p) => seenNames.set(p.id, p.name)); }, [list]);
+  const [editing, setEditing] = useState<{ p: Profile; focus?: "name" | "hotkey" | "icon" | "banner" } | null>(null);
   const [renaming, setRenaming] = useState<number | null>(null);
-  const [busy, setBusy] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const request = useEditRequest();
   const route = useRoute();
@@ -35,32 +40,54 @@ export function Profiles() {
   // a menu elsewhere asked to edit or rename one
   useEffect(() => {
     if (!request || !list) return;
-    const r = takeEditRequest();
-    const p = r && list.find((x) => x.id === r.id);
-    if (!r || !p) return;
-    open(p, r.focus);
+    // a profile just made (Duplicate) shows up when the list reloads
+    const p = list.find((x) => x.id === request.id);
+    if (!p) return;
+    takeEditRequest();
+    open(p, request.focus);
   }, [request, list]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // after Del: focus the next card (or the last one) when the list without the deleted one arrives
+  const refocus = useRef<{ at: number; from: number } | null>(null);
+  useEffect(() => {
+    const r = refocus.current;
+    if (!r || !list || list.some((x) => x.id === r.from)) return;
+    refocus.current = null;
+    const cards = gridRef.current?.querySelectorAll<HTMLElement>(".profile-card-main");
+    if (cards?.length) cards[Math.min(r.at, cards.length - 1)]!.focus();
+  }, [list]);
+
+  // a card being renamed is only on the grid: leaving it ends the rename
+  useEffect(() => { if (route.profile !== undefined) setRenaming(null); }, [route.profile]);
+
   const open = (p: Profile, focus: EditFocus = "all") => {
-    if (focus === "rename") setRenaming(p.id);
-    else setEditing({ p, focus: focus === "all" ? undefined : focus });
+    // on the grid the card's name turns into a field; on a profile's page the editor opens with the name selected
+    if (focus === "rename" && route.profile === undefined) setRenaming(p.id);
+    else setEditing({ p, focus: focus === "all" ? undefined : focus === "rename" ? "name" : focus });
   };
 
-  const run = async (id: number, job: () => Promise<unknown>) => {
-    setBusy(id);
-    try { await job(); } finally { setBusy(null); }
-  };
-  const pick = (p: Profile) => { if (!p.active && busy === null) void run(p.id, () => switchTo(gid, p, list)); };
+  // a switch from anywhere (menu, search, sidebar) shows on its card, and holds the other Switch buttons
+  const sw = useSwitching();
+  const busy = sw?.game === gid ? sw.id : null;
+  const pick = (p: Profile) => { if (!p.active && !sw) void switchTo(gid, p, list); };
 
   const editor = editing && <ProfileEditor game={gid} profile={editing.p} chars={chars} focus={editing.focus} onClose={() => setEditing(null)} />;
 
   if (route.profile !== undefined) {
+    // Undo is only offered when this session deleted it and that delete is still undoable
+    const gone = seenNames.get(route.profile);
+    const undoable = gone !== undefined && history.entries.some((e) => e.state === "done"
+      && (e.label === `Deleted ${gone}` || e.label.startsWith(`Deleted ${gone}. `)));
     return (
       <div className="page profiles">
-        {page === undefined ? <Skeleton className="char-hero-skel" />
-          : page === null ? (
+        {page === undefined ? <Waiting what="Reading your profiles"><Skeleton className="char-hero-skel" /></Waiting>
+          : error && !list?.length ? (
+            <Empty icon="profiles" title="Couldn't read your profiles" actions={<Button variant="primary" icon="refresh" onClick={reload}>Try again</Button>}>
+              {error}
+            </Empty>
+          ) : page === null ? (
             <Empty icon="profiles" title="That profile is gone" actions={<Button variant="primary" onClick={() => go("profiles")}>All profiles</Button>}>
-              It was deleted. Undo (Ctrl+Z) brings it back.
+              {undoable ? "It was deleted. Undo (Ctrl+Z) brings it back." : "It was deleted."}
             </Empty>
           ) : <ProfilePage game={gid} p={page} chars={chars} busy={busy === page.id} onSwitch={() => pick(page)} onEdit={(f) => open(page, f)} />}
         {editor}
@@ -71,7 +98,13 @@ export function Profiles() {
   const onCardKey = (e: KeyboardEvent, p: Profile) => {
     if (moveInGrid(e, gridRef.current, ".profile-card-main")) return;
     if (e.key === "F2") { e.preventDefault(); setRenaming(p.id); }
-    else if (e.key === "Delete") { e.preventDefault(); void deleteProfile(gid, p, list); }
+    else if (e.key === "Delete") {
+      e.preventDefault();
+      // focus goes to the card that takes its place once the list reloads
+      const at = list?.findIndex((x) => x.id === p.id) ?? -1;
+      refocus.current = at >= 0 ? { at, from: p.id } : null;
+      void deleteProfile(gid, p, list).then((gone) => { if (!gone) refocus.current = null; });
+    }
   };
 
   return (
@@ -84,7 +117,13 @@ export function Profiles() {
         </>} />
 
       {list === null ? (
-        <div className="profile-grid">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="profile-card-skel" />)}</div>
+        <Waiting what="Reading your profiles">
+          <div className="profile-grid">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="profile-card-skel" />)}</div>
+        </Waiting>
+      ) : error && !list.length ? (
+        <Empty icon="profiles" title="Couldn't read your profiles" actions={<Button variant="primary" icon="refresh" onClick={reload}>Try again</Button>}>
+          {error}
+        </Empty>
       ) : !list.length ? (
         <Empty icon="profiles" title="No profiles yet" actions={<Button variant="primary" icon="plus" onClick={() => startNewProfile(gid)}>New profile</Button>}>
           A profile keeps a set of mods to switch to in one click, like "Story mode" with no mods at all.
@@ -92,7 +131,7 @@ export function Profiles() {
       ) : (
         <div ref={gridRef} className="profile-grid">
           {list.map((p) => (
-            <ProfileCard key={p.id} game={gid} p={p} chars={chars} busy={busy === p.id} renaming={renaming === p.id}
+            <ProfileCard key={p.id} game={gid} p={p} chars={chars} busy={busy === p.id} held={!!sw} renaming={renaming === p.id}
               onPick={() => pick(p)} onOpen={() => go({ view: "profiles", profile: p.id })} onKey={(e) => onCardKey(e, p)}
               onRenamed={() => setRenaming(null)} onEdit={(f) => open(p, f)} />
           ))}
@@ -104,8 +143,8 @@ export function Profiles() {
   );
 }
 
-function ProfileCard({ game, p, chars, busy, renaming, onPick, onOpen, onKey, onRenamed, onEdit }: {
-  game: GameId; p: Profile; chars: ReturnType<typeof useCharacters>; busy: boolean; renaming: boolean;
+function ProfileCard({ game, p, chars, busy, held, renaming, onPick, onOpen, onKey, onRenamed, onEdit }: {
+  game: GameId; p: Profile; chars: ReturnType<typeof useCharacters>; busy: boolean; held: boolean; renaming: boolean;
   onPick: () => void; onOpen: () => void; onKey: (e: KeyboardEvent) => void; onRenamed: () => void; onEdit: (focus?: EditFocus) => void;
 }) {
   const [name, setName] = useState(p.name);
@@ -158,7 +197,7 @@ function ProfileCard({ game, p, chars, busy, renaming, onPick, onOpen, onKey, on
           : p.hotkey ? <kbd className="kbd" title="Switches to this profile while the game runs">{p.hotkey}</kbd>
           : <button type="button" className="link-btn hint" onClick={() => onEdit("hotkey")} title="A key combo that switches to it in game, like Ctrl+Alt+1">No hotkey</button>}
         <span className="grow" />
-        {!p.active && <Button size="sm" icon="swap" disabled={busy} onClick={onPick} title={`Turns mods on and off to match ${p.name}`}>Switch</Button>}
+        {!p.active && <Button size="sm" icon="swap" disabled={held} onClick={onPick} title={held && !busy ? "Waiting for the other switch to finish" : `Turns mods on and off to match ${p.name}`}>Switch</Button>}
         <IconButton icon="edit" size="sm" label="Edit" title="Edit the name, icon, colour, banner and hotkey" onClick={() => onEdit()} />
         <IconButton icon="more" size="sm" label="More" title="More (right-click the card works too)" onClick={(e) => openMenu(e.currentTarget, menu())} />
       </span>

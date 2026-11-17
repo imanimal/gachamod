@@ -65,7 +65,8 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
   written for players ("Close the game first, then try again"), never raw debug text.
 - Commands run blocking work through `state::blocking`. Long file work (scan, install, pack import/export, IMM move)
   takes `&db::Shared` and locks only around row reads and writes, never during big copies.
-- Events (model.rs `events`): `library-changed {game}`, `queue` (QueueSnapshot), `variants-needed`, `game-state
+- Events (model.rs `events`): `library-changed {game}`, `queue` (QueueSnapshot, on state changes only),
+  `queue-progress` (runner.rs, see Downloads), `variants-needed`, `game-state
   {game, running}`, `deep-link {url}`, `open-file {path}`, `toast {text, bad}`, `pack-progress {done, total}`.
 - UI cross-area events (lib/store.ts `emitApp` / `onApp`): `open-pack {path}` (MODTOOLS opens its import window),
   `install-paths {paths}` (ONLINE installs dropped archives/folders into the current game), `export-mods {game,
@@ -87,6 +88,11 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
 ## Mods on disk
 
 - A game's Mods folder comes only from `games::mods_dir(db, game)` (importer folder: `games::importer_dir`).
+  A missing Mods folder is made again only when its parent still has d3dx.ini (a fresh loader install). One picked
+  somewhere else (D:\ZZZ Mods) is never remade, since an empty folder would wipe the library on the next scan.
+  Otherwise `mods_dir` returns NotSetUp ("has no Mods folder at ... anymore"), the games list sets `modsMissing`
+  (`games::mods_missing`), a scan fails before touching the rows so the library stays, and the Mods page shows
+  "Mods folder not found" with a way to pick it again or install the loader.
 - A mod is a folder under Mods. It is off when its name starts with `DISABLED` (3DMigoto's d3dx.ini has
   `exclude_recursive = DISABLED*`, case-insensitive, at every level). gachamod writes the prefix `DISABLED ` (with a
   space) and reads any case and separator (`library::display_folder`, `library::is_disabled_name`).
@@ -103,7 +109,8 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
   and return `Error::GameRunning`, or hold the write and say so.
 - Preview images: `preview.(png|jpg|jpeg|webp|gif)` in the mod root wins; else the sidecar's `preview` (a file name
   in the folder or a URL); else the first image file in the mod root. `ModEntry.preview` is an absolute path or URL;
-  the UI shows paths through `fileUrl()` (lib/api/common.ts, Tauri asset protocol).
+  the UI shows paths through `fileUrl()` (lib/api/common.ts, Tauri asset protocol). `ModEntry.thumb` is a copy
+  about 400 px on its shorter side (see Previews); cards and lists use it, the drawer and lightbox use `preview`.
 
 ### Finding mods (library::scan, install::find_roots)
 
@@ -121,6 +128,15 @@ At the Mods root, IMM's own folders "DISABLED - ALL MODS ARE STORED HERE (Manage
 (Managed by IMM)" are groups (their mods count; MODTOOLS offers to move them out). A mod's `group` is its parent
 folder relative to Mods (None at the top level). A group's name that matches a character makes that the mod's
 character when the sidecar has none.
+
+Installs (install::place) first move files that have a fixed place: anything in a `ShaderFixes` folder goes to the
+importer's ShaderFixes, anything in a `BufferValues` folder to `Mods/BufferValues` (LeoTools' FixDash.ini), and with
+no mod in the archive, loose shader files (`<16 hex>-ps_replace.txt`) go to ShaderFixes too. Files there that would
+change get a backup whose restore takes the install back out. `d3dx.ini` and `d3dx_user.ini` don't make a folder a
+mod. When no mod is left but other files are (not readmes or pictures), they go in Mods as they came with a
+`.gachamod.json`, so the library lists them, and the outcome's `unsure` says why. Loader files (d3d11.dll and the
+like) are never swapped in. The Downloads row shows a Check files tag, and a toast asks to look at the files unless
+`downloads.reviewUnsure` is off (Settings, Downloads and installing).
 
 Characters are matched through the game's alias table (see Characters below), so "raiden ei", "Shougun",
 "雷电将军" and JASM's lowercase "raiden shogun" folder all land on Raiden Shogun. The group folders are tried first,
@@ -192,7 +208,11 @@ UI:
   "ui.nsfw" is "blur"; hidden when "hide"), name, character (or the type, a link to that type's chip), a Toggle that turns the mod on/off immediately (with Undo
   through history.record), badges (Update, Conflict, Keys), a "..." menu (Open folder, Move to character, Export as
   .gachamod: `emitApp({type:"export-mods"})`, Open on GameBanana, Remove). Multi-select with Ctrl/Shift click and a
-  bulk bar (Turn on, Turn off, Export, Remove). "Rescan" button and an automatic scan when the screen opens if the
+  bulk bar (Turn on, Turn off, Export, Remove). A mod's menu and its details set its problems aside (`lib/holds.ts`,
+  setting "problems.held"): "Ignore problems" hides every warning (red marks, the Problems filter, Tools, the nav badge)
+  and ignores its conflicts on both sides until "Show problems again"; "Wait for an update" hides the game update
+  warning until the mod's file, version or install time changes, and its card says "Waiting for update". Tools >
+  Fixes lists both under Muted, and its "Turn off and mute" waits for an update. "Rescan" button and an automatic scan when the screen opens if the
   last scan is over 30 seconds old. Empty state explains where mods come from (Browse, or drop an archive).
 - Mod drawer (`Drawer` from the kit) on card click: big preview, name (editable inline), character picker (combobox
   over characters), tags, notes, source link, version, size, folder path with Open, then `<ModInsides mod={mod} />`
@@ -250,6 +270,11 @@ loads (`filename = ...`, resolved from the ini's folder) and that doesn't look l
 like "Textures" or "tex", names with Diffuse, LightMap, NormalMap, MaterialMap, Texture, or ending in `_d` / `_n`).
 Otherwise none, and the UI offers GameBanana's picture.
 
+- Thumbnails (`previews.rs`): a local preview gets a copy 400 px on its shorter side (JPEG, or PNG when it has
+  see-through parts) in `<data>/cache/thumbs`, named from the picture's file name, size and modified time, so a
+  renamed or turned-off mod keeps it and a changed picture gets a new one. Remote pictures, GIFs and ones already
+  that small get none. A scan fills `ModEntry.thumb` from the cache and makes missing ones on a background thread
+  (the next scan picks them up); a single-mod change makes it right away.
 - Install from GameBanana: the runner's downloaded picture becomes `preview.<ext>` whenever the mod has no
   `preview.*` of its own (other images don't count). If the download failed, the sidecar keeps `preview_url`.
 - `mod_fetch_preview(game, id, url)` downloads an https picture (Content-Type png, jpeg, webp or gif, at most 25 MB)
@@ -489,11 +514,15 @@ Turn all on and Turn all off (open by itself for a quarter hour after it finishe
 `toggleMods`, so the one-skin rule and Undo work as in Mods;
  place moves (rename, fall back to copy+delete across drives) into Mods; replace keeps the old
 sidecar id, enabled state and folder name, moves the old folder to trash with reason "replaced" first; anything else new
-comes in off (`DISABLED <name>`): installing never turns a mod on, the user does that from its details or GameBanana
-page (which shows a switch once it is installed), so the one-skin question comes up there; preview_url
+comes in off (`DISABLED <name>`): the backend never turns a mod on. The UI then turns new mods on when "Turn on new
+mods" (`mods.enableNew`) is on, through `library/afterInstall.ts` with the one-skin rule (see below); with it off the
+user turns them on from the details or GameBanana page (which shows a switch once it is installed); preview_url
 is downloaded to `preview.jpg` (best effort, short timeout); register with library::add_folder; clean staging.)
 `queue.rs` + `runner.rs`: persistent queue (queue_items rows), up to 3 downloads at once, installs one at a time,
-progress events throttled to ~8 per second per item, cancel and retry (resume via the .part file), NeedsChoice when
+`queue` events with the full QueueSnapshot on state changes only; progress goes out as `queue-progress` (about 8 a
+second, all running items together): `[{id, received, total}]` for downloads and `[{id, progress}]` for install
+steps, and the UI patches those rows, cancel and retry (cancel keeps the .part file and retry resumes
+from it, and the Downloads page offers Undo after a cancel; removing or clearing the row deletes it, and at start .part files no row points at are deleted), NeedsChoice when
 an archive holds several candidates (emit variants-needed; `queue_choose` installs the picked keys; setting
 "downloads.allParts" "1" installs every key without asking). Several picked keys install as one mod whose parts are
 the picked folders (`library::parts`, `set_part` renames a part's folder with DISABLED); a part that overrides a hash
@@ -525,11 +554,13 @@ UI:
   "Open on GameBanana". Opening `route.modId` opens that page; `route.character` preselects the character chip.
 - `screens/downloads/Downloads.tsx` (view "downloads"): active items with thumbnail, name, progress bar, speed and
   time left, cancel; finished items with "Show in Mods" (go library with modId), retry for failures, "Clear
-  finished". Sets the "downloads" badge.
+  finished". Failures and pending choices not looked at yet are highlighted; one counts as seen when its row is
+  hovered, focused or clicked, or after Downloads has been on screen 5 s (`screens/downloads/seen.ts`, kept in
+  localStorage by id, state and finish time, so a retry that fails again is new).
 - `screens/browse/OnlineOverlays.tsx`: the variant picker dialog (variants-needed: candidate cards with preview, ini
   count, size; checkboxes; "Install chosen"), handles `install-paths` (installs.local; needsChoice -> same picker;
   toast result), handles `open-gb-link` (parse; go to Browse with modId, or queue the file for mmdl links), keeps
-  the downloads badge current from queue.onChange.
+  the downloads badge current from queue.onChange: running and waiting downloads, then unseen failures.
 - Demo: queue handlers that fake progress over a few seconds and then add a mod to demoDb.mods.
 
 ### Browse in detail (current build)
@@ -782,7 +813,9 @@ UI:
   installer signed with the key in `%USERPROFILE%\.tauri\gachamod.key` (its public half is in tauri.conf.json, plugins
   > updater). With "app.updateCheck" on (default), it checks 12 s after start and every 6 hours, downloads a newer
   version quietly and toasts "gachamod X is ready" with Restart now; at quit (`RunEvent::Exit`) it runs the installer
-  without reopening gachamod. Settings, About and updates shows the state (`app_update_status`) with Check now and Update now or
+  without reopening gachamod. Set to "tell" (Only tell me), it checks on the same schedule, downloads nothing and
+  emits `app-update-found` once per version, which toasts "gachamod X is out" with Update now. "0" never checks by
+  itself. Settings, About and updates shows the state (`app_update_status`) with Check now and Update now or
   Restart to update. The NSIS installer runs passive (a small progress window), per user, no administrator.
 - `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
   builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
@@ -893,9 +926,9 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - What gachamod does by itself has one switch each, all prefs in `automatic.ts` that other areas read. They sit in
   three panels of Mods and downloads: "Mod update checks and rescans" (mod updates, rescans), "Downloads
   and installing" (archives, every mod in an archive, slow downloads, on-screen toggles for new mods) and "Mods a
-  game update broke" (new fixers, the warnings). gachamod's own updates are not a mod setting: their switch is under
-  About and updates, gachamod updates, above Check now. The prefs: `appUpdateCheckPref`
-  ("app.updateCheck", shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
+  game update broke" (new fixers, the warnings). gachamod's own updates are not a mod setting: their control is under
+  About and updates, gachamod updates, above Check now. The prefs: `appUpdateModePref`
+  ("app.updateCheck": Install, Only tell me or Off, shown as "Update gachamod automatically"), `modUpdateCheckPref` ("updates.check"), `autoRescanPref` ("library.autoScan": Mods and the
   first scan of a session), `keepArchivesPref` ("downloads.keep", shown as "Delete downloaded archives"),
   `otherServersPref` ("downloads.otherServers", default on, shown as "Move slow downloads to another server"),
   `fixesAutoUpdatePref` ("fixes.autoUpdate", read by lib/fixes.ts) and "keys.onScreenOnInstall" (default off).
@@ -960,8 +993,8 @@ page history. A change to those shows in the menu too, so check both. Pages the 
 window (`skinMenu.openInApp`, event `app-go`, handled in `App.tsx`).
 
 The key list (`crates/gacha-core/src/keylist.rs`, `lib/api/keylist.ts`, docs/ingame.md "The key list") shows each
-mod's toggle keys while playing: the Keys tab of the window over the game (F8 by default), or a panel the game draws in
-its top right corner (`live/menu.rs`). Its settings and the pick per mod are in the Key list panel on the same Tools page.
+mod's toggle keys while playing: the Keys tab of the window over the game (F8 by default), where a click on a key
+rebinds it, or a panel the game draws in its top right corner (`live/menu.rs`). Its settings and the pick per mod are in the Key list panel on the same Tools page.
 
 Other apps' keys (`crates/gacha-core/src/otherkeys.rs`, `lib/api/otherkeys.ts`, `screens/ingame/otherKeys.ts`,
 docs/other-app-keys.md): recorders like Medal listen for keys in every app, so Medal's screenshot key F7 fires

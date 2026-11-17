@@ -38,6 +38,8 @@ export function Characters() {
   const ref = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
   useEffect(() => { if (loaded) noteLibrary(gid, mods); }, [gid, mods, loaded]);
+  // the last character page you were on gets focus back on the roster
+  useEffect(() => { if (route.character) opened.set(gid, route.character); }, [gid, route.character]);
 
   // an export dropped anywhere on the view marks its characters as owned (Tauri gives paths)
   useEffect(() => addDropTarget({
@@ -72,6 +74,8 @@ export function Characters() {
 
 // the search box keeps its text when you come back from a character's page
 const searches = new Map<GameId, string>();
+// and focus goes back to the tile you opened
+const opened = new Map<GameId, string>();
 
 function Roster({ game, roster, loading, ready }: { game: GameId; roster: RosterChar[] | null; loading: boolean; ready: boolean }) {
   const view = rosterViewPref.use();
@@ -91,6 +95,14 @@ function Roster({ game, roster, loading, ready }: { game: GameId; roster: Roster
     return q ? list.filter((c) => c.name.toLowerCase().includes(q)) : list;
   }, [roster, view, showHidden, q]);
   usePortraitBatch(game, shown.map((c) => c.name));
+  useEffect(() => {
+    const want = opened.get(game), a = document.activeElement;
+    if (!want || (a && a !== document.body && !a.matches(".app > .view"))) return;
+    const tile = [...(ref.current?.querySelectorAll<HTMLElement>(".roster-tile") ?? [])].find((t) => t.dataset.name === want);
+    if (!tile) return;
+    opened.delete(game);
+    tile.focus({ preventScroll: true });
+  }, [game, shown]);
 
   const sub = roster === null ? "Loading the roster"
     : `${withMods} of ${roster.length} have mods installed${ownedCount ? `, you own ${ownedCount}` : ""}`;
@@ -99,10 +111,11 @@ function Roster({ game, roster, loading, ready }: { game: GameId; roster: Roster
       <PageHeader title={noun} icon="characters" sub={sub}
         actions={<>
           <SearchField value={search} onChange={setSearch} placeholder={`Find ${article(one)} ${one}`} />
-          <Toggle checked={view.onlyWithMods} onChange={(v) => setView({ onlyWithMods: v })} label="Only with mods" />
-          <Chip on={!!view.owned} icon="check" count={ownedCount} onClick={() => setView({ owned: !view.owned })}
+          <Toggle checked={view.onlyWithMods} onChange={(v) => setView({ onlyWithMods: v })} label="Only with mods"
+            title={`Leave out ${noun.toLowerCase()} with no mods installed`} />
+          <Chip on={!!view.owned} icon={view.owned ? "check" : undefined} count={ownedCount} onClick={() => setView({ owned: !view.owned })}
             title={view.owned ? `Show every ${one}` : `Only the ${noun.toLowerCase()} you own. Mark one with O or the right-click menu, or import them all`}>Owned</Chip>
-          <Select<RosterSort> value={view.sort} onChange={(v) => setView({ sort: v })}
+          <Select<RosterSort> value={view.sort} onChange={(v) => setView({ sort: v })} title="Sort the roster"
             options={[{ value: "mods", label: "Most mods" }, { value: "recent", label: "Recently modded" }, { value: "name", label: "Name" }]} />
           {hiddenCount > 0 && (
             <Chip on={showHidden} icon="hide" count={hiddenCount} onClick={() => setShowHidden((v) => !v)}
@@ -129,7 +142,7 @@ function Roster({ game, roster, loading, ready }: { game: GameId; roster: Roster
           </Empty>
         )
       ) : (
-        <div ref={ref} className="portraits roster" role="list" onKeyDown={(e) => moveInGrid(e, ref.current, ".portrait")}>
+        <div ref={ref} className="portraits roster" role="group" aria-label={noun} onKeyDown={(e) => moveInGrid(e, ref.current, ".portrait")}>
           {shown.map((c) => <Tile key={c.name} game={game} c={c} />)}
         </div>
       )}
@@ -152,9 +165,9 @@ function Tile({ game, c }: { game: GameId; c: RosterChar }) {
   };
   const mods = n ? `${n === 1 ? "1 mod" : `${n} mods`}, ${c.on ? `${c.on} on` : "default outfit"}` : "no mods yet";
   return (
-    <button type="button" role="listitem" className={`portrait roster-tile${n ? "" : " dim"}${c.hidden ? " is-hidden" : ""}${c.owned ? " is-owned" : ""}`}
+    <button type="button" className={`portrait roster-tile${n ? "" : " dim"}${c.hidden ? " is-hidden" : ""}${c.owned ? " is-owned" : ""}`}
       title={`${c.name}: ${mods}${c.owned ? ", owned" : ""}. Press O to mark as ${c.owned ? "not owned" : "owned"}`}
-      onClick={() => go({ view: "characters", character: c.name })} onKeyDown={onKey}
+      data-name={c.name} onClick={() => go({ view: "characters", character: c.name })} onKeyDown={onKey}
       onContextMenu={menuHandler(() => menuFor("character", { game, name: c.name }))}>
       {wearing && <span className="portrait-bg"><LazyImg src={fileUrl(wearing.preview)} alt="" decoding="async" /></span>}
       <span className={`portrait-img${p.sharp ? "" : " is-soft"}`}>
@@ -196,13 +209,14 @@ function ImportOwned({ game, primary }: { game: GameId; primary?: boolean }) {
   return (
     <>
       <Button variant={primary ? "primary" : "secondary"} icon="import" onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
+        aria-haspopup="dialog" aria-expanded={!!anchor}
         title={`Mark the ${noun} you own: from an optimizer or scanner export (GOOD, SROD, ZOD, Enka.Network), any JSON that lists them, or pasted names. Dropping the file on this page works too`}>
         Import owned
       </Button>
       <input ref={file} type="file" accept=".json,.txt,.csv,application/json,text/plain" hidden
         onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void f.text().then((t) => run({ text: t })); }} />
       {anchor && (
-        <Popover anchor={anchor} onClose={() => setAnchor(null)} label="Import owned characters" width="24em">
+        <Popover anchor={anchor} onClose={() => setAnchor(null)} label={`Import owned ${noun}`} width="24em">
           <div className="own-import" onKeyDown={(e) => {
             if (e.key !== "Enter" || busy) return;
             if ((e.target as HTMLElement).closest(".own-uid")) { e.preventDefault(); if (uidOk) void run({ uid }); }

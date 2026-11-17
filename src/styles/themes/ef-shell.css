@@ -149,7 +149,7 @@
   .view { background: var(--cross) 0 0 / 160px, var(--scan), var(--sheet); animation: efView var(--dur-slow) var(--ease-out); scroll-padding-top: 7rem; }
   .page { padding: 0 .85rem 1.4rem; }
   .page-h { position: sticky; top: 0; z-index: 6; margin: 0 -.85rem .1rem; padding: .55rem .85rem .7rem; gap: .5rem; overflow: hidden; color: #f4f4f4;
-    background: var(--contour) 80% 30% / 520px, rgb(27 27 27 / .97); backdrop-filter: blur(10px); box-shadow: 0 1px 0 #000, 0 4px 12px rgb(0 0 0 / .18); }
+    background: var(--contour) 80% 30% / 520px, rgb(27 27 27 / .97); box-shadow: 0 1px 0 #000, 0 4px 12px rgb(0 0 0 / .18); }
   .page-h::after { content: ""; position: absolute; left: .85rem; right: .85rem; bottom: 4px; height: 3px; color: rgb(255 255 255 / .22);
     background: linear-gradient(var(--acc) 0 0) 0 0 / 3.2rem 100% no-repeat, var(--ticks) 0 100% / auto 3px repeat-x; }
   .page-h-row { align-items: center; gap: .7rem; }
@@ -177,6 +177,10 @@
   &.kbd .menu-i:focus { background: #60605e; color: #fff; }
   &.kbd .menu-i:focus :is(.i, .menu-k, .menu-sub) { color: #fff; }
 }
+
+/* nobody looking (lib/idle.ts: the window is in the background or a game runs): the code tickers and the blinking
+   square in the title bar hold still */
+[data-theme="ef"][data-idle] .glyphs.run, [data-theme="ef"][data-idle] .crumb-view::before { animation-play-state: paused; }
 
 @keyframes efBlink { 50% { opacity: 0; } }
 @keyframes efTurn { to { transform: rotate(360deg); } }

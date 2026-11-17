@@ -1,7 +1,7 @@
 // The "Keys and options" part of a mod's drawer: options with pickers, problems, conflicts, readmes. The keys themselves are
 // edited by ui/KeyEditor.tsx above it. Owner: MODTOOLS area. LIBRARY's mod drawer renders it.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { emitApp, useGame } from "../../lib/store";
+import { emitApp, go, useGame } from "../../lib/store";
 import { errorKind, errorText, modtools, type ModEntry, type ModInspect, type Problem, type VarInfo } from "../../lib/api";
 import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, Waiting, plural, type Tone } from "../../ui/kit";
 import { toast } from "../../ui/toast";
@@ -121,7 +121,7 @@ function Options({ mod, vars, running, stillCurrent, onSaved }:
               <span className="mi-opt-l">{v.label}</span>
               {values.length <= 5
                 ? <Segmented size="sm" label={v.label} value={value} options={values.map((x) => ({ value: x, label: x }))} onChange={(x) => change(v, x)} />
-                : <Select value={value} options={values.map((x) => ({ value: x, label: x }))} onChange={(x) => change(v, x)} />}
+                : <Select title={v.label} value={value} options={values.map((x) => ({ value: x, label: x }))} onChange={(x) => change(v, x)} />}
             </div>
           );
         })}
@@ -162,7 +162,7 @@ export function SharedParts({ n, parts }: { n: number; parts?: string[] }) {
   if (!parts?.length) return <span className="mi-conf-n hint">{plural(n, "shared part")}</span>;
   return (
     <details className="mi-parts">
-      <summary className="hint" title="Show which parts both mods change">{plural(n, "shared part")}</summary>
+      <summary className="hint" title="Show which parts these mods change">{plural(n, "shared part")}</summary>
       <ul className="mi-parts-l mono">
         {parts.map((p) => <li key={p}>{p}</li>)}
         {n > parts.length && <li className="muted">and {n - parts.length} more</li>}
@@ -193,7 +193,7 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
         {data.conflicts.map((c) => (
           <li key={c.modId} className="mi-conf">
             <div className="mi-conf-row">
-              <span className="mi-conf-name">{c.name}</span>
+              <button type="button" className="tp-link mi-conf-name" title="Open in Mods" onClick={() => go({ view: "library", modId: c.modId })}>{c.name}</button>
               {(c.hashes?.length ?? 0) > 0 && (
                 <Button size="sm" variant="ghost" busy={busy === `d:${c.modId}`} disabled={!!busy}
                   title={`Take the ${plural(c.shared, "shared part")} out of ${mod.name}, so ${c.name} shows them and ${mod.name} keeps the rest. Undo puts them back`}

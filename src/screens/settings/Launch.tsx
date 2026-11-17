@@ -90,8 +90,8 @@ export function LaunchSections() {
     );
   }
   const picker = list.length > 1 && (
-    <span title="Whose options these are. It follows the game picked in the sidebar">
-      <Select value={game.id} onChange={(v) => setPick(v)} options={list.map((g) => ({ value: g.id, label: g.name }))} />
+    <span>
+      <Select title="Game whose options these are. It follows the game picked in the sidebar" value={game.id} onChange={(v) => setPick(v)} options={list.map((g) => ({ value: g.id, label: g.name }))} />
     </span>
   );
   // a fresh form per game, so one game's edit can't land on another
@@ -376,17 +376,32 @@ function HookField({ title, hook, locked, onChange }: { title: string; hook: Hoo
   );
 }
 
+/** A number setting. What's typed stays as typed (it can be emptied, and new digits don't merge with the saved value);
+ *  each valid number saves, and leaving the field shows the saved value, capped at `max`. */
+function NumberExtra({ v, info, locked, onChange }: { v: number; info: ExtraInfo; locked?: string; onChange: (v: unknown) => void }) {
+  const [text, setText] = useState(String(v));
+  const editing = useRef(false);
+  useEffect(() => { if (!editing.current) setText(String(v)); }, [v]);
+  const cap = (n: number) => (info.max !== undefined ? Math.min(n, info.max) : n);
+  return (
+    <div style={{ display: "contents" }} onFocus={() => { editing.current = true; }} onBlur={() => { editing.current = false; setText(String(v)); }}>
+      <TextField label={info.label} type="number" value={text} disabled={!!locked} hint={locked ?? info.hint}
+        onChange={(s) => {
+          setText(s);
+          const n = Number(s);
+          if (s.trim() !== "" && Number.isFinite(n)) onChange(cap(Number.isInteger(v) ? Math.round(n) : n));
+        }} />
+    </div>
+  );
+}
+
 function Extra({ k, v, info, locked, onChange }: { k: string; v: unknown; info: ExtraInfo; locked?: string; onChange: (v: unknown) => void }) {
   if (typeof v === "boolean") return <Toggle checked={v} disabled={!!locked} onChange={onChange} label={info.label} hint={locked ?? info.hint} />;
   if (k === "resource_tier" && typeof v === "string") {
     const opts = RESOURCE_TIERS.includes(v) ? RESOURCE_TIERS : [v, ...RESOURCE_TIERS];
     return <Select label={info.label} value={v} onChange={onChange} options={opts.map((o) => ({ value: o, label: o }))} hint={info.hint} />;
   }
-  if (typeof v === "number") {
-    const cap = (n: number) => (info.max !== undefined ? Math.min(n, info.max) : n);
-    return <TextField label={info.label} type="number" value={String(v)} disabled={!!locked} hint={locked ?? info.hint}
-      onChange={(s) => { const n = Number(s); if (s.trim() !== "" && Number.isFinite(n)) onChange(cap(Number.isInteger(v) ? Math.round(n) : n)); }} />;
-  }
+  if (typeof v === "number") return <NumberExtra v={v} info={info} locked={locked} onChange={onChange} />;
   return <TextField label={info.label} mono value={typeof v === "string" ? v : JSON.stringify(v)} hint={info.hint}
     onChange={(s) => onChange(typeof v === "string" ? s : (() => { try { return JSON.parse(s); } catch { return v; } })())} />;
 }

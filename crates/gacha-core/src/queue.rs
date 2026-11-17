@@ -81,6 +81,9 @@ pub struct QueueItem {
     /// Candidate keys the user picked (NeedsChoice answered).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choose: Vec<String>,
+    /// The install didn't know where the files go and put them in Mods as they came: why.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsure: Option<String>,
     /// What the install is doing while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<crate::install::InstallProgress>,
@@ -107,11 +110,34 @@ pub struct QueueSummary { pub running: u32, pub waiting: u32, pub needs_choice: 
 #[serde(rename_all = "camelCase")]
 pub struct QueueSnapshot { pub items: Vec<QueueItem>, pub summary: QueueSummary }
 
+/// How far one running item is, sent many times a second instead of the whole snapshot: bytes for a download, the
+/// current step for an install. The UI patches that one row; state changes still come as a full snapshot.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueProgress {
+    pub id: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub received: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<crate::install::InstallProgress>,
+}
+
 /// The queue in memory (saved to `queue_items` so it survives a restart).
 #[derive(Debug, Default)]
 pub struct Queue { pub items: Vec<QueueItem>, pub next_id: u64 }
 
 impl Queue {
+    /// Progress of every item that is downloading or installing.
+    pub fn progress(&self) -> Vec<QueueProgress> {
+        self.items.iter().filter_map(|i| match &i.state {
+            ItemState::Downloading { received, total } => Some(QueueProgress { id: i.id, received: Some(*received), total: *total, progress: None }),
+            ItemState::Installing => i.progress.clone().map(|p| QueueProgress { id: i.id, received: None, total: None, progress: Some(p) }),
+            _ => None,
+        }).collect()
+    }
+
     pub fn snapshot(&self) -> QueueSnapshot {
         let mut s = QueueSummary::default();
         for i in &self.items {
@@ -165,7 +191,7 @@ impl Queue {
         if self.next_id == 0 { self.next_id = 1; }
         let item = QueueItem {
             id: self.next_id, req, state: ItemState::Waiting, added_at: crate::db::now(), finished_at: None,
-            archive: None, staging: None, choose: Vec::new(), progress: None,
+            archive: None, staging: None, choose: Vec::new(), progress: None, unsure: None,
         };
         self.next_id += 1;
         self.items.push(item.clone());

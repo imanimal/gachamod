@@ -33,12 +33,12 @@
   &, :is(.card, .tile, .home-tile, .portraits > .portrait, .popover, .apptip, .toast, .badge, .mod-img, .codeblock, .hero, .lightbox, .gallery-main, .floatbar) {
     --bg: #07080d; --bg-2: #04050a; --surface: #1d1f25; --surface-2: #272a32; --surface-3: #31343e; --raised: #3a3d48;
     --line: rgb(255 255 255 / .085); --line-2: rgb(206 185 156 / .34);
-    --text: #ebe6e2; --text-2: #b9bcc4; --text-3: #7f8492;
+    --text: #ebe6e2; --text-2: #b9bcc4; --text-3: #8a8f9c;
     --accent: var(--gold); --on-accent: #16181b; --accent-soft: color-mix(in srgb, var(--gold) 14%, transparent); --accent-ink: var(--gold-hi); --accent-2: var(--gold-line);
-    --ok: #8fd16a; --warn: #f0b64a; --bad: #ee5f79; --info: #7fc4e0; --on-bad: #fff;
+    --ok: #8fd16a; --warn: #f0b64a; --bad: #ee5f79; --info: #7fc4e0; --on-bad: #fff; --on-ok: #16181b; --on-warn: #16181b; --on-info: #16181b;
     --ring: #fff; --hover: rgb(255 255 255 / .08);
     --sheet: rgb(6 7 11 / .64); --sheet-2: rgb(255 255 255 / .045); --stat: rgb(32 38 54 / .82);
-    --well: rgb(0 0 0 / .42); --well-line: rgb(150 160 195 / .28); --well-line-hi: rgb(235 230 226 / .75);
+    --well: rgb(0 0 0 / .42); --well-line: rgb(205 210 230 / .53); --well-line-hi: rgb(235 230 226 / .75);
     --key: #e2e2e0; --key-hi: #f6f6f4; --key-fg: #16181b; --key-lines: var(--contour-ink);
     --key2: rgb(22 25 36 / .82); --key2-hi: rgb(46 51 68 / .92); --key2-fg: #ebe6e2; --key2-line: rgb(126 134 170 / .42);
     --pick: #f4f4f2; --pick-fg: #101113; --pick-line: transparent; --knob: #fff; --track: rgb(255 255 255 / .16); --gold-ink: var(--gold-hi); --gold-fill: var(--gold);
@@ -59,12 +59,12 @@
   :is(.dialog, .dl-item, .gb-file, .trash-item, .gb-post, .tp-conflict, .tp-problem, .list-row, .dropzone-card) {
     --bg: #f1f1ef; --bg-2: #dededc; --surface: #e4e4e2; --surface-2: #d7d7d5; --surface-3: #c9c9c7; --raised: #fff;
     --line: rgb(0 0 0 / .11); --line-2: rgb(0 0 0 / .3);
-    --text: #16181b; --text-2: #3a4047; --text-3: #6f757d;
+    --text: #16181b; --text-2: #3a4047; --text-3: #4d5258;
     --accent: var(--gold-dk); --on-accent: #fff; --accent-soft: color-mix(in srgb, var(--gold-dk) 15%, transparent); --accent-ink: var(--gold-dk); --accent-2: #5f6a86;
-    --ok: #2f8a3d; --warn: #9a6500; --bad: #c0304a; --info: #2a6f9c; --on-bad: #fff;
+    --ok: #1d5e27; --warn: #6e4700; --bad: #962539; --info: #1d5680; --on-bad: #fff; --on-ok: #fff; --on-warn: #fff; --on-info: #fff;
     --ring: #16181b; --hover: rgb(0 0 0 / .07);
     --sheet: rgb(0 0 0 / .055); --sheet-2: rgb(0 0 0 / .05); --stat: rgb(0 0 0 / .075);
-    --well: rgb(255 255 255 / .62); --well-line: rgb(0 0 0 / .24); --well-line-hi: #16181b;
+    --well: rgb(255 255 255 / .62); --well-line: rgb(0 0 0 / .52); --well-line-hi: #16181b;
     --key: #0d0d0d; --key-hi: #2a2b30; --key-fg: #fff; --key-lines: var(--contour);
     --key2: #2e3137; --key2-hi: #40444d; --key2-fg: #fff; --key2-line: transparent;
     --pick: #fff; --pick-fg: #101113; --pick-line: rgb(0 0 0 / .55); --knob: #16181b; --track: rgb(0 0 0 / .2); --gold-ink: var(--gold-dk); --gold-fill: var(--gold-dk);
@@ -241,7 +241,7 @@
   .drawer-f { border-top: 0; background: rgb(58 51 67 / .6); box-shadow: inset 0 1px 0 var(--line-2); padding: .7rem 1.3rem; }
 
   /* ── popover, menu: an ink box; the row under the pointer turns white ── */
-  .popover { padding: 4px; border-radius: 4px; background: rgb(9 10 15 / .95); box-shadow: inset 0 0 0 1px var(--key2-line), var(--shadow-lg); backdrop-filter: blur(14px); animation: wwRise 140ms var(--ease-out); }
+  .popover { padding: 4px; border-radius: 4px; background: rgb(9 10 15 / .95); box-shadow: inset 0 0 0 1px var(--key2-line), var(--shadow-lg); animation: wwRise 140ms var(--ease-out); }
   .menu { gap: 2px; }
   .menu hr { border-top: 1px solid var(--line); margin: .25rem .4rem; }
   .menu-i { padding: .45rem .75rem; border-radius: 3px; color: var(--text); font-weight: 700; }
@@ -309,13 +309,13 @@
   .sec-h::after, .sub-h::after { content: ""; flex: 1; height: 7px; background: var(--dia) right center / 7px 7px no-repeat, linear-gradient(90deg, var(--line-2), var(--line)) left center / calc(100% - 9px) 1px no-repeat; opacity: 1; }
   .note { border-radius: 3px; background: color-mix(in srgb, var(--tone) 13%, var(--sheet)); box-shadow: inset 2px 0 0 var(--tone); color: var(--text); font-weight: 700; }
   .note > .i:first-child { color: var(--tone); }
-  .floatbar { border-radius: 4px; background: rgb(58 51 67 / .92); box-shadow: inset 0 1px 0 var(--line-2), inset 0 0 0 1px var(--line), var(--shadow-lg); backdrop-filter: blur(12px); color: var(--text); }
+  .floatbar { border-radius: 4px; background: rgb(58 51 67 / .92); box-shadow: inset 0 1px 0 var(--line-2), inset 0 0 0 1px var(--line), var(--shadow-lg); color: var(--text); }
   .floatbar-n { color: var(--gold-hi); font-weight: 900; }
   .codeblock { border-radius: 3px; background: rgb(0 0 0 / .5); box-shadow: inset 0 0 0 1px var(--well-line); color: #c9ccd4; }
   .gallery-main { border-radius: 4px; background: var(--tile); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07); }
   .gallery-th { border-radius: 3px; box-shadow: none; outline: 2px solid transparent; outline-offset: 1px; }
   .gallery-th.on { box-shadow: none; outline-color: #fff; }
-  .lightbox { background: rgb(5 6 10 / .9); backdrop-filter: blur(12px); }
+  .lightbox { background: rgb(5 6 10 / .9); }
   .lightbox > img { border-radius: 3px; }
   .lightbox-prev, .lightbox-next, .lightbox-x, .lightbox-n { border-radius: 3px; background: rgb(22 25 36 / .82); box-shadow: inset 0 0 0 1px var(--key2-line); color: var(--cream); }
   .swatch { box-shadow: 0 0 0 1px rgb(0 0 0 / .5); outline: 2px solid transparent; outline-offset: 2px; }
@@ -337,10 +337,10 @@
     --text: #16181b; --text-2: #383e46; --text-3: #5c626b;
     --accent: var(--gold-dk); --on-accent: #fff; --accent-soft: color-mix(in srgb, var(--gold-dk) 14%, transparent);
     --accent-ink: color-mix(in oklab, var(--gold-dk) 82%, #000); --accent-2: #5f6a86;
-    --ok: #2f7d3a; --warn: #8a5a00; --bad: #b52a43; --info: #23638c; --on-bad: #fff;
+    --ok: #2f7d3a; --warn: #8a5a00; --bad: #b52a43; --info: #23638c; --on-bad: #fff; --on-ok: #fff; --on-warn: #fff; --on-info: #fff;
     --ring: #16181b; --hover: rgb(0 0 0 / .06);
     --sheet: rgb(255 255 255 / .6); --sheet-2: rgb(0 0 0 / .045); --stat: rgb(0 0 0 / .06);
-    --well: rgb(255 255 255 / .75); --well-line: rgb(0 0 0 / .22); --well-line-hi: #16181b;
+    --well: rgb(255 255 255 / .75); --well-line: rgb(0 0 0 / .52); --well-line-hi: #16181b;
     --key: #121316; --key-hi: #2a2b30; --key-fg: #fff; --key-lines: var(--contour);
     --key2: rgb(255 255 255 / .72); --key2-hi: #fff; --key2-fg: #2a2f36; --key2-line: rgb(0 0 0 / .16);
     --pick: #1d2026; --pick-fg: #fff; --pick-line: transparent; --knob: #16181b; --track: rgb(0 0 0 / .18);

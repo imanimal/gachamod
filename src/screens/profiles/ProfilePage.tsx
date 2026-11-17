@@ -4,15 +4,18 @@
 // screen until you leave the tab, so a slip is one click to put back. Route: { view: "profiles", profile, tab?:
 // "every", modId? }. Keys: arrows move, Enter opens the details, Space adds or takes out. Owner: HOME/PROFILES area.
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { errorText, profiles, settings, type GameId, type ModEntry, type Profile } from "../../lib/api";
+import { errorText, library, profiles, type GameId, type ModEntry, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
 import { portraitNow, usePortraitBatch, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { closeRoute, patchRoute, useRoute } from "../../lib/store";
 import { menuFor, menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
-import { Badge, Button, Empty, IconButton, SearchField, Skeleton, Tabs, timeAgo } from "../../ui/kit";
+import { withoutKeys } from "../../lib/menuHints";
+import { Badge, Button, Empty, IconButton, SearchField, Skeleton, Tabs, timeAgo, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { getUpdate, modsName, openDetails, setOn } from "../library/actions";
+import { getUpdate, modsName, openDetails, setOn, setParent } from "../library/actions";
+import { anchorFor, askOverlap, overlappingAll } from "../library/overlap";
+import { liveCharacterOf } from "../ingame/data";
 import { useMods } from "../library/data";
 import { moveInGrid } from "../library/gridNav";
 import { ModCard } from "../library/ModCard";
@@ -45,11 +48,9 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
   const [members, setMembersState] = useState<Set<string> | null>(null);
   // mods taken out during this visit to the tab stay on screen
   const [kept, setKept] = useState<Set<string>>(new Set());
-  const [oneSkin, setOneSkin] = useState(true);
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setKept(new Set()); }, [p.id, tab]);
-  useEffect(() => { settings.get(`${game}.oneSkin`).then((v) => setOneSkin(v !== "0")).catch(() => {}); }, [game]);
 
   // the profile in use holds exactly the mods that are on; another one keeps its own list
   const stamp = `${p.updatedAt}:${p.modCount}`;
@@ -81,34 +82,34 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
 
   // ── changes, each with Undo ──
 
-  const setIn = useCallback(async (list: ModEntry[], on: boolean) => {
+  /** `keep` (Shift): the character's other mods stay in without asking. */
+  const setIn = useCallback(async (list: ModEntry[], on: boolean, keep = false) => {
     const ids = list.filter((m) => isIn(m) !== on).map((m) => m.id);
     if (!ids.length) return;
     if (!on) setKept((k) => new Set([...k, ...ids]));
     if (p.active) {
       // the profile in use: a normal switch, which asks about the character's other mods
-      if (await setOn(game, mods.filter((m) => ids.includes(m.id)), on, mods)) profilesChanged(game);
+      if (await setOn(game, mods.filter((m) => ids.includes(m.id)), on, mods, anchorFor(ids[0]!), keep)) profilesChanged(game);
       return;
     }
     const before = inIds ?? new Set<string>();
     const ins = on ? [...ids] : [];
     const outs = on ? [] : [...ids];
     const notes: string[] = [];
-    if (on && oneSkin) {
-      // one skin per character, as when it's in use: the last one added wins, the others of that character come out
-      const byChar = new Map<string, string>();
-      for (const id of ids) { const c = mods.find((m) => m.id === id)?.character?.toLowerCase(); if (c) byChar.set(c, id); }
-      for (const id of [...ins]) {
-        const c = mods.find((m) => m.id === id)?.character?.toLowerCase();
-        if (c && byChar.get(c) !== id) ins.splice(ins.indexOf(id), 1);
+    if (on && !keep) {
+      // the same rule as turning mods on ("Another skin already on"), with this profile's mods as the ones on
+      const asIn = mods.map((m) => (m.enabled === before.has(m.id) ? m : { ...m, enabled: before.has(m.id) }));
+      const going = asIn.filter((m) => ids.includes(m.id));
+      const c = await askOverlap(game, going, asIn, anchorFor(ids[0]!));
+      if (!c) return;
+      if (c.parent && going.length === 1 && !(await setParent(game, mods.find((m) => m.id === going[0]!.id)!, c.parent, mods))) return;
+      if (c.turnOffOthers) {
+        // only the ones that change the same parts come out: a hair recolour stays next to an outfit
+        const near = overlappingAll(going, asIn).filter((o) => !liveCharacterOf(game, o.id));
+        const same = near.length ? await library.overlapping(game, ids, near.map((o) => o.id)).catch(() => near.map((o) => o.id)) : [];
+        for (const o of near) if (same.includes(o.id)) { outs.push(o.id); notes.push(`took out ${o.name}`); }
+        if (outs.length) setKept((k) => new Set([...k, ...outs]));
       }
-      // sub-mods and their parent go together
-      const roots = new Set(ins.map((id) => { const m = mods.find((x) => x.id === id); return m?.parent || id; }));
-      for (const m of mods) {
-        const c = m.character?.toLowerCase();
-        if (c && byChar.has(c) && before.has(m.id) && !ins.includes(m.id) && !roots.has(m.parent || m.id)) { outs.push(m.id); notes.push(`took out ${m.name} (one skin per ${m.character})`); }
-      }
-      if (outs.length) setKept((k) => new Set([...k, ...outs]));
     }
     const next = new Set(before);
     for (const id of outs) next.delete(id);
@@ -123,19 +124,19 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
       setMembersState(before);
       toast(errorText(e), true);
     }
-  }, [game, p, mods, inIds, isIn, oneSkin]);
+  }, [game, p, mods, inIds, isIn]);
 
   const itemsFor = useCallback((m: ModEntry): MenuEntry[] => {
     const inIt = isIn(m);
     return [
       { label: inIt ? `Take out of ${p.name}` : `Add to ${p.name}`, icon: inIt ? "minus" : "plus", keys: "Space", onClick: () => void setIn([m], !inIt) },
       "-",
-      ...menuFor("mod", { game, mod: mods.find((x) => x.id === m.id) ?? m }).filter((e) => !(e && typeof e === "object" && "keys" in e && e.keys === "Space")),
+      ...withoutKeys(menuFor("mod", { game, mod: mods.find((x) => x.id === m.id) ?? m }).filter((e) => !(e && typeof e === "object" && "keys" in e && e.keys === "Space")), ["Enter"]),
     ];
   }, [game, mods, p.name, isIn, setIn]);
 
   const onOpen = useCallback((m: ModEntry, _e: MouseEvent) => openDetails(m), []);
-  const onToggle = useCallback((m: ModEntry, on: boolean) => void setIn([m], on), [setIn]);
+  const onToggle = useCallback((m: ModEntry, on: boolean, keep: boolean) => void setIn([m], on, keep), [setIn]);
   const onMenu = useCallback((m: ModEntry, el: HTMLElement) => openMenu(el, itemsFor(m)), [itemsFor]);
   const onUpdate = useCallback((m: ModEntry) => void getUpdate(game, m), [game]);
 
@@ -159,7 +160,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
 
   return (
     <>
-      <header className="char-hero profile-hero" onContextMenu={menuHandler(() => menuFor("profile", { game, id: p.id }))}>
+      <header className="char-hero profile-hero" onContextMenu={menuHandler(() => withoutKeys(menuFor("profile", { game, id: p.id })))}>
         <button type="button" className="profile-hero-pic" onClick={() => onEdit("icon")} title="Change the icon and colour">
           <ProfileIcon profile={p} chars={chars} size={88} />
         </button>
@@ -175,7 +176,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
           <div className="char-hero-a">
             <Tabs value={tab} onChange={(v) => patchRoute({ tab: v === "every" ? "every" : undefined, modId: undefined })}
               tabs={[{ value: "in", label: "In this profile", icon: "profiles", count: ready ? inCount : undefined },
-                { value: "every", label: "Add mods", icon: "plus", count: loaded ? total : undefined }]} />
+                { value: "every", label: "Add mods", icon: "plus", count: ready ? total - inCount : undefined }]} />
           </div>
         </div>
         <div className="char-hero-nav">
@@ -183,7 +184,7 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
             ? <Badge tone="accent" icon="check" title="The profile in use. Turning mods on or off anywhere saves here">On now</Badge>
             : <Button variant="primary" icon="swap" busy={busy} onClick={onSwitch} title={`Turns mods on and off to match ${p.name}`}>Switch to it</Button>}
           <IconButton icon="edit" label="Edit" title="Edit the name, icon, colour, banner and hotkey" onClick={() => onEdit()} />
-          <IconButton icon="more" label="More" title="More (right-click the header works too)" onClick={(e) => openMenu(e.currentTarget, menuFor("profile", { game, id: p.id }))} />
+          <IconButton icon="more" label="More" title="More (right-click the header works too)" onClick={(e) => openMenu(e.currentTarget, withoutKeys(menuFor("profile", { game, id: p.id })))} />
         </div>
       </header>
 
@@ -196,7 +197,9 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
       </div>
 
       {!ready ? (
-        <div className="mod-grid is-loading" aria-busy="true">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}</div>
+        <Waiting what={`Reading the mods in ${p.name}`}>
+          <div className="mod-grid is-loading" aria-busy="true">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}</div>
+        </Waiting>
       ) : !shown.length ? (
         query ? <Empty icon="search" title="Nothing matches">No mod {tab === "every" ? "" : `in ${p.name} `}has "{query.trim()}" in its name, character or tags.</Empty>
         : tab === "every" ? <Empty icon="mods" title="No mods installed yet">Mods you install show up here to add to {p.name}.</Empty>

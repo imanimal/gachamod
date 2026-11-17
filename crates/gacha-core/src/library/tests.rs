@@ -298,6 +298,63 @@ fn turning_on_names_a_disabled_folder_back() {
 }
 
 #[test]
+fn turning_on_mods_in_another_managers_disabled_wrappers() {
+    let t = Tree::new("wrappers");
+    let rels = [
+        "character/arlecchino/DISABLED_Arlecchino City Afternoon Tea Mod (toggle).zip/Arlecchino City Afternoon Tea Mod (toggle)",
+        "character/hu tao/DISABLED_hutao_flame_fusion_20.zip/Hutao Flame Fusion 2.0",
+        "character/raiden shogun/DISABLED_raiden_shadowfeather_mod_c78b8.zip/Raiden Shadowfeather Mod",
+        "character/yelan/DISABLED_yelan_bunny.rar/Yelan Bunny",
+    ];
+    for r in rels { t.add(r); }
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    assert!(list.iter().all(|m| !m.enabled && !m.standby));
+    let d = db.lock().unwrap();
+    for m in &list {
+        set_enabled_with(&d, "zzz", &[m.id.clone()], true, Some(false)).unwrap_or_else(|e| panic!("{}: {e}", m.rel_path));
+    }
+    let rows = list_rows(&d);
+    for r in &rows { assert!(r.enabled && !rel_disabled(&r.rel_path) && Path::new(&r.path).is_dir(), "{} {}", r.rel_path, r.path); }
+    assert!(t.mods.join("character/yelan/yelan_bunny.rar/Yelan Bunny/mod.ini").is_file());
+    drop(d);
+    let again = scan(&db, "zzz").unwrap();
+    assert!(again.iter().all(|m| m.enabled), "{:?}", again.iter().map(|m| (&m.rel_path, m.enabled)).collect::<Vec<_>>());
+}
+
+#[test]
+fn every_way_of_writing_disabled_comes_off() {
+    let t = Tree::new("variants");
+    let names = ["DISABLED_a", "DISABLED-b", "DISABLEDc", "disabled d", "Disabled_e"];
+    for (i, n) in names.iter().enumerate() {
+        t.add(&format!("Own/{n}"));
+        t.add(&format!("Wrap {i}/{n}.zip/Inner {i}"));
+    }
+    // the clean name is taken already: the wrapper gets a free one, nothing is merged or replaced
+    fs::create_dir_all(t.mods.join("Wrap 0/a.zip")).unwrap();
+    fs::write(t.mods.join("Wrap 0/a.zip/keep.txt"), "x").unwrap();
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    assert!(list.iter().all(|m| !m.enabled));
+    let d = db.lock().unwrap();
+    for m in &list { set_enabled_with(&d, "zzz", &[m.id.clone()], true, Some(false)).unwrap_or_else(|e| panic!("{}: {e}", m.rel_path)); }
+    for n in ["a", "b", "c", "d", "e"] { assert!(t.mods.join("Own").join(n).join("mod.ini").is_file(), "Own/{n}"); }
+    assert!(t.mods.join("Wrap 0/a.zip/keep.txt").is_file());
+    assert!(t.mods.join("Wrap 0/a.zip (2)/Inner 0/mod.ini").is_file());
+    for (i, n) in ["b", "c", "d", "e"].iter().enumerate() { assert!(t.mods.join(format!("Wrap {}/{n}.zip/Inner {}/mod.ini", i + 1, i + 1)).is_file()); }
+    assert!(list_rows(&d).iter().all(|r| r.enabled && !rel_disabled(&r.rel_path) && Path::new(&r.path).is_dir()));
+
+    // and off again: the mod's own folder takes the prefix, its files stay
+    let inner = list_rows(&d).into_iter().find(|r| r.name == "Inner 0").unwrap();
+    set_enabled(&d, "zzz", &[inner.id.clone()], false).unwrap();
+    assert!(t.mods.join("Wrap 0/a.zip (2)/DISABLED Inner 0/mod.ini").is_file());
+    drop(d);
+    let again = scan(&db, "zzz").unwrap();
+    assert!(!by_name(&again, "Inner 0").enabled);
+    assert_eq!(again.iter().filter(|m| m.enabled).count(), list.len() - 1);
+}
+
+#[test]
 fn turning_on_two_mods_in_one_disabled_folder() {
     let t = Tree::new("parent2");
     t.add("DISABLED Old/Jane Gym");
@@ -766,6 +823,78 @@ fn live_skins_switch_from_the_library() {
     assert!(!fs::read_to_string(&maid_ini).unwrap().contains("gachamod"));
 }
 
+/// A live skin whose folder another manager turned off by renaming its wrapper to DISABLED_... while it was the one
+/// the group shows: turning it on (library, F7 menu pick) names the wrapper back, and so does the next scan.
+#[test]
+fn a_live_skin_in_a_disabled_wrapper_comes_back_on() {
+    let t = Tree::new("livewrap");
+    let ini = "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n";
+    for rel in ["Ellen Joe/Maid Ellen", "Ellen Joe/DISABLED_bunny.zip/Bunny"] {
+        let d = t.mods.join(rel);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("mod.ini"), ini).unwrap();
+    }
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let (maid, bunny) = (by_name(&list, "Maid Ellen").id.clone(), by_name(&list, "Bunny").id.clone());
+    {
+        let d = db.lock().unwrap();
+        // joining a group turns the folder on: the wrapper's prefix comes off
+        crate::live::add(&d, "zzz", &[maid.clone(), bunny.clone()]).unwrap();
+        let b = get(&d, "zzz", &bunny).unwrap();
+        assert!(b.standby && b.rel_path == "Ellen Joe/bunny.zip/Bunny", "{}", b.rel_path);
+        set_enabled(&d, "zzz", &[bunny.clone()], true).unwrap();
+        assert!(get(&d, "zzz", &bunny).unwrap().enabled);
+    }
+    // another manager puts the prefix back while Bunny is the one showing, and the row knows (no scan since, which
+    // would name it back by itself)
+    let turned_off = |d: &Db, wrapper: &str| {
+        fs::rename(t.mods.join("Ellen Joe/bunny.zip"), t.mods.join("Ellen Joe").join(wrapper)).unwrap();
+        let mut e = get(d, "zzz", &bunny).unwrap();
+        e.rel_path = format!("Ellen Joe/{wrapper}/Bunny");
+        e.path = t.mods.join("Ellen Joe").join(wrapper).join("Bunny").to_string_lossy().into_owned();
+        (e.enabled, e.standby) = (false, false);
+        put_row(d, &e).unwrap();
+    };
+    let d = db.lock().unwrap();
+    turned_off(&d, "DISABLED_bunny.zip");
+    set_enabled(&d, "zzz", &[bunny.clone()], true).unwrap();
+    let b = get(&d, "zzz", &bunny).unwrap();
+    assert!(b.enabled && !rel_disabled(&b.rel_path) && Path::new(&b.path).join("mod.ini").is_file(), "{} {}", b.rel_path, b.enabled);
+    assert!(get(&d, "zzz", &maid).unwrap().standby);
+
+    // the same through the F7 menu: a pick of the skin it already shows
+    turned_off(&d, "disabled bunny.zip");
+    let g = crate::live::info(&d, "zzz").unwrap().groups[0].clone();
+    let slot = g.mods.iter().find(|m| m.mod_id == bunny).unwrap().slot;
+    let p = crate::live::pick(&d, "zzz", g.group, slot).unwrap();
+    assert!(p.reload);
+    let b = get(&d, "zzz", &bunny).unwrap();
+    assert!(b.enabled && !rel_disabled(&b.rel_path), "{}", b.rel_path);
+    assert!(t.mods.join("Ellen Joe/bunny.zip/Bunny/mod.ini").is_file());
+
+    // and with nobody asking: a scan finds a live skin's folder off and names it back, on standby when it isn't
+    // the one showing, so a pick in the game's own menu has something to show
+    set_enabled(&d, "zzz", &[maid.clone()], true).unwrap();
+    drop(d);
+    fs::rename(t.mods.join("Ellen Joe/bunny.zip"), t.mods.join("Ellen Joe/DISABLED_bunny.zip")).unwrap();
+    let again = scan(&db, "zzz").unwrap();
+    let b = by_name(&again, "Bunny");
+    assert!(b.standby && !b.enabled && b.rel_path == "Ellen Joe/bunny.zip/Bunny", "{} {} {}", b.rel_path, b.enabled, b.standby);
+    assert!(by_name(&again, "Maid Ellen").enabled);
+    assert!(t.mods.join("Ellen Joe/bunny.zip/Bunny/mod.ini").is_file() && !t.mods.join("Ellen Joe/DISABLED_bunny.zip").exists());
+
+    // the one showing, turned off outside gachamod: a scan leaves it off, and the group shows none of its mods
+    set_enabled(&db.lock().unwrap(), "zzz", &[bunny.clone()], true).unwrap();
+    fs::rename(t.mods.join("Ellen Joe/bunny.zip"), t.mods.join("Ellen Joe/DISABLED_bunny.zip")).unwrap();
+    let again = scan(&db, "zzz").unwrap();
+    let b = by_name(&again, "Bunny");
+    assert!(!b.enabled && !b.standby && rel_disabled(&b.rel_path), "{} {} {}", b.rel_path, b.enabled, b.standby);
+    assert!(t.mods.join("Ellen Joe/DISABLED_bunny.zip/Bunny/mod.ini").is_file());
+    assert!(by_name(&again, "Maid Ellen").standby);
+    assert_eq!(crate::live::info(&db.lock().unwrap(), "zzz").unwrap().groups[0].active, 0);
+}
+
 #[test]
 fn every_character_joins_and_new_mods_follow() {
     let t = Tree::new("liveall");
@@ -1119,4 +1248,77 @@ fn picks_made_in_the_game_are_saved_right_away() {
     crate::live::set_menu(&d, "zzz", &m).unwrap();
     assert_eq!(interval(), "60");
     assert_eq!(fs::read_to_string(&d3dx).unwrap(), original);
+}
+
+/// Two characters with two skins each, every one switching in game.
+fn two_live_characters(tag: &str) -> (Tree, Shared) {
+    let t = Tree::new(tag);
+    for rel in ["Ellen Joe/Maid", "Ellen Joe/Bunny", "Jane Doe/Coat", "Jane Doe/Suit"] {
+        fs::write(t.add(rel).join("mod.ini"), "[TextureOverrideBody]\nhash = 0011aabb\nib = ResourceIB\ndrawindexed = auto\n").unwrap();
+    }
+    let db = t.db();
+    scan(&db, "zzz").unwrap();
+    crate::live::set_all(&db.lock().unwrap(), "zzz", true).unwrap();
+    (t, db)
+}
+
+/// The game saves who is on screen, and the app reports it only while the game runs.
+#[test]
+fn the_game_tells_the_app_who_is_on_screen() {
+    let (t, db) = two_live_characters("on-screen");
+    let user = t.root.join("ZZMI").join("d3dx_user.ini");
+    let info = || crate::live::info(&db.lock().unwrap(), "zzz").unwrap();
+    let groups = info().groups;
+    let n = |c: &str| groups.iter().find(|g| g.character == c).unwrap().group;
+    let (ellen, jane) = (n("Ellen Joe"), n("Jane Doe"));
+    let ini = fs::read_to_string(t.mods.join(crate::live::DIR).join("live.ini")).unwrap();
+    assert!(ini.contains(&format!("global persist $o{jane} = 0\r\n")) && ini.contains("[CommandListOnScreen]\r\n"), "{ini}");
+    fs::write(&user, format!("[Constants]\n$\\gachamod\\live\\g{ellen} = 1\n$\\gachamod\\live\\o{ellen} = 0\n$\\gachamod\\live\\o{jane} = 1\n")).unwrap();
+    // left from the last run: says nothing
+    assert!(info().on_screen.is_empty());
+    crate::launch::TEST_RUNNING.with(|r| r.set(true));
+    assert_eq!(info().on_screen, vec![jane]);
+    fs::write(&user, format!("[Constants]\n$\\gachamod\\live\\o{ellen} = 1\n$\\gachamod\\live\\o{jane} = 1\n")).unwrap();
+    let both = info().on_screen;
+    assert_eq!(both, groups.iter().map(|g| g.group).collect::<Vec<_>>(), "in the order of the groups");
+    crate::launch::TEST_RUNNING.with(|r| r.set(false));
+}
+
+/// A save the game makes only because a character came on screen or left is no pick: what the app picked stands,
+/// nothing is read back, and the windows aren't told to reload their lists.
+#[test]
+fn an_on_screen_save_is_no_pick() {
+    let (t, db) = two_live_characters("on-screen-save");
+    let user = t.root.join("ZZMI").join("d3dx_user.ini");
+    let group = |c: &str| crate::live::info(&db.lock().unwrap(), "zzz").unwrap().groups.into_iter().find(|g| g.character == c).unwrap();
+    let (ellen, jane) = (group("Ellen Joe"), group("Jane Doe"));
+    let save = |g_ellen: u32, g_jane: u32, o: u32| {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        fs::write(&user, format!("[Constants]\n$\\gachamod\\live\\g{} = {g_ellen}\n$\\gachamod\\live\\g{} = {g_jane}\n$\\gachamod\\live\\o{} = {o}\n", ellen.group, jane.group, jane.group)).unwrap();
+    };
+    crate::launch::TEST_RUNNING.with(|r| r.set(true));
+    save(ellen.active, jane.active, 0);
+    let _ = crate::live::follow_game(&db.lock().unwrap(), "zzz");
+
+    // no pick sent yet: every save is the game's word, and one with the same picks is no news
+    save(ellen.active, jane.active, 1);
+    assert!(!crate::live::follow_game(&db.lock().unwrap(), "zzz"));
+    // a pick the keys brought in, then the game saves because Jane came on screen
+    crate::live::TEST_TAPS.with(|t| t.set(true));
+    let other = ellen.mods.iter().map(|m| m.slot).find(|s| *s != ellen.active).unwrap();
+    crate::live::pick(&db.lock().unwrap(), "zzz", ellen.group, other).unwrap();
+    crate::live::flush_sends(&db);
+    save(other, jane.active, 0);
+    assert!(!crate::live::follow_game(&db.lock().unwrap(), "zzz"));
+    assert_eq!(group("Ellen Joe").active, other);
+    // a pick the keys couldn't bring in waits, and a save from Jane leaving before the game took it doesn't undo it
+    crate::live::TEST_TAPS.with(|t| t.set(false));
+    crate::live::pick(&db.lock().unwrap(), "zzz", ellen.group, ellen.active).unwrap();
+    crate::live::flush_sends(&db);
+    save(other, jane.active, 1);
+    assert!(!crate::live::follow_game(&db.lock().unwrap(), "zzz"));
+    let e = group("Ellen Joe");
+    assert!(e.active == ellen.active && e.waiting);
+    assert_eq!(group("Jane Doe").active, jane.active);
+    crate::launch::TEST_RUNNING.with(|r| r.set(false));
 }

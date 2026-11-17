@@ -126,13 +126,15 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
         <div className={`char-strip-wrap${stripAll ? " is-all" : ""}`}>
         <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many} onKeyDown={(e) => rowKeys(e, ".pchip")}>
           {strip.map((x) => (
-            <button key={x.name} type="button" role="listitem" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
+            <div key={x.name} role="listitem" className="char-strip-item">
+            <button type="button" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
               aria-current={same(x.name, name) ? "page" : undefined} onClick={() => hop(x)}
               onContextMenu={menuHandler(() => menuFor("character", { game, name: x.name }))}>
               <span className="pchip-img"><Portrait game={game} name={x.name} icon={x.icon} size="3rem" /></span>
               <span className="pchip-t">{x.name}</span>
               {x.mods.length > 0 && <span className="pchip-n">{x.mods.length}</span>}
             </button>
+            </div>
           ))}
         </div>
         <ShowAll open={stripAll} onToggle={toggleStripAll} fits={!stripEdges.left && !stripEdges.right} label={`Show every ${one.toLowerCase()} (${strip.length})`} />

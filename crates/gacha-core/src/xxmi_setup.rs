@@ -9,7 +9,7 @@
 //! - the config: each importer added to `Launcher.enabled_importers`, with its `game_folder` when the game was found.
 //! XXMI counts an importer as installed once `Core\<CODE>\main.ini` exists, and checks and updates all of it on its next
 //! start. Nothing already there is replaced: a d3dx.ini, Mods folder or game folder the user has stays. Owner: SYSTEM.
-use crate::error::{Error, Result};
+use crate::error::{Error, IoAt, Result};
 use crate::xxmi::{self, CONFIG_FILE, EXE_NAME};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -49,13 +49,13 @@ struct Asset { name: String, browser_download_url: String }
 async fn latest(http: &reqwest::Client, repo: &str) -> Result<Release> {
     let r = http.get(format!("https://api.github.com/repos/{repo}/releases/latest"))
         .header("Accept", "application/vnd.github+json")
-        .send().await?;
+        .send().await.map_err(|e| Error::unreachable("GitHub", e.without_url()))?;
     let status = r.status().as_u16();
     if status == 403 || status == 429 {
-        return Err(Error::Network("GitHub is limiting downloads from this PC for a while. Try again in an hour".into()));
+        return Err(Error::RateLimited { site: "GitHub".into(), wait: "an hour" });
     }
     if !r.status().is_success() {
-        return Err(Error::Http { status, message: format!("GitHub didn't send {repo}'s latest release") });
+        return Err(Error::Site { site: "GitHub".into(), status, message: format!("{repo}'s latest release didn't come") });
     }
     r.json::<Release>().await.map_err(|e| Error::Decode(e.to_string()))
 }
@@ -188,8 +188,8 @@ async fn unpack(zip: PathBuf, tmp: PathBuf, dest: PathBuf, keep: bool) -> Result
 }
 
 fn merge(from: &Path, to: &Path, keep: bool) -> Result<()> {
-    std::fs::create_dir_all(to)?;
-    for e in std::fs::read_dir(from)?.flatten() {
+    std::fs::create_dir_all(to).at(to)?;
+    for e in std::fs::read_dir(from).at(from)?.flatten() {
         let (src, dst) = (e.path(), to.join(e.file_name()));
         if src.is_dir() { merge(&src, &dst, keep)?; continue; }
         if dst.exists() {
@@ -209,7 +209,7 @@ pub fn write_config(root: &Path, targets: &[Target]) -> Result<()> {
         std::fs::write(&path, serde_json::to_string_pretty(&json!({ "Launcher": {}, "Importers": {} }))?)?;
     }
     if targets.is_empty() { return Ok(()); }
-    let text = std::fs::read_to_string(&path)?;
+    let text = std::fs::read_to_string(&path).at(&path)?;
     let cfg: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap_or(Value::Null);
     let mut enabled: Vec<String> = cfg["Launcher"]["enabled_importers"].as_array()
         .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();

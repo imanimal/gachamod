@@ -1,7 +1,7 @@
 // The pull button (Settings, Fun extras; off until turned on): opens one random mod for the current game, gacha style.
 // 3 star: one of the newest mods. 4 star: one of the 200 most liked. 5 star: one of the 50 most liked. A 5 star comes
 // one pull in sixteen, and every 10th pull without one is a 5 star. Mods for adults follow Settings (hidden ones stay
-// out), and hidden mods and blocked creators never come up. A short flash in the star colour plays first (not with
+// out), and hidden mods, installed mods and blocked creators never come up. A short flash in the star colour plays first (not with
 // Animations off). Owner: BROWSE area.
 import { useState } from "react";
 import type { GameState } from "../../lib/api";
@@ -10,7 +10,7 @@ import { listMods, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { hiddenModsPref, isBlocked, nsfwPref } from "../../lib/prefs";
 import { IconButton } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { openGbMod } from "./state";
+import { libIndexNow, openGbMod } from "./state";
 
 type Stars = 3 | 4 | 5;
 /** Where each rarity draws from: a sort and the pages of it. */
@@ -25,7 +25,8 @@ function roll(): Stars {
 async function draw(game: GameState, stars: Stars): Promise<GbCard | null> {
   const { sort, pages } = POOL[stars];
   const hidden = new Set(hiddenModsPref.get());
-  const ok = (c: GbCard) => !hidden.has(c.id) && !isBlocked(c.submitter?.id) && !(c.nsfw && nsfwPref.get() === "hide");
+  const have = libIndexNow(game.id).byMod;
+  const ok = (c: GbCard) => !hidden.has(c.id) && !have.has(c.id) && !isBlocked(c.submitter?.id) && !(c.nsfw && nsfwPref.get() === "hide");
   // 4 star skips the first page (that's 5 star's)
   const first = stars === 4 ? 2 : 1;
   const page = first + Math.floor(Math.random() * (pages - first + 1));

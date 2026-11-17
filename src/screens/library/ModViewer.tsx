@@ -46,7 +46,13 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
   useEffect(() => {
     const el = box.current;
     if (!mesh || !el) return;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    let renderer: THREE.WebGLRenderer;
+    try { renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); }
+    catch (e) {
+      console.error("3D view: no WebGL", e);
+      setError("Couldn't start the 3D view. The graphics driver didn't allow it, which can happen with hardware acceleration turned off or an old driver");
+      return;
+    }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     const bg = getComputedStyle(el).backgroundColor;
@@ -205,25 +211,27 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
     if (blob) onSnapshot(blob);
   };
 
+  // the model came and the view started: a renderer that failed leaves `mesh` set with an error
+  const ready = mesh && !error ? mesh : null;
   return (
     <div className="mod-viewer-wrap">
-      <div ref={box} className={`mod-viewer${mesh ? "" : " is-wait"}`} tabIndex={0} title={mesh ? TIP : undefined}
-        aria-label={mesh ? `3D view. ${TIP}` : "3D view"} onKeyDown={onKey}>
+      <div ref={box} className={`mod-viewer${ready ? "" : " is-wait"}`} tabIndex={0} title={ready ? TIP : undefined}
+        aria-label={ready ? `3D view. ${TIP}` : "3D view"} onKeyDown={onKey}>
         {!mesh && !error && <span className="mod-viewer-msg"><span className="spin" aria-hidden="true" />Reading the model</span>}
         {error && <span className="mod-viewer-msg">{error}</span>}
         <div className="mod-drawer-picact">
-          {mesh && (
+          {ready && (
             <Button size="sm" className="on-img" icon="camera" busy={saving} onClick={() => void snap()}
               title="Save this view as the mod's preview picture">Use as preview</Button>
           )}
-          {mesh && <IconButton size="sm" variant="secondary" className="on-img" icon="refresh" label="Reset the view (Home)" onClick={() => view.current?.reset()} />}
+          {ready && <IconButton size="sm" variant="secondary" className="on-img" icon="refresh" label="Reset the view (Home)" onClick={() => view.current?.reset()} />}
           <IconButton size="sm" variant="secondary" className="on-img" icon="x" label="Close the 3D view (Esc)" onClick={onClose} />
         </div>
       </div>
-      {mesh && (
+      {ready && (
         <p className="hint mod-viewer-note">
-          The parts this mod replaces, as its toggles are set now ({mesh.triangles.toLocaleString()} triangles).
-          {mesh.notes.length > 0 && ` ${mesh.notes.join(". ")}.`}
+          The parts this mod replaces, as its toggles are set now ({ready.triangles.toLocaleString()} triangles).
+          {ready.notes.length > 0 && ` ${ready.notes.join(". ")}.`}
         </p>
       )}
     </div>

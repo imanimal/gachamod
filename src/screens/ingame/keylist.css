@@ -1,36 +1,28 @@
-/* The key list: keys as key caps (KeyListParts.tsx) and Tools > Key list in game (KeyListPanel.tsx). The Keys tab of
-   the menu over the game is in overlay.css. Owner: INGAME area. */
-.kl-keys { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .25rem; flex: none; max-width: 60%; }
-.kl-alt, .kl-part { display: inline-flex; align-items: center; gap: .25rem; }
-.kl-keys .kbd { font-size: .8em; }
-.kl-plus, .kl-or { font-size: .74em; font-weight: 600; color: var(--text-3); }
-.kl-pad { display: inline-grid; place-items: center; color: var(--text-3); }
-.kl-pad .i { width: 1rem; height: 1rem; }
-
-/* Tools > Key list in game */
-.kl-all { margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
-.kl-off { display: flex; align-items: center; gap: .6rem; margin-top: .6rem; }
+/* Tools > Key list in game (KeyListPanel.tsx). The Keys tab of the menu over the game is in overlay.css.
+   Owner: INGAME area. */
+.kl-all { margin: var(--s-3) 0 var(--s-1); }
+.kl-off { display: flex; align-items: center; gap: var(--s-2); margin-top: var(--s-2); }
 .kl-off .hint { flex: 1; margin: 0; }
-.kl-opts { display: flex; flex-direction: column; gap: .6rem; margin: .7rem 0 .2rem; padding: .7rem; border-radius: var(--radius); background: var(--surface-2); }
-.kl-opts-row { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem 1rem; }
+.kl-opts { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-3) 0 var(--s-1); }
+.kl-opts-row { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-2) var(--s-4); }
 .kl-opts-l { align-self: center; font-weight: 600; }
 .kl-opts .hotkey-field { width: 14rem; }
 .kl-opts .hint { margin: 0; }
-.kl-h { display: flex; align-items: center; gap: .8rem; margin: 1rem 0 .5rem; }
+.kl-h { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-4) 0 var(--s-2); }
 .kl-h h3 { margin: 0; font-size: 1em; font-weight: 600; }
 .kl-h .search { flex: 1; max-width: 18rem; margin-left: auto; }
 .kl-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.kl-mod { display: flex; align-items: center; gap: .6rem; padding: .35rem .5rem; border-radius: var(--radius); }
+.kl-mod { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius-sm); }
 .kl-mod:hover, .kl-mod:focus-within { background: var(--surface-2); }
-.kl-thumb { display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; overflow: hidden; border-radius: calc(var(--radius) * .6); background: var(--surface-2); color: var(--text-2); }
+.kl-thumb { display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
 .kl-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .kl-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
 .kl-name .tp-link, .kl-link { align-self: flex-start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .kl-link:hover { text-decoration: underline; }
 .kl-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kl-acts { flex: none; display: flex; align-items: center; gap: .5rem; }
-.kl-none { margin: .4rem 0; }
+.kl-acts { flex: none; display: flex; align-items: center; gap: var(--s-2); }
+.kl-none { margin: var(--s-2) 0; }
 
 /* the line in Switch skins in game that points here (InGamePanel.tsx) */
-.live-menu .live-keys { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; }
+.live-menu .live-keys { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); }

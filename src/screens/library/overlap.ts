@@ -2,7 +2,7 @@
 // override, checked by the backend): most skins don't go together, some do. Mods that change other parts (a hair
 // recolour next to an outfit) turn on without a question. A small menu by the switch asks which: turn the other off,
 // keep both, or make the new one a sub-mod of the other so the question never comes back. The "<game>.oneSkin" setting can answer for good
-// ("auto" turns the other off, "0" keeps both; anything else asks), and the menu's last entry sets it to "0".
+// ("auto" turns the other off, "0" keeps both; anything else asks), and the menu's last two entries set it.
 // Owner: LIBRARY area.
 import { library, settings, type GameId, type ModEntry } from "../../lib/api";
 import { record } from "../../lib/history";
@@ -38,15 +38,17 @@ export function anchorFor(modId: string): Element | null {
   return shownOne(`${sel} .mod-card-foot`) ?? shownOne(sel);
 }
 
-/** Stop asking for this game: mods of one character turn on together from now on. Undo brings the question back. */
-async function stopAsking(game: GameId) {
+/** Stop asking for this game: "auto" swaps outfits from now on, "0" keeps both on. Undo brings the question back. */
+async function stopAsking(game: GameId, rule: "auto" | "0") {
   const key = `${game}.oneSkin`;
   const before = await settings.get(key).catch(() => null);
-  await settings.set(key, "0").catch(() => {});
+  await settings.set(key, rule).catch(() => {});
   record({
-    label: "Mods of one character turn on together without asking now. Settings changes it back",
+    label: rule === "auto"
+      ? "Turning on a mod turns off the other ones of its character without asking now. Settings changes it back"
+      : "Mods of one character turn on together without asking now. Settings changes it back",
     undo: async () => { await settings.set(key, before ?? "ask"); },
-    redo: async () => { await settings.set(key, "0"); },
+    redo: async () => { await settings.set(key, rule); },
   });
 }
 
@@ -97,9 +99,12 @@ export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all:
         title: `For an add-on that goes with ${one.name}. It turns off with ${one.name}, comes back with it, and this question won't come up for the two again`,
         onClick: () => pick({ turnOffOthers: false, parent: rootOf(one) }) },
       "-",
+      { label: one ? "Turn off the other and don't ask again" : "Turn off the others and don't ask again", icon: "check",
+        title: "From now on turning on a mod turns off the character's other mods that change the same parts, without this question. Settings has it as Another skin already on",
+        onClick: () => { void stopAsking(game, "auto"); pick({ turnOffOthers: true }); } },
       { label: one ? "Keep both on and don't ask again" : "Keep them all on and don't ask again", icon: "check",
         title: "From now on a mod turns on next to the others of its character without this question. Settings has it as Another skin already on",
-        onClick: () => { void stopAsking(game); pick({ turnOffOthers: false }); } },
+        onClick: () => { void stopAsking(game, "0"); pick({ turnOffOthers: false }); } },
     ];
     // the menu closes before a picked item runs: wait a tick so the pick wins
     openMenu(anchor, items, () => queueMicrotask(() => pick(null)));

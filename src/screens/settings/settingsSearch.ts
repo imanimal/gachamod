@@ -64,15 +64,15 @@ export const SECTIONS: SectionInfo[] = [
 ];
 
 /** Single settings: [row id (a route section), the section it sits in, title, keywords, icon]. */
-const SETTINGS: Array<[string, string, string, string, IconName]> = [
+export const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-admin", "game-start", "Run as administrator", "admin administrator elevated uac f10 keys hotkeys zenless zzz always restart", "shield"],
   ["set-only-game", "games", "One-game mode", "one game only single focus just one exclusive hide other games main game", "focus"],
   ["set-community", "games", "Community games", "pgr punishing gray raven p5x persona gf2 girls frontline identity v stella sora taimanin 3dmigoto loader other games", "controller"],
   ["set-links", "integrations", "1-click installs from GameBanana", "gachamod links protocol url one click install handler default app", "link"],
   ["set-files", "integrations", "Open .gachamod files", "gachamod file pack association double click open with default app", "link"],
-  ["set-scheme", "appearance", "Light or dark mode", "dark mode light mode night theme scheme system colours colors", "moon"],
-  ["set-accent", "appearance", "Accent colour", "accent color colour highlight tint", "palette"],
-  ["set-layout", "layout", "Layout", "density compact comfortable spacing sidebar left right nav style corners round sharp buttons", "layout"],
+  ["set-scheme", "appearance", "Light or dark", "dark mode light mode night theme scheme system colours colors", "moon"],
+  ["set-accent", "appearance", "Accent", "accent colour color highlight tint", "palette"],
+  ["set-layout", "layout", "Spacing", "layout density compact comfortable spacing sidebar left right nav style corners round sharp buttons", "layout"],
   ["set-text-size", "layout", "Text size", "font size zoom bigger smaller scale ui size", "sliders"],
   ["set-motion", "layout", "Animations", "motion animation reduce reduced effects transitions", "sparkle"],
   ["set-intro", "layout", "Opening screen", "intro splash startup start opening animation loading screen tips tip of the day", "play"],
@@ -84,22 +84,22 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-seasonal", "fun", "Seasonal touches", "snow christmas winter valentine hearts halloween bats pumpkins spooky holiday season", "snow"],
   ["set-year", "fun", "Your year in mods", "year stats wrapped recap summary hours played most mods", "calendar"],
   ["set-enable-new", "mods", "Turn on new mods", "auto enable activate new mods after install download turn on automatically off by default", "power"],
-  ["set-nsfw", "adult", "Hide, blur or show mods for adults", "nsfw 18+ adult lewd blur hide show censor", "eye"],
+  ["set-nsfw", "adult", "Mods marked for adults", "hide blur show nsfw 18+ adult lewd blur hide show censor", "eye"],
   ["set-gb-adult", "adult", "Match my GameBanana settings", "nsfw adult gamebanana account content ratings sync match same as site", "eye"],
-  ["set-pergame", "mods", "One skin per character", "single skin outfit only one at a time auto turn off others", "characters"],
-  ["set-pergame", "mods", "Reload in game automatically", "f10 reload refresh in game auto press", "refresh"],
-  ["set-app-updates", "updates", "Update gachamod automatically", "app update check new version upgrade auto install automatic", "update"],
-  ["set-app-check", "updates", "Check for gachamod updates", "app update check now new version upgrade latest", "update"],
+  ["set-pergame", "mods", "Another skin already on", "one skin per character single skin outfit only one at a time auto turn off others", "characters"],
+  ["set-pergame", "mods", "Reload in game", "automatically f10 reload refresh in game auto press", "refresh"],
+  ["set-app-updates", "updates", "Update gachamod automatically", "app update check new version upgrade auto install automatic tell notify only off", "update"],
+  ["set-app-check", "updates", "Check for updates", "gachamod app update check now new version upgrade latest", "update"],
   ["set-mod-updates", "automatic", "Check mods for updates", "mod updates outdated gamebanana auto check", "update"],
-  ["set-rescan", "automatic", "Rescan mods automatically", "scan rescan refresh folder watch auto", "refresh"],
+  ["set-rescan", "automatic", "Rescan mods when Mods opens", "scan rescan refresh folder watch auto automatically", "refresh"],
   ["set-archives", "installing", "Delete downloaded archives", "zip 7z rar archive keep downloads cleanup disk space", "trash"],
   ["set-all-parts", "installing", "Install every mod in an archive", "archive several mods variants parts pick which ask window all", "layers"],
   ["set-other-servers", "installing", "Move slow downloads to another server", "slow download speed mirror server filecache gamebanana faster", "downloads"],
   ["set-fix-updates", "broken-mods", "Look for new mod fixers", "fixer fixes hash broken game update patch auto", "wand"],
-  ["set-fix-warn", "broken-mods", "Warn about mods a game update broke", "mute fixes broken outdated hash warning badge hide", "bell"],
-  ["set-onscreen", "installing", "Toggles only while on screen", "toggles hotkeys keybinds key conflict off screen character visible active", "key"],
+  ["set-fix-warn", "broken-mods", "Warn about broken mods", "mods a game update broke mute fixes broken outdated hash warning badge hide", "bell"],
+  ["set-onscreen", "installing", "Toggles only while on screen, for new mods", "toggles hotkeys keybinds key conflict off screen character visible active", "key"],
   ["set-ext-sources", "extensions", "Extension lists", "repo repository index source marketplace url add another list", "puzzle"],
-  ["set-ext-make", "extensions", "Make an extension", "develop create build plugin addon package link folder share submit upload", "code"],
+  ["set-ext-make", "extensions", "Make your own", "make an extension develop create build plugin addon package link folder share submit upload", "code"],
   ["set-trash-days", "storage", "Keep removed mods' files", "trash recycle bin deleted removed days storage disk space archive purge", "trash"],
   ["set-gb-signin", "account", "Sign in to GameBanana", "login log in account follow like subscribe session", "user"],
   ["set-creators-sub", "creators", "Followed creators", "following subscribed subscriptions authors", "feed"],
@@ -113,11 +113,19 @@ const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-crashes", "privacy", "Crash reports", "crash report error bug automatic send privacy", "bug"],
   ["set-logs", "logs", "Logs", "log logs file gachamod.log errors debug folder", "file"],
   ["set-render-log", "logs", "Rendering log", "rendering log black screen window blank flicker gpu graphics card driver nvidia frames debug", "file"],
-  ["set-ai-show", "ai", "Turn AI on or off", "ai off hide ai disable chatbot buttons show everything", "ai"],
+  ["set-ai-show", "ai", "Show AI buttons", "turn ai on or off hide ai disable chatbot buttons show everything", "ai"],
   ["set-xxmi-uninstall", "xxmi", "Uninstall XXMI Launcher", "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
   ["set-reset", "repair", "Reset gachamod", "reset start over factory defaults clear wipe fresh delete settings data", "undo"],
   ["set-ai-chatbot", "ai", "Your chatbot", "chatgpt claude gemini copilot grok chatbot pick change", "ai"],
   ["set-ai-adult", "ai", "Hide adult mods from the chatbot", "nsfw adult explicit names prompt refuse refused chatbot hide", "ai"],
+  ["set-ai-jobs", "ai", "Ask it now", "ai chatbot make a theme tidy mod names set characters mod ideas jobs", "ai"],
+  ["set-fix-automute", "broken-mods", "Turn off mods that need their author", "fixer broken mute auto turn off cant fix can't fix need their author", "wand"],
+  ["set-review-unsure", "installing", "Ask me to check files gachamod can't place", "can't place cant place unsure no ini files where to put review check", "downloads"],
+  ["set-motd", "fun", "Mod of the day", "motd daily pick gift featured", "star"],
+  ["set-extensions", "extensions", "Extensions and themes", "extensions plugins addons themes browse manage installed", "puzzle"],
+  ["set-hotkeys-on", "hotkeys", "Switch profiles with hotkeys", "profile hotkeys keys in game switch on off", "keyboard"],
+  ["set-hotkeys-profiles", "hotkeys", "Profile keys", "profile hotkey own key each profile manage profiles editor", "profiles"],
+  ["set-hotkeys-menu", "hotkeys", "In-game menu keys", "menu key keys f7 open skin menu rebind change shortcut in game overlay", "keyboard"],
 ];
 
 /** The page a panel or a setting row is on, to open it when the panel or row isn't shown (AI turned off, an empty list). */
@@ -145,7 +153,7 @@ registerCommands("settings", () => {
     };
   });
   for (const [section, panel, title, keywords, icon] of SETTINGS) {
-    if ((section === "set-ai-chatbot" || section === "set-ai-adult") && !aiShown("useful")) continue;
+    if ((section === "set-ai-chatbot" || section === "set-ai-adult" || section === "set-ai-jobs") && !aiShown("useful")) continue;
     list.push({ id: `settings:${section}:${title}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
       run: () => go({ view: "settings", section }) });
   }

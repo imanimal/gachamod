@@ -16,18 +16,24 @@ export const useNsfwMode = (): NsfwMode => useNsfw();
 const versions = new Map<string, number>();
 export function previewChanged(path: string | null | undefined) { if (path) versions.set(path, (versions.get(path) ?? 0) + 1); }
 
-/** `portrait` and `label` fill the box when the mod has no picture: the character's portrait over its name. */
-export function Preview({ src, className, blur, icon = "image", alt = "", portrait, label }:
-  { src: string | null | undefined; className?: string; blur?: boolean; icon?: IconName; alt?: string; portrait?: string | null; label?: string | null }) {
-  const base = fileUrl(src);
-  const v = src ? versions.get(src) : undefined;
+/** `thumb` is the mod's small copy of `src` (ModEntry.thumb), shown instead of it on cards and lists; when it fails to
+ *  load, the full picture shows. `portrait` and `label` fill the box when the mod has no picture: the character's
+ *  portrait over its name. */
+export function Preview({ src, thumb, className, blur, icon = "image", alt = "", portrait, label }:
+  { src: string | null | undefined; thumb?: string | null; className?: string; blur?: boolean; icon?: IconName; alt?: string; portrait?: string | null; label?: string | null }) {
+  const [thumbBroken, setThumbBroken] = useState(false);
+  useEffect(() => { setThumbBroken(false); }, [thumb]);
+  const useThumb = !!src && !!thumb && !thumbBroken;
+  const base = fileUrl(useThumb ? thumb : src);
+  // a thumbnail's path changes with its picture, so only the full picture needs the version number
+  const v = src && !useThumb ? versions.get(src) : undefined;
   const url = base && v && !/^(data|blob):/.test(base) ? `${base}${base.includes("?") ? "&" : "?"}v=${v}` : base;
   const [broken, setBroken] = useState(false);
   useEffect(() => { setBroken(false); }, [url]);
   return (
     <span className={`mod-img${blur ? " is-blurred" : ""}${className ? ` ${className}` : ""}`}>
       {url && !broken
-        ? <LazyImg src={url} alt={alt} decoding="async" draggable={false} onError={() => setBroken(true)} />
+        ? <LazyImg src={url} alt={alt} decoding="async" draggable={false} onError={() => (useThumb ? setThumbBroken(true) : setBroken(true))} />
         : portrait || label
           ? <span className="mod-img-none mod-img-stand" aria-hidden="true">
               {label && <span className="mod-img-ghost">{label}</span>}

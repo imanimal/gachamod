@@ -441,7 +441,7 @@ export const TASKS: Record<string, TaskDef> = {
   recommend: recommendTask,
   theme: {
     title: () => "Make a theme with your chatbot",
-    text: { label: "Describe the look", placeholder: "Enter text here...", required: true },
+    text: { label: "Describe the look", placeholder: "Navy and gold with sharp corners", required: true },
     build: (t, input) => buildThemeTask(t, input),
   },
 };

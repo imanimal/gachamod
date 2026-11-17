@@ -6,6 +6,7 @@ import { characterList } from "../../lib/gamebanana";
 import { creatorsPref } from "../../lib/prefs";
 import { registerCommands, type Command } from "../../lib/search";
 import { go } from "../../lib/store";
+import { menuFor } from "../../ui/ContextMenu";
 import { openCreator } from "./actions";
 
 export function registerBrowseCommands(game: GameState | null): () => void {
@@ -26,6 +27,7 @@ export function registerBrowseCommands(game: GameState | null): () => void {
         keywords: `creator modder member author gamebanana ${c.fav ? "favourite favorite" : ""} ${c.prio ? "priority" : ""} following followed`,
         hint: c.prio ? "Prioritized" : c.fav ? "Favourite" : "Following", priority: c.fav ? 2 : c.prio ? 1 : 0,
         run: () => openCreator(c.id),
+        menu: () => menuFor("creator", { id: c.id, name: c.name, avatar: c.avatar ?? null }),
       }))),
   ];
   if (game) {

@@ -1,16 +1,16 @@
 // The shell's own palette commands (pages, everyday actions, games) and the right-click menu for a game. Other areas
 // register their own (characters, mods, profiles, creators, settings). `keywords` hold the words people use for a
 // thing, so "installed" finds Mods and "nsfw" finds the adult content switch. Owner: SHELL area.
-import { appUpdate, errorText, games as gamesApi, library, shell, type GameId, type GameState } from "../lib/api";
+import { errorText, games as gamesApi, library, shell, type GameId, type GameState } from "../lib/api";
 import { checkUpdates } from "../lib/gamebanana";
 import { charNoun } from "../lib/games";
 import { record, redo, undo } from "../lib/history";
 import { nsfwPref, setNsfw, type NsfwMode } from "../lib/prefs";
-import { allGames, back, currentGame, emitApp, forward, go, onlyGame, setBadge, setGame, setGames, setOnlyGame, type Route } from "../lib/store";
+import { allGames, back, currentGame, emitApp, forward, go, onlyGame, setGame, setGames, setOnlyGame, type Route } from "../lib/store";
 import { registerCommands, type Command } from "../lib/search";
 import { openKofi } from "../lib/support";
 import { registerMenu, type MenuEntry } from "../ui/ContextMenu";
-import { toast } from "../ui/toast";
+import { retoast, toast, type ToastAction } from "../ui/toast";
 import { play } from "../screens/home/PlayButton";
 import { refreshGameIcon } from "../ui/GameBadge";
 import { sideCollapsed, toggleHelp, toggleSide } from "./state";
@@ -30,24 +30,16 @@ export async function rescan(game: GameState) {
 }
 
 export async function checkModUpdates(game: GameState, quiet = false) {
-  if (!quiet) toast(`Checking ${game.name}'s mods for updates`);
+  // one toast that turns into the result
+  const id = quiet ? null : toast(`Checking for mod updates in ${game.name}`);
+  const say = (text: string, action?: ToastAction, bad = false) => { if (id === null || !retoast(id, text, action, bad)) toast(text, bad, action); };
   try {
     const ids = await checkUpdates(await library.list(game.id));
     await library.markUpdates(game.id, ids);
-    setBadge("library", ids.length ? { count: ids.length, tone: "accent" } : null);
     emitApp({ type: "library-refresh", game: game.id });
-    toast(ids.length ? `${ids.length === 1 ? "1 mod has" : `${ids.length} mods have`} an update` : "Every mod is up to date",
-      false, ids.length ? { label: "Show", run: () => go("library") } : undefined);
-  } catch (e) { toast(errorText(e), true); }
-}
-
-async function checkAppUpdate() {
-  try {
-    const c = await appUpdate.check();
-    if (!c.reachable) toast("Couldn't get update info right now. Try again later");
-    else if (!c.available) toast(`gachamod ${c.current} is the newest version`);
-    else toast("A new version of gachamod is out", false, { label: "See it", run: () => go({ view: "settings", section: "updates" }) });
-  } catch (e) { toast(errorText(e), true); }
+    say(ids.length ? `${ids.length === 1 ? "1 mod has" : `${ids.length} mods have`} an update` : "Every mod is up to date",
+      ids.length ? { label: "View updates", run: () => { setGame(game.id); go({ view: "library", flag: "updates" }); } } : undefined);
+  } catch (e) { say(errorText(e), undefined, true); }
 }
 
 export function openModsFolder(game: GameState) {
@@ -108,7 +100,7 @@ registerMenu("game", ({ id }) => {
 
 const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords: string; icon: Command["icon"]; hint?: string; where?: string }> = [
   { route: { view: "home" }, title: () => "Home", keywords: "start main dashboard overview front", icon: "home", hint: "Ctrl+1" },
-  { route: { view: "library" }, title: () => "My Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+3" },
+  { route: { view: "library" }, title: () => "Mods", keywords: "library installed my mods list manage enable disable toggle", icon: "mods", hint: "Ctrl+3" },
   { route: { view: "characters" }, title: (g) => charNoun(g), keywords: "characters agents resonators roster heroes cast skins", icon: "characters", hint: "Ctrl+4" },
   { route: { view: "browse" }, title: () => "Browse GameBanana", keywords: "browse gamebanana online find new mods download discover store shop", icon: "browse", hint: "Ctrl+2" },
   { route: { view: "downloads" }, title: () => "Downloads", keywords: "queue downloading progress installs transfers", icon: "downloads", hint: "Ctrl+5" },
@@ -146,7 +138,6 @@ registerCommands("shell.actions", () => {
     { id: "act:sidebar", title: sideCollapsed() ? "Expand the sidebar" : "Collapse the sidebar", section: "Actions", icon: "sidebar", keywords: "sidebar minimise minimize collapse expand hide menu rail compact", hint: "Ctrl+B", run: toggleSide },
     { id: "act:shortcuts", title: "Keyboard shortcuts", section: "Actions", icon: "keyboard", keywords: "keys hotkeys help controller gamepad bindings", hint: "?", run: toggleHelp },
     { id: "act:activity", title: "Show what's running", section: "Actions", icon: "clock", keywords: "loading waiting stuck hung frozen slow busy spinner progress background tasks", run: openActivity },
-    { id: "act:appupdate", title: "Check for gachamod updates", section: "Actions", icon: "update", keywords: "app update new version upgrade", run: () => void checkAppUpdate() },
     { id: "act:kofi", title: "Tip on Ko-fi", section: "Actions", icon: "coffee", keywords: "kofi ko-fi tip donate support coffee money thanks developer", run: openKofi },
     ...NSFW.map(([v, title, keywords]) => ({ id: `act:nsfw:${v}`, title, section: "Actions", icon: (v === "show" ? "eye" : "hide") as Command["icon"], keywords,
       hint: nsfw === v ? "On now" : undefined, run: () => setNsfw(v) })),
@@ -155,9 +146,9 @@ registerCommands("shell.actions", () => {
     list.push(
       { id: "act:play", title: `Play ${g.name}`, section: "Actions", icon: "play", keywords: "start launch run game", hint: "Ctrl+Enter", priority: 6, run: () => void play(g) },
       { id: "act:vanilla", title: "Play without mods", section: "Actions", icon: "play", keywords: "vanilla clean start launch no mods", run: () => void play(g, true) },
-      { id: "act:shuffle", title: "Shuffle outfits", section: "Actions", icon: "dice", keywords: "random randomize randomise outfits skins surprise mix", run: () => void shuffleOutfits(g.id).catch((e) => toast(String(e), true)) },
-      { id: "act:rescan", title: "Rescan mods", section: "Actions", icon: "refresh", keywords: "refresh reload scan look again find new check updates force", run: () => void rescan(g) },
-      { id: "act:updates", title: "Check mods for updates", section: "Actions", icon: "update", keywords: "update outdated new version gamebanana", run: () => void checkModUpdates(g) },
+      { id: "act:shuffle", title: "Shuffle outfits", section: "Actions", icon: "dice", keywords: "random randomize randomise outfits skins surprise mix", run: () => void shuffleOutfits(g.id).catch((e) => toast(errorText(e), true)) },
+      { id: "act:rescan", title: "Rescan mods", section: "Actions", icon: "refresh", keywords: "refresh reload scan look again find new check updates force", priority: 10, run: () => void rescan(g) },
+      { id: "act:updates", title: "Check mods for updates", section: "Actions", icon: "update", keywords: "update outdated new version gamebanana", priority: 10, run: () => void checkModUpdates(g) },
       { id: "act:folder", title: "Open the Mods folder", section: "Actions", icon: "folder", keywords: "explorer files directory location show in folder", run: () => openModsFolder(g) },
     );
   }
@@ -166,5 +157,5 @@ registerCommands("shell.actions", () => {
 
 registerCommands("shell.games", () => allGames().filter((g) => g.shown).map((g) => ({
   id: `game:${g.id}`, title: g.name, section: "Games", icon: "controller" as const, keywords: `${g.short} ${g.id} ${g.importer} game switch`,
-  hint: currentGame()?.id === g.id ? "Current" : undefined, run: () => setGame(g.id),
+  hint: currentGame()?.id === g.id ? "Current" : undefined, priority: 10, run: () => setGame(g.id),
 })));

@@ -1,5 +1,6 @@
 // Shared state for the GameBanana browser: the filters (one set per game, shared by the Browse page, Home's
-// embedded browser and the character pages, so Expand keeps them; each visit starts plain), what the library has (installed and
+// embedded browser and the character pages, so Expand keeps them; a return within half an hour keeps them, a later
+// visit starts plain), what the library has (installed and
 // archived mods by GameBanana id) and opening a mod's page. Owner: BROWSE area.
 import { useEffect, useSyncExternalStore } from "react";
 import { library, type ArchiveEntry, type GameId, type ModEntry } from "../../lib/api";
@@ -49,8 +50,11 @@ export const KINDS: Array<{ value: GbKind; label: string; title: string }> = [
   { value: "weapon", label: "Weapons", title: "Weapon models" },
   { value: "tool", label: "Tools and fixes", title: "Shaders, effect removers, camera mods and other fixes" },
   { value: "ui", label: "UI", title: "Menus, icons and loading screens" },
-  { value: "other", label: "Other", title: "NPCs, Bangboo, objects and the rest" },
+  { value: "other", label: "Other", title: "NPCs, objects and the rest" },
 ];
+/** A type's tip for one game (Other names Bangboo in Zenless Zone Zero). */
+export const kindTitle = (k: { value: GbKind; title: string }, game: GameId) =>
+  k.value === "other" && game === "zzz" ? "NPCs, Bangboo, objects and the rest" : k.title;
 export const kindLabel = (k: GbKind | null) => (k ? KINDS.find((x) => x.value === k)?.label ?? "All types" : "All types");
 
 /** What a visit starts with: newest mods first, nothing filtered. */
@@ -79,8 +83,8 @@ export function filterCount(f: BrowseFilters, fixedChar = false): number {
   return [f.kind, f.category && !f.character, !fixedChar && f.character, f.hq, f.followed, f.hideInstalled].filter(Boolean).length;
 }
 
-/** Change some filters of a game. They last while a browser stays open (and across Home's Expand); the next visit
- *  starts from DEFAULTS. */
+/** Change some filters of a game. They last while a browser stays open (and across Home's Expand); a visit more
+ *  than half an hour after the last one starts from DEFAULTS. */
 export function setFilters(game: GameId, patch: Partial<BrowseFilters>) {
   const cur = readFilters(game);
   const next = { ...cur, ...patch };
@@ -107,12 +111,38 @@ export function openWithFilters(game: GameId, patch: Partial<BrowseFilters> = {}
   carry.set(game, Date.now());
 }
 
-/** Called once as a browser mounts, before it reads the filters. Doesn't notify: nothing else shows them yet. */
-export function beginVisit(game: GameId) {
+/** A return within this long keeps the filters (and Browse's place in the grid): a toast's Show, Back, a quick look
+ *  at Downloads. A visit after that starts plain. */
+const KEEP_MS = 30 * 60 * 1000;
+/** When a browser of the game last closed. */
+const leftAt = new Map<GameId, number>();
+/** Where the full Browse grid was when it closed: how far it was scrolled and how many cards it showed. */
+const place = new Map<GameId, { scroll: number; limit: number }>();
+
+/** Called once as a browser mounts, before it reads the filters. Doesn't notify: nothing else shows them yet.
+ *  Returns whether the last visit's filters were kept. */
+export function beginVisit(game: GameId): boolean {
   const at = carry.get(game);
-  if (at !== undefined && Date.now() - at < 5000) return;
+  if (at !== undefined && Date.now() - at < 5000) return true;
+  const left = leftAt.get(game);
+  if (left !== undefined && Date.now() - left < KEEP_MS) return true;
   sortBeforeSearch.delete(game);
+  place.delete(game);
   filters.set(game, { ...DEFAULTS });
+  return false;
+}
+
+/** A browser of the game closed. `at`: the full grid's place, to put back on a return. */
+export function endVisit(game: GameId, at?: { scroll: number; limit: number }) {
+  leftAt.set(game, Date.now());
+  if (at) place.set(game, at);
+}
+
+/** The full grid's place from the last visit, once (null when there is none to put back). */
+export function takePlace(game: GameId): { scroll: number; limit: number } | null {
+  const p = place.get(game) ?? null;
+  place.delete(game);
+  return p;
 }
 
 /** The browser has mounted: a mark left for it is used up. */

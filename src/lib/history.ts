@@ -53,7 +53,14 @@ function show(e: Entry, text: string, label: "Undo" | "Redo", toastId?: number) 
   toastOf.set(e.id, id);
 }
 function offerUndo(e: Entry, toastId?: number) { show(e, `${e.label}.`, "Undo", toastId); }
-function offerRedo(e: Entry, toastId?: number) { show(e, `Undone: ${e.label.charAt(0).toLowerCase()}${e.label.slice(1)}.`, "Redo", toastId); }
+// "Turned off 3 mods" reads "Undone: turned off 3 mods", but a label that opens with a name ("Beach Walk Camellya: Kept
+// ...") keeps its capitals: only a plain first word followed by a lowercase word is lowered.
+function lowerFirst(label: string): string {
+  const [first = "", second = ""] = label.split(" ");
+  if (!/^[A-Z][a-z]+$/.test(first) || /^[A-Z]/.test(second)) return label;
+  return label.charAt(0).toLowerCase() + label.slice(1);
+}
+function offerRedo(e: Entry, toastId?: number) { show(e, `Undone: ${lowerFirst(e.label)}.`, "Redo", toastId); }
 
 /** Undo the newest operation, or the one given (it must be the newest still done). */
 export async function undo(target?: Entry, toastId?: number): Promise<boolean> {

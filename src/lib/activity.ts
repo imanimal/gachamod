@@ -88,6 +88,8 @@ type Desc = [what: string, hold: string];
 const EXACT: Record<string, Desc> = {
   games_detect: ["Looking for games and XXMI Launcher", HOLD.detect],
   games_list: ["Reading your games", HOLD.db],
+  dev_wipe_user_config: ["Resetting saved mod options", HOLD.disk],
+  dev_unwipe_user_config: ["Putting back saved mod options", HOLD.disk],
   game: ["Reading this game's setup", HOLD.db],
   game_launch: ["Starting the game", "This starts the game. A Steam copy first waits up to 90 seconds for Steam to start and sign in, and Steam may close and start again to take the game's launch options. A Steam or launcher window waiting for an answer (a sign-in, an update, an error) can hold it. Check the taskbar for one."],
   game_running: ["Checking if the game runs", HOLD.game],

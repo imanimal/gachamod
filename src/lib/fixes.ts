@@ -13,6 +13,7 @@ import { emitApp, go, onApp } from "./store";
 import { plural, timeAgo } from "../ui/kit";
 import { toast } from "../ui/toast";
 import { oxford } from "./notes";
+import { holdsPref, useHolds } from "./holds";
 
 export interface ModHealth {
   /** "broken": uses hashes a game update changed and a fix is known; "unfixable": broken and gachamod can't fix it
@@ -115,31 +116,45 @@ export const fixWarningsPref = pref<boolean>("fixes.warn", true, (r) => (r === "
 export const isDeadEnd = (h: Pick<ModHealth, "status" | "needsAuthor" | "tool" | "tried">) =>
   h.status === "unfixable" && (!!h.needsAuthor || !h.tool || !!h.tried);
 
-/** Muted dead ends per game, as "<modId>#<what's wrong>": a mod whose problem changes (another update) shows again. */
-export const mutedPref = jsonPref<Record<string, string[]>>("fixes.muted", {});
+/** Mutes from before holds.ts, per game, as "<modId>#<what's wrong>". Read once to move them into holds. */
+const mutedPref = jsonPref<Record<string, string[]>>("fixes.muted", {});
+let moved = false;
+/** Old mutes become waits for an update (holds.ts), which take the mod's version the next time the list loads. */
+async function moveMutes() {
+  if (moved) return;
+  moved = true;
+  await Promise.all([mutedPref.ready, holdsPref.ready]);
+  const old = mutedPref.get();
+  if (!Object.values(old).some((l) => l.length)) return;
+  const all = { ...holdsPref.get() };
+  for (const [game, keys] of Object.entries(old)) {
+    const mine = { ...(all[game] ?? {}) };
+    for (const k of keys) { const id = k.split("#")[0]!; mine[id] ??= { kind: "update", at: Date.now() }; }
+    all[game] = mine;
+  }
+  await holdsPref.set(all);
+  await mutedPref.set({});
+}
 /** Turn off and mute dead ends as soon as a check finds them. Off by default. */
 export const autoMutePref = pref<boolean>("fixes.autoMute", false, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
-const sig = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
-export const muteKey = (modId: string, h: Pick<ModHealth, "reasons">) => `${modId}#${sig(h.reasons.join("\n"))}`;
-export const isMuted = (muted: Record<string, string[]>, game: GameId, modId: string, h: Pick<ModHealth, "reasons">) =>
-  !!muted[game]?.includes(muteKey(modId, h));
 
 /** Called after each check with the game's rows (Tools > Fixes turns dead ends off when autoMutePref is on). */
 const healthListeners = new Set<(game: GameId, rows: ModHealthRow[]) => void>();
 export function onHealth(f: (game: GameId, rows: ModHealthRow[]) => void) { healthListeners.add(f); return () => { healthListeners.delete(f); }; }
 
 /** Health of every installed mod of a game, keyed by mod id. Updates when a scan or fix finishes. Empty while the
- *  warnings are muted, and leaves out the mods muted one by one. */
+ *  warnings are muted, and leaves out the mods whose problems were set aside (holds.ts). */
 export function useModHealth(game: GameId | null | undefined): Map<string, ModHealth> {
   const warn = fixWarningsPref.use();
-  const muted = mutedPref.use();
+  const holds = useHolds(game);
   const map = useSyncExternalStore(subscribe, () => (game && warn ? maps.get(game) ?? EMPTY : EMPTY));
   useEffect(() => { if (game && warn && !maps.has(game)) void reloadHealth(game); }, [game, warn]);
+  useEffect(() => { void moveMutes(); }, []);
   return useMemo(() => {
-    if (!game || !muted[game]?.length) return map;
-    return new Map([...map].filter(([id, h]) => !isMuted(muted, game, id, h)));
-  }, [map, muted, game]);
+    if (!game || !Object.keys(holds).length) return map;
+    return new Map([...map].filter(([id]) => !holds[id]));
+  }, [map, holds, game]);
 }
 
 /** The mods a game update broke (and the ones gachamod fixed), with their names, for Tools > Fixes. null until the
@@ -148,6 +163,20 @@ export function useHealthRows(game: GameId): ModHealthRow[] | null {
   const rows = useSyncExternalStore(subscribe, () => (maps.has(game) ? lists.get(game) ?? NO_ROWS : null));
   useEffect(() => { if (!maps.has(game)) void reloadHealth(game); }, [game]);
   return rows;
+}
+
+/** Mods a game update broke that are on and not set aside (holds.ts), for the Tools badge. Empty while the warnings
+ *  are muted, null until the first check is done. */
+export function useBrokenOn(game: GameId | null | undefined): string[] | null {
+  const warn = fixWarningsPref.use();
+  const holds = useHolds(game);
+  const rows = useSyncExternalStore(subscribe, () => (game && maps.has(game) ? lists.get(game) ?? NO_ROWS : null));
+  useEffect(() => { if (game && warn && !maps.has(game)) void reloadHealth(game); }, [game, warn]);
+  return useMemo(() => {
+    if (!rows) return null;
+    if (!warn) return [];
+    return rows.filter((r) => r.enabled && (r.status === "broken" || r.status === "unfixable") && !holds[r.modId]).map((r) => r.modId);
+  }, [rows, warn, holds]);
 }
 
 /** The last known health of a game's mods (for menus and panels outside React's tree). */
@@ -184,8 +213,8 @@ function skippedNote(r: FixAll): string {
 }
 
 /** Try to fix these mods: outdated hashes are swapped here, and a mod that needs more gets its fixer run on it.
- *  Resolves to how many were changed. Each change can be undone. A fixer that leaves a mod broken is remembered
- *  (health's `tried`), and the mod can always be tried again. */
+ *  Resolves to how many were changed. The whole run is one Undo step and one toast. A fixer that leaves a mod broken
+ *  is remembered (health's `tried`), and the mod can always be tried again. */
 export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (!ids.length) return 0;
   if (!maps.has(game)) await reloadHealth(game);
@@ -196,26 +225,59 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (!ids.length) { toast(asked === 1 ? "A fixer is already running on that mod" : "A fixer is already running on those mods"); return 0; }
   const needFixer = ids.filter((id) => health.get(id)?.status === "unfixable" && health.get(id)?.tool);
   const swap = ids.filter((id) => !needFixer.includes(id));
-  let n = swap.length ? await swapHashes(game, swap) : 0;
-  if (needFixer.length) n += await runFixers(game, needFixer.map((id) => ({ modId: id, tool: health.get(id)!.tool! })));
-  return n;
+  const out: FixOutcome = { changed: [], notes: [], errors: [], untouched: 0 };
+  if (swap.length) await swapHashes(game, swap, out);
+  if (needFixer.length) await runFixers(game, needFixer.map((id) => ({ modId: id, tool: health.get(id)!.tool! })), out);
+  if (out.changed.length) emitApp({ type: "library-refresh", game });
+  await reloadHealth(game, true);
+  const after = healthNow(game);
+  const still = (id: string) => ["broken", "unfixable"].includes(after.get(id)?.status ?? "");
+  const changed = out.changed.map((c) => c.b);
+  const fixedN = out.changed.filter((c) => !still(c.b.modId)).length;
+  const stillN = out.changed.length - fixedN + out.untouched;
+  if (changed.length) {
+    const one = out.changed.length === 1 ? out.changed[0]! : null;
+    const label = one
+      ? (one.tool ? (still(one.b.modId) ? `Ran ${one.tool} on ${one.b.name}` : `Fixed ${one.b.name} with ${one.tool}`) : `Fixed ${one.b.name} for the game update`)
+      : fixedN === changed.length ? `Fixed ${changed.length} mods for the game update` : `Tried to fix ${changed.length} mods`;
+    recordFixes(game, label, changed);
+  }
+  // one toast: a single mod gets its own story, several get a count and the way to the list
+  const lines: string[] = [];
+  let view: { label: string; run: () => void } | undefined = VIEW_FIXES;
+  if (ids.length === 1) {
+    const id = ids[0]!;
+    const c = out.changed.find((x) => x.b.modId === id);
+    if (c && !still(id)) lines.push(c.tool ? `Fixed ${c.b.name} with ${c.tool}` : `Fixed ${c.b.name}`);
+    else if (c) lines.push(`${c.tool ? `${c.tool} changed ${plural(c.files ?? 1, "file")} in` : "Swapped the outdated hashes in"} ${c.b.name} and it is still broken. ${NEEDS}`);
+    lines.push(...out.notes, ...out.errors);
+    view = { label: "View mod", run: () => go({ view: "library", modId: id }) };
+  } else {
+    if (fixedN || stillN) lines.push([fixedN && `Fixed ${plural(fixedN, "mod")}`, stillN && `${stillN} still broken`].filter(Boolean).join(", "));
+    lines.push(...out.errors);
+  }
+  if (!lines.length) { lines.push("Nothing there could be fixed automatically"); view = undefined; }
+  toast(lines.join(". ") + (changed.length ? ". Undo puts the files back" : ""), !fixedN && (stillN > 0 || out.errors.length > 0), view);
+  return changed.length;
 }
 
-async function swapHashes(game: GameId, ids: string[]): Promise<number> {
+/** What one Attempt fix did, gathered for its one Undo step and one toast. */
+interface FixOutcome {
+  /** Mods that changed, with the fixer's name when one ran. */
+  changed: Array<{ b: ModBackup; tool?: string; files?: number }>;
+  /** Plain lines about mods left as they were, for a single mod's toast. */
+  notes: string[];
+  /** What went wrong getting or running a fixer. */
+  errors: string[];
+  /** Mods asked about that nothing changed. */
+  untouched: number;
+}
+
+async function swapHashes(game: GameId, ids: string[], out: FixOutcome) {
   let r: FixAll;
-  try { r = await fixesApi.apply(game, ids); } catch (e) { toast(errorText(e), true); return 0; }
-  if (r.changed.length) {
-    const label = r.changed.length === 1 ? `Fixed ${r.changed[0]!.name} for the game update` : `Fixed ${r.changed.length} mods for the game update`;
-    recordFixes(game, label, r.changed);
-    emitApp({ type: "library-refresh", game });
-    if (r.skipped.length) toast(skippedNote(r), false, VIEW_FIXES);
-  } else if (r.skipped.length) {
-    toast(skippedNote(r), true, VIEW_FIXES);
-  } else {
-    toast("Nothing there could be fixed automatically");
-  }
-  void reloadHealth(game, true);
-  return r.changed.length;
+  try { r = await fixesApi.apply(game, ids); } catch (e) { out.errors.push(errorText(e)); return; }
+  for (const b of r.changed) out.changed.push({ b });
+  if (r.skipped.length) { out.notes.push(skippedNote(r)); out.untouched += r.skipped.length; }
 }
 
 // ── fixers downloaded from GameBanana ──
@@ -312,8 +374,8 @@ async function getFixer(game: GameId, tool: ToolLink): Promise<FixerFile> {
 /** A fixer's window is being watched (useFixerBusy has "waiting"): stop, and go by what it changed so far. */
 export const stopWaiting = () => { void fixersApi.stopWaiting().catch(() => {}); };
 
-/** Run the fixer each mod needs on it. One Undo step per mod that changed. Resolves to how many changed. */
-async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLink }>): Promise<number> {
+/** Run the fixer each mod needs on it, adding what happened to `out`. */
+async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLink }>, out: FixOutcome) {
   const byTool = new Map<string, { tool: ToolLink; ids: string[] }>();
   for (const r of rows) byTool.set(r.tool.url, { tool: r.tool, ids: [...(byTool.get(r.tool.url)?.ids ?? []), r.modId] });
   /** `quiet`: a mod nobody asked about that the fixer's one run covered too. Its result shows on the mod, not in a toast. */
@@ -323,7 +385,7 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
     ids.forEach((id) => setBusy(`mod:${id}`, true));
     try {
       let f: FixerFile;
-      try { f = await getFixer(game, tool); } catch (e) { toast(`Couldn't get ${tool.name}: ${errorText(e)}`, true); continue; }
+      try { f = await getFixer(game, tool); } catch (e) { out.errors.push(`Couldn't get ${tool.name}: ${errorText(e)}`); out.untouched += ids.length; continue; }
       if (f.window) {
         // it opens its own window and goes through the whole Mods folder there: one run covers every mod that
         // needs it, so the window doesn't come back for each of them
@@ -334,36 +396,25 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
         try {
           const runs = await fixersApi.runAll(game, f.fileId, [...ids, ...rest]);
           for (const run of runs) done.push({ run, tool: named(f.tool), quiet: !ids.includes(run.modId) });
-        } catch (e) { toast(errorText(e), true); }
+        } catch (e) { out.errors.push(errorText(e)); }
         finally { setBusy("waiting", false); rest.forEach((id) => setBusy(`mod:${id}`, false)); }
         continue;
       }
       for (const id of ids) {
         try { done.push({ run: await fixersApi.run(game, f.fileId, id), tool: named(f.tool) }); }
-        catch (e) { toast(errorText(e), true); }
+        catch (e) { out.errors.push(errorText(e)); out.untouched++; }
         finally { setBusy(`mod:${id}`, false); }
       }
     } finally {
       ids.forEach((id) => setBusy(`mod:${id}`, false));
     }
   }
-  if (!done.length) return 0;
-  emitApp({ type: "library-refresh", game });
-  await reloadHealth(game, true);
-  const after = healthNow(game);
-  let changed = 0;
   for (const { run: r, tool, quiet } of done) {
-    const view = { label: "View mod", run: () => go({ view: "library", modId: r.modId }) };
-    if (!r.backup) {
-      if (!quiet) toast(r.stopped
-        ? `${tool} was still running on ${r.name} after 2 minutes, so gachamod stopped it. It changed no files`
-        : `${tool} changed no files in ${r.name}. ${NEEDS}`, true, view);
-      continue;
-    }
-    changed++;
-    const still = ["broken", "unfixable"].includes(after.get(r.modId)?.status ?? "");
-    recordFixes(game, still ? `Ran ${tool} on ${r.name}` : `Fixed ${r.name} with ${tool}`, [{ modId: r.modId, name: r.name, backup: r.backup }]);
-    if (still && !quiet) toast(`${tool} changed ${plural(r.changed, "file")} in ${r.name} and it is still broken. ${NEEDS}. Undo puts its files back`, true, view);
+    if (r.backup) { out.changed.push({ b: { modId: r.modId, name: r.name, backup: r.backup }, tool, files: r.changed }); continue; }
+    if (quiet) continue;
+    out.untouched++;
+    out.notes.push(r.stopped
+      ? `${tool} was still running on ${r.name} after 2 minutes, so gachamod stopped it. It changed no files`
+      : `${tool} changed no files in ${r.name}. ${NEEDS}`);
   }
-  return changed;
 }

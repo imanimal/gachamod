@@ -9,7 +9,8 @@
   --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
   --accent-ink: color-mix(in oklab, var(--accent) 86%, #fff);
   --accent-2: #9fb6ff;
-  --ok: #4cd38a; --warn: #f2b84b; --bad: #ff6868; --info: #6cb8ff; --on-bad: #fff;
+  --ok: #4cd38a; --warn: #f2b84b; --bad: #ff6868; --info: #6cb8ff;
+  --on-bad: #0c0e13;
   --ring: color-mix(in oklab, var(--accent) 80%, #fff); --hover: rgb(255 255 255 / .055);
   --radius: 10px; --radius-sm: 7px; --radius-lg: 12px; --radius-xs: 4px; --radius-pill: 999px; --stack-gap: .9rem;
   --shadow: 0 1px 2px rgb(0 0 0 / .32);
@@ -20,20 +21,27 @@
   --font: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-display: "Manrope", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
-  --font-num: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-num: var(--font);
   --ease: cubic-bezier(.2, .8, .2, 1); --ease-out: cubic-bezier(.16, 1, .3, 1); --ease-spring: cubic-bezier(.25, 1, .5, 1);
   --dur: 180ms; --dur-fast: 110ms; --dur-slow: 280ms;
   color-scheme: dark;
 }
+/* only on Default itself, not :root: game themes inherit :root and leave these unset, so kit.css falls back to #fff
+   text on tone fills and to --line/--line-2 edges for them */
+[data-theme="default"] {
+  --line-3: #666f82;
+  --on-ok: #0c0e13; --on-warn: #0c0e13; --on-info: #0c0e13;
+}
 [data-theme="default"][data-scheme="light"] {
   --bg: #f3f4f7; --bg-2: #e9ebf0; --surface: #ffffff; --surface-2: #f3f4f7; --surface-3: #e8eaef; --raised: #ffffff;
-  --line: #e0e3ea; --line-2: #cbd0da;
-  --text: #11141b; --text-2: #3b4250; --text-3: #687183;
+  --line: #e0e3ea; --line-2: #cbd0da; --line-3: #7f8797;
+  --text: #11141b; --text-2: #3b4250; --text-3: #5f6879;
   --accent: var(--game-accent-dk, #5d4fd6); --on-accent: #fff;
   --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
   --accent-ink: var(--accent);
   --accent-2: #3d5bd0;
-  --ok: #18874a; --warn: #a15c00; --bad: #cf2f28; --info: #1d6fc4; --on-bad: #fff;
+  --ok: #136b3a; --warn: #8a4f00; --bad: #b3261e; --info: #185fa8;
+  --on-ok: #fff; --on-warn: #fff; --on-bad: #fff; --on-info: #fff;
   --ring: var(--accent); --hover: rgb(16 24 40 / .05);
   --shadow: 0 1px 2px rgb(16 24 40 / .07), 0 1px 3px rgb(16 24 40 / .05);
   --shadow-lg: 0 24px 56px -14px rgb(16 24 40 / .24), 0 8px 18px -6px rgb(16 24 40 / .1);

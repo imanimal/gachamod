@@ -30,9 +30,9 @@
   /* the shared tokens (base.css) */
   --bg: #070707; --bg-2: #000; --surface: #222; --surface-2: #2c2c2c; --surface-3: #383838; --raised: #444;
   --line: rgb(255 255 255 / .1); --line-2: rgb(255 255 255 / .24);
-  --text: #fff; --text-2: #c6c6c6; --text-3: #8f8f8f;
+  --text: #fff; --text-2: #c6c6c6; --text-3: #939393;
   --accent: var(--acc); --on-accent: #0a0a0a; --accent-soft: color-mix(in srgb, var(--acc) 16%, transparent); --accent-ink: var(--acc-ink); --accent-2: var(--yellow);
-  --ok: var(--green); --warn: #ffb400; --bad: var(--red); --info: #38c6ff; --on-bad: #fff;
+  --ok: var(--green); --warn: #ffb400; --bad: #ef675e; --info: #38c6ff; --on-bad: #0a0a0a;
   --ring: var(--acc); --hover: rgb(255 255 255 / .09);
   --radius: 14px; --radius-sm: 10px; --radius-lg: 20px; --radius-xs: 5px; --radius-pill: 999px; --stack-gap: .7rem;
   --shadow: 0 3px 0 rgb(0 0 0 / .7); --shadow-lg: 0 4px 0 #000, 0 20px 44px rgb(0 0 0 / .65);
@@ -170,7 +170,7 @@
   .badge .i { stroke-width: 2.6; }
   .badge[class*="t-"] { background: var(--tone); color: #0a0a0a; box-shadow: 0 2px 0 rgb(0 0 0 / .6); }
   .badge.t-accent { color: #0a0a0a; }
-  .badge.t-bad { color: #fff; }
+  .badge.t-bad { color: var(--on-bad); }
   .badge.t-muted { background: #0a0a0a; color: #e6e6e6; box-shadow: 0 0 0 1px #555; }
   .dot { box-shadow: 0 0 0 2px var(--ink); }
 
@@ -267,7 +267,7 @@
   .gallery-main { border-radius: 12px; box-shadow: 0 0 0 2.5px var(--ink), 0 0 0 4px #4a4a4a; }
   .gallery-th { border-radius: 8px; box-shadow: 0 0 0 2px var(--ink); }
   .gallery-th.on { box-shadow: 0 0 0 2px var(--ink), 0 0 0 4.5px var(--acc); }
-  .lightbox { background: var(--dots), rgb(0 0 0 / .9); backdrop-filter: blur(8px); }
+  .lightbox { background: var(--dots), rgb(0 0 0 / .9); }
   .swatch { box-shadow: 0 0 0 2.5px var(--ink), 0 0 0 4px #555; }
   .swatch.on { box-shadow: 0 0 0 2.5px var(--ink), 0 0 0 5px #fff; }
   .prose a { color: var(--yellow-ink); }
@@ -279,6 +279,8 @@
 [data-theme="zzz"] ::-webkit-scrollbar-thumb { background: #5a5a5a; border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
 [data-theme="zzz"] ::-webkit-scrollbar-thumb:hover { background: var(--acc); background-clip: padding-box; border: 3px solid transparent; }
 [data-theme="zzz"] ::selection { background: var(--acc); color: #0a0a0a; }
+/* black controls on the dark sheets need a lighter rim to stand out at 3:1 */
+[data-theme="zzz"]:not([data-scheme="light"]) :is(.toggle-track, .check-box, .search, .field input, .field textarea, .select select, .seg) { --rim: #828282; }
 
 @keyframes zzGlyphs { to { -webkit-mask-position: -117rem 50%; mask-position: -117rem 50%; } }
 @keyframes zzRun { to { background-position: 22px 0; } }
@@ -298,8 +300,8 @@
   --dots: radial-gradient(circle at 1px 1px, rgb(0 0 0 / .07) .85px, transparent 1.1px) 0 0 / 4px 4px;
   --bg: #dcdcdc; --bg-2: #cdcdcd; --surface: #f4f4f4; --surface-2: #e8e8e8; --surface-3: #dadada; --raised: #fff;
   --line: rgb(0 0 0 / .12); --line-2: rgb(0 0 0 / .26);
-  --text: #0d0d0d; --text-2: #383838; --text-3: #595959;
-  --ok: #1d7d12; --warn: #9a6100; --bad: #c81e12; --info: #0b6f9f;
+  --text: #0d0d0d; --text-2: #383838; --text-3: #565656;
+  --ok: #17650f; --warn: #7b4e00; --bad: #ac1a0f; --info: #095d86; --on-bad: #fff;
   --hover: rgb(0 0 0 / .07);
   --shadow: 0 3px 0 rgb(0 0 0 / .3); --shadow-lg: 0 4px 0 rgb(0 0 0 / .55), 0 20px 44px rgb(0 0 0 / .22);
   --scrim: rgb(30 30 30 / .38); --img-bg: #d2d2d2;
@@ -312,6 +314,8 @@
   :is(.panel-b, .dialog-b, .drawer-b, .menu, .side-nav, .player-card, .side-game-cur, .palette-list) { box-shadow: inset 0 0 0 2px var(--ink), inset 0 3px 8px rgb(0 0 0 / .08); }
   .skel { background: linear-gradient(100deg, #e4e4e4 30%, #f2f2f2 50%, #e4e4e4 70%); background-size: 250% 100%; }
   .empty-i { box-shadow: 0 3px 0 rgb(0 0 0 / .5), 0 0 0 1.5px #8a6f00; }
+  /* the light tones are dark, so their sticker tags take white text */
+  .badge[class*="t-"]:not(.t-accent) { color: #fff; }
   ::-webkit-scrollbar-thumb { background: #9a9a9a; background-clip: padding-box; }
 }
 

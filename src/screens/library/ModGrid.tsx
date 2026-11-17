@@ -7,18 +7,20 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { errorText, type GameId, type ModEntry } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import { useModHealth } from "../../lib/fixes";
+import { holdOn, settleHolds, useHolds } from "../../lib/holds";
 import { usePortraitBatch, usePortraitsVersion, portraitNow } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
+import { useTrashDays } from "../settings/automatic";
 import { menuFor, openMenu, type MenuEntry } from "../../ui/ContextMenu";
-import { Button, IconButton, Skeleton, Waiting } from "../../ui/kit";
+import { Button, IconButton, Skeleton, Waiting, behindLayer } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import {
-  exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails, setFavourite, setParent, trashMods, warmProfiles,
+  fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails, setFavourite, setParent, trashMods, warmProfiles,
 } from "./actions";
 import { anchorFor, askOverlap } from "./overlap";
 import { toggleMods } from "./data";
 import { askLib } from "./LibDialogs";
-import { noteLibrary, profileItems } from "./menus";
+import { getUpdates, isBroken, noteLibrary, profileItems } from "./menus";
 import { ModCard } from "./ModCard";
 
 export interface ModGridProps {
@@ -38,10 +40,23 @@ export interface ModGridProps {
   empty?: ReactNode;
 }
 
+/** Cards drawn at first and added each time the end of the grid comes near. */
+const BATCH = 60;
+
+/** The nearest box above `el` that scrolls up and down (`.view`), or null for the window. */
+function scroller(el: HTMLElement): HTMLElement | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY)) return p;
+  }
+  return null;
+}
+
 export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icons, showCharacter = true, empty }: ModGridProps) {
   const nsfw = useNsfw();
   const health = useModHealth(game);
+  const holds = useHolds(game);
   const aiShow = useAiShow();
+  const trashDays = useTrashDays();
   usePortraitsVersion();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
@@ -55,6 +70,8 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
   const names = useMemo(() => new Map(all.map((m) => [m.id, m.name])), [all]);
 
   useEffect(() => { noteLibrary(game, all, health); }, [game, all, health]);
+  // a mod waiting for an update that got one shows its warnings again
+  useEffect(() => { void settleHolds(game, all); }, [game, all]);
   useEffect(() => { warmProfiles(game); }, [game]);
   const chars = useMemo(() => [...new Set(shown.filter((m) => !m.preview && m.character).map((m) => m.character!))], [shown]);
   usePortraitBatch(game, chars);
@@ -68,6 +85,22 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
       return next.size === s.size ? s : next;
     });
   }, [shown]);
+
+  // cards are drawn in batches: the first ones at once, more as the end comes near
+  const [limit, setLimit] = useState(BATCH);
+  useEffect(() => { setLimit(BATCH); }, [game]);
+  const more = shown.length > limit;
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!more || !el) return;
+    if (typeof IntersectionObserver === "undefined") { setLimit(Infinity); return; }
+    // observed again after each batch, so a tall window keeps filling until the end is out of reach
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setLimit((l) => l + BATCH); },
+      { root: scroller(el), rootMargin: "800px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [more, limit, loading]);
 
   const picked = useMemo(() => shown.filter((m) => selected.has(m.id)), [shown, selected]);
   const pickedRef = useRef(picked);
@@ -109,6 +142,31 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     setSelected(new Set());
   }, [game]);
 
+  /** Delete from the keyboard: then focus goes to the next card that stays (the one before at the end), so the
+   *  arrows and Delete keep working. */
+  const trashFromKey = async (list: ModEntry[], at: number) => {
+    const going = new Set(list.map((m) => m.id));
+    const order = shownRef.current;
+    const next = order.slice(at + 1).find((m) => !going.has(m.id)) ?? order.slice(0, at).reverse().find((m) => !going.has(m.id));
+    await trash(list);
+    let tries = 0;
+    const land = () => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      const active = document.activeElement;
+      // something else took focus (a dialog, a click), or the card is still there because the removal was cancelled
+      if (active && active !== document.body && !grid.contains(active)) return;
+      const hitOf = (id: string) => grid.querySelector<HTMLElement>(`.mod-card[data-mod="${CSS.escape(id)}"] .mod-card-hit`);
+      const stillThere = [...going].some((id) => hitOf(id));
+      if (stillThere && tries++ < 30) { requestAnimationFrame(land); return; }
+      if (active && grid.contains(active)) return;
+      const back = order[at];
+      const el = stillThere ? (back ? hitOf(back.id) : null) : next ? hitOf(next.id) : null;
+      (el ?? grid.querySelector<HTMLElement>(".mod-card-hit"))?.focus();
+    };
+    requestAnimationFrame(land);
+  };
+
   const selectRange = (toId: string, add: boolean) => {
     const ids = shownRef.current.map((x) => x.id);
     const a = anchor.current ? ids.indexOf(anchor.current) : -1, b = ids.indexOf(toId);
@@ -129,16 +187,20 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     openDetails(m);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** The mod's menu with Select on top (the selection lives here, not in the registered menu). */
+  /** The mod's menu with the selection items after its first group (Turn on, Details), since the selection lives
+   *  here, not in the registered menu. */
   const itemsFor = useCallback((m: ModEntry): MenuEntry[] => {
     const sel = pickedRef.current;
     const inSel = sel.some((x) => x.id === m.id);
-    return [
+    const every = shownRef.current;
+    const selecting: MenuEntry[] = [
       { label: inSel ? "Unselect" : "Select", icon: "select", keys: "Ctrl+Space", onClick: () => flip(m.id) },
+      every.length > 1 && sel.length < every.length && { label: "Select all shown", icon: "select", keys: "Ctrl+A", onClick: () => setSelected(new Set(shownRef.current.map((x) => x.id))) },
       sel.length > 0 && { label: "Clear the selection", icon: "x", keys: "Esc", onClick: () => setSelected(new Set()) },
-      "-",
-      ...menuFor("mod", { game, mod: m, selection: inSel && sel.length > 1 ? sel : undefined }),
     ];
+    const rest = menuFor("mod", { game, mod: m, selection: inSel && sel.length > 1 ? sel : undefined });
+    const cut = rest.indexOf("-");
+    return cut < 0 ? [...rest, "-", ...selecting] : [...rest.slice(0, cut), "-", ...selecting, ...rest.slice(cut)];
   }, [game]);
 
   const onMenu = useCallback((m: ModEntry, el: HTMLElement) => openMenu(el, itemsFor(m)), [itemsFor]);
@@ -156,7 +218,7 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const hit = (e.target as HTMLElement).closest<HTMLElement>(".mod-card-hit");
-    if (!hit || !gridRef.current) return;
+    if (!hit || !gridRef.current || behindLayer(hit)) return;
     const idx = Number(hit.dataset.idx ?? -1);
     const m = shown[idx];
     if (!m) return;
@@ -170,8 +232,13 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     }
     const move = (to: number) => {
       e.preventDefault();
-      const t = Math.max(0, Math.min(items.length - 1, to));
-      items[t]?.focus();
+      const t = Math.max(0, Math.min(shown.length - 1, to));
+      if (t < items.length) items[t]?.focus();
+      else {
+        // past the cards drawn so far: draw up to it, then focus it
+        setLimit((l) => Math.max(l, t + 1 + BATCH / 2));
+        requestAnimationFrame(() => gridRef.current?.querySelector<HTMLElement>(`.mod-card-hit[data-idx="${t}"]`)?.focus());
+      }
       const target = shown[t];
       if (e.shiftKey && target) { if (!anchor.current) anchor.current = m.id; selectRange(target.id, false); }
     };
@@ -181,11 +248,16 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
     else if (k === "ArrowDown") move(idx + cols);
     else if (k === "ArrowUp") move(idx - cols);
     else if (k === "Home") move(0);
-    else if (k === "End") move(items.length - 1);
+    else if (k === "End") move(shown.length - 1);
     else if (k === " " && (e.ctrlKey || e.metaKey)) { e.preventDefault(); flip(m.id); }
-    else if (k === " ") { e.preventDefault(); void toggle(selected.has(m.id) && picked.length > 1 ? picked : [m], !m.enabled, e.shiftKey); }
+    else if (k === " ") {
+      // the same rule as the menu's Turn on/off: all on turns them off, otherwise on
+      e.preventDefault();
+      const list = selected.has(m.id) && picked.length > 1 ? picked : [m];
+      void toggle(list, !list.every((x) => x.enabled), e.shiftKey);
+    }
     else if (k === "F2") { e.preventDefault(); askLib({ kind: "rename", game, mod: m }); }
-    else if (k === "Delete") { e.preventDefault(); void trash(selected.has(m.id) ? picked : [m]); }
+    else if (k === "Delete") { e.preventDefault(); void trashFromKey(selected.has(m.id) ? picked : [m], idx); }
     else if (k.toLowerCase() === "a" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setSelected(new Set(shown.map((x) => x.id))); }
     else if (k === "Escape" && selected.size) { e.preventDefault(); e.stopPropagation(); setSelected(new Set()); }
   };
@@ -219,20 +291,22 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
   }
   if (!shown.length) return <>{empty}</>;
 
-  const broken = picked.filter((m) => health.get(m.id)?.status === "broken");
+  const broken = picked.filter((m) => isBroken(health.get(m.id)));
+  const due = picked.filter((m) => m.updateAvailable && m.source);
   const allFav = picked.length > 0 && picked.every((m) => m.favorite);
   const onScreen = onlyOnScreenFn();
   return (
     <div className="mod-grid-wrap">
       <div ref={gridRef} className={`mod-grid ${view === "list" ? "is-list" : "cards"}`} onKeyDown={onKey} onContextMenu={onContextMenu}
         onKeyUp={(e) => { if (e.key === " " && (e.target as HTMLElement).closest(".mod-card-hit")) e.preventDefault(); }}>
-        {shown.map((m, i) => (
+        {(more ? shown.slice(0, limit) : shown).map((m, i) => (
           <ModCard key={m.id} game={game} mod={m} index={i} row={view === "list"} selected={selected.has(m.id)} nsfw={nsfw}
             showCharacter={showCharacter} health={health.get(m.id)} portrait={portraitOf(m)}
-            parentName={m.parent ? names.get(m.parent) : undefined}
+            parentName={m.parent ? names.get(m.parent) : undefined} held={holdOn(holds, m)?.kind ?? null}
             onOpen={onOpen} onToggle={onToggleCard} onMenu={onMenu} onUpdate={onUpdate} />
         ))}
       </div>
+      {more && <div ref={sentinel} className="mod-grid-more" style={{ height: 1 }} aria-hidden="true" />}
 
       {picked.length > 0 && (
         <div className="floatbar mod-bulk" role="toolbar" aria-label="Selected mods">
@@ -249,16 +323,23 @@ export function ModGrid({ game, mods, all, setMods, view = "grid", loading, icon
               Attempt fix{broken.length === picked.length ? "" : ` on ${broken.length}`}
             </Button>
           )}
+          {due.length > 0 && (
+            <Button size="sm" variant="ghost" icon="downloads" title={due.length === 1 ? `Download the newest version of ${due[0]!.name}` : "Download the newest version of each"}
+              onClick={() => void getUpdates(game, due)}>Update{due.length === picked.length ? "" : ` ${due.length}`}</Button>
+          )}
           {onScreen && picked.some((m) => m.hasKeys) && (
             <IconButton size="sm" icon="keyboard" label="Toggles only while on screen: their toggles only work while their character is on screen"
               onClick={() => void keysOnlyOnScreen(game, picked.filter((m) => m.hasKeys))} />
           )}
-          {aiShown("useful", aiShow) && (
-            <IconButton size="sm" icon="ai" label="Ask the AI helper (rename, tag or sort these)" onClick={() => askAi({ kind: "mods", game, modIds: picked.map((m) => m.id) })} />
-          )}
-          <IconButton size="sm" icon="share" label="Share as .gachamod" onClick={() => exportMods(game, picked)} />
-          <IconButton size="sm" icon="more" label="More actions" onClick={(e) => openMenu(e.currentTarget, menuFor("mod", { game, mod: picked[0]!, selection: picked }))} />
-          <Button size="sm" variant="danger" icon="trash" title="Move to trash (Delete). Undo puts them back" onClick={() => void trash(picked)}>Trash</Button>
+          {/* sharing is in the menu already; the AI helper joins it, so the bar fits a small window */}
+          <IconButton size="sm" icon="more" label="More actions" onClick={(e) => openMenu(e.currentTarget, [
+            ...menuFor("mod", { game, mod: picked[0]!, selection: picked }),
+            aiShown("useful", aiShow) && "-",
+            aiShown("useful", aiShow) && { label: "Ask the AI helper", icon: "ai", title: "Rename, tag or sort these", onClick: () => askAi({ kind: "mods", game, modIds: picked.map((m) => m.id) }) },
+          ])} />
+          {trashDays > 0
+            ? <Button size="sm" variant="danger" icon="trash" title="Move to trash (Delete). Undo puts them back" onClick={() => void trash(picked)}>Trash</Button>
+            : <Button size="sm" variant="danger" icon="trash" title="Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest are asked about first" onClick={() => void trash(picked)}>Delete</Button>}
           <IconButton size="sm" icon="x" label="Clear the selection (Esc)" onClick={() => setSelected(new Set())} />
         </div>
       )}

@@ -122,7 +122,10 @@ fn read_manifest(root: &Path, id: &str) -> Result<Backup> {
 pub fn restore(db: &Db, id: &str) -> Result<Backup> {
     let b = read_manifest(&root(db), id)?;
     let current = crate::library::mod_path(db, &b.game, &b.mod_id).ok().filter(|p| p.is_dir());
-    restore_in(&root(db), id, current)
+    let before = restore_in(&root(db), id, current)?;
+    // put-back parts can make a conflict again (or a removed one go away)
+    crate::library::recount_conflicts(db, &b.game);
+    Ok(before)
 }
 
 fn restore_in(root: &Path, id: &str, current_dir: Option<PathBuf>) -> Result<Backup> {

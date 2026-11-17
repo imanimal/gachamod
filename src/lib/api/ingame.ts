@@ -6,7 +6,7 @@ import type { AiTask } from "../ai";
 import type { Route } from "../store";
 
 export interface LiveMod { modId: string; slot: number; name: string; enabled: boolean; preview: string | null }
-/** One character's live mods. `active` is the slot showing; 0 is none of them (the game's own look). */
+/** One character's live mods. `active` is the slot showing; 0 is none of them (vanilla). */
 /** `waiting`: the app's pick couldn't be keyed into the running game, so it shows at the game's next reload. */
 export interface LiveGroup { group: number; character: string; active: number; mods: LiveMod[]; waiting: boolean }
 /** A character with two or more mods that aren't all live yet. */
@@ -35,7 +35,12 @@ export const MENU_BINDS: Readonly<Record<string, string[]>> = {
  *  (live.rs drawn_menu_open: those two, Star Rail and Honkai Impact 3rd; or any game with tester options on,
  *  "ui.testerOk"). `checked`: the drawn menu needs no tester options here; elsewhere "Inside the game" is marked as
  *  a tester option. */
-export interface LiveInfo { groups: LiveGroup[]; ready: LiveReady[]; running: boolean; menu: MenuSettings; blocked: boolean; all: boolean; allowed: boolean; checked: boolean }
+export interface LiveInfo {
+  groups: LiveGroup[]; ready: LiveReady[]; running: boolean; menu: MenuSettings; blocked: boolean; all: boolean; allowed: boolean; checked: boolean;
+  /** The groups whose character is on screen in the running game, as it last saved them (live.rs `on_screen`).
+   *  Empty while the game is closed. The menu over the game opens on these characters. */
+  onScreen?: number[];
+}
 export interface LiveChange { changed: string[]; skipped: ModSkip[]; backups: ModBackup[]; turnedOn: string[]; turnedOff: string[] }
 /** `reload`: the mod was off and was turned on, so it shows after a reload. `send`: the pick went to the running game. */
 export interface Picked { reload: boolean; send: boolean; note?: string | null }

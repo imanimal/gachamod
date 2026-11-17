@@ -8,15 +8,16 @@ import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop } from "./ui/Deco";
 import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
-import { about as aboutApi, app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi } from "./lib/api";
+import { about as aboutApi, app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi, shell as shellApi } from "./lib/api";
 import { held } from "./lib/tauri";
-import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, setOnlyGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, VIEWS, type View } from "./lib/store";
+import { reviewUnsurePref } from "./screens/settings/automatic";
+import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, setOnlyGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, type View } from "./lib/store";
 import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
 import { chillPref, HIDDEN_THEME, onKonami, watchKonamiKeys } from "./lib/fun";
 import { Seasonal } from "./ui/Seasonal";
 import { notePlaying } from "./lib/playtime";
 import { warmUp } from "./lib/warmup";
-import { PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
+import { MOD_SHORTCUTS, PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
 import { installGamepad } from "./lib/gamepad";
 import { installUndoKeys } from "./lib/history";
 import { applyTextSize, installZoomKeys } from "./lib/zoom";
@@ -64,29 +65,37 @@ export function App() {
   const [loaded, setLoaded] = useState(false);
   // the first look for games is done (on a first start, or while no game is ready)
   const [looked, setLooked] = useState(false);
+  // reading the saved games failed at start (shown on the setup page, apart from an empty list)
+  const [startError, setStartError] = useState<string | null>(null);
   const ready = games.some((g) => g.modsDir);
   const sawSetup = useRef(false);
   const viewRef = useRef<HTMLElement>(null);
 
   // games: the saved list at once, then a detection pass on first start and whenever nothing is ready. No window:
   // a game that's ready opens straight away (welcome() says what was found), otherwise the setup page shows
-  useEffect(() => {
-    refreshGames().then(async (list) => {
-      setLoaded(true);
-      const first = (await settingsApi.get("onboarded").catch(() => null)) !== "1";
-      // installed with a game's own setup (gachamod-setup-zzz.exe): start in one-game mode for that game
-      const named = await aboutApi.setupGame().catch(() => null);
-      if (first && named) {
-        setOnlyGame(named);
-        if (list.some((g) => g.id === named && g.shown)) setGame(named);
-      }
-      if (!first && list.some((g) => g.modsDir)) { setLooked(true); return; }
-      const after = (await recheck(true)) ?? list;
-      setLooked(true);
-      if (after.some((g) => g.modsDir)) void welcome(after);
-      introSearch();
-    }).catch((e) => { setLoaded(true); setLooked(true); toast(String((e as { message?: string }).message ?? e), true); });
-  }, []);
+  const start = useRef(async () => {
+    let list: Awaited<ReturnType<typeof refreshGames>>;
+    try { list = await refreshGames(); }
+    catch (e) { setStartError(errorText(e)); setLoaded(true); setLooked(true); return; }
+    setStartError(null);
+    setLoaded(true);
+    const first = (await settingsApi.get("onboarded").catch(() => null)) !== "1";
+    // installed with a game's own setup (gachamod-setup-zzz.exe): start in one-game mode for that game
+    const named = await aboutApi.setupGame().catch(() => null);
+    if (first && named) {
+      setOnlyGame(named);
+      if (list.some((g) => g.id === named && g.shown)) setGame(named);
+    }
+    if (!first && list.some((g) => g.modsDir)) { setLooked(true); return; }
+    const after = (await recheck(true)) ?? list;
+    setLooked(true);
+    if (after.some((g) => g.modsDir)) void welcome(after);
+    introSearch();
+  }).current;
+  useEffect(() => { void start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // a later read that worked (Look again, the setup page's own checks) sets a new list: nothing is failing any more,
+  // even when that list is empty
+  useEffect(() => { setStartError(null); }, [games]);
   // the opening screen plays once the games are read and the first screen is drawn (splash/splash.ts)
   useEffect(() => { if (loaded) splashReady(); }, [loaded]);
   // the setup page made a game ready: that was the first start
@@ -143,12 +152,26 @@ export function App() {
       held(appApi.onOpenFile((p) => open({ kind: "file", path: p.path }))),
       held(appApi.onToast((p) => {
         const o = p.open;
+        const review = p.review;
+        if (review) {
+          void reviewUnsurePref.ready.then(() => {
+            if (!reviewUnsurePref.get()) return;
+            toast("gachamod wasn't sure where some of this mod's files go. Check its folder against the mod's install steps", false,
+              { label: "Review files", run: () => { shellApi.openPath(review).catch((e) => toast(errorText(e), true)); } },
+              { label: "Don't show again", run: () => void reviewUnsurePref.set(false, "Stopped asking about files gachamod can't place") });
+          });
+        }
         if (o && p.installed?.length) { void afterInstall(p.text, o.game, p.installed); return; }
         // nowhere to install: offer the loader (or a fresh look) and retry, not a dead end
         const f = p.failed, fg = f && allGames().find((g) => g.id === f.game);
         if (f && fg && !fg.modsDir) {
           toast(p.text, true, { label: canInstallLoader(fg) ? "Install mod loader" : "Find Mods folder",
             run: () => void getReady(f.game).then((ok) => { if (ok) queueApi.retry(f.item).catch((e) => toast(errorText(e), true)); }) });
+          return;
+        }
+        const show = f?.file ?? p.reveal;
+        if (!o && show) {
+          toast(p.text, !!p.bad, { label: f?.file ? "Show file" : "Show folder", run: () => { shellApi.revealPath(show).catch((e) => toast(errorText(e), true)); } });
           return;
         }
         toast(p.text, !!p.bad, o ? { label: "Open", run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
@@ -161,8 +184,14 @@ export function App() {
       })),
       // a newer gachamod downloaded in the background (commands/app.rs)
       held(appUpdate.onReady((p) => {
-        toast(`gachamod ${p.version} is ready. It installs when you close gachamod`, false,
+        toast(`gachamod ${p.version} is ready. It installs when you close gachamod`, "info",
           { label: "Restart now", run: () => { appUpdate.install().catch((e) => toast(errorText(e), true)); } });
+      })),
+      // updates set to only tell: a newer gachamod is out, nothing downloaded
+      held(appUpdate.onFound((p) => {
+        toast(`gachamod ${p.version} is out`, "info",
+          { label: "Update now", run: () => { appUpdate.install().catch((e) => toast(errorText(e), true)); } },
+          { label: "View details", run: () => go({ view: "settings", section: "updates" }) });
       })),
     ];
     return () => offs.forEach((f) => f());
@@ -188,19 +217,21 @@ export function App() {
       const n = list[(i + d + list.length) % list.length];
       if (n) setGame(n.id);
     };
-    const play = () => (document.querySelector(".side .play-btn") as HTMLElement | null)?.click();
+    // Set up shares the play-btn class but installs things, so it never answers a shortcut
+    const play = () => (document.querySelector(".side .play-btn:not(.play-setup)") as HTMLElement | null)?.click();
     const offKeys = installKeys({
       views: KEY_VIEWS, go: (v) => go(v as View), help: toggleHelp, back: () => back(), forward: () => forward(), nextGame, play,
       palette: (t) => openPalette(t, !!t), sidebar: toggleSide, menu: menuForFocus,
     });
     const offPad = installGamepad({
-      nextView: (d) => { const cur = VIEWS.indexOf(routeRef.current); go(VIEWS[(cur + d + VIEWS.length) % VIEWS.length]!); },
-      back: () => back(), play, menu: menuForFocus, palette: () => openPalette(),
+      // the sidebar's order, the same as Ctrl+1 to Ctrl+8
+      nextView: (d) => { const cur = KEY_VIEWS.indexOf(routeRef.current); go(KEY_VIEWS[cur < 0 ? (d > 0 ? 0 : KEY_VIEWS.length - 1) : (cur + d + KEY_VIEWS.length) % KEY_VIEWS.length]!); },
+      nextGame, back: () => back(), play, menu: menuForFocus, palette: () => openPalette(),
     });
     const offMouse = installGlobalInput();
     const offUndo = installUndoKeys();
     applyTextSize();
-    const offZoom = installZoomKeys((px) => toast(`Text size ${px}px (Ctrl+0 resets)`));
+    const offZoom = installZoomKeys((px) => toast(`Text size ${px}px (Ctrl+0 resets)`, "info"));
     return () => { offKeys(); offPad(); offMouse(); offUndo(); offZoom(); };
   }, []);
   const shownRef = useLatest(shown);
@@ -225,9 +256,18 @@ export function App() {
     return () => { stop(); el.removeEventListener("wheel", stop); };
   }, [nav.n]);
 
+  // focus never drops to the page body: a new screen takes it (Tab starts there), and a focused control that goes away
+  // (Attempt fix, Play anyway) hands it to the nearest one left
+  const mainKey = `${game?.id}-${route.view}${route.ext ? `-${route.ext}` : ""}`;
+  useLayoutEffect(() => {
+    const a = document.activeElement;
+    if (!a || a === document.body || !a.isConnected) viewRef.current?.focus({ preventScroll: true });
+  }, [mainKey, route.character, nav.n]);
+  useEffect(() => keepFocus(), []);
+
   const view = route.view;
   const screen = !loaded ? <Waiting className="nogame" what="Reading your games" />
-    : !ready && view !== "settings" && view !== "extensions" ? <SetupPage looking={!looked} />
+    : !ready && view !== "settings" && view !== "extensions" ? <SetupPage looking={!looked} error={startError} retry={start} />
     : view === "home" ? <Home />
     : view === "library" ? <Library />
     : view === "characters" ? <Characters />
@@ -238,27 +278,35 @@ export function App() {
     : view === "extensions" ? <Extensions />
     : <Settings />;
 
+  // quiet parts that failed come back when the page changes
+  const navKey = `${mainKey}-${nav.n}`;
+  // the last resort: the feedback form and toasts go down with the window, so its page brings its own
+  const lastResort = <><ErrorBoundary where="Feedback" quiet><FeedbackHost /></ErrorBoundary><Toasts /></>;
+
   return (
+    <ErrorBoundary where="gachamod" whole extra={lastResort}>
     <div className="app" data-side={collapsed ? "rail" : "full"}>
       <Backdrop game={game} />
-      <Titlebar />
-      <Sidebar />
+      <ErrorBoundary where="Title bar" slot="titlebar" windowKeys resetKey={navKey}><Titlebar /></ErrorBoundary>
+      <ErrorBoundary where="Sidebar" slot="side" resetKey={navKey}><Sidebar /></ErrorBoundary>
 
-      <main ref={viewRef} className="view" key={`${game?.id}-${view}${route.ext ? `-${route.ext}` : ""}`}>
+      <main ref={viewRef} className="view" key={mainKey} tabIndex={-1} style={{ outline: "none" }}>
         <ErrorBoundary where={viewLabel(view, game?.id)}>{screen}</ErrorBoundary>
       </main>
 
-      {games.length > 0 && <ErrorBoundary where="Online" quiet><OnlineOverlays /></ErrorBoundary>}
-      {games.length > 0 && <ErrorBoundary where="Mod tools" quiet><ModtoolsOverlays /></ErrorBoundary>}
-      {games.length > 0 && <ErrorBoundary where="Profiles" quiet><NewProfileHost /></ErrorBoundary>}
-      <ErrorBoundary where="Feedback" quiet><FeedbackHost /></ErrorBoundary>
-      <ErrorBoundary where="Check this game" quiet><GameCheckHost /></ErrorBoundary>
+      {games.length > 0 && <ErrorBoundary where="Online" quiet resetKey={navKey}><OnlineOverlays /></ErrorBoundary>}
+      {games.length > 0 && <ErrorBoundary where="Mod tools" quiet resetKey={navKey}><ModtoolsOverlays /></ErrorBoundary>}
+      {games.length > 0 && <ErrorBoundary where="Profiles" quiet resetKey={navKey}><NewProfileHost /></ErrorBoundary>}
+      <ErrorBoundary where="Feedback" quiet resetKey={navKey}><FeedbackHost /></ErrorBoundary>
+      <ErrorBoundary where="Check this game" quiet resetKey={navKey}><GameCheckHost /></ErrorBoundary>
       <DropZone />
-      <ErrorBoundary where="AI helper" quiet><AiHost /></ErrorBoundary>
+      <ErrorBoundary where="AI helper" quiet resetKey={navKey}><AiHost /></ErrorBoundary>
       <CommandPalette />
       {help && (
         <Dialog icon="keyboard" title="Shortcuts" onClose={() => setHelpOpen(false)}>
           <div className="keys-list">{SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
+          <h3 className="sub-h">On a mod</h3>
+          <div className="keys-list">{MOD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
           <h3 className="sub-h">Controller</h3>
           <div className="keys-list">{PAD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
         </Dialog>
@@ -267,7 +315,47 @@ export function App() {
       <ContextMenuHost />
       <Toasts />
     </div>
+    </ErrorBoundary>
   );
+}
+
+const FOCUSABLE = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+const REGIONS = ".app > .view, .app > .side, .app > .titlebar";
+
+/** When a focused control in the screen, sidebar or title bar is removed, focus the nearest control in the same place,
+ *  preferring the one below it. Windows and menus hand focus back on their own, so they're left alone. */
+function keepFocus() {
+  let last: HTMLElement | null = null, region = "", at = { x: 0, y: 0 };
+  const onIn = (e: FocusEvent) => {
+    const t = e.target as HTMLElement | null;
+    const r = t?.closest?.(REGIONS);
+    if (!t || !r || t === r || t.closest(".overlay, .popover, .ctx, [role='dialog']")) { last = null; return; }
+    const b = t.getBoundingClientRect();
+    last = t; region = r.classList.contains("view") ? ".app > .view" : r.classList.contains("side") ? ".app > .side" : ".app > .titlebar";
+    at = { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  };
+  const check = () => {
+    if (!last || last.isConnected) return;
+    last = null;
+    const a = document.activeElement;
+    if (a && a !== document.body) return;
+    const root = document.querySelector<HTMLElement>(region);
+    if (!root) return;
+    let best: HTMLElement | null = null, score = Infinity;
+    for (const el of root.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+      const b = el.getBoundingClientRect();
+      if (b.width < 2 || b.height < 2) continue;
+      const dx = b.left + b.width / 2 - at.x, dy = b.top + b.height / 2 - at.y;
+      const s = Math.abs(dx) + Math.abs(dy) * 2 + (dy < -4 ? 400 : 0);
+      if (s < score) { score = s; best = el; }
+    }
+    (best ?? (region === ".app > .view" ? root : null))?.focus({ preventScroll: true });
+  };
+  const obs = new MutationObserver(check);
+  const app = document.querySelector(".app");
+  if (app) obs.observe(app, { childList: true, subtree: true });
+  document.addEventListener("focusin", onIn);
+  return () => { obs.disconnect(); document.removeEventListener("focusin", onIn); };
 }
 
 function useLatest<T>(v: T) { const r = useRef(v); r.current = v; return r; }

@@ -1313,12 +1313,16 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
         let mine: HashSet<String> = quick_facts(&dir).active.into_iter().collect();
         let (_, by_hash) = enabled_hashes(&mods);
         let ignored = ignored_pairs(db, game);
+        // the same rules as the Conflict tag on the card (library::compute_conflicts)
+        let live = crate::live::groups_by_mod(db, game);
+        let my_group = live.get(&m.id);
         let mut shared: HashMap<usize, Vec<String>> = HashMap::new();
         for h in &mine {
             let Some(list) = by_hash.get(h) else { continue };
-            if list.len() >= COMMON_HASH { continue; }
+            if list.len() < 2 || list.len() >= COMMON_HASH { continue; }
             for &i in list {
-                if mods[i].id != m.id && !ignored.contains(&pair_key(&m.id, &mods[i].id)) { shared.entry(i).or_default().push(h.clone()); }
+                let same_group = my_group.is_some() && live.get(&mods[i].id) == my_group;
+                if mods[i].id != m.id && !same_group && !ignored.contains(&pair_key(&m.id, &mods[i].id)) { shared.entry(i).or_default().push(h.clone()); }
             }
         }
         let parts = if shared.is_empty() { HashMap::new() } else { parts_by_hash(&dir) };
@@ -1377,7 +1381,9 @@ pub fn ignore_conflict(db: &Db, game: &str, ids: &[String], on: bool) -> Result<
     }
     let mut list: Vec<String> = set.into_iter().collect();
     list.sort();
-    db.set_setting_json(&ignored_key(game), &list)
+    db.set_setting_json(&ignored_key(game), &list)?;
+    library::recount_conflicts(db, game);
+    Ok(())
 }
 
 /// Take a conflict's shared parts out of one mod: each override section in its inis that changes one of `hashes`
@@ -1416,6 +1422,7 @@ pub fn drop_overrides(db: &Db, game: &str, id: &str, hashes: &[String]) -> Resul
     let backup = crate::backups::take(db, game, &m.id, &dir, &files, &label)?;
     for (path, _, bytes) in &edits { std::fs::write(path, bytes)?; }
     if m.loaded() { crate::devtools::mark_changed(game); }
+    library::recount_conflicts(db, game);
     Ok(backup)
 }
 
@@ -1821,12 +1828,21 @@ hash = 11111111"));
 ;hash = 33333333
 ;ib = Hair.ib"));
             assert!(conflicts(&db, "zzz").unwrap().is_empty());
+            let cards = |db: &crate::db::Db| library::list(db, "zzz").unwrap().iter().map(|m| m.conflicts).collect::<Vec<_>>();
+            assert_eq!(cards(&db), vec![0, 0], "cards drop the tag without a rescan");
             crate::backups::restore(&db, &backup.id).unwrap();
             assert_eq!(fs::read_to_string(mods.join("A/mod.ini")).unwrap(), ini);
+            assert_eq!(cards(&db), vec![1, 1], "undo brings it back");
+
+            library::set_enabled(&db, "zzz", &[b.clone()], false).unwrap();
+            assert_eq!(cards(&db), vec![0, 0], "turning one off clears both");
+            library::set_enabled(&db, "zzz", &[b.clone()], true).unwrap();
+            assert_eq!(cards(&db), vec![1, 1]);
 
             ignore_conflict(&db, "zzz", &[a.clone(), b.clone()], true).unwrap();
             assert!(conflicts(&db, "zzz").unwrap()[0].ignored);
             assert!(inspect(&db, "zzz", &a).unwrap().conflicts.is_empty());
+            assert_eq!(cards(&db), vec![0, 0]);
         }
         assert!(library::scan(&shared, "zzz").unwrap().iter().all(|m| m.conflicts == 0), "mod cards stop counting it");
         {

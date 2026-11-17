@@ -337,7 +337,8 @@ const NOTES: Record<string, string> = {
   global: "This mod doesn't draw a character, so its toggles work everywhere",
 };
 
-function demoModKeys(game: string, id: string): ModKeys {
+/** A demo mod's keys as they are now (the demo key list shows the same ones, so a rebind there shows here too). */
+export function demoModKeys(game: string, id: string): ModKeys {
   const s = demoKeysOf(game, id);
   const m = findMod(game, id);
   return {

@@ -1,8 +1,9 @@
 // Problems in mods (modtools.lint): one result per game that the Tools panel, the Tools page order and the nav badge
 // all read, the problems the user chose to ignore, and the one-click fixes. Owner: MODTOOLS area.
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { errorKind, errorText, modtools, type Backup, type GameId, type ModProblems, type Problem, type ProblemFix } from "../../lib/api";
 import { modPage, newestFile, queueModFile } from "../../lib/gamebanana";
+import { holdsNow, holdsPref, releaseMods } from "../../lib/holds";
 import { jsonPref } from "../../lib/prefs";
 import { emitApp, go } from "../../lib/store";
 import { onKeysChanged, recordBackups } from "../../ui/KeyEditor";
@@ -15,11 +16,17 @@ import { problemSeenKey } from "./toolsBadge";
 /** Ignored problems by "<game>:<modId>". A problem that changes (another file goes missing) shows again. */
 export const ignoredPref = jsonPref<Record<string, string[]>>("problems.ignored", {});
 export type Ignored = Record<string, string[]>;
-export const useIgnored = () => ignoredPref.use();
+/** The ignored problems; a new object when a mod's problems are set aside from the Mods list too (lib/holds). */
+export function useIgnored(): Ignored {
+  const ign = ignoredPref.use();
+  const holds = holdsPref.use();
+  return useMemo(() => ({ ...ign }), [ign, holds]);
+}
 
 const problemKey = (p: Problem) => `${p.kind}|${p.ini ?? ""}|${p.detail}`;
 const modKey = (game: GameId, modId: string) => `${game}:${modId}`;
-const isIgnored = (ign: Ignored, game: GameId, modId: string, p: Problem) => !!ign[modKey(game, modId)]?.includes(problemKey(p));
+const isIgnored = (ign: Ignored, game: GameId, modId: string, p: Problem) =>
+  holdsNow(game)[modId]?.kind === "ignore" || !!ign[modKey(game, modId)]?.includes(problemKey(p));
 
 /** What Tools lists for a mod: warnings and worse, not ignored. Notes ("info") only show in the mod's drawer. */
 export const shownProblems = (ign: Ignored, game: GameId, m: ModProblems) =>
@@ -58,7 +65,9 @@ export function ignoreAll(game: GameId, list: ModProblems[]) {
 }
 
 export function unignore(game: GameId, m: ModProblems) {
+  if (holdsNow(game)[m.modId]) void releaseMods(game, [{ id: m.modId, name: m.name }]);
   const all = { ...ignoredPref.get() };
+  if (!all[modKey(game, m.modId)]) return;
   delete all[modKey(game, m.modId)];
   void ignoredPref.set(all, `Showing ${m.name}'s problems again`);
 }

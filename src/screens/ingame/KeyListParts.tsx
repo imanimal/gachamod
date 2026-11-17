@@ -1,18 +1,18 @@
-// The key list's shared parts (lib/api/keylist.ts): loading it for a game, keys drawn as key caps, the note beside a
-// key, search and grouping by character. Used by the Keys tab of the menu over the game (OverlayKeys.tsx) and by
-// Tools > Key list in game (KeyListPanel.tsx). Owner: INGAME area.
+// The key list's shared parts (lib/api/keylist.ts): loading it for a game, the note beside a key, search and grouping
+// by character. Used by the Keys tab of the menu over the game (OverlayKeys.tsx) and by Tools > Key list in game
+// (KeyListPanel.tsx). Owner: INGAME area.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorText, keyList, library, type GameId, type KeyList, type KeyListSettings, type KeyRow, type ModKeyList } from "../../lib/api";
 import { onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
-import { Icon } from "../../ui/Icon";
-import { Kbd } from "../../ui/kit";
+import { onKeysChanged } from "../../ui/KeyEditor";
 import "./keylist.css";
 
 /** Mods with no character sit under this name, last. */
 export const OTHER_MODS = "Other mods";
 
-/** The game's key list (null while reading), read again when `tick` changes and when the library changes. */
+/** The game's key list (null while reading), read again when `tick` changes, when the library changes and when a
+ *  mod's keys change (a rebind, its Undo). */
 export function useKeyList(game: GameId, tick = 0) {
   const [state, setState] = useState<{ game: GameId; list: KeyList | null; error: string | null }>({ game, list: null, error: null });
   const live = useRef(true);
@@ -24,7 +24,8 @@ export function useKeyList(game: GameId, tick = 0) {
     void load();
     const off = held(library.onChanged((p) => { if (p.game === game) void load(); }));
     const offApp = onApp((e) => { if (e.type === "library-refresh" && e.game === game) void load(); });
-    return () => { live.current = false; off(); offApp(); };
+    const offKeys = onKeysChanged((g) => { if (g === game) void load(); });
+    return () => { live.current = false; off(); offApp(); offKeys(); };
   }, [game, tick, load]);
   /** One mod changed (keyList.choose answered). */
   const patch = useCallback((m: ModKeyList) =>
@@ -36,29 +37,6 @@ export function useKeyList(game: GameId, tick = 0) {
   }, [load]);
   const mine = state.game === game;
   return { list: mine ? state.list : null, error: mine ? state.error : null, reload: load, patch, settle };
-}
-
-/** One key as key caps: "Ctrl+H" as Ctrl + H, "Pad LB+Pad A" with a controller mark. Alternatives are joined by "or". */
-export function KeyCombo({ keys }: { keys: string[] }) {
-  return (
-    <span className="kl-keys">
-      {keys.map((k, i) => (
-        <span key={i} className="kl-alt">
-          {i > 0 && <span className="kl-or">or</span>}
-          {k.split(/\+(?!$)/).map((p, n) => {
-            const pad = p.startsWith("Pad ");
-            return (
-              <span key={n} className="kl-part">
-                {n > 0 && <span className="kl-plus">+</span>}
-                {pad && <span className="kl-pad" title="Controller"><Icon name="gamepad" /></span>}
-                <Kbd>{pad ? p.slice(4) : p}</Kbd>
-              </span>
-            );
-          })}
-        </span>
-      ))}
-    </span>
-  );
 }
 
 /** The dim note after what a key does: "Hold", or how many values a cycle steps through. */
@@ -84,13 +62,15 @@ export function keyHits(m: ModKeyList, words: string): KeyRow[] | null {
   return rows.length ? rows : null;
 }
 
-/** Mods grouped by character, in name order, with mods that have no character last. */
-export function byCharacter<T extends { character: string | null }>(mods: T[]): Array<{ name: string; other: boolean; mods: T[] }> {
+/** Mods grouped by character: the characters in `order` first, in that order, then the rest by name, with mods that
+ *  have no character last. */
+export function byCharacter<T extends { character: string | null }>(mods: T[], order: string[] = []): Array<{ name: string; other: boolean; mods: T[] }> {
+  const rank = (name: string) => { const i = order.indexOf(name); return i < 0 ? order.length : i; };
   const groups = new Map<string, T[]>();
   for (const m of mods) {
     const k = m.character ?? OTHER_MODS;
     groups.set(k, [...(groups.get(k) ?? []), m]);
   }
   return [...groups].map(([name, list]) => ({ name, other: name === OTHER_MODS && !list.some((m) => m.character), mods: list }))
-    .sort((a, b) => Number(a.other) - Number(b.other) || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(a.other) - Number(b.other) || rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
 }

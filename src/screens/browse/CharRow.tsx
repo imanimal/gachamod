@@ -7,9 +7,9 @@ import type { GbCategoryRef } from "../../lib/gamebanana";
 import { usePortraitBatch } from "../../lib/portraits";
 import { IconButton } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
-import { menuFor, menuHandler } from "../../ui/ContextMenu";
+import { menuFor, menuHandler, type MenuEntry } from "../../ui/ContextMenu";
 import { Portrait } from "../../ui/Portrait";
-import { reveal, rowKeys, useSideScroll } from "./sideScroll";
+import { reveal, rowKeys, useRovingTab, useSideScroll } from "./sideScroll";
 
 const EXPAND_KEY = "gm.browse.charsOpen";
 
@@ -20,6 +20,8 @@ export function CharRow({ game, chars, value, onChange, expanded, onExpanded }: 
   const ref = useRef<HTMLDivElement>(null);
   const { left, right, page } = useSideScroll(ref, [chars.length, expanded]);
   usePortraitBatch(game, chars.map((c) => c.name));
+  // one Tab stop for the whole row; the arrow keys move inside it
+  useRovingTab(ref, ".gb-ch");
   const noun = charNoun(game);
 
   // keep the picked character in view (scrolling the row only: the page stays where it is)
@@ -27,6 +29,12 @@ export function CharRow({ game, chars, value, onChange, expanded, onExpanded }: 
     const row = ref.current, el = row?.querySelector<HTMLElement>(".gb-ch.on");
     if (row && el && !expanded) reveal(row, el, "center");
   }, [value, chars.length, expanded]);
+
+  // the shared character menu, but "Find mods online" filters Browse here instead of leaving it
+  const browseMenu = (name: string, on: boolean): MenuEntry[] => menuFor("character", { game, name }).map((it) =>
+    it && it !== "-" && "label" in it && it.label === "Find mods online"
+      ? on ? { label: "Show all", icon: "characters", onClick: () => onChange(null) } : { label: `Show only ${name}`, icon: "browse", onClick: () => onChange(name) }
+      : it);
 
   if (!chars.length) return null;
   const want = value?.toLowerCase();
@@ -42,7 +50,7 @@ export function CharRow({ game, chars, value, onChange, expanded, onExpanded }: 
           const on = c.name.toLowerCase() === want;
           return (
             <button key={c.id} type="button" className={`gb-ch${on ? " on" : ""}`} aria-pressed={on} title={on ? `${c.name} (click again for all)` : c.name}
-              onClick={() => onChange(on ? null : c.name)} onContextMenu={menuHandler(() => menuFor("character", { game, name: c.name }))}>
+              onClick={() => onChange(on ? null : c.name)} onContextMenu={menuHandler(() => browseMenu(c.name, on))}>
               <Portrait game={game} name={c.name} icon={c.icon} size="2.6rem" className="gb-ch-img" />
               <span className="gb-ch-t">{c.name}</span>
             </button>

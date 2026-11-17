@@ -388,6 +388,7 @@ pub fn run() {
             commands::system::dev_clear_frame_dumps,
             commands::system::dev_reload,
             commands::system::dev_wipe_user_config,
+            commands::system::dev_unwipe_user_config,
             commands::system::integrations_get,
             commands::system::integration_set,
             commands::system::app_data_dir,

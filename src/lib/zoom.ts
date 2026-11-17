@@ -1,7 +1,7 @@
 // Text size for the whole app: every size is in em from --fs, so one number scales the UI (pixel icons stay
 // crisp at their own sizes). Ctrl+= and Ctrl+- step it, Ctrl+0 resets; the choice is remembered.
 const KEY = "pm.textSize";
-export const SIZES = [12, 13, 14, 15, 16, 18, 20] as const;
+export const SIZES = [12, 13, 14, 15, 16, 18, 20, 22, 24, 28] as const;
 const DEFAULT = 14;
 
 export function getTextSize(): number {

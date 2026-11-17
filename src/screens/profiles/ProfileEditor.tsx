@@ -4,6 +4,8 @@
 // in-game hotkey. Enter in a one-line field saves. Saving can be undone. Owner: HOME/PROFILES area.
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { dialogs, errorText, hotkeys, library, type Character, type GameId, type ModEntry, type Profile } from "../../lib/api";
+import { article, charNoun } from "../../lib/games";
+import { go } from "../../lib/store";
 import { onColor as inkOn } from "../../lib/theme";
 import { Icon } from "../../ui/Icon";
 import { Button, Dialog, Segmented, Tabs, TextField, Waiting, plural } from "../../ui/kit";
@@ -70,7 +72,7 @@ export function NewProfileHost() {
 
 /** Edits `profile`, or with `profile` null sets up a new one that starts as `start` says. */
 export function ProfileEditor({ game, profile, chars, onClose, focus, start: startAt = "now" }:
-  { game: GameId; profile: Profile | null; chars: Character[]; onClose: () => void; focus?: "hotkey" | "icon" | "banner"; start?: NewStart }) {
+  { game: GameId; profile: Profile | null; chars: Character[]; onClose: () => void; focus?: "name" | "hotkey" | "icon" | "banner"; start?: NewStart }) {
   const making = !profile;
   const [start, setStart] = useState<NewStart>(startAt);
   const [name, setName] = useState(() => profile?.name ?? freeName(game, baseName(startAt)));
@@ -89,14 +91,16 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
   const bannerBtn = useRef<HTMLButtonElement>(null);
   const shownName = name.trim() || (profile?.name ?? baseName(start));
   const onNow = making ? knownProfiles(game)?.find((p) => p.active)?.modCount : undefined;
+  // another profile with this combo loses it on save (one press, one profile), so the field says so first
+  const holder = hotkey && hotkey !== (profile?.hotkey ?? "") ? knownProfiles(game)?.find((p) => p.id !== profile?.id && p.hotkey === hotkey) : undefined;
 
   // "Set a hotkey" from a menu opens here with the hotkey field listening; "Change icon" opens the icon picker.
-  // A new profile opens with its name selected, so typing replaces it and Enter makes it.
+  // A new profile, and Rename from a profile's page, open with the name selected, so typing replaces it and Enter saves.
   useEffect(() => {
     if (!focus && !making) return;
     const t = window.setTimeout(() => {
       if (focus === "hotkey") keyRef.current?.querySelector("input")?.focus();
-      else if (focus) setOpen(focus);
+      else if (focus && focus !== "name") setOpen(focus);
       else { const i = fieldsRef.current?.querySelector("input"); i?.focus(); i?.select(); }
     }, 80);
     return () => window.clearTimeout(t);
@@ -178,12 +182,13 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
         )}
         <TextField label="Description" multiline rows={2} value={description} onChange={setDescription} placeholder="What this loadout is for" />
         <div ref={keyRef}><HotkeyField label="In-game hotkey" value={hotkey} onChange={(v) => { setHotkey(v); setTaken(null); }} taken={taken}
-          hint="Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1" /></div>
+          hint={holder ? `${holder.name} uses ${hotkey}. ${making ? "Creating" : "Saving"} moves it here`
+            : "Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1"} /></div>
       </div>
 
       {open === "icon" && (
         <Popover anchor={iconBtn.current} onClose={() => setOpen(null)} width="25rem" label="Icon and colour" align="start">
-          <IconPicker icon={icon} color={color} name={shownName} chars={chars} onIcon={setIcon} onColor={setColor} />
+          <IconPicker game={game} icon={icon} color={color} name={shownName} chars={chars} onIcon={setIcon} onColor={setColor} />
         </Popover>
       )}
       {open === "banner" && (
@@ -206,8 +211,8 @@ function useFocusIn(ref: RefObject<HTMLElement | null>) {
   }, [ref]);
 }
 
-function IconPicker({ icon, color, name, chars, onIcon, onColor }:
-  { icon: string; color: string; name: string; chars: Character[]; onIcon: (v: string) => void; onColor: (v: string) => void }) {
+function IconPicker({ game, icon, color, name, chars, onIcon, onColor }:
+  { game: GameId; icon: string; color: string; name: string; chars: Character[]; onIcon: (v: string) => void; onColor: (v: string) => void }) {
   const [tab, setTab] = useState<IconTab>(() => tabOf(icon));
   const [q, setQ] = useState("");
   const box = useRef<HTMLDivElement>(null);
@@ -236,7 +241,7 @@ function IconPicker({ icon, color, name, chars, onIcon, onColor }:
         </label>
       </div>
       <Tabs<IconTab> value={tab} onChange={setTab} tabs={[{ value: "picture", label: "From this PC" }, { value: "icons", label: "Icons" },
-        { value: "emoji", label: "Emoji" }, { value: "character", label: "Character" }]} />
+        { value: "emoji", label: "Emoji" }, { value: "character", label: charNoun(game, true) }]} />
       {tab === "picture" && (
         <div className="pe-file">
           {picture && <ProfileIcon profile={{ icon, name, color }} chars={chars} size={56} />}
@@ -269,9 +274,9 @@ function IconPicker({ icon, color, name, chars, onIcon, onColor }:
       )}
       {tab === "character" && (
         <>
-          <TextField value={q} onChange={setQ} placeholder="Find a character" />
+          <TextField value={q} onChange={setQ} placeholder={`Find ${article(charNoun(game, true).toLowerCase())} ${charNoun(game, true).toLowerCase()}`} />
           {portraits.length ? (
-            <div className="pe-grid pe-portraits" role="radiogroup" aria-label="Character">
+            <div className="pe-grid pe-portraits" role="radiogroup" aria-label={charNoun(game, true)}>
               {portraits.map((c) => {
                 const v = `char:${c.name}`;
                 return (
@@ -281,7 +286,13 @@ function IconPicker({ icon, color, name, chars, onIcon, onColor }:
                 );
               })}
             </div>
-          ) : <p className="hint">{query ? "No character by that name." : "No portraits yet. Open the Characters screen once to load them."}</p>}
+          ) : query ? <p className="hint">No {charNoun(game, true).toLowerCase()} by that name.</p> : (
+            <div className="banner-link">
+              <span className="hint">No portraits yet. Opening {charNoun(game)} once loads them.</span>
+              <Button size="sm" icon="characters" onClick={() => go({ view: "characters" })}
+                title={`Goes to ${charNoun(game)}, which loads the portraits`}>Open {charNoun(game)}</Button>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -322,12 +333,12 @@ function BannerPicker({ game, banner, onPick }: { game: GameId; banner: string; 
           tabs={[{ value: "file", label: "From this PC" }, { value: "mods", label: "A mod's preview" }, { value: "link", label: "Link" }]} />
         {banner && <Button size="sm" variant="ghost" icon="x" onClick={() => onPick("")}>No banner</Button>}
       </div>
-      {tab === "mods" && (mods === null ? <Waiting what="Reading the mods in this profile" /> : mods.length ? (
+      {tab === "mods" && (mods === null ? <Waiting what="Reading your mods" /> : mods.length ? (
         <div className="pe-banners" role="radiogroup" aria-label="Mod previews">
           {mods.map((m) => (
             <button key={m.id} type="button" role="radio" aria-checked={banner === m.preview} className={`pe-banner-tile${banner === m.preview ? " on" : ""}`}
               title={m.name} onClick={() => onPick(m.preview ?? "")}>
-              <Preview src={m.preview} className="pe-banner-img" />
+              <Preview src={m.preview} thumb={m.thumb} className="pe-banner-img" />
             </button>
           ))}
         </div>

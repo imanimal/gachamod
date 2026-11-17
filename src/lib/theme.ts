@@ -35,6 +35,11 @@ export function themeFor(game: Pick<GameState, "id" | "theme"> | null): string {
 }
 export const themePick = (gameId: string): string => read(K.perGame(gameId)) ?? "auto";
 export function setThemePick(game: GameState, id: string) { write(K.perGame(game.id), id === "auto" ? null : id); applyGameTheme(game); }
+/** Set several games' picks at once ({ gameId: themeId or "auto" }), then apply the one on screen. */
+export function setThemePicks(picks: Record<string, string>, current: GameState | null) {
+  for (const [g, id] of Object.entries(picks)) write(K.perGame(g), id === "auto" ? null : id);
+  applyGameTheme(current);
+}
 
 /** The accent picked for a theme that offers several (its first one when nothing is picked). */
 export function accentPick(themeId: string): string {
@@ -69,10 +74,43 @@ export function schemeChoiceFor(themeId: string): SchemeChoice {
 }
 const resolve = (c: SchemeChoice): Scheme => (c === "system" ? systemScheme() : c);
 
+// ── a game theme's stylesheet ──
+// Base, kit, shell and Default CSS come with the app (main.tsx). Each game theme's files (60 to 100 KB) load the
+// first time something shows that theme: the window, a preview in Settings, the menu over a game. main.tsx waits for
+// the one the pre-paint script in index.html picked before it draws the app.
+const THEME_CSS: Record<string, () => Promise<unknown>> = {
+  // one after another, so they cascade in the order they were written
+  zzz: () => import("../styles/themes/zzz.css").then(() => import("../styles/themes/zzz-shell.css")).then(() => import("../styles/themes/zzz-screens.css")),
+  gi: () => import("../styles/themes/gi.css"),
+  hsr: () => import("../styles/themes/hsr.css"),
+  ww: () => import("../styles/themes/ww.css"),
+  ef: () => import("../styles/themes/ef.css"),
+  clay: () => import("../styles/themes/clay.css"),
+};
+const cssLoads = new Map<string, Promise<void>>();
+/** Load a theme's stylesheet once (Default's is always in). Resolves when it applies; a failed load can be tried again. */
+export function loadThemeCss(id: string): Promise<void> {
+  const load = THEME_CSS[id];
+  if (!load) return Promise.resolve();
+  let p = cssLoads.get(id);
+  if (!p) {
+    p = load().then(() => {
+      // a custom theme's CSS stays after the theme files
+      const custom = document.getElementById(STYLE_ID);
+      if (custom) document.head.appendChild(custom);
+    }, (e: unknown) => { cssLoads.delete(id); console.error(`theme ${id}`, e); });
+    cssLoads.set(id, p);
+  }
+  return p;
+}
+/** Every theme's stylesheet (the kit page shows them all side by side). */
+export const loadAllThemeCss = () => Promise.all(Object.keys(THEME_CSS).map(loadThemeCss)).then(() => {});
+
 /** Attributes that show theme `id` inside one element, e.g. `<div {...themeAttrs("zzz")}>` for a preview. Without a
     scheme it shows the one the user would see for that theme. */
 export function themeAttrs(id: string, scheme?: Scheme): { "data-theme": string; "data-scheme": Scheme } {
   const info = THEMES.find((t) => t.id === id) ?? THEMES[0]!;
+  void loadThemeCss(info.id);
   const want = scheme ?? resolve(schemeChoiceFor(info.id));
   return { "data-theme": info.id, "data-scheme": info.schemes.includes(want) ? want : info.native };
 }
@@ -88,6 +126,7 @@ export function applyGameTheme(game: GameState | null) {
   const choice = custom ? custom.scheme : schemeChoiceFor(info.id);
   const want = resolve(choice);
   const scheme = info.schemes.includes(want) ? want : info.native;
+  void loadThemeCss(info.id);
   const r = document.documentElement;
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;
@@ -273,6 +312,7 @@ export const THEME_TOKENS: Record<string, { kind: TokenKind; meaning: string }> 
   "--font": { kind: "font", meaning: "body font family list" },
   "--font-display": { kind: "font", meaning: "headings font family list" },
   "--font-mono": { kind: "font", meaning: "monospace font family list" },
+  "--font-num": { kind: "font", meaning: "numbers in stats and counters font family list" },
   "--dur": { kind: "time", meaning: "normal animation time, like 180ms" },
   "--dur-fast": { kind: "time", meaning: "hover feedback time" },
   "--dur-slow": { kind: "time", meaning: "time for panels coming in" },
@@ -505,6 +545,7 @@ export function applyCustomTheme(input: CustomTheme | null): string[] {
   const info = THEMES.find((t) => t.id === theme.base) ?? THEMES[0]!;
   const want = resolve(theme.scheme);
   const scheme = info.schemes.includes(want) ? want : info.native;
+  void loadThemeCss(info.id);
   const r = document.documentElement;
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;

@@ -2,7 +2,8 @@
 // from, and new fixers posted on GameBanana. Owner: FIXES area.
 import { useEffect, useRef, useState } from "react";
 import { fixes, type FixInfo, type GameId, type ModHealthRow } from "../../lib/api";
-import { autoMutePref, downloadNewestFixer, fixLabel, fixMods, fixWarningsPref, fixerName, checkHealth, isDeadEnd, isMuted, mutedPref, stopWaiting, triedNote, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
+import { autoMutePref, downloadNewestFixer, fixLabel, fixMods, fixWarningsPref, fixerName, checkHealth, isDeadEnd, stopWaiting, triedNote, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
+import { useHolds } from "../../lib/holds";
 import { gameTools, gbToolId, type GbTool } from "../../lib/gamebanana";
 import { openGbTool } from "../browse/state";
 import { jsonPref } from "../../lib/prefs";
@@ -11,6 +12,7 @@ import { Badge, Button, Checkbox, Panel, Skeleton, plural, timeAgo } from "../..
 import { fixesAutoUpdatePref } from "../settings/automatic";
 import { muteDeadEnds, unmute } from "./deadEnds";
 import "../modtools/modtools.css";
+import { ModLink } from "../modtools/ModLink";
 
 /** Words that make a GameBanana tool a fixer (docs/fixers.md). */
 const FIXER = /fix|hash|remap|repair|update|convert/i;
@@ -23,7 +25,7 @@ export function FixesPanel({ game }: { game: GameId }) {
   const [busy, setBusy] = useState<string | null>(null);
   const waiting = useFixerBusy().has("waiting");
   const warn = fixWarningsPref.use();
-  const muted = mutedPref.use();
+  const holds = useHolds(game);
   const autoMute = autoMutePref.use();
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -40,7 +42,7 @@ export function FixesPanel({ game }: { game: GameId }) {
   // failed on, or one whose model changed, is tried from its own row
   const fixable = [...broken, ...stuck.filter((r) => r.tool && !r.tried && !r.needsAuthor)];
   const all = [...broken, ...stuck].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
-  const quiet = all.filter((r) => isMuted(muted, game, r.modId, r));
+  const quiet = all.filter((r) => holds[r.modId]);
   // dead ends (the model changed, no fixer, or the fixer already failed) get one line and one button, not a row each
   const dead = all.filter((r) => isDeadEnd(r) && !quiet.includes(r));
   const listed = all.filter((r) => !quiet.includes(r) && !dead.includes(r));
@@ -53,7 +55,7 @@ export function FixesPanel({ game }: { game: GameId }) {
         {!noData && <Button size="sm" variant="ghost" icon={warn ? "bell" : "bell-off"}
           title={warn ? "Stop warning about mods a game update broke, here, on mod cards and in a mod's details. Nothing changes in the mods"
             : "Warn again about mods a game update broke"}
-          onClick={() => void fixWarningsPref.set(!warn, warn ? "Muted the broken mod warnings" : "Showing the broken mod warnings again")}>{warn ? "Mute" : "Unmute"}</Button>}
+          onClick={() => void fixWarningsPref.set(!warn, warn ? "Muted the broken mod warnings" : "Showing the broken mod warnings again")}>{warn ? "Mute warnings" : "Unmute warnings"}</Button>}
         {waiting && (
           <Button size="sm" variant="ghost" onClick={stopWaiting}
             title="The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far">Stop waiting</Button>
@@ -108,21 +110,22 @@ export function FixesPanel({ game }: { game: GameId }) {
           <ul className="tp-list">
             {quiet.map((r) => (
               <li key={r.modId} className="tp-ignored-mod row">
-                <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: r.modId })}>{r.name}</button>
+                <ModLink game={game} modId={r.modId} name={r.name} className="grow" />
                 {!r.enabled && <Badge tone="muted" title="This mod is off">Off</Badge>}
-                <Button size="sm" variant="ghost" icon="bell" title="Warn about this mod again. It stays off" onClick={() => unmute(game, r)}>Unmute</Button>
+                <span className="hint">{holds[r.modId]?.kind === "update" ? "Until it's updated" : "Ignored"}</span>
+                <Button size="sm" variant="ghost" icon="bell" title="Warn about this mod again. It stays on or off as it is" onClick={() => void unmute(game, r)}>Unmute</Button>
               </li>
             ))}
           </ul>
         </details>
       )}
-      {fixed.length > 0 && listed.length > 0 && (
+      {fixed.length > 0 && (
         <details className="tp-ignored">
           <summary className="hint">Fixed ({fixed.length})</summary>
           <ul className="tp-list">
             {fixed.map((r) => (
               <li key={r.modId} className="tp-ignored-mod row">
-                <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: r.modId })}>{r.name}</button>
+                <ModLink game={game} modId={r.modId} name={r.name} className="grow" />
               </li>
             ))}
           </ul>
@@ -161,7 +164,7 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
   return (
     <li className="tp-problem">
       <div className="tp-problem-h row">
-        <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: r.modId })}>{r.name}</button>
+        <ModLink game={game} modId={r.modId} name={r.name} className="grow" />
         {!r.enabled && <Badge tone="muted" title="This mod is off">Off</Badge>}
         {can && (
           <Button size="sm" icon="wand" busy={busy === r.modId || fixerBusy.has(`mod:${r.modId}`)} disabled={!!busy}
@@ -203,7 +206,7 @@ function DeadRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy: 
   const why = r.needsAuthor ? r.reasons[0] : triedNote(r) ?? r.reasons[0];
   return (
     <li className="tp-ignored-mod row">
-      <button type="button" className="tp-link" title="Open in Mods" onClick={() => go({ view: "library", modId: r.modId })}>{r.name}</button>
+      <ModLink game={game} modId={r.modId} name={r.name} />
       <span className="hint grow" title={r.reasons.join(". ")}>{why}</span>
       {!r.enabled && <Badge tone="muted" title="This mod is off">Off</Badge>}
       {r.tool && (
@@ -237,6 +240,8 @@ function NewFixers({ game }: { game: GameId }) {
     <div className="fx-new" role="status">
       <div className="row">
         <strong className="grow">{fresh.length === 1 ? "A new fixer on GameBanana" : `${fresh.length} new fixers on GameBanana`}</strong>
+        <Button size="sm" variant="ghost" icon="sliders" onClick={() => go({ view: "settings", section: "set-fix-updates" })}
+          title="Opens Settings, Look for new mod fixers, where this check can be turned off">Settings</Button>
         <Button size="sm" variant="ghost" icon="check" onClick={dismiss} title="Stop listing these. Newer ones still show up">Dismiss</Button>
       </div>
       <ul className="tp-list">

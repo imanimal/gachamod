@@ -17,7 +17,8 @@ export function FixButton({ game, m, fix, busyKey, busy, run, onDone }: {
     <span className="tp-fix row">
       <Button size="sm" variant="primary" icon="wand" busy={busy === busyKey} disabled={!!busy} title={fixHint(fix)} onClick={() => make(fix)}>{fixLabel(fix)}</Button>
       {others.length > 0 && (
-        <IconButton icon="more" size="sm" label="Keep a different one on" disabled={!!busy} onClick={(e) => setMenu(e.currentTarget)} />
+        <IconButton icon="more" size="sm" label="Keep a different one on" disabled={!!busy} aria-haspopup="menu" aria-expanded={!!menu}
+          onClick={(e) => setMenu(menu ? null : e.currentTarget)} />
       )}
       {menu && (
         <Popover anchor={menu} onClose={() => setMenu(null)} label="Keep which one on" width="18em">

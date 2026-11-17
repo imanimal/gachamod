@@ -77,6 +77,8 @@ function info(game: string): LiveInfo {
   const groups = groupsOf(game);
   const live = new Set(groups.flatMap((g) => g.slots.map((s) => s.modId)));
   const out: LiveGroup[] = groups.map((g) => ({ group: g.n, character: g.character, active: g.active, mods: g.slots.map((s) => liveMod(byId.get(s.modId), s.modId, s.slot)), waiting: false }));
+  // the demo's game shows its last two live characters, so the menu has someone on screen to open on
+  const onScreen = demoDb.games.find((x) => x.id === game)?.running ? groups.slice(-2).map((g) => g.n) : [];
   const byChar = new Map<string, ModEntry[]>();
   for (const m of mods) {
     if (!m.character || m.iniCount === 0) continue;
@@ -88,7 +90,7 @@ function info(game: string): LiveInfo {
     .map((l) => ({ character: l[0]!.character!, mods: l.filter((m) => !live.has(m.id)).map((m) => liveMod(m, m.id, 0)) }))
     .sort((a, b) => a.character.localeCompare(b.character));
   const running = !!demoDb.games.find((g) => g.id === game)?.running;
-  return { groups: out, ready, running, menu: menuOf(game), blocked: false, all: alls.get(game) ?? false, allowed: allowed(game), checked: drawnMenuOpen(game) };
+  return { groups: out, ready, running, menu: menuOf(game), blocked: false, all: alls.get(game) ?? false, allowed: allowed(game), checked: drawnMenuOpen(game), onScreen };
 }
 
 /** live.rs CHECKED: the games where switching in game is on by default. */

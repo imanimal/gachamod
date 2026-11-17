@@ -1,13 +1,14 @@
 // Settings > Appearance: Theme and colours (theme per game, accent, light or dark), Layout, text size and animations,
 // Custom themes, and Hardware acceleration and rendering log.
 // Owner: SETTINGS/AI area. Applying themes is lib/theme.ts (THEMES area); saving custom ones is ./customThemes.ts.
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { currentGame, go, useGame } from "../../lib/store";
-import { shareTheme } from "../../lib/extensions";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { currentGame, go, useGame, useGames } from "../../lib/store";
+import { extName, extensionsNow, removeExtension, shareTheme } from "../../lib/extensions";
+import { record } from "../../lib/history";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import {
   THEMES, THEME_TOKENS, accentPick, applyCustomTheme, currentLayout, customThemesPref, darkShade, onColor, ownSchemeChoice, setAccentPick, setLayout, setMotion,
-  setScheme, setSchemeMode, setThemePick, subscribeTheme, themeAttrs, themePick, useTheme, validateCustomTheme,
+  setScheme, setSchemeMode, setThemePick, setThemePicks, subscribeTheme, themeAttrs, themePick, useTheme, validateCustomTheme,
   type CustomTheme, type LayoutPrefs, type Scheme, type SchemeChoice, type SchemeMode,
 } from "../../lib/theme";
 import { anatomyText } from "../../lib/theme-anatomy";
@@ -105,8 +106,8 @@ export function LayoutSection() {
       <div className="set-rows">
         <LayoutRows />
         <SetRow id="set-text-size" label="Text size" hint="Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets">
-          <Segmented value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }} label="Text size"
-            options={SIZES.map((s) => ({ value: String(s), label: String(s) }))} size="sm" />
+          <Select value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }}
+            options={SIZES.map((s) => ({ value: String(s), label: `${s} px` }))} />
         </SetRow>
         <SetRow id="set-motion" label="Animations" hint="Off keeps every change instant">
           <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
@@ -147,7 +148,7 @@ function GpuSwitch() {
     toast(`Hardware acceleration turns ${v ? "on" : "off"} when gachamod restarts`, false,
       { label: "Restart", run: () => void about.relaunch().catch((e) => toast(errorText(e), true)) });
   };
-  return <Toggle checked={on} label="Hardware acceleration" onChange={(v) => void change(v)} />;
+  return <Toggle checked={on} ariaLabel="Hardware acceleration" onChange={(v) => void change(v)} />;
 }
 
 function IntroPicker() {
@@ -169,7 +170,7 @@ function IntroPicker() {
 
 function HintsSwitch() {
   const on = hintsOnPref.use();
-  return <Toggle checked={on} label="First-start hints" onChange={(v) => void hintsOnPref.set(v, v ? "Turned first-start hints on" : "Turned first-start hints off")} />;
+  return <Toggle checked={on} ariaLabel="First-start hints" onChange={(v) => void hintsOnPref.set(v, v ? "Turned first-start hints on" : "Turned first-start hints off")} />;
 }
 
 // ── layout ──
@@ -227,6 +228,7 @@ const baseName = (id: string) => THEMES.find((t) => t.id === id)?.name ?? id;
 
 export function CustomThemesSection() {
   const game = useGame();
+  const games = useGames();
   const saved = customThemesPref.use();
   const aiShow = useAiShow();
   const theme = useTheme();
@@ -236,6 +238,19 @@ export function CustomThemesSection() {
   const inUse = game ? themePick(game.id) : "";
 
   const use = (t: CustomTheme) => { if (game) setThemePick(game, t.id); };
+  const useEverywhere = (t: CustomTheme) => {
+    const before = Object.fromEntries(games.map((g) => [g.id, themePick(g.id)]));
+    const after = Object.fromEntries(games.map((g) => [g.id, t.id]));
+    setThemePicks(after, currentGame());
+    record({ label: `Used the theme ${t.name} for every game`, undo: async () => setThemePicks(before, currentGame()), redo: async () => setThemePicks(after, currentGame()) });
+  };
+  // a package's themes come back from the package each start, so editing one edits a copy and deleting removes the package
+  const pkgOf = (t: CustomTheme) => (t.pkg ? extensionsNow().find((e) => e.id === t.pkg) ?? null : null);
+  const remove = (t: CustomTheme) => {
+    if (edit?.theme.id === t.id) setEdit(null);
+    const ext = pkgOf(t);
+    void (ext ? removeExtension(ext) : deleteTheme(t));
+  };
   const startNew = () => setEdit({ theme: { id: "custom:my-theme", name: "My theme", base: theme.id, scheme: theme.choice, tokens: {}, layout: {} }, isNew: true });
   const importText = async (text: string) => {
     const { themes, problems } = readThemes(text);
@@ -253,13 +268,16 @@ export function CustomThemesSection() {
   ]);
   const items = (t: CustomTheme): MenuEntry[] => [
     !!game && { label: `Use for ${game.name}`, icon: "check", disabled: inUse === t.id, onClick: () => use(t) },
-    { label: "Edit", icon: "edit", onClick: () => setEdit({ theme: t, isNew: false }) },
-    { label: "Duplicate", icon: "copy", onClick: () => setEdit({ theme: duplicateOf(t, list), isNew: true }) },
+    games.length > 1 && { label: "Use for every game", icon: "check", disabled: games.every((g) => themePick(g.id) === t.id), onClick: () => useEverywhere(t) },
+    t.pkg ? { label: "Edit a copy", icon: "edit", title: "This theme comes from a package and changes when the package updates, so your edits go in a copy", onClick: () => setEdit({ theme: duplicateOf(t, list), isNew: true }) }
+      : { label: "Edit", icon: "edit", onClick: () => setEdit({ theme: t, isNew: false }) },
+    !t.pkg && { label: "Duplicate", icon: "copy", onClick: () => setEdit({ theme: duplicateOf(t, list), isNew: true }) },
     { label: "Copy as text", icon: "share", title: "To share it: whoever gets it imports it here", onClick: () => copyTheme(t) },
     !t.pkg && { label: "Share to the theme list", icon: "upload", title: "Saves it as a package and opens the page where you send it in, so anyone can install it from Extensions", onClick: () => void shareTheme(t) },
     !!t.pkg && { label: "View in Extensions", icon: "puzzle", title: "This theme came from a package", onClick: () => go({ view: "extensions", tab: "installed" }) },
     "-",
-    { label: "Delete", icon: "trash", danger: true, onClick: () => { if (edit?.theme.id === t.id) setEdit(null); void deleteTheme(t); } },
+    pkgOf(t) ? { label: `Remove ${extName(pkgOf(t)!)}`, icon: "trash", danger: true, title: "Removes the package this theme came from, with any other themes in it", onClick: () => remove(t) }
+      : { label: "Delete", icon: "trash", danger: true, onClick: () => remove(t) },
   ];
 
   return (
@@ -330,6 +348,7 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
   const [problems, setProblems] = useState<string[]>([]);
   const [text, setText] = useState(() => editable(start));
   const [textErr, setTextErr] = useState<string | null>(null);
+  const textId = useId();
   const typing = useRef(false);
 
   // the whole app shows the draft while editing; closing the editor puts the game's theme back
@@ -404,12 +423,14 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
       </div>
       <details className="ctheme-adv">
         <summary>Edit as text</summary>
-        <label className="field mono">
-          <span className="field-l">Theme</span>
-          <textarea value={text} rows={12} spellCheck={false} onChange={(e) => onText(e.target.value)}
+        {/* the note under it sits outside the label, so the error is read as the field's description, not its name */}
+        <div className="field mono">
+          <label className="field-l" htmlFor={`${textId}-in`}>Theme</label>
+          <textarea id={`${textId}-in`} value={text} rows={12} spellCheck={false} onChange={(e) => onText(e.target.value)}
+            aria-describedby={`${textId}-note`} aria-invalid={!!textErr || undefined}
             onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; setText(editable(t)); setTextErr(null); }} />
-          {textErr ? <span className="hint ctheme-err">{textErr}</span> : <span className="hint">"tokens" takes any name below, "css" holds the stylesheet</span>}
-        </label>
+          {textErr ? <span id={`${textId}-note`} className="hint ctheme-err">{textErr}</span> : <span id={`${textId}-note`} className="hint">"tokens" takes any name below, "css" holds the stylesheet</span>}
+        </div>
         <label className="field mono">
           <span className="field-l">Stylesheet</span>
           <textarea value={t.css ?? ""} rows={14} spellCheck={false} onChange={(e) => patch({ css: e.target.value })} />

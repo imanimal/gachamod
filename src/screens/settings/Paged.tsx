@@ -8,13 +8,14 @@
 // Owner: SETTINGS/AI area.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Icon, type IconName } from "../../ui/Icon";
+import { Badge } from "../../ui/kit";
 import { consumeRoute, useRoute } from "../../lib/store";
 import { glide, scrollToElement } from "../../lib/smoothScroll";
 import "./paged.css";
 
-/** A page: its route id, its name and icon in the list, the group it's listed under (none for a short list), and a
- *  hover tip when the name alone doesn't say what's on it. */
-export interface PageInfo { id: string; label: string; icon: IconName; group?: string; tip?: string }
+/** A page: its route id, its name and icon in the list, the group it's listed under (none for a short list), a
+ *  hover tip when the name alone doesn't say what's on it, and a count of new items on it to show in the list. */
+export interface PageInfo { id: string; label: string; icon: IconName; group?: string; tip?: string; count?: number }
 
 type Dir = 1 | -1;
 
@@ -50,7 +51,7 @@ function innerScroll(target: EventTarget | null, page: Element, dir: Dir): boole
   return false;
 }
 
-export function Paged({ name, label, pages, fallback, children }: {
+export function Paged({ name, label, pages, fallback, onShow, children }: {
   /** Which screen this is, to remember its page. */
   name: string;
   /** What the list of pages is called, for screen readers. */
@@ -58,6 +59,8 @@ export function Paged({ name, label, pages, fallback, children }: {
   pages: PageInfo[];
   /** The page a route id is on when nothing has that id (a row whose list is still loading, a panel that isn't shown). */
   fallback?: (id: string) => string | undefined;
+  /** Called with the page showing whenever it changes, and with null when the screen closes. */
+  onShow?: (id: string | null) => void;
   children: Record<string, ReactNode>;
 }) {
   const route = useRoute();
@@ -79,6 +82,10 @@ export function Paged({ name, label, pages, fallback, children }: {
   const list = useRef(shown);
   list.current = shown;
   const moving = useRef(false);
+  const showRef = useRef(onShow);
+  showRef.current = onShow;
+  useEffect(() => { showRef.current?.(current); }, [current]);
+  useEffect(() => () => showRef.current?.(null), []);
   const after = useRef<(() => void) | null>(null);
   /** When the page last scrolled, and when the last turn finished: a page counts as at its end once both are a moment ago. */
   const movedAt = useRef(0);
@@ -299,6 +306,7 @@ export function Paged({ name, label, pages, fallback, children }: {
               <button key={p.id} type="button" data-to={p.id} className={`pg-nav-i${p.id === current ? " on" : ""}`}
                 aria-current={p.id === current ? "page" : undefined} title={p.tip} onClick={() => turn(p.id)}>
                 <Icon name={p.icon} /><span>{p.label}</span>
+                {p.count ? <span style={{ marginLeft: "auto" }}><Badge tone="bad" title={`${p.count} new since you last looked`}>{p.count}</Badge></span> : null}
               </button>
             ))}
           </div>

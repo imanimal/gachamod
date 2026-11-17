@@ -71,8 +71,9 @@ function download(id: number) {
       pump();
       return;
     }
+    // like runner.rs: bytes go out as a small progress event, not a whole snapshot
     set(id, { state: "downloading", received: Math.round(received), total });
-    emit();
+    demoEmit(EVENTS.queueProgress, [{ id, received: Math.round(received), total }]);
   }, 250));
 }
 

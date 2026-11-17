@@ -12,7 +12,8 @@ import { Badge, Button, Checkbox, Dialog, Progress, Segmented, Skeleton, TextFie
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { notesText, oxford } from "../../lib/notes";
-import { conflictKey, fileName, markModSeen, markToolsSeen, setToolsCount } from "./toolsBadge";
+import { conflictKey, fileName, fixSeenKey, markModSeen, markToolsSeen, setToolsCount } from "./toolsBadge";
+import { useBrokenOn } from "../../lib/fixes";
 import { badgeKeys, loadLint, useIgnored, useLint } from "./problems";
 import "./modtools.css";
 import { LazyImg } from "../../ui/LazyImg";
@@ -37,7 +38,10 @@ export function ModtoolsOverlays() {
   const lint = useLint(game);
   const ignored = useIgnored();
   useEffect(() => { if (game && lint) setToolsCount(game, "problems", badgeKeys(lint, ignored, game)); }, [game, lint, ignored]);
-  // looking at Tools, or at a mod, clears what it shows from the badge
+  // and mods a game update broke that are on, not set aside, while the warnings aren't muted
+  const broken = useBrokenOn(game);
+  useEffect(() => { if (game && broken) setToolsCount(game, "fixes", broken.map(fixSeenKey)); }, [game, broken]);
+  // looking at a Tools page, or at a mod, clears what it shows from the badge
   const seenView = route.view === "tools" ? "tools" : "modId" in route && typeof route.modId === "string" ? route.modId : null;
   useEffect(() => {
     if (!game || !seenView) return;
@@ -48,7 +52,7 @@ export function ModtoolsOverlays() {
     let live = true;
     let timer = 0;
     const count = () => {
-      modtools.conflicts(game).then((g) => { if (live) setToolsCount(game, "conflicts", g.map(conflictKey)); }).catch(() => {});
+      modtools.conflicts(game).then((g) => { if (live) setToolsCount(game, "conflicts", g.filter((x) => !x.ignored).map(conflictKey)); }).catch(() => {});
       void loadLint(game);
     };
     count();
@@ -259,6 +263,8 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
   const usable = (m: PackPreviewMod) => ready.has(m.game) && m.how !== "missing";
   const picked = pack?.mods.filter((m) => chosen.has(m.index)) ?? [];
   const existing = picked.filter((m) => m.existing).length;
+  // what the button counts: Skip leaves out the mods already here
+  const toImport = chosen.size - (onExisting === "skip" ? existing : 0);
   const fetched = picked.filter((m) => m.how === "download" && (!m.existing || onExisting !== "skip"));
   const inside = picked.filter((m) => m.how === "inside");
   const several = (pack?.games.length ?? 0) > 1;
@@ -327,8 +333,9 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
       locked={busy ? "Importing" : undefined}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="primary" icon="import" busy={busy} disabled={!pack || (chosen.size === 0 && !(useProfile && canProfile))} onClick={() => void run()}>
-          {chosen.size ? `Import ${plural(chosen.size, "mod")}` : "Import"}
+        <Button variant="primary" icon="import" busy={busy} disabled={!pack || (toImport === 0 && !(useProfile && canProfile))} onClick={() => void run()}
+          title={chosen.size && !toImport ? "You already have every mod picked. Pick Replace or Keep both to import them anyway" : undefined}>
+          {toImport ? `Import ${plural(toImport, "mod")}` : "Import"}
         </Button>
       </>}>
       {!pack ? (

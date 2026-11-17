@@ -23,7 +23,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, PI};
 use std::path::Path;
 
 /// Bump when the pictures or the ini change shape, so files made by an older version are made again.
-const VERSION: u32 = 8;
+const VERSION: u32 = 11;
 /// The number the app sends with no group to open or close the menu.
 pub(crate) const TOGGLE: u32 = 1;
 /// The number the app sends with no group to show or hide the key list the game draws.
@@ -59,8 +59,9 @@ pub(crate) struct Layout {
     pub thumb: u32,
     pub pad: u32,
     pub foot: u32,
-    /// Width of a scroll button.
+    /// The arrows on the list's top and bottom edges: width and height of one.
     pub arw: u32,
+    pub arh: u32,
     /// The check on the row that is showing: its size, and its left edge from the menu's left.
     pub chk: u32,
     pub chk_x: u32,
@@ -74,6 +75,14 @@ pub(crate) struct Layout {
     /// How round the corners of the list's background are. The rows scroll under them, so they are two strips of
     /// their own in `menu.dds` that live.ini lays over the first and the last row in view. 0: square, no strips.
     pub round: u32,
+    /// The scroll bar along the list's right side: its left edge from the menu's left, its width, how far its ends
+    /// sit inside the list, and whether its ends are round.
+    pub bar_x: u32,
+    pub bar_w: u32,
+    pub bar_in: u32,
+    pub bar_round: bool,
+    /// How much further from the right the rows' art ends on a list long enough to have the bar.
+    pub room: u32,
 }
 
 impl Layout {
@@ -97,10 +106,24 @@ impl Layout {
             Look::Hi3 => (450, 66, 66, 48, 18, 44, 24, 22, 0, 0),
             Look::Endfield => (450, 64, 66, 48, 22, 44, 24, 22, 0, 0),
         };
+        // the scroll bar at 1080: width, its gap to the menu's right edge, how much the rows' art moves in for it, how
+        // far its ends sit inside the list, round ends. Each keeps 4 to 6 between the bar and the rows' art
+        let (bar_w, bar_r, room, bar_in, bar_round) = match look {
+            Look::Plain => (5, 7, 10, 6, true),
+            // as far from the frame as the pills are, and the same 6 from the pills
+            Look::Zzz => (8, 15, 14, 3, true),
+            Look::Genshin => (4, 12, 9, 6, true),
+            Look::StarRail => (4, 6, 6, 4, true),
+            Look::Wuwa => (3, 6, 6, 4, false),
+            Look::Hi3 => (4, 6, 8, 4, false),
+            Look::Endfield => (4, 6, 8, 4, false),
+        };
         let w = s(w);
+        let bar_w = s(bar_w).max(2);
         Layout {
-            gen_h, look, w, head: s(head), row: s(row), thumb: s(thumb), pad: s(pad), foot: s(foot), arw: s(44), chk: s(chk),
+            gen_h, look, w, head: s(head), row: s(row), thumb: s(thumb), pad: s(pad), foot: s(foot), arw: s(52), arh: s(18), chk: s(chk),
             chk_x: w - s(chk_r) - s(chk), x0: s(40), vis: 8, gut: s(gut), round: s(round),
+            bar_x: w - s(bar_r) - bar_w, bar_w, bar_in: s(bar_in), bar_round, room: s(room),
         }
     }
     fn s(&self, v: u32) -> u32 { ((v * self.gen_h) as f32 / 1080.0).round() as u32 }
@@ -108,10 +131,25 @@ impl Layout {
     fn f(&self, v: f32) -> f32 { v * self.gen_h as f32 / 1080.0 }
     /// Where a row's name starts.
     fn text_x(&self) -> u32 { self.pad + self.thumb + self.s(12) }
-    /// Left edges in the middle strip of `menu.dds`: the up and down buttons, the same under the mouse, then the
-    /// check and the check on the picked row.
-    fn btn_u(&self, down: bool, hover: bool) -> u32 { self.arw * (down as u32 + 2 * hover as u32) }
+    /// Left edges in the middle strip of `menu.dds`: the up and down arrows, the same under the mouse, the check and
+    /// the check on the picked row, then the round ends of the scroll bar's track (top, bottom) and thumb.
+    fn arrow_u(&self, down: bool, hover: bool) -> u32 { self.arw * (down as u32 + 2 * hover as u32) }
     fn chk_u(&self, on_pick: bool) -> u32 { 4 * self.arw + on_pick as u32 * self.chk }
+    fn cap_u(&self, thumb: bool, bottom: bool) -> u32 { 4 * self.arw + 2 * self.chk + self.bar_w * (bottom as u32 + 2 * thumb as u32) }
+    /// How high a round end of the scroll bar is; 0 for square ends.
+    fn cap_h(&self) -> u32 { if self.bar_round { self.bar_w.div_ceil(2) } else { 0 } }
+    /// The scroll bar's track length. The bar only shows on a full list, so it is always this long.
+    fn track(&self) -> u32 { self.vis * self.row - 2 * self.bar_in }
+    /// The shortest the thumb gets on a very long list.
+    fn thumb_min(&self) -> u32 { self.s(28).max(2 * self.cap_h() + 2) }
+    /// How far the arrows reach past the list's top and bottom edges, into the header and the footer.
+    fn arrow_out(&self) -> u32 { self.s(6) }
+    /// The arrows' top edges from the menu's top: the up arrow's, and the down arrow's less `$vis` rows.
+    fn arrow_y(&self) -> (u32, u32) {
+        (self.head - self.gut - self.arrow_out(), self.head + self.gut + self.arrow_out() - self.arh)
+    }
+    /// The arrows' left edge from the menu's left: centred.
+    fn arrow_x(&self) -> u32 { (self.w - self.arw) / 2 }
 }
 
 /// One character's page: its group number and the slot of each row after "None".
@@ -176,22 +214,47 @@ impl Out {
         self.l("$qa = 1");
         self.l("run = CustomShaderMenuQuad");
     }
+    /// A rectangle of one colour at (x, y), `w` by `h`, with `a` cover.
+    fn flat(&mut self, x: impl AsRef<str>, y: impl AsRef<str>, w: impl AsRef<str>, h: impl AsRef<str>, rgb: Rgb, a: f32) {
+        self.l(format!("$qx = {}", x.as_ref()));
+        self.l(format!("$qy = {}", y.as_ref()));
+        self.l(format!("$qw = {}", w.as_ref()));
+        self.l(format!("$qh = {}", h.as_ref()));
+        self.l("$qflat = 1");
+        self.l(format!("$qa = {a:.3}"));
+        for (v, c) in ["qr", "qg", "qb"].iter().zip(rgb) { self.l(format!("${v} = {:.3}", c as f32 / 255.0)); }
+        self.l("run = CustomShaderMenuQuad");
+    }
 }
 
 const VARS: &[&str] = &["char", "here", "fv", "sel", "top", "rows", "vis", "act", "zone", "hover", "lx", "ly", "mx", "my", "ww", "wh",
-    "k", "y0", "qx", "qy", "qw", "qh", "qu", "qv", "qflat", "qa", "qr", "qg", "qb"];
+    "k", "y0", "cx", "th", "ty", "qx", "qy", "qw", "qh", "qu", "qv", "qflat", "qa", "qr", "qg", "qb", "seen", "at", "who"];
 /// The IniParams the shader reads. Other mods may use them too, so the menu puts back what was there.
 const SLOTS: [u32; 4] = [86, 87, 88, 89];
 const XYZW: [char; 4] = ['x', 'y', 'z', 'w'];
+/// Frames a character's flag has to keep its new value before `$o<group>` follows it: about half a second at 60 fps.
+pub(crate) const HOLD: u32 = 30;
 
-/// The lines for live.ini's [Constants]. `$open` and the on-screen flags are always there: the gated mod inis read
-/// them whether the menu is on or not. `key_list`: the key list's own variables too.
+/// The lines for live.ini's [Constants]. `$open`, the on-screen flags and `$o<group>` are always there: the gated mod
+/// inis read them, and the app reads `$o<group>` from the saved values, whether the menu is on or not. `key_list`:
+/// the key list's own variables too.
 pub(crate) fn constants(pages: &[IniPage], on: bool, key_list: bool) -> String {
     let mut o = Out::default();
     o.l("global $open = 0");
-    for p in pages { o.l(format!("global $s{} = 0", p.n)); }
+    for p in pages {
+        o.l(format!("global $s{} = 0", p.n));
+        o.l(format!("global persist $o{} = 0", p.n));
+        o.l(format!("global $h{} = 0", p.n));
+    }
     if on {
         for v in VARS { o.l(format!("global ${v} = 0")); }
+        if pages.len() > 1 {
+            // who was on screen as the menu opened, and each character's place on the list of characters
+            for p in pages {
+                o.l(format!("global $m{} = 0", p.n));
+                o.l(format!("global $p{} = 0", p.n));
+            }
+        }
         for i in 0..16 { o.l(format!("global $b{i} = 0")); }
         if key_list {
             for v in ["keys", "kx", "ky"] { o.l(format!("global ${v} = 0")); }
@@ -214,6 +277,46 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.section(&format!("CommandListSeen{}", p.n));
         o.l(format!("$s{} = 1", p.n));
     }
+    // the key list rides on the menu
+    let key_list = key_list.filter(|k| keys.is_some() && !k.sheets.is_empty());
+    o.section("Present");
+    if key_list.is_some() {
+        // the on-screen flags are still set here: `post` clears them after the frame
+        o.l("if $keys == 1");
+        o.l("  run = CommandListKeysFrame");
+        o.l("endif");
+    }
+    if keys.is_some() {
+        for (k, p) in pages.iter().enumerate() {
+            o.l(format!("if $s{} == 1", p.n));
+            o.l(format!("  $here = {k}"));
+            o.l("endif");
+        }
+    }
+    o.l("run = CommandListOnScreen");
+    for p in pages { o.l(format!("post $s{} = 0", p.n)); }
+    if keys.is_some() {
+        o.l("if $open == 1");
+        o.l("  run = CommandListMenuFrame");
+        o.l("endif");
+    }
+
+    o.section("CommandListOnScreen");
+    o.l(format!("; o<group> says the character is on screen. It follows the frame's flag once that has kept its new value for {HOLD}"));
+    o.l("; frames in a row, so a character who flickers out of view doesn't change it: it is saved, and every change makes");
+    o.l("; the game write its saved values again");
+    for p in pages {
+        let n = p.n;
+        o.l(format!("if $s{n} == $o{n}"));
+        o.l(format!("  $h{n} = 0"));
+        o.l("else");
+        o.l(format!("  $h{n} = $h{n} + 1"));
+        o.l(format!("  if $h{n} >= {HOLD}"));
+        o.l(format!("    $o{n} = $s{n}"));
+        o.l(format!("    $h{n} = 0"));
+        o.l("  endif");
+        o.l("endif");
+    }
     let Some(keys) = keys else { return o.0 };
     let many = pages.len() > 1;
     let list = pages.len();
@@ -222,24 +325,6 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
 
     o.l("");
     o.l("; ── the menu the game draws ──");
-    o.section("Present");
-    let key_list = key_list.filter(|k| !k.sheets.is_empty());
-    if key_list.is_some() {
-        // the on-screen flags are still set here: `post` clears them after the frame
-        o.l("if $keys == 1");
-        o.l("  run = CommandListKeysFrame");
-        o.l("endif");
-    }
-    for (k, p) in pages.iter().enumerate() {
-        o.l(format!("if $s{} == 1", p.n));
-        o.l(format!("  $here = {k}"));
-        o.l("endif");
-    }
-    for p in pages { o.l(format!("post $s{} = 0", p.n)); }
-    o.l("if $open == 1");
-    o.l("  run = CommandListMenuFrame");
-    o.l("endif");
-
     o.section("CommandListMenuFrame");
     o.l("run = CommandListMenuWindow");
     o.l("if $ww > 0 && $wh > 0");
@@ -278,16 +363,25 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.l("endif");
     }
     if many {
-        o.l("; the list of characters: the check is on the one on screen");
+        o.l("; the list of characters: the check is on the one seen last, or with characters on screen as it opened, on");
+        o.l("; each of them (the first $seen rows), and the menu starts on the first");
         o.l(format!("if $char == {list}"));
         o.l(format!("  $rows = {list}"));
         o.l("  $act = $here");
+        o.l("  if $seen > 0");
+        o.l("    $act = 0");
+        o.l("  endif");
         o.l(format!("  $fv = {}", 2 * foot));
         o.l("endif");
     }
     o.l("$vis = $rows");
     o.l(format!("if $vis > {vis}"));
     o.l(format!("  $vis = {vis}"));
+    o.l("endif");
+    o.l("; where the check goes: the rows make room for the scroll bar on a list longer than the menu");
+    o.l(format!("$cx = {}", x0 + l.chk_x));
+    o.l("if $rows > $vis");
+    o.l(format!("  $cx = {}", x0 + l.chk_x - l.room));
     o.l("endif");
 
     o.section("CommandListMenuScroll");
@@ -306,9 +400,19 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     o.l("endif");
 
     o.section("CommandListMenuPointer");
-    o.l("; where the menu sits, and what the mouse is over: 1 a row, 2 a character's header (back to the list), 4 and 5 the scroll buttons");
+    o.l("; where the menu sits, and what the mouse is over: 1 a row, 2 a character's header (back to the list), 4 and 5 the");
+    o.l("; arrows on the list's top and bottom edges, 6 and 7 the scroll bar's track above and below its thumb");
     o.l(format!("$k = $wh / {}", l.gen_h));
     o.l(format!("$y0 = ({} - $vis * {row}) / 2", l.gen_h - head - foot));
+    let (track, bar_top) = (l.track(), head + l.bar_in);
+    o.l("; the scroll bar's thumb: as long as the share of rows in view, as far down as the list is scrolled");
+    o.l("if $rows > $vis");
+    o.l(format!("  $th = {} / $rows", track * vis));
+    o.l(format!("  if $th < {}", l.thumb_min()));
+    o.l(format!("    $th = {}", l.thumb_min()));
+    o.l("  endif");
+    o.l(format!("  $ty = $y0 + {bar_top} + ({track} - $th) * $top / ($rows - $vis)"));
+    o.l("endif");
     o.l("$mx = cursor_x * $ww / $k");
     o.l(format!("$my = cursor_y * {}", l.gen_h));
     o.l("$zone = 0");
@@ -331,12 +435,26 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     }
     o.l("  endif");
     o.l("  if $rows > $vis");
-    o.l(format!("    if $my >= $y0 + {head} + $vis * {row} && $my < $y0 + {} + $vis * {row}", head + foot));
-    o.l(format!("      if $mx >= {}", right - 2 * arw));
-    o.l("        $zone = 4");
+    o.l(format!("    if $mx >= {} && $my >= $y0 + {head} && $my < $y0 + {head} + $vis * {row}", x0 + l.bar_x - l.s(4)));
+    o.l("      $zone = 0");
+    o.l("      if $my < $ty");
+    o.l("        $zone = 6");
     o.l("      endif");
-    o.l(format!("      if $mx >= {}", right - arw));
-    o.l("        $zone = 5");
+    o.l("      if $my >= $ty + $th");
+    o.l("        $zone = 7");
+    o.l("      endif");
+    o.l("    endif");
+    let ((up_y, down_y), ax) = (l.arrow_y(), x0 + l.arrow_x());
+    o.l(format!("    if $mx >= {ax} && $mx < {}", ax + arw));
+    o.l("      if $top > 0");
+    o.l(format!("        if $my >= $y0 + {up_y} && $my < $y0 + {}", up_y + l.arh));
+    o.l("          $zone = 4");
+    o.l("        endif");
+    o.l("      endif");
+    o.l("      if $top + $vis < $rows");
+    o.l(format!("        if $my >= $y0 + {down_y} + $vis * {row} && $my < $y0 + {} + $vis * {row}", down_y + l.arh));
+    o.l("          $zone = 5");
+    o.l("        endif");
     o.l("      endif");
     o.l("    endif");
     o.l("  endif");
@@ -365,7 +483,20 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.l("endif");
     }
     o.l("; the rows in view, then the header over them");
+    if many {
+        o.l("; the list with characters on screen first: a row at a time, each from its character's row in the picture");
+        o.l(format!("if $char == {list} && $seen > 0"));
+        for r in 0..vis {
+            o.l(format!("if $vis > {r}"));
+            o.l(format!("$at = $top + {r}"));
+            o.l("run = CommandListMenuWho");
+            o.quad(x0.to_string(), format!("$y0 + {}", head + r * row), w.to_string(), row.to_string(), "0", format!("{head} + $who * {row}"));
+            o.l("endif");
+        }
+        o.l("else");
+    }
     o.quad(x0.to_string(), format!("$y0 + {head}"), w.to_string(), format!("$vis * {row}"), "0", format!("{head} + $top * {row}"));
+    if many { o.l("endif"); }
     o.quad(x0.to_string(), "$y0", w.to_string(), head.to_string(), "0", "0");
     if many {
         o.l("; the back button under the mouse, from the picture's right half");
@@ -375,7 +506,12 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     }
     o.l("; the row the keys are on: the picture's right half has each row as the picked one");
     o.l("if $sel >= $top && $sel < $top + $vis");
-    o.quad(x0.to_string(), format!("$y0 + {head} + ($sel - $top) * {row}"), w.to_string(), row.to_string(), w.to_string(), format!("{head} + $sel * {row}"));
+    if many {
+        o.l("$at = $sel");
+        o.l("run = CommandListMenuWho");
+    }
+    let pick = if many { "$who" } else { "$sel" };
+    o.quad(x0.to_string(), format!("$y0 + {head} + ($sel - $top) * {row}"), w.to_string(), row.to_string(), w.to_string(), format!("{head} + {pick} * {row}"));
     o.l("endif");
     o.l("ps-t100 = ResourceMenuChrome");
     o.quad(x0.to_string(), format!("$y0 + {head} + $vis * {row}"), w.to_string(), foot.to_string(), "0", "$fv");
@@ -385,25 +521,59 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.quad(x0.to_string(), format!("$y0 + {} + $vis * {row}", head + l.gut - l.round), w.to_string(), l.round.to_string(), "0", (3 * foot + l.round).to_string());
     }
     o.l("; a check on the skin that is showing, in the picked row's colours when the keys are on it");
-    let (cx, cy) = ((x0 + l.chk_x).to_string(), format!("$y0 + {} + ($act - $top) * {row}", head + (row - l.chk) / 2));
+    let cy = format!("$y0 + {} + ($act - $top) * {row}", head + (row - l.chk) / 2);
+    if many { o.l(format!("if $char < {list} || $seen == 0")); }
     o.l("if $act >= $top && $act < $top + $vis");
     o.l("if $act == $sel");
-    o.quad(&cx, &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(true).to_string(), foot.to_string());
+    o.quad("$cx", &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(true).to_string(), foot.to_string());
     o.l("else");
-    o.quad(&cx, &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(false).to_string(), foot.to_string());
+    o.quad("$cx", &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(false).to_string(), foot.to_string());
     o.l("endif");
     o.l("endif");
-    o.l("; scroll buttons, lit under the mouse, when the list is longer than the menu");
-    o.l("if $rows > $vis");
-    let by = format!("$y0 + {head} + $vis * {row}");
-    for (down, zone) in [(false, 4), (true, 5)] {
-        let bx = (right - if down { arw } else { 2 * arw }).to_string();
-        o.quad(&bx, &by, arw.to_string(), foot.to_string(), l.btn_u(down, false).to_string(), foot.to_string());
-        o.l(format!("if $zone == {zone}"));
-        o.quad(&bx, &by, arw.to_string(), foot.to_string(), l.btn_u(down, true).to_string(), foot.to_string());
+    if many {
+        o.l("endif");
+        o.l("; on the list, a check on each character on screen as the menu opened: the first $seen rows");
+        o.l(format!("if $char == {list} && $seen > 0"));
+        for r in 0..vis {
+            let cy = format!("$y0 + {}", head + (row - l.chk) / 2 + r * row);
+            o.l(format!("if $vis > {r} && $top + {r} < $seen"));
+            o.l(format!("if $top + {r} == $sel"));
+            o.quad("$cx", &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(true).to_string(), foot.to_string());
+            o.l("else");
+            o.quad("$cx", &cy, l.chk.to_string(), l.chk.to_string(), l.chk_u(false).to_string(), foot.to_string());
+            o.l("endif");
+            o.l("endif");
+        }
         o.l("endif");
     }
+    o.l("; the scroll bar along the list's right side, when the list is longer than the menu");
+    o.l("if $rows > $vis");
+    let ((track_rgb, track_a), (thumb_rgb, thumb_a)) = l.look.bar();
+    let (bx, bw, ch) = ((x0 + l.bar_x).to_string(), l.bar_w.to_string(), l.cap_h());
+    if ch > 0 {
+        // round ends from menu.dds, flat between them
+        let (chs, fv) = (ch.to_string(), foot.to_string());
+        o.quad(&bx, format!("$y0 + {bar_top}"), &bw, &chs, l.cap_u(false, false).to_string(), &fv);
+        o.flat(&bx, format!("$y0 + {}", bar_top + ch), &bw, (track - 2 * ch).to_string(), track_rgb, track_a);
+        o.quad(&bx, format!("$y0 + {}", bar_top + track - ch), &bw, &chs, l.cap_u(false, true).to_string(), &fv);
+        o.quad(&bx, "$ty", &bw, &chs, l.cap_u(true, false).to_string(), &fv);
+        o.flat(&bx, format!("$ty + {ch}"), &bw, format!("$th - {}", 2 * ch), thumb_rgb, thumb_a);
+        o.quad(&bx, format!("$ty + $th - {ch}"), &bw, &chs, l.cap_u(true, true).to_string(), &fv);
+    } else {
+        o.flat(&bx, format!("$y0 + {bar_top}"), &bw, track.to_string(), track_rgb, track_a);
+        o.flat(&bx, "$ty", &bw, "$th", thumb_rgb, thumb_a);
+    }
     o.l("endif");
+    o.l("; an arrow on the list's top edge when rows are above it, one on its bottom edge when rows are below, lit under the mouse");
+    let ((up_y, down_y), ax) = (l.arrow_y(), (x0 + l.arrow_x()).to_string());
+    for (down, zone, cond, ay) in [(false, 4, "$top > 0", format!("$y0 + {up_y}")), (true, 5, "$top + $vis < $rows", format!("$y0 + {down_y} + $vis * {row}"))] {
+        o.l(format!("if {cond}"));
+        o.quad(&ax, &ay, arw.to_string(), l.arh.to_string(), l.arrow_u(down, false).to_string(), foot.to_string());
+        o.l(format!("if $zone == {zone}"));
+        o.quad(&ax, &ay, arw.to_string(), l.arh.to_string(), l.arrow_u(down, true).to_string(), foot.to_string());
+        o.l("endif");
+        o.l("endif");
+    }
     o.l("ps-t100 = null");
     for (i, s) in SLOTS.iter().enumerate() {
         for (j, c) in XYZW.iter().enumerate() { o.l(format!("{c}{s} = $b{}", i * 4 + j)); }
@@ -449,12 +619,63 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     o.l("filename = menu.dds");
 
     o.section("CommandListMenuToggle");
-    o.l("; opening goes to the character on screen");
+    if many {
+        o.l("; opening goes to the character on screen. With two or more on screen it goes to the list of characters, where");
+        o.l("; they come first; with none, to the character seen last");
+    } else {
+        o.l("; opening goes to the character on screen");
+    }
     o.l("$open = 1 - $open");
     o.l("if $open == 1");
+    if many { o.l("  run = CommandListMenuFreeze"); }
     o.l("  $char = $here");
+    if many {
+        o.l("  if $seen == 1");
+        for (k, p) in pages.iter().enumerate() {
+            o.l(format!("    if $m{} == 1", p.n));
+            o.l(format!("      $char = {k}"));
+            o.l("    endif");
+        }
+        o.l("  endif");
+        o.l("  if $seen > 1");
+        o.l(format!("    $char = {list}"));
+        o.l("  endif");
+    }
     o.l("  run = CommandListMenuTurn");
     o.l("endif");
+
+    if many {
+        o.section("CommandListMenuFreeze");
+        o.l("; who is on screen as the menu opens, kept until it opens again so the list's rows stay put: those characters");
+        o.l("; take the list's first places in its usual order, then everyone else");
+        o.l("$seen = 0");
+        for p in pages {
+            o.l(format!("$m{} = 0", p.n));
+            o.l(format!("if $o{} == 1", p.n));
+            o.l(format!("  $m{} = 1", p.n));
+            o.l(format!("  $p{} = $seen", p.n));
+            o.l("  $seen = $seen + 1");
+            o.l("endif");
+        }
+        o.l("$at = $seen");
+        for p in pages {
+            o.l(format!("if $m{} == 0", p.n));
+            o.l(format!("  $p{} = $at", p.n));
+            o.l("  $at = $at + 1");
+            o.l("endif");
+        }
+
+        o.section("CommandListMenuWho");
+        o.l("; the page's row at place $at: on the list with characters on screen first, the character whose place it is");
+        o.l("$who = $at");
+        o.l(format!("if $char == {list} && $seen > 0"));
+        for (k, p) in pages.iter().enumerate() {
+            o.l(format!("  if $p{} == $at", p.n));
+            o.l(format!("    $who = {k}"));
+            o.l("  endif");
+        }
+        o.l("endif");
+    }
 
     o.section("CommandListMenuTurn");
     o.l("; a page was opened: start on the row with the check");
@@ -481,7 +702,11 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.section("CommandListMenuList");
         o.l("; from a character back to the list of characters, on the one that was open");
         o.l(format!("if $char < {list}"));
-        o.l("  $sel = $char");
+        for (k, p) in pages.iter().enumerate() {
+            o.l(format!("  if $char == {k}"));
+            o.l(format!("    $sel = $p{}", p.n));
+            o.l("  endif");
+        }
         o.l(format!("  $char = {list}"));
         o.l("  run = CommandListMenuLoad");
         o.l("  $top = 0");
@@ -512,7 +737,9 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     if many {
         o.l("; on the list of characters a row opens that character");
         o.l(format!("if $char == {list}"));
-        o.l("  $char = $sel");
+        o.l("  $at = $sel");
+        o.l("  run = CommandListMenuWho");
+        o.l("  $char = $who");
         o.l("  run = CommandListMenuTurn");
         o.l("else");
     }
@@ -541,12 +768,12 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
         o.l("  run = CommandListMenuList");
         o.l("endif");
     }
-    o.l("if $zone == 4");
-    o.l("  run = CommandListMenuPageUp");
-    o.l("endif");
-    o.l("if $zone == 5");
-    o.l("  run = CommandListMenuPageDown");
-    o.l("endif");
+    o.l("; the arrows and the scroll bar's track page up and down");
+    for (zone, run) in [(4, "PageUp"), (5, "PageDown"), (6, "PageUp"), (7, "PageDown")] {
+        o.l(format!("if $zone == {zone}"));
+        o.l(format!("  run = CommandListMenu{run}"));
+        o.l("endif");
+    }
 
     // two keys to a section, the way a keyboard key and a controller button share one: more get a section of
     // their own (KeyMenuShow2)
@@ -927,6 +1154,18 @@ impl Look {
             Look::StarRail => (WHITE, 0.1), Look::Wuwa => (WHITE, 0.08), Look::Hi3 => (hi3::CYAN, 0.1), Look::Endfield => (ef::INK, 0.12),
         }
     }
+    /// The scroll bar's track and thumb, each a colour and how much it covers.
+    fn bar(self) -> ((Rgb, f32), (Rgb, f32)) {
+        match self {
+            Look::Plain => ((plain::LINE, 1.0), (plain::DIM, 1.0)),
+            Look::Zzz => ((zzz::FRAME, 1.0), (zzz::ORANGE, 1.0)),
+            Look::Genshin => ((gi::GOLD, 0.2), (gi::GOLD, 1.0)),
+            Look::StarRail => ((WHITE, 0.14), (hsr::PILL, 1.0)),
+            Look::Wuwa => ((WHITE, 0.12), (ww::GOLD_LINE, 1.0)),
+            Look::Hi3 => ((hi3::CYAN, 0.18), (hi3::CYAN, 1.0)),
+            Look::Endfield => ((ef::INK, 0.12), (ef::INK, 1.0)),
+        }
+    }
 }
 
 /// A shape inside a box, for fills, outlines and cutting pictures.
@@ -1217,9 +1456,8 @@ fn brackets(c: &mut Canvas, x: f32, y: f32, w: f32, h: f32, len: f32, t: f32, rg
 }
 
 /// Zenless Zone Zero's title bar in a header `w` by `h`: one black capsule that holds the back button and the name.
-/// `cut`: where its orange end starts at the bottom edge. `dots`: where the halftone before that end starts, which
-/// is as far as the name goes.
-struct ZzzBar { x: f32, y: f32, w: f32, h: f32, cut: f32, dots: f32 }
+/// `cut`: where its orange end starts at the bottom edge, which is as far as the name goes.
+struct ZzzBar { x: f32, y: f32, w: f32, h: f32, cut: f32 }
 
 fn zzz_bar(l: &Layout, w: f32, h: f32) -> ZzzBar {
     let bh = (h * 0.58).round();
@@ -1227,7 +1465,7 @@ fn zzz_bar(l: &Layout, w: f32, h: f32) -> ZzzBar {
     // in line with the rows' pills, or as far from the side as from the top in a small header
     let x = y.min(l.f(15.0).round());
     let cut = w - x - (bh * 1.75).round();
-    ZzzBar { x, y, w: w - 2.0 * x, h: bh, cut, dots: cut - (bh * 2.2).round() }
+    ZzzBar { x, y, w: w - 2.0 * x, h: bh, cut }
 }
 
 /// The panel behind a header, `w` by `h` at the top of the picture.
@@ -1243,17 +1481,25 @@ fn head_bg(c: &mut Canvas, l: &Layout, w: f32, h: f32) {
             c.rect(0.0, h - 1.0, w, 1.0, plain::LINE, 1.0);
         }
         Look::Zzz => {
-            // a grey frame with a black outline. In it one black capsule, as wide as the rows' pills: halftone dots
-            // grow toward its right end, which is orange with black stripes behind a leaning edge
+            // a grey frame with a black outline. In it one black capsule, as wide as the rows' pills, with the well's
+            // dot matrix. Its right end is orange with black stripes behind a leaning edge
             let (r, b) = (f(18.0), f(2.0));
             c.shape(0.0, 0.0, w, h + r, Shape::Corners([r, r, 0.0, 0.0]), Paint::Solid(zzz::INK), 1.0);
             c.shape(b, b, w - 2.0 * b, h + r, Shape::Corners([r - b, r - b, 0.0, 0.0]), Paint::Down(zzz::FRAME_HI, zzz::FRAME), 1.0);
             let bar = zzz_bar(l, w, h);
             c.shape(bar.x, bar.y, bar.w, bar.h, Shape::Pill, Paint::Solid(zzz::INK), 1.0);
             let lean = (bar.h * 0.4).round();
-            let step = (bar.h / 7.0).round().max(3.0);
-            let dh = ((bar.h - 2.0 * b - 2.0) / step).floor() * step;
-            c.dots(bar.dots, bar.y + (bar.h - dh) / 2.0, bar.cut + lean - bar.dots, dh, step, 0.0, step * 0.38, zzz::RIM, 1.0);
+            // the same dots as the well behind the rows (`body_bg`), kept inside the capsule
+            let (step, dot) = (f(5.0), f(0.9));
+            let (nx, ny) = ((bar.w / step).floor() as i32, (bar.h / step).floor() as i32);
+            let oy = (bar.h - ny as f32 * step) / 2.0;
+            for j in 0..ny {
+                for i in 0..nx {
+                    let (lx, ly) = ((i as f32 + 0.5) * step, oy + (j as f32 + 0.5) * step);
+                    if Shape::Pill.sd(lx, ly, bar.w, bar.h) > -(dot + b) { continue; }
+                    c.shape(bar.x + lx - dot, bar.y + ly - dot, 2.0 * dot, 2.0 * dot, Shape::Pill, Paint::Solid(WHITE), 0.08);
+                }
+            }
             let n = bar.h / bar.h.hypot(lean);
             let (period, thick) = (bar.h * 0.24, bar.h * 0.12);
             c.each(bar.x, bar.y, bar.w, bar.h, |c, px, py, lx, ly| {
@@ -1477,7 +1723,7 @@ fn title(c: &mut Canvas, l: &Layout, w: f32, h: f32, text: &str, size: u32, back
                 c.shape(x, (h - tag) / 2.0, tw, tag, Shape::Slant(tag * 0.25), Paint::Solid(zzz::ORANGE), 1.0);
                 x += tw + f(8.0);
             }
-            keep = w - bar.dots + f(4.0);
+            keep = w - bar.cut + f(8.0);
         }
         Look::Hi3 if !back => {
             c.shape(x, (h - tag) / 2.0, f(10.0), tag, Shape::Slant(tag * 0.25), Paint::Solid(hi3::CYAN), 1.0);
@@ -1533,16 +1779,32 @@ fn back_button(c: &mut Canvas, l: &Layout, x0: f32, hover: bool) {
     c.chevron(x + d / 2.0 - l.f(1.0), y + d / 2.0, d * 0.17, Dir::Left, l.f(2.2), fg);
 }
 
-/// The two scroll buttons, up then down, each `arw` by `foot` from (x, y). `hover`: as under the mouse.
-fn buttons(c: &mut Canvas, l: &Layout, x: f32, y: f32, hover: bool) {
-    // in the footer's own part, under the list's margin
-    let (bw, bh, y) = (l.arw as f32, (l.foot - l.gut) as f32, y + l.gut as f32);
-    let d = (bw.min(bh) - l.f(12.0)).round();
-    for (i, dir) in [Dir::Up, Dir::Down].into_iter().enumerate() {
-        let (cx, cy) = (x + bw * (i as f32 + 0.5), y + bh / 2.0);
-        let fg = button(c, l, (cx - d / 2.0).round(), (cy - d / 2.0).round(), d, hover);
-        c.chevron(cx, cy, d * 0.2, dir, l.f(2.2), fg);
-    }
+/// An arrow on the list's top or bottom edge, `arw` by `arh` at (x, y): a small tab in the look's own shape with a
+/// chevron. It covers the rows under it, so its face is solid. `hover`: as under the mouse.
+fn arrow_tab(c: &mut Canvas, l: &Layout, x: f32, y: f32, dir: Dir, hover: bool) {
+    let f = |v: f32| l.f(v);
+    let (w, h) = (l.arw as f32, l.arh as f32);
+    let cut = Shape::Chamfer([f(6.0), 0.0, f(6.0), 0.0]);
+    // shape, face, a line round it (colour, thickness, cover), the chevron's colour
+    let (s, face, ring, fg) = match (l.look, hover) {
+        (Look::Plain, false) => (Shape::Round(f(6.0)), plain::KEY, Some((plain::LINE, 1.0, 1.0)), plain::TEXT),
+        (Look::Plain, true) => (Shape::Round(f(6.0)), plain::ACCENT, None, WHITE),
+        (Look::Zzz, false) => (Shape::Pill, zzz::INK, Some((zzz::RIM, f(2.0), 1.0)), zzz::TEXT),
+        (Look::Zzz, true) => (Shape::Pill, zzz::ORANGE, Some((zzz::INK, f(2.0), 1.0)), zzz::INK),
+        (Look::Genshin, false) => (Shape::Pill, gi::NAVY_HI, Some((gi::GOLD, f(1.5), 0.8)), gi::CREAM),
+        (Look::Genshin, true) => (Shape::Pill, gi::CREAM, Some((gi::GOLD, f(1.5), 0.8)), gi::INK),
+        (Look::StarRail, false) => (Shape::Pill, hsr::GLASS_HI, Some((WHITE, 1.0, 0.4)), WHITE),
+        (Look::StarRail, true) => (Shape::Pill, hsr::PILL, None, hsr::INK),
+        (Look::Wuwa, false) => (Shape::Round(f(3.0)), ww::INK, Some((WHITE, 1.0, 0.5)), WHITE),
+        (Look::Wuwa, true) => (Shape::Round(f(3.0)), ww::SHEET, None, ww::DARK),
+        (Look::Hi3, false) => (cut, hi3::DEEP_HI, Some((hi3::CYAN, 1.0, 0.9)), hi3::CYAN),
+        (Look::Hi3, true) => (cut, hi3::CYAN, None, hi3::NAVY),
+        (Look::Endfield, false) => (Shape::Pill, ef::INK, None, ef::YELLOW),
+        (Look::Endfield, true) => (Shape::Pill, ef::YELLOW, Some((ef::INK, f(1.5), 1.0)), ef::INK),
+    };
+    c.shape(x, y, w, h, s, Paint::Solid(face), 1.0);
+    if let Some((rgb, t, a)) = ring { c.ring(x, y, w, h, s, t, rgb, a); }
+    c.chevron(x + w / 2.0, y + h / 2.0, f(6.0), dir, f(2.0), fg);
 }
 
 /// The mark on the row that is showing, `chk` square at (x, y). `on_pick`: for the picked row's colours.
@@ -1585,10 +1847,12 @@ fn thumb(c: &mut Canvas, it: &Item, x: f32, y: f32, d: f32, s: Shape, hole: Rgb,
 }
 
 /// One row of a list at `y`, with its left edge at `x0`. `pick`: as the picked row, drawn alone in the picture's
-/// right half and laid over the plain row by live.ini, so it covers what it changes.
-fn row(c: &mut Canvas, l: &Layout, x0: f32, y: f32, it: &Item, pick: bool) {
+/// right half and laid over the plain row by live.ini, so it covers what it changes. `room`: how much further from
+/// the right its art ends, to leave the scroll bar clear.
+#[allow(clippy::too_many_arguments)]
+fn row(c: &mut Canvas, l: &Layout, x0: f32, y: f32, it: &Item, pick: bool, room: f32) {
     let f = |v: f32| l.f(v);
-    let (w, rh, pad) = (l.w as f32, l.row as f32, l.pad as f32);
+    let (w, rh, pad) = (l.w as f32 - room, l.row as f32, l.pad as f32);
     let (tx, ty, td) = (x0 + pad, y + ((l.row - l.thumb) / 2) as f32, l.thumb as f32);
     let (line, la) = l.look.line();
     let fg = if pick { l.look.pick_text() } else if it.none { l.look.dim() } else { l.look.text() };
@@ -1609,12 +1873,21 @@ fn row(c: &mut Canvas, l: &Layout, x0: f32, y: f32, it: &Item, pick: bool) {
             thumb(c, it, tx, ty, td, Shape::Round(f(6.0)), plain::LINE, None, plain::DIM);
         }
         (Look::Zzz, _) => {
-            // chunky pills on the well; the picked one turns orange with a hard shadow and stripes at its end
+            // chunky pills on the well; the picked one turns orange with a hard shadow and stripes over its right end
             let (px, py, pw, ph) = (x0 + f(15.0), y + f(3.0), w - f(30.0), rh - f(6.0));
             if pick {
                 c.shape(px, py + f(3.0), pw, ph, Shape::Pill, Paint::Solid(zzz::INK), 1.0);
                 c.shape(px, py, pw, ph, Shape::Pill, Paint::Solid(zzz::ORANGE), 1.0);
-                c.stripes(px + pw - ph / 2.0 - f(72.0), py, f(72.0), ph, Shape::Rect, f(8.0), f(3.0), zzz::INK, 0.13);
+                // they start along a stripe and run to the end of the pill, round end included
+                let (sw, period, thick) = (f(72.0) + ph / 2.0, f(8.0), f(3.0));
+                let sx = px + pw - sw;
+                c.each(sx, py, sw, ph, |c, qx, qy, lx, ly| {
+                    let inside = (0.5 - Shape::Pill.sd(lx + sx - px, ly, pw, ph)).clamp(0.0, 1.0);
+                    if inside <= 0.0 || lx + ly < ph { return; }
+                    let d = (((lx + ly) * FRAC_1_SQRT_2).rem_euclid(period) - period / 2.0).abs();
+                    let k = (thick / 2.0 - d + 0.5).clamp(0.0, 1.0);
+                    if k > 0.0 { c.over(qx, qy, zzz::INK, inside * k * 0.13); }
+                });
                 c.ring(px, py, pw, ph, Shape::Pill, f(2.0), zzz::INK, 1.0);
             } else {
                 c.shape(px, py, pw, ph, Shape::Pill, Paint::Down(zzz::CARD_HI, zzz::CARD_LO), 1.0);
@@ -1688,7 +1961,7 @@ fn row(c: &mut Canvas, l: &Layout, x0: f32, y: f32, it: &Item, pick: bool) {
             brackets(c, tx - f(3.0), ty - f(3.0), td + f(6.0), td + f(6.0), f(7.0), f(1.5), ef::INK, 0.9);
         }
     }
-    let text_w = l.chk_x.saturating_sub(l.text_x() + l.s(10)) as f32;
+    let text_w = (l.chk_x as f32 - room - (l.text_x() + l.s(10)) as f32).max(0.0);
     let font = l.look.row_font(l.s(l.look.row_size()), pick);
     c.label(x0 + l.text_x() as f32, y, text_w, rh, &it.label, font, fg, Align::Left, shadow);
     c.unclip();
@@ -1780,22 +2053,31 @@ fn thumb_img(preview: &str, size: u32) -> Option<image::RgbaImage> {
 /// A list's picture: the header and a row per item, each row twice side by side. The left half is the menu as it
 /// shows; the right half holds each row as the picked one (and the back button under the mouse), which live.ini
 /// lays over the left half.
-fn render_rows(l: &Layout, name: &str, back: bool, items: &[Item]) -> Canvas {
+/// `apart`: live.ini draws the rows in another order (the list of characters, characters on screen first), so Zenless
+/// Zone Zero's dot matrix starts again on each row and lines up wherever a row lands.
+fn render_rows(l: &Layout, name: &str, back: bool, items: &[Item], apart: bool) -> Canvas {
     let n = items.len() as u32;
     // the header's own part: under it the list's background starts, `gut` above the first row
     let (w, head) = (l.w as f32, (l.head - l.gut) as f32);
     let mut c = Canvas::new(2 * l.w, l.head + l.row * n, [0, 0, 0, 0]);
-    body_bg(&mut c, l, head, w, (l.gut + l.row * n) as f32);
+    if apart && l.look == Look::Zzz {
+        body_bg(&mut c, l, head, w, l.gut as f32);
+        for i in 0..n { body_bg(&mut c, l, (l.head + i * l.row) as f32, w, l.row as f32); }
+    } else {
+        body_bg(&mut c, l, head, w, (l.gut + l.row * n) as f32);
+    }
     head_bg(&mut c, l, w, head);
     title(&mut c, l, w, head, name, l.s(l.look.title_size()), back);
     if back {
         back_button(&mut c, l, 0.0, false);
         back_button(&mut c, l, w, true);
     }
+    // a list longer than the menu gets the scroll bar, and its rows make room for it
+    let room = if n > l.vis { l.room as f32 } else { 0.0 };
     for (i, it) in items.iter().enumerate() {
         let y = (l.head + i as u32 * l.row) as f32;
-        row(&mut c, l, 0.0, y, it, false);
-        row(&mut c, l, w, y, it, true);
+        row(&mut c, l, 0.0, y, it, false, room);
+        row(&mut c, l, w, y, it, true, room);
     }
     c
 }
@@ -1804,7 +2086,7 @@ pub(crate) fn render_page(p: &Page, l: &Layout, many: bool) -> Canvas {
     let mut items = vec![Item { label: "None".into(), img: None, none: true }];
     items.extend(p.rows.iter().map(|r| Item { label: r.name.clone(), img: r.preview.as_deref().and_then(|p| thumb_img(p, l.thumb)), none: false }));
     // with more characters, a back button before the name: left (or a click on the header) goes to the list of them
-    render_rows(l, &p.character, many, &items)
+    render_rows(l, &p.character, many, &items, false)
 }
 
 /// The list of characters: a row each, with a picture of one of the character's skins.
@@ -1814,15 +2096,16 @@ pub(crate) fn render_list(pages: &[Page], l: &Layout) -> Canvas {
         img: p.rows.iter().find_map(|r| r.preview.as_deref()).and_then(|p| thumb_img(p, l.thumb)),
         none: false,
     }).collect();
-    render_rows(l, "Characters", false, &items)
+    render_rows(l, "Characters", false, &items, true)
 }
 
-/// Three strips: the footer under a character's skins; then the scroll buttons, the same under the mouse, the check
-/// and the check on the picked row (`Layout::btn_u`, `chk_u`); then the footer under the list of characters.
+/// Three strips: the footer under a character's skins; then the up and down arrows, the same under the mouse, the
+/// check, the check on the picked row and the scroll bar's round ends (`Layout::arrow_u`, `chk_u`, `cap_u`); then the
+/// footer under the list of characters.
 pub(crate) fn render_chrome(l: &Layout, hint: &Hint, list_hint: &Hint) -> Canvas {
     let (w, ft) = (l.w as f32, l.foot as f32);
     let mut c = Canvas::new(l.w, l.foot * 3 + l.round * 2, [0, 0, 0, 0]);
-    let room = w - (l.pad + 2 * l.arw + l.s(6)) as f32;
+    let room = w - 2.0 * l.pad as f32;
     let gut = l.gut as f32;
     for (y, h) in [(0.0, hint), (2.0 * ft, list_hint)] {
         // the list's background goes on `gut` under the last row, then the footer itself
@@ -1831,8 +2114,23 @@ pub(crate) fn render_chrome(l: &Layout, hint: &Hint, list_hint: &Hint) -> Canvas
         hint_row(&mut c, l, l.pad as f32, y + gut, room, ft - gut, h);
     }
     for hover in [false, true] {
-        buttons(&mut c, l, l.btn_u(false, hover) as f32, ft, hover);
+        for (down, dir) in [(false, Dir::Up), (true, Dir::Down)] {
+            arrow_tab(&mut c, l, l.arrow_u(down, hover) as f32, ft, dir, hover);
+        }
         check(&mut c, l, l.chk_u(hover) as f32, ft, hover);
+    }
+    if l.cap_h() > 0 {
+        // each round end is half of a pill as wide as the bar
+        let ((track, ta), (thumb, ha)) = l.look.bar();
+        let (bw, ch) = (l.bar_w as f32, l.cap_h() as f32);
+        for (is_thumb, rgb, a) in [(false, track, ta), (true, thumb, ha)] {
+            for bottom in [false, true] {
+                let x = l.cap_u(is_thumb, bottom) as f32;
+                c.clip(x, ft, x + bw, ft + ch);
+                c.shape(x, if bottom { ft - ch } else { ft }, bw, 2.0 * ch, Shape::Pill, Paint::Solid(rgb), a);
+            }
+        }
+        c.unclip();
     }
     if l.round > 0 {
         // the list's top corners, then its bottom ones: each strip is the end of a well twice as high
@@ -1902,7 +2200,7 @@ pub(crate) fn render_no_keys(l: &Layout, hint: &Hint) -> Canvas {
     let mut c = Canvas::new(k.w, k.none_h(), [0, 0, 0, 0]);
     head_bg(&mut c, l, w, kh);
     let (x, keep) = match l.look {
-        Look::Zzz => { let bar = zzz_bar(l, w, kh); (bar.x + (bar.h * 0.5).round(), w - bar.dots + l.f(4.0)) }
+        Look::Zzz => { let bar = zzz_bar(l, w, kh); (bar.x + (bar.h * 0.5).round(), w - bar.cut + l.f(8.0)) }
         _ => (pad, pad),
     };
     c.label(x, 0.0, w - x - keep, kh, "No mod keys for the characters on screen", l.look.row_font(l.s(15), false), l.look.head_text(), Align::Left, None);
@@ -1988,7 +2286,7 @@ pub(crate) fn dds(c: &Canvas) -> Vec<u8> {
 }
 
 /// The menu as live.ini lays it out over something to see through, for a look at it without the game. `zone` is
-/// what the mouse is over (2 the back button, 4 and 5 the scroll buttons) and `fv` which footer shows.
+/// what the mouse is over (2 the back button, 4 and 5 the up and down arrows) and `fv` which footer shows.
 #[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mock(page: &Canvas, chrome: &Canvas, l: &Layout, rows: u32, top: u32, sel: u32, act: u32, zone: u32, fv: u32) -> Canvas {
@@ -2024,14 +2322,28 @@ pub(crate) fn mock(page: &Canvas, chrome: &Canvas, l: &Layout, rows: u32, top: u
         copy(&mut c, chrome, 0, l.head - l.gut, l.w, l.round, 0, 3 * l.foot);
         copy(&mut c, chrome, 0, l.head + l.gut + vis * l.row - l.round, l.w, l.round, 0, 3 * l.foot + l.round);
     }
+    let scrolls = rows > vis;
+    let chk_x = l.chk_x - if scrolls { l.room } else { 0 };
     if act >= top && act < top + vis {
-        copy(&mut c, chrome, l.chk_x, l.head + (act - top) * l.row + (l.row - l.chk) / 2, l.chk, l.chk, l.chk_u(act == sel), l.foot);
+        copy(&mut c, chrome, chk_x, l.head + (act - top) * l.row + (l.row - l.chk) / 2, l.chk, l.chk, l.chk_u(act == sel), l.foot);
     }
-    if rows > vis {
-        for (down, z) in [(false, 4), (true, 5)] {
-            let bx = l.w - if down { l.arw } else { 2 * l.arw };
-            copy(&mut c, chrome, bx, l.head + vis * l.row, l.arw, l.foot, l.btn_u(down, false), l.foot);
-            if zone == z { copy(&mut c, chrome, bx, l.head + vis * l.row, l.arw, l.foot, l.btn_u(down, true), l.foot); }
+    if scrolls {
+        let ((track_rgb, track_a), (thumb_rgb, thumb_a)) = l.look.bar();
+        let (track, ch, bt) = (l.track(), l.cap_h(), l.head + l.bar_in);
+        let th = (track * vis / rows).max(l.thumb_min());
+        let ty = bt + (track - th) * top / (rows - vis);
+        let flat = |c: &mut Canvas, y: u32, h: u32, rgb: Rgb, a: f32| c.rect((m + l.bar_x) as f32, (m + y) as f32, l.bar_w as f32, h as f32, rgb, a);
+        flat(&mut c, bt + ch, track - 2 * ch, track_rgb, track_a);
+        flat(&mut c, ty + ch, th - 2 * ch, thumb_rgb, thumb_a);
+        if ch > 0 {
+            for (y, thumb, bottom) in [(bt, false, false), (bt + track - ch, false, true), (ty, true, false), (ty + th - ch, true, true)] {
+                copy(&mut c, chrome, l.bar_x, y, l.bar_w, ch, l.cap_u(thumb, bottom), l.foot);
+            }
+        }
+        let (up_y, down_y) = l.arrow_y();
+        for (down, z, show, y) in [(false, 4, top > 0, up_y), (true, 5, top + vis < rows, down_y + vis * l.row)] {
+            if !show { continue; }
+            copy(&mut c, chrome, l.arrow_x(), y, l.arw, l.arh, l.arrow_u(down, zone == z), l.foot);
         }
     }
     c
@@ -2316,7 +2628,7 @@ mod tests {
         // row 2 of the first character is slot 4
         assert!(t.contains("  if $char == 0\r\n    if $sel == 0\r\n      $g2 = 0\r\n    endif\r\n    if $sel == 1\r\n      $g2 = 1\r\n    endif\r\n    if $sel == 2\r\n      $g2 = 4\r\n    endif\r\n  endif"));
         // page 2 lists the two characters: a row there opens that character, left goes back to it
-        assert!(t.contains("[CommandListMenuShow]\r\n; on the list of characters a row opens that character\r\nif $char == 2\r\n  $char = $sel\r\n  run = CommandListMenuTurn\r\nelse\r\n"));
+        assert!(t.contains("[CommandListMenuShow]\r\n; on the list of characters a row opens that character\r\nif $char == 2\r\n  $at = $sel\r\n  run = CommandListMenuWho\r\n  $char = $who\r\n  run = CommandListMenuTurn\r\nelse\r\n"));
         assert!(t.contains("if $char == 2\r\n  $rows = 2\r\n  $act = $here\r\n") && t.contains("[ResourceMenuList]\r\nfilename = menu0.dds\r\n"));
         assert!(t.contains("[KeyMenuList]\r\ncondition = $open == 1\r\nkey = VK_LEFT\r\nkey = XB_DPAD_LEFT\r\nrun = CommandListMenuList\r\n"));
         assert!(t.contains("[ResourceMenuPage7]\r\nfilename = menu7.dds\r\n"));
@@ -2332,16 +2644,21 @@ mod tests {
             let t = sections(&pages(), &l, Some(&keys(false, false)), None);
             let (w, head, row, foot) = (l.w, l.head, l.row, l.foot);
             // the picked row comes from the same row of the picture's right half
-            assert!(t.contains(&format!("$qy = $y0 + {head} + ($sel - $top) * {row}\r\n$qw = {w}\r\n$qh = {row}\r\n$qu = {w}\r\n$qv = {head} + $sel * {row}\r\n")));
+            assert!(t.contains(&format!("$qy = $y0 + {head} + ($sel - $top) * {row}\r\n$qw = {w}\r\n$qh = {row}\r\n$qu = {w}\r\n$qv = {head} + $who * {row}\r\n")));
             // and the back button under the mouse from its header
             assert!(t.contains(&format!("if $zone == 2\r\n$qx = {}\r\n$qy = $y0\r\n$qw = {w}\r\n$qh = {head}\r\n$qu = {w}\r\n$qv = 0\r\n", l.x0)));
             // the check, in the picked row's colours when it is that row
-            let chk = format!("$qx = {}\r\n$qy = $y0 + {} + ($act - $top) * {row}\r\n$qw = {c}\r\n$qh = {c}\r\n", l.x0 + l.chk_x, head + (row - l.chk) / 2, c = l.chk);
+            let chk = format!("$qx = $cx\r\n$qy = $y0 + {} + ($act - $top) * {row}\r\n$qw = {c}\r\n$qh = {c}\r\n", head + (row - l.chk) / 2, c = l.chk);
             assert!(t.contains(&format!("if $act == $sel\r\n{chk}$qu = {}\r\n$qv = {foot}\r\n", l.chk_u(true))));
             assert!(t.contains(&format!("else\r\n{chk}$qu = {}\r\n$qv = {foot}\r\n", l.chk_u(false))));
-            // each scroll button lit under the mouse, and no bar: nothing in the game reads the mouse wheel
-            assert!(t.contains(&format!("if $zone == 5\r\n$qx = {}\r\n$qy = $y0 + {head} + $vis * {row}\r\n$qw = {}\r\n$qh = {foot}\r\n$qu = {}\r\n", l.x0 + w - l.arw, l.arw, l.btn_u(true, true))));
-            assert!(!t.contains("$qflat = 1"));
+            // the check moves in with the rows when the bar shows
+            assert!(t.contains(&format!("$cx = {}\r\nif $rows > $vis\r\n  $cx = {}\r\nendif\r\n", l.x0 + l.chk_x, l.x0 + l.chk_x - l.room)));
+            // the down arrow lit under the mouse, on the list's bottom edge
+            let (_, down_y) = l.arrow_y();
+            assert!(t.contains(&format!("if $zone == 5\r\n$qx = {}\r\n$qy = $y0 + {down_y} + $vis * {row}\r\n$qw = {}\r\n$qh = {}\r\n$qu = {}\r\n", l.x0 + l.arrow_x(), l.arw, l.arh, l.arrow_u(true, true))));
+            // the footer has no scroll buttons any more: nothing is drawn from the middle strip at the footer's height
+            assert!(!t.contains(&format!("$qy = $y0 + {head} + $vis * {row}\r\n$qw = {}\r\n", l.arw)));
+            assert!(t.contains("$qflat = 1"));
             balanced(&t, &constants(&pages(), true, false));
         }
     }
@@ -2363,7 +2680,129 @@ mod tests {
             assert!(target.starts_with("BuiltIn") || names.iter().any(|n| n == target), "{target} is missing");
         }
         for v in t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '$' || c == '_')).filter(|w| w.starts_with('$')) {
-            assert!(v.starts_with("$g") || consts.contains(&format!("global {v} = 0")), "{v} isn't declared");
+            assert!(v.starts_with("$g") || consts.contains(&format!("global {v} = 0")) || consts.contains(&format!("global persist {v} = 0")), "{v} isn't declared");
+        }
+    }
+
+    /// For each line that reads `line`, the conditions of the ifs around it in its section.
+    fn under(t: &str, line: &str) -> Vec<Vec<String>> {
+        let (mut stack, mut out) = (Vec::<String>::new(), Vec::new());
+        for s in t.lines().map(str::trim) {
+            if s.starts_with('[') { stack.clear(); }
+            if s == line { out.push(stack.clone()); }
+            if let Some(c) = s.strip_prefix("if ") { stack.push(c.to_string()); }
+            if s == "endif" { stack.pop(); }
+        }
+        out
+    }
+
+    #[test]
+    fn the_scroll_bar_shows_only_on_a_long_list() {
+        for look in LOOKS {
+            for h in [720, 1080, 2160] {
+                let l = Layout::with_look(h, look);
+                let t = sections(&pages(), &l, Some(&keys(false, false)), None);
+                // every flat rectangle is the bar's, and the thumb, the track's zones and the room for it all wait on a long list
+                let mut lines = vec!["$qflat = 1".to_string(), "$zone = 6".into(), "$zone = 7".into(), format!("$th = {} / $rows", l.track() * l.vis), format!("$cx = {}", l.x0 + l.chk_x - l.room)];
+                if l.cap_h() > 0 {
+                    for (thumb, bottom) in [(false, false), (false, true), (true, false), (true, true)] { lines.push(format!("$qu = {}", l.cap_u(thumb, bottom))); }
+                } else {
+                    assert!(!t.contains(&format!("$qu = {}", l.cap_u(false, false))), "{look:?} {h}");
+                }
+                for line in &lines {
+                    let found = under(&t, line);
+                    assert!(!found.is_empty(), "{look:?} {h}: {line}");
+                    assert!(found.iter().all(|c| c.iter().any(|c| c == "$rows > $vis")), "{look:?} {h}: {line} {found:?}");
+                }
+                // two flat pieces: the track and the thumb, each in the look's own colours
+                let ((track, ta), (thumb, ha)) = look.bar();
+                let rgb = |c: Rgb, a: f32| format!("$qflat = 1\r\n$qa = {a:.3}\r\n$qr = {:.3}\r\n$qg = {:.3}\r\n$qb = {:.3}\r\n", c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0);
+                assert_eq!(t.matches("$qflat = 1").count(), 2, "{look:?} {h}");
+                assert!(t.contains(&rgb(track, ta)) && t.contains(&rgb(thumb, ha)), "{look:?} {h}");
+                // the thumb's place follows $top and never runs past the track
+                assert!(t.contains(&format!("  $ty = $y0 + {} + ({} - $th) * $top / ($rows - $vis)\r\n", l.head + l.bar_in, l.track())));
+                assert!(l.thumb_min() < l.track() && l.bar_x + l.bar_w < l.w, "{look:?} {h}");
+                balanced(&t, &constants(&pages(), true, false));
+            }
+        }
+    }
+
+    #[test]
+    fn the_arrows_show_when_rows_are_out_of_view() {
+        for look in LOOKS {
+            let l = Layout::with_look(1080, look);
+            let t = sections(&pages(), &l, Some(&keys(false, false)), None);
+            let (up_y, down_y) = l.arrow_y();
+            let up = format!("$qy = $y0 + {up_y}");
+            let down = format!("$qy = $y0 + {down_y} + $vis * {}", l.row);
+            // the plain one and the lit one each
+            for (line, cond) in [(&up, "$top > 0"), (&down, "$top + $vis < $rows"), (&"$zone = 4".to_string(), "$top > 0"), (&"$zone = 5".to_string(), "$top + $vis < $rows")] {
+                let found = under(&t, line);
+                assert!(!found.is_empty(), "{look:?}: {line}");
+                assert!(found.iter().all(|c| c.iter().any(|c| c == cond)), "{look:?}: {line} {found:?}");
+            }
+            assert_eq!(under(&t, &up).len(), 2);
+            assert_eq!(under(&t, &down).len(), 2);
+            // where the mouse lights an arrow is where it is drawn
+            let ax = l.x0 + l.arrow_x();
+            assert!(t.contains(&format!("    if $mx >= {ax} && $mx < {}\r\n      if $top > 0\r\n        if $my >= $y0 + {up_y} && $my < $y0 + {}\r\n", ax + l.arw, up_y + l.arh)));
+            assert!(t.contains(&format!("        if $my >= $y0 + {down_y} + $vis * {r} && $my < $y0 + {} + $vis * {r}\r\n          $zone = 5\r\n", down_y + l.arh, r = l.row)));
+            // on the list's edges: partly over the header and the footer, mostly over the first and the last row
+            assert!(up_y < l.head && up_y + l.arh > l.head && down_y < l.head && down_y + l.arh > l.head, "{look:?}");
+        }
+    }
+
+    #[test]
+    fn a_click_on_an_arrow_or_the_track_pages_the_list() {
+        let l = Layout::new(1080);
+        let t = sections(&pages(), &l, Some(&keys(false, false)), None);
+        // the same lists the footer's scroll buttons ran: a page less one row, the picked row kept in view
+        for (zone, run) in [(4, "PageUp"), (5, "PageDown"), (6, "PageUp"), (7, "PageDown")] {
+            assert!(t.contains(&format!("if $zone == {zone}\r\n  run = CommandListMenu{run}\r\nendif\r\n")), "{zone}");
+        }
+        assert!(t.contains("[CommandListMenuPageUp]\r\n$top = $top - $vis + 1\r\nif $top < 0\r\n  $top = 0\r\nendif\r\n"));
+        assert!(t.contains("[CommandListMenuPageDown]\r\n$top = $top + $vis - 1\r\nif $top > $rows - $vis\r\n  $top = $rows - $vis\r\nendif\r\n"));
+        // only the left button clicks, and only on something
+        assert!(t.contains("[KeyMenuClick]\r\ncondition = $open == 1 && $zone > 0\r\nkey = VK_LBUTTON\r\nrun = CommandListMenuClick\r\n"));
+        // the thumb itself is no zone, so a click on it doesn't pick the row under it
+        assert!(t.contains("      $zone = 0\r\n      if $my < $ty\r\n        $zone = 6\r\n      endif\r\n      if $my >= $ty + $th\r\n        $zone = 7\r\n"));
+    }
+
+    #[test]
+    fn every_look_draws_at_small_and_large_sizes() {
+        let (hint, list_hint) = hints(&HintKeys::standard("F7"), true);
+        for look in LOOKS {
+            for h in [720, 2160] {
+                let l = Layout::with_look(h, look);
+                // the middle strip of menu.dds holds four arrows, two checks and four round ends
+                assert!(l.cap_u(true, true) + l.bar_w <= l.w && l.arh <= l.foot && l.cap_h() <= l.foot, "{look:?} {h}");
+                let chrome = render_chrome(&l, &hint, &list_hint);
+                assert_eq!((chrome.w, chrome.h), (l.w, 3 * l.foot + 2 * l.round));
+                for n in [3usize, 12] {
+                    let rows: Vec<Row> = (0..n).map(|i| Row { name: format!("Skin {i}"), preview: None }).collect();
+                    let p = render_page(&Page { n: 1, character: "Ellen".into(), rows }, &l, true);
+                    let total = n as u32 + 1;
+                    assert_eq!((p.w, p.h), (2 * l.w, l.head + total * l.row), "{look:?} {h}");
+                    if total > l.vis {
+                        // the picked rows (the right half, nothing under them) leave the bar's column clear
+                        for y in l.head..p.h {
+                            for x in l.bar_x.saturating_sub(1)..(l.bar_x + l.bar_w + 1).min(l.w) {
+                                assert_eq!(p.px[((y * p.w + l.w + x) * 4 + 3) as usize], 0, "{look:?} {h} ({x}, {y})");
+                            }
+                        }
+                    }
+                    // laid out as live.ini does, scrolled to each end
+                    let max_top = total.saturating_sub(l.vis);
+                    for top in [0, max_top] {
+                        let m = mock(&p, &chrome, &l, total, top, top, 0, 4, 0);
+                        assert!(m.w > l.w && m.h > l.head);
+                    }
+                }
+                let cast: Vec<Page> = (0..10).map(|i| Page { n: i + 1, character: format!("Character {i}"), rows: vec![] }).collect();
+                let list = render_list(&cast, &l);
+                assert_eq!(list.h, l.head + 10 * l.row);
+                mock(&list, &chrome, &l, 10, 2, 5, 1, 5, 2 * l.foot);
+            }
         }
     }
 
@@ -2379,7 +2818,7 @@ mod tests {
         let t = sections(&one, &l, Some(&keys(false, true)), None);
         assert!(!t.contains("[KeyMenuOpen]") && t.contains("key = XB_DPAD_UP") && t.contains("[KeyMenuClose]"));
         let off = sections(&one, &l, None, None);
-        assert!(off.contains("[CommandListSeen1]") && !off.contains("[Present]"));
+        assert!(off.contains("[CommandListSeen1]") && off.contains("[CommandListOnScreen]") && !off.contains("$here") && !off.contains("CommandListMenu"));
         assert!(constants(&one, false, false).contains("global $open = 0") && constants(&one, false, false).contains("global $s1 = 0"));
     }
 
@@ -2391,10 +2830,12 @@ mod tests {
         for look in LOOKS {
             for h in [720, 1080, 1440, 2160] {
                 let l = Layout::with_look(h, look);
-                // the middle strip of menu.dds holds two pairs of scroll buttons and two checks
-                assert!(l.chk_u(true) + l.chk <= l.w && l.chk <= l.foot, "{look:?} {h}");
-                // a row: picture, name, then the check
-                assert!(l.thumb < l.row && l.text_x() + l.s(120) < l.chk_x && l.chk_x + l.chk < l.w, "{look:?} {h}");
+                // the middle strip of menu.dds holds two pairs of arrows, two checks and the bar's round ends
+                assert!(l.cap_u(true, true) + l.bar_w <= l.w && l.chk <= l.foot, "{look:?} {h}");
+                // a row: picture, name, then the check, with room for the name when the rows move in for the bar
+                assert!(l.thumb < l.row && l.text_x() + l.s(120) < l.chk_x - l.room && l.chk_x + l.chk < l.w, "{look:?} {h}");
+                // the check stays left of the bar
+                assert!(l.chk_x - l.room + l.chk < l.bar_x, "{look:?} {h}");
             }
             let l = Layout::with_look(1080, look);
             let rows: Vec<Row> = (0..9).map(|i| Row { name: format!("Skin {i}"), preview: None }).collect();
@@ -2463,7 +2904,7 @@ mod tests {
     }
 
     fn row(what: &str, kind: &str, options: u32) -> crate::keylist::KeyRow {
-        crate::keylist::KeyRow { keys: vec!["F6".into()], what: what.into(), kind: kind.into(), options, on_screen: true }
+        crate::keylist::KeyRow { keys: vec!["F6".into()], what: what.into(), kind: kind.into(), options, on_screen: true, ..Default::default() }
     }
 
     #[test]
@@ -2527,6 +2968,287 @@ mod tests {
         assert!(write_assets(dir.path(), &renamed, &l, &HintKeys::standard("F7")).unwrap() && !dir.path().join("menu0.dds").exists());
         assert!(clear(dir.path()));
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    /// A rectangle the menu drew: where, how big, and from where in the bound picture.
+    #[derive(Debug, Clone, Copy)]
+    struct Quad { y: f64, w: f64, h: f64, u: f64, v: f64 }
+
+    /// Runs live.ini's lists the way 3DMigoto does for the lines the menu writes: assignments, ifs, runs and `post`.
+    /// Variables are kept without their `$`; the loader's own values (`cursor_x`, `window_width`) go in by name.
+    struct Sim { secs: HashMap<String, Vec<String>>, vars: HashMap<String, f64>, quads: Vec<Quad>, post: Vec<String> }
+
+    impl Sim {
+        fn new(ini: &str) -> Self {
+            let (mut secs, mut cur) = (HashMap::<String, Vec<String>>::new(), String::new());
+            for s in ini.lines().map(str::trim) {
+                if let Some(n) = s.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
+                    secs.insert(n.to_string(), Vec::new());
+                    cur = n.to_string();
+                } else if !s.is_empty() && !s.starts_with(';') {
+                    if let Some(v) = secs.get_mut(&cur) { v.push(s.to_string()); }
+                }
+            }
+            let mut sim = Sim { secs, vars: HashMap::new(), quads: Vec::new(), post: Vec::new() };
+            sim.set("window_width", 1920.0);
+            sim.set("window_height", 1080.0);
+            sim
+        }
+        fn get(&self, v: &str) -> f64 { self.vars.get(v).copied().unwrap_or(0.0) }
+        fn set(&mut self, v: &str, x: f64) { self.vars.insert(v.to_string(), x); }
+        fn run(&mut self, name: &str) {
+            let lines = self.secs.get(name).unwrap_or_else(|| panic!("no [{name}]")).clone();
+            // each open if: whether the lines around it run, whether a branch was taken, whether this branch runs
+            let mut stack: Vec<(bool, bool, bool)> = Vec::new();
+            for s in &lines {
+                let on = stack.last().is_none_or(|f| f.2);
+                if let Some(c) = s.strip_prefix("if ") {
+                    let a = on && self.eval(c) != 0.0;
+                    stack.push((on, a, a));
+                } else if let Some(c) = s.strip_prefix("else if ") {
+                    let (p, t, _) = *stack.last().unwrap();
+                    let a = p && !t && self.eval(c) != 0.0;
+                    *stack.last_mut().unwrap() = (p, t || a, a);
+                } else if s == "else" {
+                    let (p, t, _) = *stack.last().unwrap();
+                    *stack.last_mut().unwrap() = (p, true, p && !t);
+                } else if s == "endif" {
+                    stack.pop();
+                } else if !on {
+                } else if let Some(p) = s.strip_prefix("post ") {
+                    self.post.push(p.to_string());
+                } else if let Some(t) = s.strip_prefix("run = ") {
+                    if t == "CustomShaderMenuQuad" {
+                        self.quads.push(Quad { y: self.get("qy"), w: self.get("qw"), h: self.get("qh"), u: self.get("qu"), v: self.get("qv") });
+                    } else if !t.starts_with("BuiltIn") {
+                        self.run(t);
+                    }
+                } else {
+                    self.assign(s);
+                }
+            }
+            assert!(stack.is_empty(), "[{name}] leaves an if open");
+        }
+        fn assign(&mut self, s: &str) {
+            let Some((name, e)) = s.strip_prefix('$').and_then(|v| v.split_once('=')) else { return };
+            let x = self.eval(e);
+            self.set(name.trim(), x);
+        }
+        /// One frame: [Present], then its `post` lines.
+        fn frame(&mut self) {
+            self.post.clear();
+            self.run("Present");
+            for p in std::mem::take(&mut self.post) { self.assign(&p); }
+        }
+        fn eval(&self, e: &str) -> f64 {
+            let mut toks = Vec::new();
+            let cs: Vec<char> = e.chars().collect();
+            let mut i = 0;
+            while i < cs.len() {
+                let c = cs[i];
+                if c.is_whitespace() { i += 1; continue; }
+                let two: String = cs[i..(i + 2).min(cs.len())].iter().collect();
+                if ["==", "!=", "<=", ">=", "&&", "||"].contains(&two.as_str()) { toks.push(two); i += 2; continue; }
+                let start = i;
+                if c.is_ascii_alphanumeric() || c == '$' || c == '_' || c == '.' {
+                    while i < cs.len() && (cs[i].is_ascii_alphanumeric() || cs[i] == '$' || cs[i] == '_' || cs[i] == '.') { i += 1; }
+                } else {
+                    i += 1;
+                }
+                toks.push(cs[start..i].iter().collect());
+            }
+            let mut at = 0;
+            let v = self.or(&toks, &mut at);
+            assert_eq!(at, toks.len(), "can't read {e}");
+            v
+        }
+        fn or(&self, t: &[String], i: &mut usize) -> f64 {
+            let mut v = self.and(t, i);
+            while t.get(*i).is_some_and(|s| s == "||") { *i += 1; let r = self.and(t, i); v = (v != 0.0 || r != 0.0) as u8 as f64; }
+            v
+        }
+        fn and(&self, t: &[String], i: &mut usize) -> f64 {
+            let mut v = self.cmp(t, i);
+            while t.get(*i).is_some_and(|s| s == "&&") { *i += 1; let r = self.cmp(t, i); v = (v != 0.0 && r != 0.0) as u8 as f64; }
+            v
+        }
+        fn cmp(&self, t: &[String], i: &mut usize) -> f64 {
+            let a = self.add(t, i);
+            let Some(op) = t.get(*i).filter(|s| ["==", "!=", "<", "<=", ">", ">="].contains(&s.as_str())).cloned() else { return a };
+            *i += 1;
+            let b = self.add(t, i);
+            let r = match op.as_str() { "==" => a == b, "!=" => a != b, "<" => a < b, "<=" => a <= b, ">" => a > b, _ => a >= b };
+            r as u8 as f64
+        }
+        fn add(&self, t: &[String], i: &mut usize) -> f64 {
+            let mut v = self.mul(t, i);
+            while let Some(op) = t.get(*i).filter(|s| *s == "+" || *s == "-").cloned() {
+                *i += 1;
+                let r = self.mul(t, i);
+                v = if op == "+" { v + r } else { v - r };
+            }
+            v
+        }
+        fn mul(&self, t: &[String], i: &mut usize) -> f64 {
+            let mut v = self.atom(t, i);
+            while let Some(op) = t.get(*i).filter(|s| *s == "*" || *s == "/").cloned() {
+                *i += 1;
+                let r = self.atom(t, i);
+                v = if op == "*" { v * r } else { v / r };
+            }
+            v
+        }
+        fn atom(&self, t: &[String], i: &mut usize) -> f64 {
+            let s = t[*i].clone();
+            *i += 1;
+            match s.as_str() {
+                "-" => -self.atom(t, i),
+                "(" => { let v = self.or(t, i); assert_eq!(t[*i], ")"); *i += 1; v }
+                _ => s.parse::<f64>().unwrap_or_else(|_| self.get(s.trim_start_matches('$'))),
+            }
+        }
+    }
+
+    #[test]
+    fn the_flags_are_there_with_the_menu_off_and_on() {
+        let l = Layout::new(1080);
+        for menu in [None, Some(keys(false, false))] {
+            let t = sections(&pages(), &l, menu.as_ref(), None);
+            let c = constants(&pages(), menu.is_some(), false);
+            // saved, so the app can read it; the frame's flag and the count are not
+            assert!(c.contains("global persist $o2 = 0\r\n") && c.contains("global persist $o7 = 0\r\n") && c.contains("global $h7 = 0\r\n"));
+            assert!(!c.contains("global persist $s") && !c.contains("global persist $h"));
+            assert!(t.contains("[Present]\r\n") && t.contains("run = CommandListOnScreen\r\npost $s2 = 0\r\npost $s7 = 0\r\n"), "{t}");
+            assert!(t.contains("[CommandListOnScreen]\r\n; o<group>") &&t.contains(&format!("if $s7 == $o7\r\n  $h7 = 0\r\nelse\r\n  $h7 = $h7 + 1\r\n  if $h7 >= {HOLD}\r\n    $o7 = $s7\r\n")));
+            balanced(&t, &c);
+        }
+    }
+
+    #[test]
+    fn on_screen_follows_the_flag_after_the_hold() {
+        let l = Layout::new(1080);
+        for menu in [None, Some(keys(false, false))] {
+            let mut sim = Sim::new(&sections(&pages(), &l, menu.as_ref(), None));
+            let seen = |sim: &mut Sim, frames: u32| for _ in 0..frames { sim.set("s7", 1.0); sim.frame(); };
+            let gone = |sim: &mut Sim, frames: u32| for _ in 0..frames { sim.frame(); };
+            seen(&mut sim, HOLD - 1);
+            assert_eq!(sim.get("o7"), 0.0, "not yet");
+            assert_eq!(sim.get("s7"), 0.0, "the flag clears after each frame");
+            seen(&mut sim, 1);
+            assert_eq!(sim.get("o7"), 1.0);
+            assert_eq!(sim.get("o2"), 0.0);
+            // a few frames out of view change nothing, and the count starts again when it's back
+            gone(&mut sim, HOLD - 1);
+            seen(&mut sim, 1);
+            gone(&mut sim, HOLD - 1);
+            assert_eq!(sim.get("o7"), 1.0);
+            gone(&mut sim, 1);
+            assert_eq!(sim.get("o7"), 0.0);
+            if menu.is_some() { assert_eq!(sim.get("here"), 1.0, "the menu still knows who was seen last"); }
+        }
+    }
+
+    /// What the list of characters shows: the character on each row in view (from the picture's rows), the row with the
+    /// picked row's art and the character in it, and the rows with a check (true: in the picked row's colours).
+    fn list_view(sim: &mut Sim, l: &Layout) -> (Vec<u32>, Option<(u32, u32)>, Vec<(u32, bool)>) {
+        sim.quads.clear();
+        sim.run("CommandListMenuFrame");
+        let (y0, head, row) = (sim.get("y0"), l.head as f64, l.row as f64);
+        let body = |q: &Quad| q.y >= y0 + head && q.y < y0 + head + sim.get("vis") * row;
+        let mut rows: Vec<(f64, u32)> = Vec::new();
+        let (mut pick, mut checks) = (None, Vec::new());
+        for q in sim.quads.iter().filter(|q| body(q)) {
+            let at = ((q.y - y0 - head) / row).floor() as u32;
+            if q.w == l.w as f64 && q.u == 0.0 && q.v >= head {
+                for i in 0..(q.h / row) as u32 { rows.push((q.y + i as f64 * row, ((q.v - head) / row) as u32 + i)); }
+            } else if q.w == l.w as f64 && q.u == l.w as f64 {
+                pick = Some((at, ((q.v - head) / row) as u32));
+            } else if q.w == l.chk as f64 {
+                checks.push((at, q.u == l.chk_u(true) as f64));
+            }
+        }
+        rows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        (rows.into_iter().map(|r| r.1).collect(), pick, checks)
+    }
+
+    #[test]
+    fn characters_on_screen_come_first_on_the_list() {
+        let l = Layout::new(1080);
+        let cast = vec![IniPage { n: 2, slots: vec![1, 2] }, IniPage { n: 5, slots: vec![1] }, IniPage { n: 7, slots: vec![3, 4] }, IniPage { n: 9, slots: vec![1] }];
+        let t = sections(&cast, &l, Some(&keys(false, false)), None);
+        balanced(&t, &constants(&cast, true, false));
+        let mut sim = Sim::new(&t);
+
+        // two on screen (pages 1 and 3): the menu opens on the list, with them first and checked, on the first of them
+        sim.set("o5", 1.0);
+        sim.set("o9", 1.0);
+        sim.run("CommandListMenuToggle");
+        assert_eq!((sim.get("open"), sim.get("char"), sim.get("seen"), sim.get("sel")), (1.0, 4.0, 2.0, 0.0));
+        assert_eq!(list_view(&mut sim, &l), (vec![1, 3, 0, 2], Some((0, 1)), vec![(0, true), (1, false)]));
+        sim.run("CommandListMenuDown");
+        assert_eq!(list_view(&mut sim, &l), (vec![1, 3, 0, 2], Some((1, 3)), vec![(0, false), (1, true)]));
+        // the second row opens the character on it, and back on the list the rows haven't moved though the game's
+        // flags did, with the keys on that character
+        sim.set("o5", 0.0);
+        sim.set("o7", 1.0);
+        sim.run("CommandListMenuShow");
+        assert_eq!(sim.get("char"), 3.0);
+        sim.run("CommandListMenuList");
+        assert_eq!((sim.get("char"), sim.get("sel")), (4.0, 1.0));
+        assert_eq!(list_view(&mut sim, &l).0, vec![1, 3, 0, 2]);
+        // a click on the third row opens the character drawn there
+        let y = (sim.get("y0") + (l.head + 2 * l.row + l.row / 2) as f64) / 1080.0;
+        sim.set("cursor_x", (l.x0 + 100) as f64 / 1920.0);
+        sim.set("cursor_y", y);
+        assert_eq!(list_view(&mut sim, &l).1, Some((2, 0)), "the mouse picks the row under it");
+        assert_eq!((sim.get("zone"), sim.get("hover")), (1.0, 2.0));
+        sim.run("CommandListMenuClick");
+        assert_eq!(sim.get("char"), 0.0);
+
+        // one on screen: its skins, as before
+        sim.run("CommandListMenuToggle");
+        assert_eq!(sim.get("open"), 0.0);
+        sim.set("o9", 0.0);
+        sim.run("CommandListMenuToggle");
+        assert_eq!((sim.get("char"), sim.get("seen")), (2.0, 1.0));
+
+        // none: the character seen last, and the list in its usual order with the check on them
+        sim.run("CommandListMenuToggle");
+        sim.set("o7", 0.0);
+        sim.set("here", 3.0);
+        sim.run("CommandListMenuToggle");
+        assert_eq!((sim.get("char"), sim.get("seen")), (3.0, 0.0));
+        sim.run("CommandListMenuList");
+        assert_eq!(sim.get("sel"), 3.0);
+        assert_eq!(list_view(&mut sim, &l), (vec![0, 1, 2, 3], Some((3, 3)), vec![(3, true)]));
+        sim.run("CommandListMenuShow");
+        assert_eq!(sim.get("char"), 3.0);
+    }
+
+    #[test]
+    fn a_long_list_scrolls_with_characters_on_screen_first() {
+        let l = Layout::new(1080);
+        let cast: Vec<IniPage> = (1..=10).map(|n| IniPage { n, slots: vec![1] }).collect();
+        let t = sections(&cast, &l, Some(&keys(false, false)), None);
+        balanced(&t, &constants(&cast, true, false));
+        let mut sim = Sim::new(&t);
+        // pages 7 and 9 on screen
+        sim.set("o8", 1.0);
+        sim.set("o10", 1.0);
+        sim.run("CommandListMenuToggle");
+        assert_eq!(list_view(&mut sim, &l).0, vec![7, 9, 0, 1, 2, 3, 4, 5]);
+        // up from the top goes to the last row, and the list scrolls to it
+        sim.run("CommandListMenuUp");
+        let (rows, pick, checks) = list_view(&mut sim, &l);
+        assert_eq!((rows, pick, checks), (vec![0, 1, 2, 3, 4, 5, 6, 8], Some((7, 8)), vec![]));
+        assert_eq!(sim.get("top"), 2.0);
+        sim.run("CommandListMenuShow");
+        assert_eq!(sim.get("char"), 8.0);
+        // back on the list, on that character's row, then a page up shows the marked ones again
+        sim.run("CommandListMenuList");
+        assert_eq!(sim.get("sel"), 9.0);
+        sim.run("CommandListMenuPageUp");
+        assert_eq!(list_view(&mut sim, &l).2, vec![(0, false), (1, false)]);
     }
 
     /// Pictures side by side with a gap, for one file per look.

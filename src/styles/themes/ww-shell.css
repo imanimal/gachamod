@@ -74,8 +74,8 @@
   .nv-b { border-radius: 2px; background: none; color: var(--gold-hi); font-weight: 900; box-shadow: inset 0 0 0 1px rgb(206 185 156 / .45); }
   .nv.on .nv-b { color: #101113; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .4); }
   .nv-b.t-bad { min-width: 1.3rem; width: 1.3rem; height: 1.3rem; padding: 0; border-radius: 2px; background: var(--crimson); color: #fff; box-shadow: none; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); font-size: .68em; }
-  .nv-b.t-warn { background: var(--warn); color: #16181b; box-shadow: none; }
-  .nv-b.t-ok { background: var(--ok); color: #16181b; box-shadow: none; }
+  .nv-b.t-warn { background: var(--warn); color: var(--on-warn); box-shadow: none; }
+  .nv-b.t-ok { background: var(--ok); color: var(--on-ok); box-shadow: none; }
   .nv-b.t-run { background: var(--gold-hi); color: #101113; box-shadow: none; }
   .nv-b.t-run:empty { border-radius: 1px; transform: rotate(45deg); }
   .nv-b.t-run::after { border-radius: 1px; border-color: var(--gold-hi); }
@@ -123,7 +123,7 @@
   .nogame h1 { font-weight: 700; color: var(--cream); }
 
   /* ── command palette: an ink box like the menus; the row under the cursor turns white ── */
-  .palette { border-radius: 4px; background: rgb(9 10 15 / .95); box-shadow: inset 0 0 0 1px var(--key2-line), var(--shadow-lg); backdrop-filter: blur(14px); animation: wwRise 140ms var(--ease-out); }
+  .palette { border-radius: 4px; background: rgb(9 10 15 / .95); box-shadow: inset 0 0 0 1px var(--key2-line), var(--shadow-lg); animation: wwRise 140ms var(--ease-out); }
   .palette-in { box-shadow: none; background: var(--dia) left 1rem bottom -3px / 7px 7px no-repeat, var(--dia) right 1rem bottom -3px / 7px 7px no-repeat, linear-gradient(var(--line-2), var(--line-2)) center bottom / calc(100% - 2.6rem) 1px no-repeat; }
   .palette-in input { font-weight: 700; }
   .palette-h { color: var(--gold-ink); letter-spacing: .1em; }
@@ -183,3 +183,7 @@
   .page-h h1, .page-h h1 .i, .nogame h1 { color: var(--text); }
   .palette-i.on .palette-hint { color: rgb(255 255 255 / .75); }
 }
+
+/* nobody looking (lib/idle.ts: the window is in the background or a game runs): the stars and the ring hold still */
+[data-theme="ww"][data-idle] .backdrop::before, [data-theme="ww"][data-idle] .backdrop::after,
+[data-theme="ww"][data-idle] .app::before { animation-play-state: paused; }

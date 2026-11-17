@@ -33,7 +33,7 @@
   .mod-card-badges { top: .35rem; left: .35rem; gap: .25rem; }
   .mod-card-fav { width: 1.3rem; height: 1.3rem; border-radius: 2px; background: var(--tile-strip); color: var(--gold-hi); box-shadow: inset 0 0 0 1px rgb(206 185 156 / .45); }
   .mod-card-fav .i { width: .82rem; height: .82rem; fill: currentColor; }
-  .mod-card.is-row { border-radius: 4px; background: var(--tile-strip); }
+  .mod-card.is-row { gap: .9rem; border-radius: 4px; background: var(--tile-strip); }
   .mod-card.is-row .mod-card-hit { padding: 0; gap: .9rem; }
   .mod-card.is-row .mod-card-hit { align-self: stretch; }
   .mod-card.is-row .mod-card-img { border-radius: 4px 0 0 4px; width: 5rem; align-self: stretch; aspect-ratio: auto; height: auto; }
@@ -98,10 +98,10 @@
   /* ── downloads: paper rows ── */
   .dl-list { gap: 5px; }
   .dl-item { border-radius: 4px; background: var(--wm) right -1.200rem center / auto 240% no-repeat, #dadada; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .45), 0 2px 8px rgb(0 0 0 / .28); padding: .5rem .6rem .5rem .55rem; }
-  .dl-item.is-done, .dl-item.is-cancelled { background-color: #b2b2b2; }
+  .dl-item.is-done, .dl-item.is-cancelled { background-color: #c8c8c8; }
   .dl-thumb { border-radius: 3px; background: var(--tile); box-shadow: inset 0 -3px 0 var(--r-blue); }
   .dl-t { font-weight: 700; color: #3a4047; }
-  .dl-c { color: var(--gold-dk); font-weight: 700; }
+  .dl-c { color: #5f490c; font-weight: 700; }
   .dl-item .progress { background: rgb(0 0 0 / .14); }
 
   /* ── profiles ── */

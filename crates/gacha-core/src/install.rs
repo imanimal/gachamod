@@ -71,6 +71,12 @@ pub struct InstallOutcome {
     /// The file was a bundle of separate mods, each installed on its own (not variants of one mod).
     #[serde(default)]
     pub bundle: bool,
+    /// A folder outside the mod's own that got files (ShaderFixes, Mods/BufferValues), for a button that shows it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shader_fixes: Option<String>,
+    /// gachamod didn't know where the files go and put them in Mods as they came: why, for the Downloads row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unsure: Option<String>,
 }
 
 /// What an install is doing, for the Downloads list: the step ("Unpacking Lucia-Velvet v1.0.zip (3 of 18)"), how far
@@ -141,7 +147,9 @@ fn skipped(name: &str) -> bool {
 }
 
 fn is_mod_ini(p: &Path) -> bool {
-    ext_of(p) == "ini" && !name_of(p).eq_ignore_ascii_case("desktop.ini") && p.is_file()
+    let n = name_of(p);
+    // the loader's own inis make a copy of the loader, not a mod
+    ext_of(p) == "ini" && !["desktop.ini", "d3dx.ini", "d3dx_user.ini"].iter().any(|x| n.eq_ignore_ascii_case(x)) && p.is_file()
 }
 
 fn is_image(p: &Path) -> bool { IMAGE_EXT.contains(&ext_of(p).as_str()) && p.is_file() }
@@ -496,9 +504,139 @@ fn entry_for(game: &str, mods_dir: &Path, dir: &Path, sc: &Sidecar) -> ModEntry 
 /// keys; empty means "all when there is one, else ask" (returns `needs_choice`). The staging folder is removed in
 /// every outcome except `needs_choice`.
 pub fn place(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
-    let r = place_inner(db, data_dir, game, staging, meta, choose);
+    // files with a fixed place go in on the first call only: a second one answers a choice from the same files
+    let r = if choose.is_empty() { place_first(db, data_dir, game, staging, meta) } else { place_inner(db, data_dir, game, staging, meta, choose) };
     if !matches!(&r, Ok(o) if o.needs_choice.is_some()) { let _ = fs::remove_dir_all(staging); }
     r
+}
+
+/// A folder whose files have one fixed place outside a mod's own folder: the loader's ShaderFixes, or
+/// Mods/BufferValues, where shared fixes like LeoTools' FixDash.ini go.
+struct FixedPlace { folder: &'static str, in_mods: bool, one: &'static str, many: &'static str }
+const FIXED_PLACES: &[FixedPlace] = &[
+    FixedPlace { folder: "ShaderFixes", in_mods: false, one: "shader fix", many: "shader fixes" },
+    FixedPlace { folder: "BufferValues", in_mods: true, one: "BufferValues file", many: "BufferValues files" },
+];
+
+/// Loader files a mod can't replace from inside Mods. gachamod never swaps them itself.
+const LOADER_FILES: &[&str] = &["d3d11.dll", "d3dx.ini", "d3dx_user.ini", "d3dcompiler_47.dll", "nvapi64.dll"];
+
+/// The first `place` call: files with a fixed place go there, then the mods. Files nothing says where to put go in
+/// Mods as they came, marked so the library lists them, and the outcome says so (`unsure`).
+fn place_first(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta) -> Result<InstallOutcome> {
+    let name = meta.name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "the mod".into());
+    let mut notes = Vec::new();
+    let mut shown = None;
+    for p in FIXED_PLACES {
+        let (files, folders) = fixed_files(staging, p.folder);
+        if files.is_empty() { continue; }
+        let (note, dir) = add_fixed(db, game, &name, p, &files)?;
+        notes.push(note);
+        shown.get_or_insert(dir);
+        for f in folders { let _ = fs::remove_dir_all(f); }
+    }
+    let no_mod = find_roots(staging)?.is_empty();
+    if no_mod {
+        let loose: Vec<(PathBuf, String)> = all_files(staging).into_iter().filter(|f| is_shader_name(&name_of(f))).map(|f| { let n = name_of(&f); (f, n) }).collect();
+        if !loose.is_empty() {
+            let (note, dir) = add_fixed(db, game, &name, &FIXED_PLACES[0], &loose)?;
+            notes.push(note);
+            shown.get_or_insert(dir);
+            for (f, _) in &loose { let _ = fs::remove_file(f); }
+        }
+    }
+    let mut unsure = None;
+    if no_mod {
+        let left: Vec<PathBuf> = all_files(staging).into_iter().filter(|f| !is_side_file(staging, f)).collect();
+        if left.is_empty() && shown.is_some() {
+            return Ok(InstallOutcome { notes, shader_fixes: shown, ..Default::default() });
+        }
+        if !left.is_empty() {
+            let kids = child_dirs(staging);
+            let root_files = entries(staging).into_iter().any(|e| e.is_file() && !is_side_file(staging, &e));
+            let home = if kids.len() == 1 && !root_files { kids[0].clone() } else { staging.to_path_buf() };
+            fs::write(home.join(crate::model::SIDECAR_FILE), serde_json::to_string(&Sidecar::default())?)?;
+            let loader: Vec<String> = left.iter().map(|f| name_of(f)).filter(|n| LOADER_FILES.iter().any(|l| n.eq_ignore_ascii_case(l))).collect();
+            unsure = Some(if loader.is_empty() {
+                "gachamod didn't know where these files go, so it put them in Mods as they came. The mod may not work until they're moved. Its GameBanana page says where".to_string()
+            } else {
+                format!("It has {}, which replaces part of the mod loader. gachamod doesn't swap loader files, so it put everything in Mods as it came. Its GameBanana page says what to do", loader.join(", "))
+            });
+        }
+    }
+    let mut o = place_inner(db, data_dir, game, staging, meta, &[])?;
+    if o.needs_choice.is_none() {
+        if let Some(u) = &unsure { notes.push(u.clone()); }
+        o.notes.extend(notes);
+        o.unsure = unsure;
+    }
+    o.shader_fixes = shown;
+    Ok(o)
+}
+
+fn all_files(dir: &Path) -> Vec<PathBuf> {
+    walkdir::WalkDir::new(dir).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path()).collect()
+}
+
+/// A file that comes with a mod but isn't part of it: a readme, a picture, gachamod's own staging notes.
+fn is_side_file(staging: &Path, f: &Path) -> bool {
+    let n = name_of(f).to_ascii_lowercase();
+    let in_skipped = rel_key(staging, f).split('/').any(skipped);
+    let doc = ["txt", "md", "pdf", "url", "html", "htm", "rtf", "docx"].contains(&ext_of(f).as_str()) && !is_shader_name(&n);
+    in_skipped || n.starts_with(".gachamod") || IMAGE_EXT.contains(&ext_of(f).as_str()) || doc
+}
+
+/// A shader replacement file the loader reads from ShaderFixes: `001acf466fe5dd61-ps_replace.txt` and the like.
+fn is_shader_name(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    let Some((hash, rest)) = n.split_once('-') else { return false };
+    hash.len() == 16 && hash.chars().all(|c| c.is_ascii_hexdigit())
+        && ["vs", "ps", "cs", "gs", "hs", "ds"].iter().any(|k| rest.starts_with(k))
+        && [".txt", ".bin", ".hlsl"].iter().any(|e| rest.ends_with(e))
+}
+
+/// Files inside folders named `folder` anywhere in the archive, as (file, path inside that folder), and the folders.
+fn fixed_files(staging: &Path, folder: &str) -> (Vec<(PathBuf, String)>, Vec<PathBuf>) {
+    let mut folders: Vec<PathBuf> = Vec::new();
+    let files = all_files(staging).into_iter().filter_map(|f| {
+        let rel = rel_key(staging, &f);
+        let parts: Vec<&str> = rel.split('/').collect();
+        let i = parts.iter().position(|p| p.eq_ignore_ascii_case(folder))?;
+        if i + 1 >= parts.len() { return None; }
+        let top = staging.join(parts[..=i].join("/"));
+        if !folders.contains(&top) { folders.push(top); }
+        Some((f, parts[i + 1..].join("/")))
+    }).collect();
+    (files, folders)
+}
+
+/// Copy files into a fixed place. Files there that would change are backed up first, and the backup lists the new
+/// ones as created, so restoring it takes the whole install back out. Returns the note for the toast and the folder.
+fn add_fixed(db: &crate::db::Shared, game: &str, name: &str, place: &FixedPlace, files: &[(PathBuf, String)]) -> Result<(String, String)> {
+    let d = lock(db)?;
+    let dir = if place.in_mods { crate::games::mods_dir(&d, game)? } else { crate::games::importer_dir(&d, game)? }.join(place.folder);
+    fs::create_dir_all(&dir)?;
+    let same = |src: &Path, dst: &Path| fs::read(dst).ok().is_some_and(|b| fs::read(src).ok().is_some_and(|a| a == b));
+    let todo: Vec<&(PathBuf, String)> = files.iter().filter(|(src, rel)| !same(src, &dir.join(rel))).collect();
+    if !todo.is_empty() {
+        let rels: Vec<String> = todo.iter().map(|(_, r)| r.clone()).collect();
+        crate::backups::take(&d, game, &place.folder.to_ascii_lowercase(), &dir, &rels, &format!("Added {name}'s {}", place.many))?;
+    }
+    drop(d);
+    for (src, rel) in &todo {
+        let dst = crate::backups::inside(&dir, rel)?;
+        if let Some(p) = dst.parent() { fs::create_dir_all(p)?; }
+        fs::copy(src, &dst)?;
+    }
+    // a shader comes as a .txt and a .bin of the same hash: count it once
+    let count: std::collections::HashSet<String> = files.iter().map(|(_, rel)| {
+        let f = rel.rsplit('/').next().unwrap_or(rel).to_ascii_lowercase();
+        if is_shader_name(&f) { f[..16].to_string() } else { f }
+    }).collect();
+    let what = if count.len() == 1 { format!("1 {}", place.one) } else { format!("{} {}", count.len(), place.many) };
+    let note = if todo.is_empty() { format!("Its {what} were already in the {} folder", place.folder) }
+        else { format!("Added {what} to the {} folder. Restart the game to load them", place.folder) };
+    Ok((note, dir.to_string_lossy().into_owned()))
 }
 
 fn lock(db: &crate::db::Shared) -> Result<std::sync::MutexGuard<'_, crate::db::Db>> {
@@ -667,14 +805,36 @@ fn place_bundle(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &P
     }
 }
 
+/// The archive folders an update installs without asking: the one the installed copy came from, or the folders its
+/// parts are named after. None when the archive no longer has all of them, so the user picks.
+fn same_parts(d: &crate::db::Db, game: &str, id: &str, all: &[Candidate]) -> Option<Vec<String>> {
+    let old = crate::library::get(d, game, id).ok()?;
+    if let Some(v) = crate::library::read_sidecar(Path::new(&old.path)).and_then(|s| s.variant) {
+        return all.iter().any(|c| c.key == v).then(|| vec![v]);
+    }
+    let parts = crate::library::parts_in(Path::new(&old.path));
+    if parts.is_empty() { return None; }
+    let keys: Vec<String> = all.iter()
+        .filter(|c| parts.iter().any(|p| sanitize_name(&c.label).eq_ignore_ascii_case(&p.name)))
+        .map(|c| c.key.clone()).collect();
+    let every = parts.iter().all(|p| all.iter().any(|c| sanitize_name(&c.label).eq_ignore_ascii_case(&p.name)));
+    (every && keys.len() == parts.len()).then_some(keys)
+}
+
 fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Path, meta: &InstallMeta, choose: &[String]) -> Result<InstallOutcome> {
     let all = find_roots(staging)?;
     let nested = read_nested(staging);
     if all.is_empty() {
-        let mut msg = "No mod found inside. A mod is a folder with at least one .ini file in it".to_string();
+        let mut msg = "Nothing inside goes in the Mods folder (it has no .ini file). Its GameBanana page says where the files go".to_string();
         if !nested.broken.is_empty() { msg = format!("No mod found inside. Couldn't open {}", nested.broken.join(", ")); }
         return Err(Error::Invalid(msg));
     }
+    // an update keeps the parts already installed, without asking, while the archive still has them
+    let kept = match meta.replaces.as_deref() {
+        Some(id) if choose.is_empty() && meta.setups.is_empty() && all.len() > 1 => { let d = lock(db)?; same_parts(&d, game, id, &all) }
+        _ => None,
+    };
+    let choose = kept.as_deref().unwrap_or(choose);
     // a bundle of separate mods installs each on its own, without asking
     if choose.is_empty() && meta.setups.is_empty() && meta.replaces.is_none() && all.len() > 1 {
         let groups = { let d = lock(db)?; bundle_groups(&d, game, &all, &nested) };
@@ -866,7 +1026,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     }
     crate::devtools::mark_changed(game);
     for b in &nested.broken { notes.push(format!("Couldn't open {b}, so it was left out")); }
-    Ok(InstallOutcome { installed, needs_choice: None, notes, bundle: false })
+    Ok(InstallOutcome { installed, needs_choice: None, notes, ..Default::default() })
 }
 
 /// Install archives or folders right away, without the queue (the app itself queues local installs so they get
@@ -880,7 +1040,7 @@ pub fn install_local(db: &crate::db::Shared, data_dir: &Path, game: &str, paths:
         let o = place(db, data_dir, game, &staging, &meta, choose)?;
         if o.needs_choice.is_some() {
             let _ = fs::remove_dir_all(&staging);
-            return Ok(InstallOutcome { needs_choice: o.needs_choice, installed: out.installed, notes: out.notes, bundle: false });
+            return Ok(InstallOutcome { needs_choice: o.needs_choice, installed: out.installed, notes: out.notes, ..Default::default() });
         }
         out.installed.extend(o.installed);
         out.notes.extend(o.notes);
@@ -982,6 +1142,23 @@ mod tests {
         assert!(keys(&t).is_empty());
         t.file("Real/real.ini", "[x]");
         assert_eq!(keys(&t), [("Real".to_string(), "Real".to_string())]);
+    }
+
+    #[test]
+    fn shader_fixes_are_found() {
+        let t = Tmp::new("shaders");
+        t.file("README.txt", "x");
+        t.file("ShaderFixes/001acf466fe5dd61-ps_replace.txt", "x");
+        t.file("ShaderFixes/001acf466fe5dd61-ps_replace.bin", "x");
+        let (files, folders) = fixed_files(&t.0, "ShaderFixes");
+        let mut f: Vec<String> = files.into_iter().map(|(_, r)| r).collect();
+        f.sort();
+        assert_eq!(f, ["001acf466fe5dd61-ps_replace.bin", "001acf466fe5dd61-ps_replace.txt"]);
+        assert_eq!(folders, [t.0.join("ShaderFixes")]);
+        assert!(is_shader_name("075ae3614d1f9c46-vs_replace.txt"));
+        assert!(!is_shader_name("readme.txt"));
+        assert!(is_side_file(&t.0, &t.0.join("README.txt")));
+        assert!(!is_side_file(&t.0, &t.0.join("tool.dll")));
     }
 
     #[test]
@@ -1107,9 +1284,49 @@ mod tests {
     }
 
     fn test_db(mods: &Path) -> crate::db::Shared {
+        // a saved Mods folder that isn't on disk is an error now, so the test makes it like setup would
+        fs::create_dir_all(mods).unwrap();
         let db = crate::db::Db::memory().unwrap();
         crate::games::save_paths(&db, "zzz", &crate::games::GamePaths { mods_dir: Some(mods.to_string_lossy().into_owned()), ..Default::default() }).unwrap();
         std::sync::Arc::new(std::sync::Mutex::new(db))
+    }
+
+    #[test]
+    fn files_without_an_ini_still_install() {
+        let t = Tmp::new("noini");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let meta = InstallMeta { name: Some("Remover".into()), ..Default::default() };
+
+        // shader fixes only: they go to the loader's ShaderFixes, nothing lands in Mods
+        let staging = new_staging(&data).unwrap();
+        fs::create_dir_all(staging.join("ShaderFixes")).unwrap();
+        fs::write(staging.join("README.txt"), "x").unwrap();
+        fs::write(staging.join("ShaderFixes/001acf466fe5dd61-ps_replace.txt"), "a").unwrap();
+        fs::write(staging.join("ShaderFixes/001acf466fe5dd61-ps_replace.bin"), "b").unwrap();
+        let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        assert!(o.installed.is_empty() && o.unsure.is_none());
+        assert!(t.0.join("ShaderFixes/001acf466fe5dd61-ps_replace.bin").is_file());
+        assert!(o.notes[0].starts_with("Added 1 shader fix"));
+
+        // BufferValues files go to Mods/BufferValues
+        let staging = new_staging(&data).unwrap();
+        fs::create_dir_all(staging.join("Fix/BufferValues")).unwrap();
+        fs::write(staging.join("Fix/BufferValues/FixDash.ini"), "[x]").unwrap();
+        let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        assert!(mods.join("BufferValues/FixDash.ini").is_file());
+        assert!(o.installed.is_empty());
+
+        // nothing says where these go: Mods, as they came, listed, and flagged
+        let staging = new_staging(&data).unwrap();
+        fs::create_dir_all(staging.join("Tool")).unwrap();
+        fs::write(staging.join("Tool/d3d11.dll"), "x").unwrap();
+        fs::write(staging.join("Tool/readme.txt"), "x").unwrap();
+        let o = place(&db, &data, "zzz", &staging, &meta, &[]).unwrap();
+        assert_eq!(o.installed.len(), 1);
+        assert!(o.unsure.as_deref().is_some_and(|u| u.contains("d3d11.dll")));
+        assert!(Path::new(&o.installed[0].path).join("d3d11.dll").is_file());
     }
 
     #[test]
@@ -1171,6 +1388,47 @@ hash = {hash}
         assert!(dir.join("DISABLED Icon/a.ini").is_file());
         assert_eq!(e.ini_count, 2);
         assert!(!e.enabled);
+    }
+
+    #[test]
+    fn update_keeps_the_installed_parts() {
+        let t = Tmp::new("updparts");
+        let mods = t.0.join("Mods");
+        let data = t.0.join("data");
+        let db = test_db(&mods);
+        let meta = InstallMeta { name: Some("Coca Cola".into()), character: Some("Ellen Joe".into()), ..Default::default() };
+        let stage = |names: &[&str]| {
+            let s = new_staging(&data).unwrap();
+            for (i, v) in names.iter().enumerate() {
+                fs::create_dir_all(s.join(v)).unwrap();
+                fs::write(s.join(v).join("a.ini"), format!("[TextureOverride{v}]\nhash = {i:08}\n")).unwrap();
+            }
+            s
+        };
+        let pick = |s: &Path, m: &InstallMeta, want: &[&str]| {
+            let c = place(&db, &data, "zzz", s, m, &[]).unwrap().needs_choice.unwrap();
+            let keys: Vec<String> = c.iter().filter(|c| want.contains(&c.label.as_str())).map(|c| c.key.clone()).collect();
+            place(&db, &data, "zzz", s, m, &keys).unwrap().installed.remove(0)
+        };
+
+        // two of three parts as one mod: the update brings the same two, no question
+        let one = pick(&stage(&["Red", "Blue", "Icon"]), &meta, &["Red", "Icon"]);
+        let upd = InstallMeta { replaces: Some(one.id.clone()), ..meta.clone() };
+        let o = place(&db, &data, "zzz", &stage(&["Red", "Blue", "Icon"]), &upd, &[]).unwrap();
+        assert!(o.needs_choice.is_none());
+        let names: Vec<String> = { let d = db.lock().unwrap(); crate::library::parts(&d, "zzz", &one.id).unwrap().into_iter().map(|p| p.name).collect() };
+        assert_eq!(names, ["Icon", "Red"]);
+        // a part gone from the archive: asks again
+        let upd = InstallMeta { replaces: Some(one.id.clone()), ..meta.clone() };
+        assert!(place(&db, &data, "zzz", &stage(&["Blue", "Icon", "Green"]), &upd, &[]).unwrap().needs_choice.is_some());
+
+        // one picked folder: the update takes the same folder
+        let single = pick(&stage(&["Red", "Blue"]), &meta, &["Blue"]);
+        let upd = InstallMeta { replaces: Some(single.id.clone()), ..meta.clone() };
+        let o = place(&db, &data, "zzz", &stage(&["Red", "Blue"]), &upd, &[]).unwrap();
+        assert!(o.needs_choice.is_none());
+        let sc = crate::library::read_sidecar(Path::new(&o.installed[0].path)).unwrap();
+        assert_eq!(sc.variant.as_deref(), Some("Blue"));
     }
 
     #[test]

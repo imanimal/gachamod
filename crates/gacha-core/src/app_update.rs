@@ -8,8 +8,19 @@ use std::cmp::Ordering;
 
 /// The repo whose releases carry gachamod's installers.
 pub const REPO: &str = "imanimal/gachamod";
-/// The setting that turns automatic updates off ("0").
+/// The setting for automatic updates: "1" (or unset) downloads and installs them, "tell" only says a new version is
+/// out, "0" never looks by itself.
 pub const SETTING: &str = "app.updateCheck";
+
+/// What gachamod does about its own updates by itself, from the `SETTING` value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutoMode { Install, Tell, Off }
+
+impl AutoMode {
+    pub fn from_setting(v: Option<&str>) -> Self {
+        match v { Some("0") => Self::Off, Some("tell") => Self::Tell, _ => Self::Install }
+    }
+}
 
 // ── versions ──
 

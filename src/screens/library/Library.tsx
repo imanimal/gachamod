@@ -1,29 +1,32 @@
 // Mods: the current game's library (Installed) and the mods removed from it (Trash). Installed has one row of search,
 // All/On/Off, sort and layout, then one scrolling row of filters: Updates, Favourites and Problems when there are any,
 // then types and characters. Then the shared mod grid with selection and its bulk bar. Only sort and layout are kept;
-// the filters reset when the page is left, so My Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
+// the filters reset when the page is left, so Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
 // a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { errorText, library, settings, type ModEntry } from "../../lib/api";
+import { errorText, library, settings, type GameState, type ModEntry } from "../../lib/api";
+import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/setup";
 import { checkUpdates } from "../../lib/gamebanana";
 import { useModHealth } from "../../lib/fixes";
+import { holdOn, useHolds } from "../../lib/holds";
 import { usePortraitBatch, portraitNow, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
-import { consumeRoute, go, patchRoute, setBadge, useGame, useRoute } from "../../lib/store";
+import { consumeRoute, go, patchRoute, recountMods, useGame, useRoute } from "../../lib/store";
 import { openPalette } from "../../shell/state";
-import { menuFor, menuHandler } from "../../ui/ContextMenu";
+import { menuFor, menuHandler, type MenuEntry } from "../../ui/ContextMenu";
+import { withoutKeys } from "../../lib/menuHints";
 import { Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { shuffleOutfits } from "./shuffle";
+import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "./shuffle";
 import { useBackendRoster } from "../characters/roster";
-import { reveal, rowKeys, useSideScroll } from "../browse/sideScroll";
+import { reveal, rowKeys, useRovingTab, useSideScroll } from "../browse/sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { Archive } from "./Archive";
-import { useMods } from "./data";
+import { useMods, type ModsError } from "./data";
 import { LIB_KINDS, libKind, type LibKind } from "./kinds";
 import { ModDrawerHost } from "./ModDrawer";
 import { ModGrid } from "./ModGrid";
-import "./menus";
+import { getUpdates } from "./menus";
 import "./library.css";
 
 type Show = "all" | "on" | "off";
@@ -32,6 +35,22 @@ type Sort = "added" | "name" | "character" | "size";
 interface Prefs { sort: Sort; view: "grid" | "list" }
 const DEFAULT_PREFS: Prefs = { sort: "added", view: "grid" };
 const UPDATE_EVERY = 30 * 60 * 1000;
+
+// right-click on Shuffle: when it shuffles by itself, the same choice as in Settings
+const SHUFFLE_WHEN: Array<[ShuffleWhen, string, string]> = [
+  ["off", "Only when I click Shuffle", "Stopped shuffling outfits"],
+  ["play", "At each Play", "Shuffling outfits at each Play"],
+  ["day", "Once a day", "Shuffling outfits once a day"],
+];
+const shuffleMenu = (): MenuEntry[] => {
+  const cur = shuffleWhenPref.get();
+  return [
+    { header: "Shuffle outfits" },
+    ...SHUFFLE_WHEN.map(([v, label, done]): MenuEntry => ({ label, checked: cur === v, onClick: () => void shuffleWhenPref.set(v, done) })),
+    "-",
+    { label: "Shuffle settings", icon: "settings", onClick: () => go({ view: "settings", section: "set-shuffle" }) },
+  ];
+};
 
 function loadPrefs(game: string): Prefs {
   try {
@@ -45,12 +64,16 @@ export function Library() {
   const game = useGame()!;
   const gid = game.id;
   const route = useRoute();
-  const { mods, setMods, loaded, scanning, rescan } = useMods(gid);
+  const { mods, setMods, loaded, error, scanning, rescan } = useMods(gid, { showsErrors: true });
   const tab = route.tab === "archive" ? "archive" : "installed";
+  // the Mods folder came back (found by the setup watch, picked in Settings): read it again by itself
+  const found = !!game.modsDir && !game.modsMissing;
+  const notSetUp = error?.kind === "not_set_up";
+  useEffect(() => { if (found && notSetUp) void rescan(true); }, [found, notSetUp, game.modsDir, rescan]);
   return (
     <div className="page library">
       {tab === "installed"
-        ? <Installed gid={gid} gameName={game.name} mods={mods} setMods={setMods} loaded={loaded} scanning={scanning} rescan={rescan} />
+        ? <Installed gid={gid} game={game} mods={mods} setMods={setMods} loaded={loaded} error={error} scanning={scanning} rescan={rescan} />
         : <Archive game={gid} tabs={<LibTabs tab={tab} />} />}
       <ModDrawerHost game={gid} mods={mods} loaded={loaded} />
     </div>
@@ -69,10 +92,13 @@ function LibTabs({ tab }: { tab: "installed" | "archive" }) {
   );
 }
 
-function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
-  gid: string; gameName: string; mods: ModEntry[]; setMods: ReturnType<typeof useMods>["setMods"]; loaded: boolean; scanning: boolean; rescan: (quiet?: boolean) => Promise<void>;
+function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan }: {
+  gid: string; game: GameState; mods: ModEntry[]; setMods: ReturnType<typeof useMods>["setMods"]; loaded: boolean; error: ModsError | null;
+  scanning: boolean; rescan: (quiet?: boolean) => Promise<void>;
 }) {
+  const gameName = game.name;
   const route = useRoute();
+  const setup = useSetup();
   const nsfw = useNsfw();
   const health = useModHealth(gid);
   const roster = useBackendRoster(gid);
@@ -99,6 +125,11 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
 
   // a route's search fills the box once
   useEffect(() => { if (route.search) { setSearch(route.search); consumeRoute(["search"]); } }, [route.search]);
+  // and a route's filter chip ("View updates" on the update check's toast)
+  useEffect(() => {
+    const f = route.flag;
+    if (f === "updates" || f === "favourites" || f === "problems") { setFlag(f); consumeRoute(["flag"]); }
+  }, [route.flag]);
 
   // update check: on open and every 30 minutes while open
   useEffect(() => {
@@ -113,7 +144,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
         if (!live) return;
         const want = new Set(ids);
         setMods((l) => l.map((m) => (m.updateAvailable === want.has(m.id) ? m : { ...m, updateAvailable: want.has(m.id) })));
-        setBadge("library", ids.length ? { count: ids.length, tone: "accent" } : null);
+        recountMods(gid);
       } catch { /* offline: try again next time */ }
     };
     void run();
@@ -140,7 +171,11 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
   const kinds = useMemo(() => new Map(mods.filter((m) => !m.character).map((m) => [m.id, libKind(m)])), [mods]);
   const kindRow = useMemo(() => LIB_KINDS.map((k) => ({ ...k, n: [...kinds.values()].filter((v) => v === k.value).length })).filter((k) => k.n > 0), [kinds]);
 
-  const isProblem = useCallback((m: ModEntry) => m.conflicts > 0 || m.iniCount === 0 || health.get(m.id)?.status === "broken" || health.get(m.id)?.status === "unfixable", [health]);
+  const holds = useHolds(gid);
+  // a mod whose problems were set aside leaves the filter: ignored ones for good, ones waiting for an update for
+  // their game update warnings (health leaves them out already)
+  const isProblem = useCallback((m: ModEntry) => holdOn(holds, m)?.kind !== "ignore"
+    && (m.conflicts > 0 || m.iniCount === 0 || health.get(m.id)?.status === "broken" || health.get(m.id)?.status === "unfixable"), [health, holds]);
   const counts = useMemo(() => ({
     all: mods.length, on: mods.filter((m) => m.enabled).length, off: mods.filter((m) => !m.enabled).length,
     updates: mods.filter((m) => m.updateAvailable).length, favourites: mods.filter((m) => m.favorite).length,
@@ -182,33 +217,69 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
 
   // shown only while there is something to show (or it is the filter that is on)
   const flagChips = ([
-    { id: "problems", label: "Problems", icon: "warn", title: "Mods that conflict with another mod that is on, have no .ini file, or were broken by a game update" },
+    { id: "problems", label: "Problems", icon: "warn", title: "Mods that conflict with another mod that is on, have no .ini file, or were broken by a game update. Right-click a mod to ignore its problems" },
     { id: "updates", label: "Updates", icon: "update", title: "Mods with a newer version on GameBanana" },
     { id: "favourites", label: "Favourites", icon: "star", title: "Mods you starred" },
   ] as const).filter((f) => counts[f.id] > 0 || flag === f.id);
+  const [updating, setUpdating] = useState(false);
+  const updateAll = async () => {
+    setUpdating(true);
+    try { await getUpdates(gid, mods.filter((m) => m.updateAvailable)); } finally { setUpdating(false); }
+  };
   const clearFilters = () => { setSearch(""); setShow("all"); setFlag(null); setCharacter(null); };
+
+  // the folder is missing, or nothing could be read and there is no list to fall back on
+  // the game's own state counts too, so a folder that went missing hides the old cards before any scan runs
+  const gameSaysMissing = !game.modsDir || !!game.modsMissing;
+  const notSetUp = error?.kind === "not_set_up" || gameSaysMissing;
+  const failed = notSetUp || (!!error && !mods.length);
+  const missingText = error?.kind === "not_set_up" ? error.text : game.modsDir
+    ? `${gameName} has no Mods folder there anymore. Pick it again, or install the mod loader again if it was removed`
+    : `${gameName} has no Mods folder yet. Install its mod loader or pick the folder`;
+  const loader = canInstallLoader(game);
+  const failure = !failed ? null : notSetUp ? (
+    <Empty icon="folder" title={game.modsDir ? "Mods folder not found" : "No Mods folder yet"}
+      actions={<>
+        <Button variant="primary" icon={loader ? "install" : "search"} busy={setup.running}
+          title={loader ? `Installs XXMI Launcher and ${game.short}'s mod loader, which makes the Mods folder` : `Looks for ${game.short}'s Mods folder again`}
+          onClick={() => void getReady(gid).then((ok) => { if (ok) void rescan(true); })}>
+          {loader ? "Install mod loader" : "Find Mods folder"}
+        </Button>
+        <Button icon="folder" title={`Pick ${game.short}'s Mods folder yourself`}
+          onClick={() => void pickModsFolder(gid).then((ok) => { if (ok) void rescan(true); })}>Pick folder</Button>
+      </>}>
+      {missingText}
+    </Empty>
+  ) : (
+    <Empty icon="warn" title="Couldn't read your mods"
+      actions={<Button icon="refresh" busy={scanning} onClick={() => void rescan(true)} title="Reads the Mods folder again">Try again</Button>}>
+      {error?.text}
+    </Empty>
+  );
 
   return (
     <>
-      <PageHeader title="My Mods" icon="mods"
-        sub={loaded ? `${mods.length === 1 ? "1 mod" : `${mods.length} mods`}, ${counts.on} on, ${formatBytes(size)}` : "Reading the Mods folder"}
+      <PageHeader title="Mods" icon="mods"
+        sub={failed ? undefined : loaded ? `${mods.length === 1 ? "1 mod" : `${mods.length} mods`}, ${counts.on} on, ${formatBytes(size)}` : "Reading the Mods folder"}
         actions={<>
           <LibTabs tab="installed" />
-          <SearchField value={search} onChange={setSearch} placeholder="Search name, character, tag, creator" className="library-search" />
+          <SearchField value={search} onChange={setSearch} placeholder="Search mods" className="library-search"
+            title="Finds mods by name, character, tag or creator. Arrow down or Enter goes to the first match"
+            onEnter={() => document.querySelector<HTMLElement>(".library .mod-grid .mod-card-hit")?.focus()} />
           <Segmented size="sm" label="Show" value={show} onChange={setShow}
             options={[
               { value: "all", label: "All", title: "Every mod" },
               { value: "on", label: "On", title: `Mods that are on (${counts.on})` },
               { value: "off", label: "Off", title: `Mods that are off (${counts.off})` },
             ]} />
-          <Select<Sort> value={prefs.sort} onChange={(v) => setPrefs({ sort: v })}
+          <Select<Sort> value={prefs.sort} onChange={(v) => setPrefs({ sort: v })} title="Sort mods"
             options={[{ value: "added", label: "Recently added" }, { value: "name", label: "Name" }, { value: "character", label: "Character" }, { value: "size", label: "Size" }]} />
           <Segmented size="sm" label="Layout" value={prefs.view} onChange={(v) => setPrefs({ view: v })}
             options={[{ value: "grid", label: "", icon: "grid", title: "Grid" }, { value: "list", label: "", icon: "list", title: "List" }]} />
           <IconButton icon="refresh" className={scanning ? "lib-scanning" : undefined} disabled={scanning} onClick={() => void rescan()}
-            label={scanning ? "Reading the Mods folder" : "Rescan: read the Mods folder again for changes made outside gachamod, then check every mod for updates on GameBanana. Opening this page only reads the folder"} />
-          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. It can also happen at each Play (Settings, Mods and downloads)"
-            onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} />
+            label={scanning ? "Reading the Mods folder" : "Rescan: read the Mods folder again for changes made outside gachamod, then check every mod for updates on GameBanana"} />
+          <IconButton icon="dice" label="Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. Right-click to shuffle at each Play"
+            onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} onContextMenu={menuHandler(shuffleMenu)} />
         </>}>
         {flagChips.length + kindRow.length + charRow.length > 0 && <CharRow count={flagChips.length + kindRow.length + charRow.length} deps={[flagChips.length, kindRow.length, charRow.length, character, kind, flag]}>
           {flagChips.map((f) => (
@@ -216,6 +287,10 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
               title={flag === f.id ? `${f.title}. Click again for every mod` : f.title}
               onClick={() => setFlag(flag === f.id ? null : f.id)}>{f.label}</Chip>
           ))}
+          {flag === "updates" && counts.updates > 0 && (
+            <Button size="sm" icon="downloads" className="lib-update-all" busy={updating} onClick={() => void updateAll()}
+              title="Download the newest version of every mod with an update">Update all ({counts.updates})</Button>
+          )}
           {flagChips.length > 0 && kindRow.length + charRow.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
           {kindRow.map((k) => (
             <Chip key={k.value} className="char-chip kind-chip" icon={k.icon} count={k.n} on={kind === k.value}
@@ -226,14 +301,15 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
           {charRow.map((c) => (
             <Chip key={c.name} className="char-chip" img={portraitNow(gid, c.name, icons.get(c.name.toLowerCase()) ?? null)} icon="user" count={c.n}
               on={character?.toLowerCase() === c.name.toLowerCase()} title={`Only ${c.name}'s mods. Right-click for more`}
-              onClick={() => setCharacter(character?.toLowerCase() === c.name.toLowerCase() ? null : c.name)}>
-              <span onContextMenu={menuHandler(() => menuFor("character", { game: gid, name: c.name }))}>{c.name}</span>
+              onClick={() => setCharacter(character?.toLowerCase() === c.name.toLowerCase() ? null : c.name)}
+              onContextMenu={menuHandler(() => withoutKeys(menuFor("character", { game: gid, name: c.name })))}>
+              {c.name}
             </Chip>
           ))}
         </CharRow>}
       </PageHeader>
 
-      <ModGrid game={gid} mods={shown} all={mods} setMods={setMods} view={prefs.view} loading={!loaded} icons={icons}
+      {failed ? failure : <ModGrid game={gid} mods={shown} all={mods} setMods={setMods} view={prefs.view} loading={!loaded} icons={icons}
         empty={!mods.length ? (
           <Empty icon="mods" title="No mods yet"
             actions={<>
@@ -252,7 +328,7 @@ function Installed({ gid, gameName, mods, setMods, loaded, scanning, rescan }: {
             </>}>
             {nsfw === "hide" && mods.some((m) => m.nsfw) ? "Mods for adults are hidden." : "Try another search or filter."}
           </Empty>
-        )} />
+        )} />}
     </>
   );
 }
@@ -263,6 +339,7 @@ function CharRow({ deps, count, children }: { deps: unknown[]; count: number; ch
   const ref = useRef<HTMLDivElement>(null);
   const [all, toggleAll] = useRowOpen("library.chips");
   const { left, right, page } = useSideScroll(ref, [...deps, all]);
+  useRovingTab(ref, ".chip");
   useEffect(() => {
     const el = ref.current, on = el?.querySelector<HTMLElement>(".chip.on");
     if (el && on) reveal(el, on, "center");

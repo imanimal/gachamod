@@ -119,6 +119,8 @@ const waiting: Array<() => void> = [];
 
 function abortError(): Error { return new DOMException("Aborted", "AbortError"); }
 export const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name === "AbortError";
+/** GameBanana answered 404: the page (a mod, a member) isn't there. */
+export const isNotFound = (e: unknown): boolean => e instanceof Error && (e as Error & { notFound?: boolean }).notFound === true;
 
 async function acquire(signal?: AbortSignal): Promise<void> {
   if (inFlight < 4) { inFlight++; return; }
@@ -160,7 +162,7 @@ async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
         throw new Error(OFFLINE);
       }
       if (r.status >= 500 && attempt === 0) { await pause(800, signal); continue; }
-      if (r.status === 404) throw new Error("GameBanana doesn't have that page. It may have been removed.");
+      if (r.status === 404) throw Object.assign(new Error("GameBanana doesn't have that page. It may have been removed."), { notFound: true });
       if (!r.ok) throw new Error(`GameBanana answered with an error (${r.status}). Try again in a minute.`);
       let body: unknown;
       try { body = await r.json(); } catch { throw new Error("GameBanana sent something gachamod couldn't read. Try again in a minute."); }
@@ -670,24 +672,19 @@ async function itemPage(model: GbModel, id: number, signal?: AbortSignal): Promi
   });
 }
 
-/** A mod's (or tool's) update posts, newest first. */
+/** A mod's (or tool's) update posts, newest first. Rejects when GameBanana can't be read. */
 export async function modUpdates(id: number, model: GbModel = "Mod"): Promise<GbUpdate[]> {
-  try {
-    return await cached(`updates:${model}:${id}`, MIN5, async () => {
-      const o = obj(await getJson(`${GB}/${model}/${id}/Updates?_nPage=1&_nPerpage=20`));
-      return arr(o?._aRecords).map((r): GbUpdate | null => {
-        const u = obj(r);
-        const uid = num(u?._idRow);
-        if (!u || uid === null) return null;
-        const changes = arr(u._aChangeLog).map(obj).filter((c): c is Json => !!c)
-          .map((c) => ({ cat: str(c.cat) ?? "", text: str(c.text) ?? "" })).filter((c) => c.text);
-        return { id: uid, name: str(u._sName) ?? "Update", version: str(u._sVersion), added: num(u._tsDateAdded) ?? 0, changes, text: str(u._sText) ?? "" };
-      }).filter((u): u is GbUpdate => !!u).sort((a, b) => b.added - a.added);
-    });
-  } catch (e) {
-    console.warn("GameBanana updates:", e);
-    return [];
-  }
+  return cached(`updates:${model}:${id}`, MIN5, async () => {
+    const o = obj(await getJson(`${GB}/${model}/${id}/Updates?_nPage=1&_nPerpage=20`));
+    return arr(o?._aRecords).map((r): GbUpdate | null => {
+      const u = obj(r);
+      const uid = num(u?._idRow);
+      if (!u || uid === null) return null;
+      const changes = arr(u._aChangeLog).map(obj).filter((c): c is Json => !!c)
+        .map((c) => ({ cat: str(c.cat) ?? "", text: str(c.text) ?? "" })).filter((c) => c.text);
+      return { id: uid, name: str(u._sName) ?? "Update", version: str(u._sVersion), added: num(u._tsDateAdded) ?? 0, changes, text: str(u._sText) ?? "" };
+    }).filter((u): u is GbUpdate => !!u).sort((a, b) => b.added - a.added);
+  });
 }
 
 export interface GbComment {
@@ -741,22 +738,39 @@ export async function characterList(game: GameId): Promise<GbCategoryRef[]> {
   return charsQuiet(charCatFor(game));
 }
 
-/** characterList as React state, updated when GameBanana adds a character. */
-export function useCharacterList(game: GameId | null | undefined): GbCategoryRef[] {
-  const [list, setList] = useState<GbCategoryRef[]>(() => {
-    const cat = game ? charCatFor(game) : null;
-    return (cat && charLive.get(cat)) || [];
-  });
+/** How long a filter waits for the character list before it searches for the name instead. */
+const CHAR_WAIT_MS = 4000;
+
+function charsNow(game: GameId | null | undefined): GbCategoryRef[] | null {
+  const cat = game ? charCatFor(game) : null;
+  if (!cat) return [];
+  const kept = charLive.get(cat) ?? storeRead<GbCategoryRef[]>(charKey(cat))?.value;
+  return kept?.length ? kept : null;
+}
+
+/** characterList as React state, updated when GameBanana adds a character. Null while the first list loads, for at
+ *  most a few seconds; then an empty list until it arrives. Games with no character category get [] at once. */
+export function useCharacterListOrNull(game: GameId | null | undefined): GbCategoryRef[] | null {
+  const [list, setList] = useState<GbCategoryRef[] | null>(() => charsNow(game));
   useEffect(() => {
-    if (!game) { setList([]); return; }
+    const now = charsNow(game);
+    setList(now);
+    if (!game || (now && !charCatFor(game))) return;
     let live = true;
+    const t = now ? 0 : window.setTimeout(() => { if (live) setList((l) => l ?? []); }, CHAR_WAIT_MS);
     const load = () => characterList(game).then((l) => { if (live) setList(l); });
     void load();
     const off = onCharacters((g) => { if (g === game) void load(); });
-    return () => { live = false; off(); };
+    return () => { live = false; window.clearTimeout(t); off(); };
   }, [game]);
   return list;
 }
+
+/** useCharacterListOrNull with an empty list while it loads. */
+export function useCharacterList(game: GameId | null | undefined): GbCategoryRef[] {
+  return useCharacterListOrNull(game) ?? EMPTY_CHARS;
+}
+const EMPTY_CHARS: GbCategoryRef[] = [];
 
 /** The game's top-level mod categories (Skins, UI, Other ...). */
 export async function categories(gbGameId: number): Promise<GbCategoryRef[]> {

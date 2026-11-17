@@ -53,18 +53,32 @@ function BotPicker({ value, onPick }: { value: ChatbotId | ""; onPick: (id: Chat
 
 // ── the helper window ──
 
+/** What was typed for each task, kept for the rest of the session so closing the helper (Esc, Close) loses nothing.
+ *  Keyed by the whole task, so an answer never lands on another game's or other mods' request. Cleared on Apply. */
+type Draft = { goal: string; text: string; reply: string; sent: boolean };
+const drafts = new Map<string, Draft>();
+
 function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   const def = TASKS[task.kind] ?? TASKS.custom!;
-  const [goal, setGoal] = useState(() => (def.goals?.some((g) => g.id === task.detail) ? task.detail! : def.defaultGoal ?? ""));
-  const [text, setText] = useState(() => (task.kind === "theme" || task.kind === "custom" ? task.detail ?? "" : ""));
+  const key = useMemo(() => JSON.stringify(task), [task]);
+  const [kept] = useState(() => drafts.get(key));
+  const [goal, setGoal] = useState(() => kept?.goal ?? (def.goals?.some((g) => g.id === task.detail) ? task.detail! : def.defaultGoal ?? ""));
+  const [text, setText] = useState(() => kept?.text ?? (task.kind === "theme" || task.kind === "custom" ? task.detail ?? "" : ""));
   const [built, setBuilt] = useState<Built | null>(null);
   const [buildErr, setBuildErr] = useState<string | null>(null);
-  const bot = chatbotPref.use();
-  const [reply, setReply] = useState("");
-  const [sent, setSent] = useState(false);
+  const saved = chatbotPref.use();
+  const installed = useInstalled();
+  // nothing picked yet: the chatbot found on this PC, saved once it's used
+  const bot: ChatbotId | "" = saved || installed[0] || "";
+  const [reply, setReply] = useState(kept?.reply ?? "");
+  const [sent, setSent] = useState(kept?.sent ?? false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string[] | null>(null);
   const replyBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (done) drafts.delete(key);
+    else drafts.set(key, { goal, text, reply, sent });
+  }, [key, goal, text, reply, sent, done]);
 
   const showText = !!def.text && (!def.text.forGoal || def.text.forGoal === goal);
   const needText = showText && def.text!.required && !text.trim();
@@ -88,6 +102,7 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
 
   const send = async (open: boolean) => {
     if (!built || needText) return;
+    if (!saved && bot) void chatbotPref.set(bot);
     let copied = true;
     try { await navigator.clipboard.writeText(built.prompt); } catch { copied = false; }
     const link = open && bot ? chatbotLink(bot, built.prompt) : null;

@@ -347,7 +347,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
           : compact ? undefined : `Toggles do nothing while ${who} isn't on screen`}
         onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? "Its toggles already work only while on screen" : "Nothing to take out")} />
       {showAi && (
-        <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of the mod draws the character, then apply its answer here. Takes a strong chatbot, like Claude Opus 5.5"
+        <Button size="sm" variant="ghost" icon="ai" title="Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot"
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>Ask the AI helper</Button>
       )}
     </div>
@@ -378,17 +378,18 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
                 ))}
               </span>
               <span className="ke-on" title={e.off ? "Turn this toggle back on" : "Turn this toggle off. The mod stays on, only this toggle stops working"}>
-                <Toggle size="sm" checked={!e.off} disabled={busy !== null}
+                <Toggle size="sm" checked={!e.off} disabled={busy !== null} ariaLabel={`${said ?? e.name} toggle`}
                   onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), "No change")} />
               </span>
             </li>
           );
         })}
       </ul>
+      <p className="ke-tip hint">Click a key to rebind it</p>
     </>
   );
 
-  const ours = keys.changed || onScreen === "on" || onScreen === "partial";
+  const ours =keys.changed || onScreen === "on" || onScreen === "partial";
   const reset = ours && (
     <Button size="sm" variant="ghost" icon="undo" busy={busy === "reset"} disabled={busy !== null && busy !== "reset"}
       title="Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before its first change. Undo brings the changes back"

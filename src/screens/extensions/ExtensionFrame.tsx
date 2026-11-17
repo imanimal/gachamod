@@ -4,12 +4,12 @@
 // controller through (lib/gamepad.ts setFrameNav). Owner: EXTENSIONS area.
 import { useEffect, useRef, useState } from "react";
 import { characters as charsApi, errorText, extensions as api, library, owned as ownedApi, settings, shell, type AppStatus, type GameId, type GameState, type InstalledExt } from "../../lib/api";
-import { usePageReloads } from "../../lib/extensions";
+import { setExtensionEnabled, usePageReloads } from "../../lib/extensions";
 import { accountState } from "../../lib/account";
 import { moveFocusFrom, setFrameNav } from "../../lib/gamepad";
 import { go, VIEWS, type Route, type View } from "../../lib/store";
 import { subscribeTheme, THEME_TOKENS } from "../../lib/theme";
-import { Button, Waiting } from "../../ui/kit";
+import { Button, Empty, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 
 export type ExtSlotName = "characterTab" | "page";
@@ -32,6 +32,9 @@ function themeNow() {
   return { scheme: document.documentElement.dataset.scheme === "light" ? "light" : "dark", vars };
 }
 
+/** How long a page has to say "ready" before it gets a way out. */
+const READY_MS = 10_000;
+
 // the controller moves into and out of extension frames through these
 setFrameNav((frame, msg) => { frame.contentWindow?.postMessage({ gachamod: 1, type: "pad", ...msg }, "*"); });
 
@@ -40,6 +43,8 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
   const [src, setSrc] = useState<{ url: string } | { html: string } | null>(null);
   const [height, setHeight] = useState(160);
   const [error, setError] = useState<string | null>(null);
+  const [stuck, setStuck] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const m = ext.manifest!;
   const entry = (slot === "page" ? m.page : m.characterTab)?.entry ?? "";
   const ctx = { extension: { id: ext.id, name: m.name, version: m.version }, slot, game: { id: game.id, name: game.name, short: game.short }, character: character ?? null };
@@ -52,10 +57,18 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
     let live = true;
     setError(null);
     setSrc(null);
+    setStuck(false);
     ready.current = false;
     api.pageSource(ext.id, entry).then((s) => { if (live) setSrc(s); }).catch((e) => { if (live) setError(errorText(e)); });
     return () => { live = false; };
-  }, [ext.id, entry, ext.manifest?.version, reloads]);
+  }, [ext.id, entry, ext.manifest?.version, reloads, attempt]);
+
+  // a page that never says "ready" gets a way out instead of a blank box
+  useEffect(() => {
+    if (!src) return;
+    const t = window.setTimeout(() => { if (!ready.current) setStuck(true); }, READY_MS);
+    return () => window.clearTimeout(t);
+  }, [src]);
 
   const send = (msg: object) => ref.current?.contentWindow?.postMessage({ gachamod: 1, ...msg }, "*");
 
@@ -69,7 +82,7 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
       if (!frame || e.source !== frame.contentWindow) return;
       const msg = e.data as { gachamod?: number; type?: string; id?: number; method?: string; params?: unknown; height?: number } & Record<string, unknown>;
       if (!msg || msg.gachamod !== 1) return;
-      if (msg.type === "ready") { ready.current = true; send({ type: "context", context: ctxRef.current, theme: themeNow() }); }
+      if (msg.type === "ready") { ready.current = true; setStuck(false); send({ type: "context", context: ctxRef.current, theme: themeNow() }); }
       else if (msg.type === "size" && typeof msg.height === "number") setHeight(Math.max(80, Math.min(msg.height, 20000)));
       else if (msg.type === "call" && typeof msg.id === "number") {
         const id = msg.id;
@@ -86,12 +99,32 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
     return () => { window.removeEventListener("message", h); };
   }, [ext, src]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <p className="hint ext-frame-err">{m.name} couldn't load its page: {error}</p>;
+  const way = (retry: string, retryTip: string) => (
+    <>
+      <Button icon="refresh" onClick={() => setAttempt((n) => n + 1)} title={retryTip}>{retry}</Button>
+      <Button icon="power" onClick={() => void setExtensionEnabled(ext, false)} title={`Turns ${m.name} off. Undo turns it back on`}>Turn off</Button>
+      {m.homepage && <Button icon="external" onClick={() => void shell.openUrl(m.homepage!)} title={m.homepage}>Author's page</Button>}
+    </>
+  );
+  if (error) {
+    return (
+      <Empty icon="puzzle" title={`${m.name} couldn't load its page`} actions={way("Try again", "Reads the page's files again")}>
+        {error}
+      </Empty>
+    );
+  }
   if (!src) return <Waiting className="ext-frame-wait" what={`Loading ${m.name}`} />;
   return (
-    <iframe ref={ref} className="ext-frame" data-ext={ext.id} title={`${m.name}: ${(slot === "page" ? m.page : m.characterTab)?.title ?? ""}`}
-      sandbox="allow-scripts" referrerPolicy="no-referrer" allow=""
-      style={{ height }} {...("url" in src ? { src: src.url } : { srcDoc: src.html })} />
+    <>
+      {stuck && (
+        <Empty icon="puzzle" title={`${m.name} isn't answering`} actions={way("Reload page", "Starts the page again")}>
+          Its page hasn't started after 10 seconds. It may be waiting on a site that's down, or it has a fault its author can fix.
+        </Empty>
+      )}
+      <iframe ref={ref} className="ext-frame" data-ext={ext.id} title={`${m.name}: ${(slot === "page" ? m.page : m.characterTab)?.title ?? ""}`}
+        sandbox="allow-scripts" referrerPolicy="no-referrer" allow=""
+        style={{ height, display: stuck ? "none" : undefined }} {...("url" in src ? { src: src.url } : { srcDoc: src.html })} />
+    </>
   );
 }
 

@@ -3,8 +3,8 @@
 // drilling. Owner: skeleton.
 import type { AiTask } from "./ai";
 import { useSyncExternalStore } from "react";
-import { games as gamesApi, type GameId, type GameState } from "./api";
-import { isMenuWindow } from "./tauri";
+import { games as gamesApi, library as libraryApi, type GameId, type GameState } from "./api";
+import { held, isMenuWindow } from "./tauri";
 
 type Sub = () => void;
 function store<T>(initial: T) {
@@ -94,6 +94,7 @@ export function setGame(id: GameId) {
 
 /** Replace the game list (after detect, a path change ...). Picks a current game when none is valid. */
 export function setGames(list: GameState[]) {
+  const loading = !gameList.get().length;
   gameList.set(list);
   const id = current.get();
   if (!id || !list.some((g) => g.id === id && g.shown)) {
@@ -104,6 +105,9 @@ export function setGames(list: GameState[]) {
       if (e) e.game = first.id;
     }
   }
+  // the backend's counts can be older than the library, so read the current game's mods once the list is in
+  const cur = current.get();
+  if (loading && cur && list.length) recountMods(cur);
 }
 
 export async function refreshGames(detect = false): Promise<GameState[]> {
@@ -115,6 +119,32 @@ export async function refreshGames(detect = false): Promise<GameState[]> {
 /** Patch one game in place (running state from an event, counts after a scan). */
 export function patchGame(id: GameId, patch: Partial<GameState>) {
   gameList.set(gameList.get().map((g) => (g.id === id ? { ...g, ...patch } : g)));
+}
+
+// ── each game's mod counts (the game card, the corner, the Mods badge), kept in step with its library ──
+
+const updateCounts = new Map<GameId, number>();
+function showUpdateBadge() {
+  const id = current.get();
+  const n = id ? updateCounts.get(id) ?? 0 : 0;
+  setBadge("library", n ? { count: n, tone: "accent" } : null);
+}
+/** Take a game's mod list as the truth for its counts: mods, mods on, and mods with an update. */
+export function noteMods(game: GameId, list: Array<{ enabled: boolean; updateAvailable: boolean }>) {
+  const g = gameList.get().find((x) => x.id === game);
+  const on = list.filter((m) => m.enabled).length;
+  if (g && (g.modCount !== list.length || g.enabledCount !== on)) patchGame(game, { modCount: list.length, enabledCount: on });
+  updateCounts.set(game, list.filter((m) => m.updateAvailable).length);
+  if (game === current.get()) showUpdateBadge();
+}
+const recountTimers = new Map<GameId, ReturnType<typeof setTimeout>>();
+/** Read a game's mods again for its counts, soon (a burst of changes reads once). */
+export function recountMods(game: GameId) {
+  clearTimeout(recountTimers.get(game));
+  recountTimers.set(game, setTimeout(() => {
+    recountTimers.delete(game);
+    libraryApi.list(game).then((l) => noteMods(game, l)).catch(() => { /* the next change tries again */ });
+  }, 200));
 }
 
 // ── pages, with back and forward ──
@@ -137,6 +167,8 @@ export interface Route {
   kind?: string;
   /** library and browse: start with this search text. */
   search?: string;
+  /** library: start with this filter chip on ("updates", "favourites", "problems"). */
+  flag?: string;
   /** settings and tools: scroll to the section with this id. */
   section?: string;
   /** browse: this GameBanana member's page (creator id). */
@@ -205,6 +237,12 @@ export const useNav = () => useSyncExternalStore(nav.sub, nav.get);
 export function go(to: Route | View) {
   const r = clean(typeof to === "string" ? { view: to } : to);
   push({ game: current.get(), route: r });
+}
+
+/** Go to a page of another game (a mod installed in that game's Mods), switching to it. */
+export function goIn(game: GameId, to: Route | View) {
+  const r = clean(typeof to === "string" ? { view: to } : to);
+  push({ game, route: r });
 }
 
 /** Change the current page without a new history step (a filter, a closed drawer). */
@@ -279,8 +317,11 @@ export function goIndex(index: number) {
 const badgeStore = store<Partial<Record<View, { count?: number; tone?: "accent" | "bad" | "run" }>>>({});
 export const useBadges = () => useSyncExternalStore(badgeStore.sub, badgeStore.get);
 export function setBadge(view: View, badge: { count?: number; tone?: "accent" | "bad" | "run" } | null) {
+  const now = badgeStore.get()[view];
+  const next = badge && (badge.count || badge.tone) ? badge : undefined;
+  if (now?.count === next?.count && now?.tone === next?.tone) return;
   const b = { ...badgeStore.get() };
-  if (badge && (badge.count || badge.tone)) b[view] = badge; else delete b[view];
+  if (next) b[view] = next; else delete b[view];
   badgeStore.set(b);
 }
 
@@ -306,4 +347,16 @@ export function onApp(cb: (e: AppEvent) => void): () => void {
   const h = (ev: Event) => cb((ev as CustomEvent<AppEvent>).detail);
   window.addEventListener("gm-app", h);
   return () => window.removeEventListener("gm-app", h);
+}
+
+// the counts follow the library: a game switch, a refresh asked for anywhere, or the backend saying it changed
+// (not in tests, which run without a window)
+if (typeof window !== "undefined") {
+  current.sub(() => {
+    showUpdateBadge();
+    const id = current.get();
+    if (id && gameList.get().length) recountMods(id);
+  });
+  onApp((e) => { if (e.type === "library-refresh") recountMods(e.game); });
+  held(libraryApi.onChanged((p) => recountMods(p.game)));
 }

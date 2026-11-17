@@ -1,43 +1,62 @@
 /* Downloads: the queue rows. Layout only; colours are theme tokens. */
 
-.dl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
-.dl-item { display: flex; align-items: center; gap: .9rem; padding: .6rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); }
-.dl-thumb { flex: none; display: grid; place-items: center; width: 4.5rem; aspect-ratio: 16 / 10; border-radius: var(--radius-xs); overflow: hidden; background: var(--img-bg); color: var(--text-3); }
+/* sections are a heading and a count over hairline-separated rows, like .list.lined; only a new failure gets a fill */
+.dl-sec-h { display: flex; align-items: baseline; gap: var(--s-2); margin: 0 0 var(--s-1); font-size: 1rem; font-weight: 700; }
+.dl-sec-n { color: var(--text-3); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--dl-gap, 0); }
+/* the hairline is part of the row's box-shadow, so a look that gives .dl-item its own shadow drops it */
+.dl-list > li { --dl-rule: 0px; }
+.dl-list > li + li { --dl-rule: 1px; }
+.dl-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-2) var(--s-3);
+  box-shadow: inset 0 var(--dl-rule) 0 var(--line), inset 2px 0 0 transparent, inset 0 0 0 100vmax transparent; transition: box-shadow .9s ease; }
+/* a failure or choice not looked at yet; fades once hovered, focused or seen */
+.dl-item.is-new { box-shadow: inset 0 var(--dl-rule) 0 var(--line), inset 2px 0 0 var(--accent), inset 0 0 0 100vmax var(--accent-soft); transition-duration: .15s; }
+/* game looks that draw each row as its own card keep space between them and no rule */
+:is([data-theme="ef"], [data-theme="gi"], [data-theme="hsr"], [data-theme="ww"]) .dl-list { --dl-gap: var(--s-2); }
+:is([data-theme="ef"], [data-theme="gi"], [data-theme="hsr"], [data-theme="ww"]) .dl-list > li { --dl-rule: 0px; }
+.dl-thumb { flex: none; display: grid; place-items: center; width: 4.5rem; aspect-ratio: 16 / 10; border-radius: var(--radius-sm); overflow: hidden; background: var(--img-bg); color: var(--text-3); }
 .dl-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.dl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .3rem; }
-.dl-name { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.dl-main { flex: 1 1 16rem; min-width: 0; display: flex; flex-direction: column; gap: var(--s-1); }
+.dl-name { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .dl-t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dl-c { color: var(--accent-ink); font-size: .86em; white-space: nowrap; }
 .dl-line { font-family: var(--font-num); overflow-wrap: anywhere; }
 .dl-bad { color: var(--bad); }
-.dl-act { flex: none; display: flex; align-items: center; gap: .35rem; }
+.dl-act { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+/* a narrow page puts the buttons under the text, lined up with it */
+@container view (max-width: 52rem) { .dl-act { flex-basis: 100%; padding-left: calc(4.5rem + var(--s-4)); } }
 .dl-item.is-done .dl-thumb, .dl-item.is-cancelled .dl-thumb { opacity: .75; }
 .dl-t-link { min-width: 0; text-align: left; }
 .dl-t-link:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
-.dl-group + .dl-group { margin-top: .9rem; }
-.dl-group-h { margin: 0 0 .4rem; font-size: .86em; font-weight: 700; color: var(--text-2); }
-.dl-elsewhere { text-align: center; margin-top: .6rem; }
+.dl-group + .dl-group { margin-top: var(--s-4); }
+.dl-group-h { margin: 0 0 var(--s-2); font-size: var(--t-small); font-weight: 700; color: var(--text-2); }
+.dl-elsewhere { text-align: center; margin-top: var(--s-2); }
 .dl-more { color: var(--accent-ink); font-weight: 600; }
 .dl-more:hover { text-decoration: underline; }
-.dl-mods { list-style: none; margin: .2rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .15rem .9rem; font-size: .86em; color: var(--text-3); }
-.dl-mods li { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.dl-mods { list-style: none; margin: var(--s-1) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: .15rem var(--s-4); font-size: var(--t-small); color: var(--text-3); }
+.dl-mods li { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .dl-mods li > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dl-mods li.is-in { color: var(--text-2); }
 .dl-mods li.is-now { color: var(--text); font-weight: 600; }
 .dl-mods .i { width: 12px; height: 12px; color: var(--ok); flex: none; }
 .dl-mods-dot { flex: none; width: 12px; display: grid; place-items: center; }
 .dl-mods-dot::before { content: ""; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
-.dl-mods-btn { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .5rem; border-radius: var(--radius-xs); color: var(--text-2); font-size: .86em; white-space: nowrap; }
+.dl-mods-btn { display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-1) var(--s-2); border-radius: var(--radius-xs); color: var(--text-2); font-size: var(--t-small); white-space: nowrap; }
 .dl-mods-btn:hover, .dl-mods-btn:focus-visible { color: var(--text); background: var(--surface-3); }
 .dl-mods-btn .i { width: 12px; height: 12px; transition: transform .12s; }
 .dl-mods-btn.open .i { transform: rotate(90deg); }
-.dl-installed { margin-top: .35rem; display: flex; flex-direction: column; gap: .35rem; }
-.dl-installed-bar { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-.dl-installed ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .2rem .9rem; }
-.dl-installed li { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.dl-installed { margin-top: var(--s-1); display: flex; flex-direction: column; gap: var(--s-1); }
+.dl-installed-bar { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.dl-installed ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: var(--s-1) var(--s-4); }
+.dl-installed li { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .dl-installed-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .dl-installed-name:hover, .dl-installed-name:focus-visible { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
-.dl-batch { display: flex; flex-direction: column; gap: .4rem; padding: .5rem; border-radius: var(--radius-sm); border: 1px solid var(--line-2); }
-.dl-batch-h { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; padding: 0 .2rem; }
+/* a batch: its heading, then its rows indented under it */
+.dl-batch { display: flex; flex-direction: column; gap: var(--s-1); padding-top: var(--s-2); box-shadow: inset 0 var(--dl-rule) 0 var(--line); }
+.dl-batch-h { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; padding: 0 var(--s-3); }
+.dl-batch > .dl-list { margin-left: var(--s-5); }
 .dl-batch-t { font-weight: 600; }
-.dl-batch-act { margin-left: auto; display: flex; align-items: center; gap: .35rem; }
+.dl-batch-act { margin-left: auto; display: flex; align-items: center; gap: var(--s-1); }
+/* rows take focus for the arrow keys (one Tab stop for the list) */
+.dl-item:focus { outline: none; }
+.dl-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

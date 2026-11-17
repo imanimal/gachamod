@@ -3,19 +3,21 @@
 // Zone Zero and Genshin Impact. Every game has it with the menu over the game; the menu the game draws is a tester
 // option outside those two, Star Rail and Honkai Impact 3rd (live.rs drawn_menu_open). Owner: INGAME area.
 import { useState } from "react";
-import { KEY_LIST_SHOWN, fileUrl, type GameId, type LiveGroup, type LiveMod, type MenuSettings } from "../../lib/api";
+import { fileUrl, type GameId, type LiveGroup, type LiveMod, type MenuSettings } from "../../lib/api";
 import { Badge, Button, Checkbox, IconButton, Panel, Segmented, Skeleton, Toggle } from "../../ui/kit";
 import { HotkeyField } from "../profiles/HotkeyField";
 import { KeyClashNote } from "./KeyClash";
 import { MenuKeys } from "./MenuKeys";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
-import { makeLive, pickLive, setAll, setMenu, stopLive, useLive } from "./data";
+import { makeLive, patchMenu, pickLive, reloadLive, setAll, setTester, stopLive, useLive, useLiveError } from "./data";
+import { useSetting } from "../settings/parts";
 import "./ingame.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { go, reloadKeyOf, useGames } from "../../lib/store";
 import { openGameCheck } from "../../lib/feedback";
 import { AdminRow } from "../settings/Feedback";
+import { menuHandler } from "../../ui/ContextMenu";
 
 
 export function InGamePanel({ game }: { game: GameId }) {
@@ -23,6 +25,16 @@ export function InGamePanel({ game }: { game: GameId }) {
   const name = useGames().find((g) => g.id === game)?.name ?? "this game";
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (key: string, job: () => Promise<unknown>) => { setBusy(key); try { await job(); } finally { setBusy(null); } };
+  const error = useLiveError(game);
+
+  if (error) {
+    return (
+      <Panel title="Switch skins in game" icon="swap">
+        <p className="hint row"><span>Couldn't read the game's skins: {error}</span>
+          <Button size="sm" icon="refresh" busy={busy === "retry"} onClick={() => void run("retry", () => reloadLive(game))} title="Read the game's skins again">Try again</Button></p>
+      </Panel>
+    );
+  }
 
   // one switch: on, every character's skins stay loaded and the menu key works; off, none of it shows
   const on = !!info?.all;
@@ -78,7 +90,7 @@ export function InGamePanel({ game }: { game: GameId }) {
 
 /** `drawn`: the game has the menu it draws itself (live.rs `allowed`). */
 const MENU_HINT: Record<MenuSettings["style"], (key: string, drawn: boolean) => string> = {
-  window: (key, drawn) => `Press ${key} while you play and gachamod's menu opens over the game, with previews, search and every character. When the game runs as administrator (Zenless Zone Zero does), gachamod has to as well. `
+  window: (key, drawn) => `Press ${key} while you play and gachamod's menu opens over the game, with previews, search and every character. `
     + (drawn ? `In exclusive fullscreen, or when gachamod can't hear the key, ${key} opens the plainer menu the game draws.` : "It needs borderless or windowed mode."),
   game: (key) => `Press ${key} while you play and the game draws a plain menu itself. Use this when you play in exclusive fullscreen. Borderless or windowed gets the better menu with Over the game.`,
 };
@@ -106,7 +118,10 @@ function Blocked({ game, menu, drawn }: { game: GameId; menu: MenuSettings; draw
  *  options, so it isn't marked as one. */
 function MenuOptions({ game, name, menu, blocked, drawn, checked }:
   { game: GameId; name: string; menu: MenuSettings; blocked: boolean; drawn: boolean; checked: boolean }) {
-  const set = (patch: Partial<MenuSettings>) => void setMenu(game, menu, { ...menu, ...patch });
+  // each change starts from the one before it, so quick changes don't put each other back
+  const set = (patch: Partial<MenuSettings>) => void patchMenu(game, menu, patch);
+  // otherkeys.rs ASK: the toasts that ask when another app has the key that opens the menu
+  const [ask, setAsk] = useSetting("otherKeys.ask", "1");
   return (
     <div className="live-menu">
       {drawn && (
@@ -121,16 +136,23 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
         </div>
       )}
       <div className="live-menu-row">
-        <HotkeyField label="Key that opens it" value={menu.key} bareF keep onChange={(key) => { if (key && key !== menu.key) set({ key }); }} />
+        <HotkeyField label="Key that opens it" value={menu.key} bareF keep reloadKey={reloadKeyOf(game)} reset="F7" onChange={(key) => { if (key && key !== menu.key) set({ key }); }} />
+        <Checkbox checked={ask !== "0"} onChange={(v) => setAsk(v ? "1" : "0")} label="Say when another app uses this key"
+          title="When Medal, OBS, Steam or another recorder listens for the key that opens the skin menu, gachamod says so and offers a free key. The note on this page shows either way" />
         <Checkbox checked={menu.pad} onChange={(pad) => set({ pad })} label="Use a controller in the menu"
           title="Both sticks pressed in open it, the D-pad moves, A shows a skin and B closes it. Menu keys changes the buttons" />
       </div>
-      <MenuKeys menu={menu} onChange={(binds) => set({ binds })} />
+      <MenuKeys menu={menu} onChange={(update, label) => void patchMenu(game, menu, (m) => ({ binds: update(m.binds) }), label)} />
       {drawn && <Checkbox checked={menu.fastSave} onChange={(fastSave) => set({ fastSave })} label="Show skins picked in the game right away"
         title="The game saves its values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in its own menu shows here at once. Starts after the game reloads its mods" />}
       <p className="hint">{MENU_HINT[menu.style](menu.key, drawn)} {blocked ? `Press ${reloadKeyOf(game)} in the game after a change here.` : "The game reloads once after a change here."}</p>
-      {KEY_LIST_SHOWN && <p className="hint live-keys">The menu's Keys tab lists the toggle keys of the mods showing now.
-        <Button size="sm" variant="ghost" icon="keyboard" onClick={() => go({ view: "tools", section: "keylist" })} title="Opens Key list in game: its key, where it shows and which mods it lists">Key list settings</Button></p>}
+      {!drawn && (
+        <p className="hint row"><span>Playing in exclusive fullscreen? Tester options add the menu the game draws.</span>
+          <Button size="sm" variant="ghost" icon="settings" onClick={() => void setTester(true)}
+            title="Turns on tester options. It asks first and says what they risk">Tester options</Button></p>
+      )}
+      <p className="hint live-keys">The menu's Keys tab lists the toggle keys of the mods showing now. Click a key there to rebind it.
+        <Button size="sm" variant="ghost" icon="keyboard" onClick={() => go({ view: "tools", section: "keylist" })} title="Opens Key list in game: its key, where it shows and which mods it lists">Key list settings</Button></p>
     </div>
   );
 }
@@ -150,20 +172,27 @@ function LiveRow({ game, g, busy, run }: { game: GameId; g: LiveGroup; busy: str
       <div className="live-chips" role="radiogroup" aria-label={`${g.character}'s skin`}>
         <button type="button" role="radio" aria-checked={g.active === 0} className={`live-chip${g.active === 0 ? " on" : ""}`}
           disabled={busy === `pick-${g.group}`} onClick={() => pick(0)}
-          title={`None of these: ${g.character} wears the game's own look (or a mod that isn't live)`}>
+          title={`None of these: vanilla ${g.character} (or a mod that isn't live)`}>
           <span className="live-thumb"><Icon name="block" /></span>
           <span className="live-chip-t">None</span>
         </button>
-        {g.mods.map((m) => <Chip key={m.modId} m={m} on={g.active === m.slot} busy={busy === `pick-${g.group}`} onPick={() => pick(m.slot)} />)}
+        {g.mods.map((m) => <Chip key={m.modId} m={m} on={g.active === m.slot} busy={busy === `pick-${g.group}`} onPick={() => pick(m.slot)}
+          onStop={() => void run(`stop-${g.group}`, () => stopLive(game, [m.modId], m.name))} />)}
       </div>
     </div>
   );
 }
 
-function Chip({ m, on, busy, onPick }: { m: LiveMod; on: boolean; busy: boolean; onPick: () => void }) {
+function Chip({ m, on, busy, onPick, onStop }: { m: LiveMod; on: boolean; busy: boolean; onPick: () => void; onStop: () => void }) {
   const src = fileUrl(m.preview);
+  const menu = menuHandler(() => [
+    { label: "Show in game", icon: "check", disabled: on || busy, onClick: onPick },
+    { label: "View in Mods", icon: "mods", onClick: () => go({ view: "library", modId: m.modId }) },
+    { label: "Stop switching this skin", icon: "x", disabled: busy, title: "Takes it out of the menu while you play", onClick: onStop },
+  ]);
   return (
     <button type="button" role="radio" aria-checked={on} className={`live-chip${on ? " on" : ""}${m.enabled ? "" : " is-off"}`} disabled={busy} onClick={onPick}
+      onContextMenu={menu}
       title={on ? `${m.name} is showing` : m.enabled ? `Show ${m.name}` : `${m.name} is off. Picking it turns it on, and it shows after the game reloads`}>
       <span className="live-thumb">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
       <span className="live-chip-t">{m.name}</span>

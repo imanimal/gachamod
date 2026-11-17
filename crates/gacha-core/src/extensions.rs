@@ -15,7 +15,7 @@
 use crate::app_update::{is_newer, parse_version};
 use crate::archive::safe_relative;
 use crate::db::{self, Db};
-use crate::error::{Error, Result};
+use crate::error::{Error, IoAt, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -435,7 +435,7 @@ fn new_staging(data_dir: &Path, id_hint: &str) -> Result<PathBuf> {
 /// Unpack a package zip into `dest` with limits on size and file count. The manifest may sit in one top folder
 /// (a zip of a folder, GitHub's "Download ZIP"); returns the folder that holds it.
 pub fn unpack(zip_path: &Path, dest: &Path) -> Result<PathBuf> {
-    let size = fs::metadata(zip_path)?.len();
+    let size = fs::metadata(zip_path).at(zip_path)?.len();
     if size > MAX_PACKAGE { return Err(bad(format!("That package is over {} MB", MAX_PACKAGE / 1024 / 1024))); }
     let mut z = zip::ZipArchive::new(fs::File::open(zip_path)?).map_err(|_| bad("That isn't a package (a .zip with extension.json in it)"))?;
     if z.len() > MAX_FILES { return Err(bad(format!("That package has over {MAX_FILES} files"))); }
@@ -670,7 +670,7 @@ pub fn allowed_path(m: &Manifest, raw: &str) -> Result<PathBuf> {
 
 pub fn read_file(m: &Manifest, raw: &str) -> Result<String> {
     let p = allowed_path(m, raw)?;
-    let meta = fs::metadata(&p)?;
+    let meta = fs::metadata(&p).at(&p)?;
     if !meta.is_file() { return Err(bad("That's a folder, not a file")); }
     if meta.len() > MAX_READ { return Err(bad("That file is over 8 MB")); }
     Ok(String::from_utf8_lossy(&fs::read(&p)?).into_owned())
@@ -683,7 +683,7 @@ pub struct DirEntry { pub name: String, pub dir: bool, pub size: u64, pub modifi
 pub fn list_dir(m: &Manifest, raw: &str) -> Result<Vec<DirEntry>> {
     let p = allowed_path(m, raw)?;
     let mut out = Vec::new();
-    for e in fs::read_dir(&p)?.flatten().take(5000) {
+    for e in fs::read_dir(&p).at(&p)?.flatten().take(5000) {
         let Ok(meta) = e.metadata() else { continue };
         let modified = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs() as i64);
         out.push(DirEntry { name: e.file_name().to_string_lossy().into_owned(), dir: meta.is_dir(), size: meta.len(), modified });
@@ -856,14 +856,20 @@ pub fn sources(db: &Db) -> Vec<String> {
 
 pub fn cache_key(source: &str) -> String { format!("ext-index:{source}") }
 
+/// The site in a link ("raw.githubusercontent.com"), for error text.
+fn host(link: &str) -> String {
+    url::Url::parse(link).ok().and_then(|u| u.host_str().map(str::to_string)).unwrap_or_else(|| "the server".into())
+}
+
 /// Download an index (up to 4 MB).
 pub async fn fetch_index(http: &reqwest::Client, source: &str) -> Result<String> {
     if !https(source) { return Err(bad("Extension lists load over https only")); }
-    let resp = http.get(source).timeout(std::time::Duration::from_secs(15)).send().await?;
-    let status = resp.status();
-    if status == reqwest::StatusCode::NOT_FOUND { return Err(Error::Network("the list isn't there (404)".into())); }
-    if !status.is_success() { return Err(Error::Network(format!("the server answered {}", status.as_u16()))); }
-    let bytes = resp.bytes().await?;
+    let site = host(source);
+    let resp = http.get(source).timeout(std::time::Duration::from_secs(15)).send().await.map_err(|e| Error::unreachable(&site, e.without_url()))?;
+    let status = resp.status().as_u16();
+    if status == 404 { return Err(Error::Site { site, status, message: "The extension list isn't at that address".into() }); }
+    if !resp.status().is_success() { return Err(Error::Site { site, status, message: "The extension list didn't come".into() }); }
+    let bytes = resp.bytes().await.map_err(|e| Error::unreachable(&site, e.without_url()))?;
     if bytes.len() > 4 * 1024 * 1024 { return Err(bad("The extension list is over 4 MB")); }
     let text = String::from_utf8_lossy(&bytes).into_owned();
     parse_index(&text)?;
@@ -873,11 +879,12 @@ pub async fn fetch_index(http: &reqwest::Client, source: &str) -> Result<String>
 /// Download a listed package to `dir` and check its size and SHA-256. Returns the file.
 pub async fn download_package(http: &reqwest::Client, e: &IndexEntry, dir: &Path) -> Result<PathBuf> {
     if !https(&e.download) { return Err(bad("Packages download over https only")); }
-    let mut resp = http.get(&e.download).timeout(std::time::Duration::from_secs(120)).send().await?;
-    if !resp.status().is_success() { return Err(Error::Network(format!("the server answered {} for {}", resp.status().as_u16(), e.name))); }
+    let site = host(&e.download);
+    let mut resp = http.get(&e.download).timeout(std::time::Duration::from_secs(120)).send().await.map_err(|err| Error::unreachable(&site, err.without_url()))?;
+    if !resp.status().is_success() { return Err(Error::Site { site, status: resp.status().as_u16(), message: format!("{} didn't download", e.name) }); }
     let mut h = Sha256::new();
     let mut data = Vec::new();
-    while let Some(chunk) = resp.chunk().await? {
+    while let Some(chunk) = resp.chunk().await.map_err(|err| Error::unreachable(&site, err.without_url()))? {
         h.update(&chunk);
         data.extend_from_slice(&chunk);
         if data.len() as u64 > MAX_PACKAGE { return Err(bad(format!("{} is over {} MB", e.name, MAX_PACKAGE / 1024 / 1024))); }

@@ -4,19 +4,20 @@
 import type { GameId } from "../../lib/api";
 import { registerCommands, type Command } from "../../lib/search";
 import { currentGame, currentRoute, go } from "../../lib/store";
-import { registerMenu, type MenuEntry } from "../../ui/ContextMenu";
-import { deleteProfile, duplicateProfile, exportProfile, requestEdit, saveInto, startNewProfile, switchTo } from "./actions";
-import { knownProfiles, loadProfiles } from "./data";
+import { menuFor, registerMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { deleteProfile, duplicateProfile, exportProfile, quickNewProfile, requestEdit, saveInto, startNewProfile, switchTo } from "./actions";
+import { knownProfiles, loadProfiles, switchingNow } from "./data";
 
 registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[] => {
   const list = knownProfiles(game);
   const p = list?.find((x) => x.id === id);
   if (!list || !p) return [{ label: "Loading profiles", disabled: true }];
   const only = list.length <= 1;
+  const sw = switchingNow();
   return [
     { header: p.name },
-    { label: p.active ? "On now" : `Switch to ${p.name}`, icon: p.active ? "check" : "swap", disabled: p.active,
-      onClick: () => void switchTo(game, p, list) },
+    { label: sw?.id === p.id ? `Switching to ${p.name}` : p.active ? "On now" : `Switch to ${p.name}`, icon: p.active ? "check" : "swap", disabled: p.active || !!sw,
+      title: sw && sw.id !== p.id ? `Switching to ${sw.name} first` : undefined, onClick: () => void switchTo(game, p, list) },
     { label: "View mods", icon: "mods", title: "See the mods in this profile, and add or take out mods",
       disabled: currentRoute().profile === p.id, onClick: () => go({ view: "profiles", profile: p.id }) },
     "-",
@@ -35,19 +36,27 @@ registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[
   ];
 });
 
+/** Right-click on a "New profile" button (sidebar, Home): the ways to make one besides the one-click default. */
+export const newProfileMenu = (game: GameId): MenuEntry[] => [
+  { label: "New profile from the mods on now", icon: "plus", onClick: () => void quickNewProfile(game) },
+  { label: "New profile with no mods", icon: "plus", title: "Every mod off, for playing without mods", onClick: () => startNewProfile(game, "empty") },
+  { label: "New profile with options...", icon: "edit", title: "Pick the name, icon, colour and hotkey first", onClick: () => startNewProfile(game) },
+];
+
 registerCommands("profiles", async () => {
   const g = currentGame();
   if (!g) return [];
   const list = knownProfiles(g.id) ?? await loadProfiles(g.id).catch(() => []);
   const out: Command[] = list.map((p) => ({
     id: `profile:${p.id}`,
-    title: p.active ? `${p.name} (on now)` : `Switch to ${p.name}`,
+    title: switchingNow()?.id === p.id ? `Switching to ${p.name}` : p.active ? `${p.name} (on now)` : `Switch to ${p.name}`,
     section: "Profiles",
     icon: p.active ? "check" : "profiles",
     keywords: `profile loadout preset set outfit switch load use ${p.description ?? ""}`,
     hint: p.hotkey ?? undefined,
     priority: p.active ? 0 : 3,
     run: () => void switchTo(g.id, p, list),
+    menu: () => menuFor("profile", { game: g.id, id: p.id }),
   }));
   out.push(
     { id: "profile:new", title: "New profile from the mods on now", section: "Profiles", icon: "plus", keywords: "save loadout preset create add snapshot remember current",

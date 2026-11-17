@@ -20,7 +20,7 @@ const EMIT_EVERY: Duration = Duration::from_millis(125);
 /// A lock that survives a panic in another holder (the data is still usable for a queue).
 pub fn lk<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 
-/// Send the current queue to the UI.
+/// Send the current queue to the UI. Only for state changes: progress goes out as `events::QUEUE_PROGRESS`.
 pub fn emit_snapshot(app: &AppHandle) {
     let st = app.state::<AppState>();
     let snap = lk(&st.queue).snapshot();
@@ -65,10 +65,34 @@ pub fn discard_files(data_dir: &Path, item: &QueueItem, keep: bool) {
     if let Some(s) = &item.staging { let _ = std::fs::remove_dir_all(s); }
 }
 
+/// What a cancel removes: unpacked files and the archive unless archives are kept. The .part stays, so Retry
+/// resumes; removing or clearing the row deletes it.
+pub fn discard_unpacked(item: &QueueItem, keep: bool) {
+    if item.req.local_path.is_none() && !keep { if let Some(a) = &item.archive { let _ = std::fs::remove_file(a); } }
+    if let Some(s) = &item.staging { let _ = std::fs::remove_dir_all(s); }
+}
+
 /// Another item that isn't finished downloads to the same file, so that file is not this item's to delete.
 pub fn shares_file(q: &Queue, data_dir: &Path, item: &QueueItem) -> bool {
     let at = download_target(data_dir, item);
     q.items.iter().any(|o| o.id != item.id && !o.state.finished() && o.req.local_path.is_none() && download_target(data_dir, o) == at)
+}
+
+/// The .part files rows still point at, so Retry on a cancelled or failed row resumes.
+fn kept_parts(q: &Queue, data_dir: &Path) -> HashSet<PathBuf> {
+    q.items.iter().filter(|i| i.req.local_path.is_none()).map(|i| { let (dir, name) = download_target(data_dir, i); download::part_path(&dir, &name) }).collect()
+}
+
+/// Delete .part files no row points at any more (a cancelled row that was cleared or removed).
+fn clean_parts(data_dir: &Path, keep: &HashSet<PathBuf>) {
+    let Ok(games) = std::fs::read_dir(data_dir.join("downloads")) else { return };
+    for game in games.flatten().filter(|g| g.path().is_dir()) {
+        let Ok(files) = std::fs::read_dir(game.path()) else { continue };
+        for f in files.flatten() {
+            let p = f.path();
+            if p.extension().is_some_and(|e| e == "part") && p.is_file() && !keep.contains(&p) { let _ = std::fs::remove_file(&p); }
+        }
+    }
 }
 
 /// Delete unpacked files off the caller's thread: they can be gigabytes.
@@ -79,7 +103,8 @@ pub fn remove_staging_later(staging: Option<String>) {
 /// Words a player can act on.
 fn readable(e: &Error) -> String {
     match e {
-        Error::Network(_) => "GameBanana didn't answer. Check your connection, then press Retry to pick up where it stopped".into(),
+        Error::Network(_) | Error::Unreachable { .. } => "GameBanana didn't answer. Check your connection, then press Retry to pick up where it stopped".into(),
+        Error::RateLimited { site, wait } => format!("{site} is limiting downloads from this PC for a while. Press Retry in {wait}"),
         Error::Http { status: 404 | 410, .. } => "GameBanana doesn't have this file anymore. The mod may have a newer one".into(),
         Error::Http { status, .. } => format!("GameBanana answered with an error ({status}). Try again in a minute"),
         other => other.to_string(),
@@ -120,7 +145,8 @@ pub fn start(app: AppHandle) {
         Err(e) => eprintln!("queue: couldn't load the saved queue: {e}"),
     }
     let data = r.data.clone();
-    tauri::async_runtime::spawn_blocking(move || install::clean_staging(&data));
+    let parts = kept_parts(&lk(&r.queue), &data);
+    tauri::async_runtime::spawn_blocking(move || { install::clean_staging(&data); clean_parts(&data, &parts); });
     tauri::async_runtime::spawn(async move {
         loop {
             r.tick();
@@ -136,12 +162,16 @@ impl Runner {
         emit_snapshot(&self.app);
     }
 
-    fn emit_throttled(&self) {
+    /// Send how far the running items are, at most every EMIT_EVERY. A row patches its bytes or step from this, so
+    /// the whole queue isn't sent and redrawn eight times a second.
+    fn emit_progress(&self) {
         let due = {
             let mut last = lk(&self.last_emit);
             if last.elapsed() >= EMIT_EVERY { *last = Instant::now(); true } else { false }
         };
-        if due { emit_snapshot(&self.app); }
+        if !due { return; }
+        let list = lk(&self.queue).progress();
+        if !list.is_empty() { let _ = self.app.emit(events::QUEUE_PROGRESS, &list); }
     }
 
     /// Change an item and save it. None when it is gone.
@@ -232,7 +262,7 @@ impl Runner {
                 _ => return false,
             }
         }
-        self.emit_throttled();
+        self.emit_progress();
         true
     }
 
@@ -284,18 +314,25 @@ impl Runner {
                     self.emit();
                 }
             }
-            Err(_) if !live => { let _ = std::fs::remove_file(download::part_path(&dir, &name)); }
+            // a cancelled row keeps its .part so Retry carries on from there; a removed row's .part goes with it
+            Err(_) if !live => {
+                let q = lk(&self.queue);
+                if !q.items.iter().any(|i| i.id == id) && !shares_file(&q, &self.data, &item) {
+                    let _ = std::fs::remove_file(download::part_path(&dir, &name));
+                }
+            }
             Err(e) => self.fail(id, readable(&e), &item),
         }
         self.pump.notify_one();
     }
 
     fn fail(&self, id: u64, message: String, item: &QueueItem) {
-        self.update(id, |i| { i.staging = None; i.choose.clear(); i.state = ItemState::Failed { message: message.clone() }; });
+        let now = self.update(id, |i| { i.staging = None; i.choose.clear(); i.state = ItemState::Failed { message: message.clone() }; });
         self.emit();
-        // the UI adds a way to fix it when the game has no Mods folder yet (App.tsx)
+        // the UI adds a way to fix it when the game has no Mods folder yet, else a button that shows the file (App.tsx)
         let text = format!("Couldn't install {}: {message}", item.name());
-        let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": true, "failed": { "game": item.req.game, "item": id } }));
+        let file = now.and_then(|i| i.req.local_path.or(i.archive)).filter(|p| Path::new(p).exists());
+        let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": true, "failed": { "game": item.req.game, "item": id, "file": file } }));
     }
 
     async fn fetch_preview(&self, url: &str, staging: &Path) {
@@ -332,6 +369,7 @@ impl Runner {
                     i.staging = None;
                     i.choose.clear();
                     if !keep && i.req.local_path.is_none() { i.archive = None; }
+                    i.unsure = o.unsure.clone();
                     i.state = ItemState::Done { mod_ids: ids.clone() };
                 });
                 if !keep && item.req.local_path.is_none() { if let Some(a) = archive { let _ = std::fs::remove_file(a); } }
@@ -348,7 +386,9 @@ impl Runner {
                 // the toast opens the mod; a new one (not an update) is turned on by the UI first (library/afterInstall.ts)
                 let open = o.installed.first().map(|m| serde_json::json!({ "game": item.req.game, "modId": m.id }));
                 let fresh: Vec<&String> = if item.req.meta.replaces.is_none() { ids.iter().collect() } else { Vec::new() };
-                let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false, "open": open, "installed": fresh }));
+                // files gachamod couldn't place: the toast asks to look at them (App.tsx), unless turned off
+                let review = o.unsure.as_ref().and_then(|_| o.installed.first()).map(|m| m.path.clone());
+                let _ = self.app.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false, "open": open, "installed": fresh, "reveal": o.shader_fixes, "review": review }));
             }
             Err(e) => {
                 // a broken archive is fetched again on Retry
@@ -368,8 +408,11 @@ impl Runner {
         move |p| {
             *lk(&last) = p.clone();
             let p = p.clone();
-            r.update_if(id, |i| i.state == ItemState::Installing, move |i| i.progress = Some(p));
-            r.emit_throttled();
+            // a step is not a state change, so it is saved with the next one rather than on every step
+            let mut q = lk(&r.queue);
+            if let Some(i) = q.get_mut(id).filter(|i| i.state == ItemState::Installing) { i.progress = Some(p); }
+            drop(q);
+            r.emit_progress();
         }
     }
 

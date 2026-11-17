@@ -1,16 +1,17 @@
-//! The key list: each mod's toggle keys, shown while playing (docs/ingame.md, "The key list"). Many mods show their
-//! own key help in game (a picture or panel behind a key of their own); those are left out unless the player wants
-//! them. The list shows in two places: the Keys tab of gachamod's menu over the game (Overlay.tsx), and a panel the
-//! game draws in its top right corner for the character on screen (live/menu.rs), which also works in exclusive
-//! fullscreen. Both ride on the in-game menu, so the game needs characters that switch in game (live.rs).
+//! The key list: each mod's toggle keys, shown while playing (docs/ingame.md, "The key list"). It shows in two
+//! places: the Keys tab of gachamod's menu over the game (Overlay.tsx), where a click on a key rebinds it, and a panel
+//! the game draws in its top right corner for the character on screen (live/menu.rs), which also works in exclusive
+//! fullscreen. Both ride on the in-game menu, so the game needs characters that switch in game (live.rs). Some mods
+//! show their own key help in game (a picture or panel behind a key of their own); they are listed like the rest, and
+//! the player can leave them out, all of them or one by one.
 //!
 //! Settings, per game: `<game>.keyList` ("0" turns it off), `<game>.keyListStyle` ("window" or "game"),
-//! `<game>.keyListKey` (a hotkey, F8 by default), `<game>.keyListOwn` ("1": also mods with their own help), and the
-//! player's pick per mod in `keyList.pick.<game>` (mod id -> shown or not). Owner: INGAME area.
+//! `<game>.keyListKey` (a hotkey, F8 by default), `<game>.keyListOwnHelp` ("0": leave out mods with their own help),
+//! and the player's pick per mod in `keyList.pick.<game>` (mod id -> shown or not). Owner: INGAME area.
 
 use crate::db::Db;
 use crate::error::{Error, Result};
-use crate::keys::{self, KeyEntry};
+use crate::keys::{self, KeyEntry, KeyLine};
 use crate::model::ModEntry;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -18,10 +19,6 @@ use std::path::Path;
 
 /// F6 and F12 are the loaders' own keys, F7 opens the skin menu, F10 reloads.
 pub const KEY: &str = "F8";
-
-/// The key list is held back for now: off everywhere, and the UI hides it (`KEY_LIST_SHOWN` in src/lib/api/keylist.ts).
-/// Set both to true to bring it back; the player's saved settings are kept meanwhile.
-pub const SHOWN: bool = false;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -36,6 +33,11 @@ pub struct KeyRow {
     pub options: u32,
     /// It only works while the character is on screen.
     pub on_screen: bool,
+    /// Where the keys are, for a rebind (`keys::rebind`): the ini inside the mod folder, its section, and the key
+    /// lines that are on.
+    pub ini: String,
+    pub section: String,
+    pub lines: Vec<KeyLine>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -64,7 +66,7 @@ pub struct ModKeyList {
 pub struct KeyListSettings { pub on: bool, pub style: String, pub key: String, pub own: bool }
 
 impl Default for KeyListSettings {
-    fn default() -> Self { KeyListSettings { on: true, style: "window".into(), key: KEY.into(), own: false } }
+    fn default() -> Self { KeyListSettings { on: true, style: "window".into(), key: KEY.into(), own: true } }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -79,10 +81,10 @@ fn picks(db: &Db, game: &str) -> HashMap<String, bool> { db.setting_json(&picks_
 pub fn settings(db: &Db, game: &str) -> KeyListSettings {
     let get = |k: &str| db.setting(&format!("{game}.{k}")).ok().flatten();
     KeyListSettings {
-        on: SHOWN && get("keyList").as_deref() != Some("0"),
+        on: get("keyList").as_deref() != Some("0"),
         style: if get("keyListStyle").as_deref() == Some("game") { "game" } else { "window" }.into(),
         key: get("keyListKey").and_then(|k| crate::hotkeys::normalize_menu(&k).ok()).unwrap_or_else(|| KEY.into()),
-        own: get("keyListOwn").as_deref() == Some("1"),
+        own: get("keyListOwnHelp").as_deref() != Some("0"),
     }
 }
 
@@ -98,7 +100,7 @@ pub fn set(db: &Db, game: &str, s: &KeyListSettings) -> Result<KeyListSettings> 
     db.set_setting(&format!("{game}.keyList"), if s.on { "1" } else { "0" })?;
     db.set_setting(&format!("{game}.keyListStyle"), &s.style)?;
     db.set_setting(&format!("{game}.keyListKey"), &key)?;
-    db.set_setting(&format!("{game}.keyListOwn"), if s.own { "1" } else { "0" })?;
+    db.set_setting(&format!("{game}.keyListOwnHelp"), if s.own { "1" } else { "0" })?;
     crate::live::menu_sync(db, game);
     Ok(settings(db, game))
 }
@@ -114,13 +116,19 @@ pub fn choose(db: &Db, game: &str, mod_id: &str, listed: Option<bool>) -> Result
     of_mod(&m, live.contains_key(&m.id), &all, settings(db, game).own).ok_or_else(|| Error::Invalid(format!("{} has no keys", m.name)))
 }
 
+/// A mod's keys changed (a rebind, a key turned off, an undo): the pictures of the key list the game draws follow.
+pub fn keys_changed(db: &Db, game: &str) {
+    if settings(db, game).on { crate::live::menu_sync(db, game); }
+}
+
 // ── reading a mod ──
 
 /// The rows of a mod's keys, the sections with every key off left out.
 pub(crate) fn rows(entries: &[KeyEntry]) -> Vec<KeyRow> {
     entries.iter().filter(|e| !e.off).filter_map(|e| {
+        let lines: Vec<KeyLine> = e.lines.iter().filter(|l| !l.off && !l.label.is_empty()).cloned().collect();
         let mut keys: Vec<String> = Vec::new();
-        for l in e.lines.iter().filter(|l| !l.off && !l.label.is_empty()) {
+        for l in &lines {
             if !keys.contains(&l.label) { keys.push(l.label.clone()); }
         }
         if keys.is_empty() { return None; }
@@ -129,7 +137,7 @@ pub(crate) fn rows(entries: &[KeyEntry]) -> Vec<KeyRow> {
             "toggle" => 2,
             _ => 0,
         };
-        Some(KeyRow { keys, what: e.name.clone(), kind: e.kind.clone(), options, on_screen: e.on_screen })
+        Some(KeyRow { keys, what: e.name.clone(), kind: e.kind.clone(), options, on_screen: e.on_screen, ini: e.ini.clone(), section: e.section.clone(), lines })
     }).collect()
 }
 
@@ -158,17 +166,25 @@ fn words(s: &str) -> Vec<String> {
 
 pub(crate) fn names_help(s: &str) -> bool {
     let lower = s.to_lowercase();
+    // "creditinfo" is the credits picture, not key help
+    if lower.contains("credit") { return false; }
     if HELP_ANY.iter().any(|w| lower.contains(w)) { return true; }
     words(s).iter().any(|w| HELP_WORD.contains(&w.as_str()))
 }
 
-/// Whether the mod shows its own key help, and the key that shows it. A key section whose name or variables name a
-/// help panel ("[KeyHelp]", "$showinfo") counts, and so does a picture with such a name ("ToggleGuide.dds") behind
-/// any key of the mod.
+/// Whether the mod shows its own key help, and the key that shows it. A key section counts when its name names a
+/// help panel ("[KeyHelp]") or every variable it sets does ("$showinfo"); a section that changes a part of the mod
+/// and also clears a help or credits variable is a toggle like any other. A picture with such a name
+/// ("ToggleGuide.dds") in a mod with keys counts too.
 pub(crate) fn own_help(dir: &Path, inis: &[String], entries: &[KeyEntry]) -> (bool, Option<String>) {
     let section_name = |e: &KeyEntry| e.section.strip_prefix("Key").or_else(|| e.section.strip_prefix("key")).unwrap_or(&e.section).to_string();
     let label = |e: &KeyEntry| e.lines.iter().find(|l| !l.off && !l.pad).or_else(|| e.lines.iter().find(|l| !l.off)).map(|l| l.label.clone());
-    if let Some(e) = entries.iter().filter(|e| !e.off).find(|e| names_help(&section_name(e)) || e.vars.iter().any(|v| names_help(&v.var))) {
+    let shows_help = |e: &KeyEntry| {
+        if names_help(&section_name(e)) { return true; }
+        let mut vars = e.vars.iter().filter(|v| !keys::noise_var(&v.var)).peekable();
+        vars.peek().is_some() && vars.all(|v| names_help(&v.var))
+    };
+    if let Some(e) = entries.iter().filter(|e| !e.off).find(|e| shows_help(e)) {
         return (true, label(e));
     }
     if entries.iter().all(|e| e.off) { return (false, None); }
@@ -184,7 +200,7 @@ pub(crate) fn own_help(dir: &Path, inis: &[String], entries: &[KeyEntry]) -> (bo
             let name = file.rsplit('/').next().unwrap_or(&file).to_lowercase();
             let picture = [".dds", ".png", ".jpg", ".jpeg"].iter().any(|x| name.ends_with(x));
             let stem = name.rsplit_once('.').map_or(name.as_str(), |(s, _)| s);
-            if picture && (names_help(stem) || stem.contains("toggle")) { return (true, None); }
+            if picture && names_help(stem) { return (true, None); }
         }
     }
     (false, None)
@@ -243,7 +259,6 @@ pub fn window_keys(db: &Db) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keys::KeyLine;
 
     fn entry(section: &str, var: &str, kind: &str, values: &[&str], key: &str) -> KeyEntry {
         KeyEntry {
@@ -264,6 +279,7 @@ mod tests {
         assert!(!names_help("Jacket"));
         assert!(!names_help("swapvar"));
         assert!(!names_help("Building"));
+        assert!(!names_help("creditinfo"));
     }
 
     #[test]
@@ -275,9 +291,17 @@ mod tests {
         assert_eq!(own_help(&dir, &[], &[jacket.clone(), help]), (true, Some("H".into())));
         std::fs::write(dir.join("a.ini"), "[ResourceGuide]\nfilename = Textures/ToggleGuide.dds\n").unwrap();
         assert_eq!(own_help(&dir, &["a.ini".into()], std::slice::from_ref(&jacket)), (true, None));
-        std::fs::write(dir.join("a.ini"), "[ResourceBody]\nfilename = Body.dds\n").unwrap();
-        assert_eq!(own_help(&dir, &["a.ini".into()], &[jacket]), (false, None));
+        std::fs::write(dir.join("a.ini"), "[ResourceBody]\nfilename = Body.dds\n[ResourceOff]\nfilename = HatToggleOff.dds\n[ResourceCredit]\nfilename = CreditInfo.png\n").unwrap();
+        assert_eq!(own_help(&dir, &["a.ini".into()], std::slice::from_ref(&jacket)), (false, None));
         let _ = std::fs::remove_dir_all(&dir);
+        // the template many mods use: every toggle also clears the credits picture
+        let mut swap = entry("KeySwap", "swapvar", "cycle", &["0", "1"], "VK_DOWN");
+        swap.vars.push(crate::ini::KeyVar { var: "creditinfo".into(), values: vec!["0".into()] });
+        assert_eq!(own_help(&dir, &[], std::slice::from_ref(&swap)), (false, None));
+        // a toggle that also closes the mod's help is still a toggle
+        let mut both = jacket.clone();
+        both.vars.push(crate::ini::KeyVar { var: "showhelp".into(), values: vec!["0".into()] });
+        assert_eq!(own_help(&dir, &[], &[both]), (false, None));
     }
 
     #[test]
@@ -288,5 +312,8 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].options, 3);
         assert_eq!(r[0].keys, vec!["F6".to_string()]);
+        // what a rebind needs to find the line
+        assert_eq!((r[0].ini.as_str(), r[0].section.as_str(), r[0].lines.len()), ("a.ini", "KeyJacket", 1));
+        assert_eq!((r[0].lines[0].field.as_str(), r[0].lines[0].index), ("key", 0));
     }
 }

@@ -2,19 +2,19 @@
 // About and updates page. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
 import { useEffect, useState } from "react";
 import { oxford } from "../../lib/notes";
-import { Button, Checkbox, Confirm, Panel, Progress, Toggle, formatBytes, plural } from "../../ui/kit";
+import { Button, Checkbox, Confirm, Panel, Progress, Segmented, formatBytes, plural } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
 import { record, undo } from "../../lib/history";
 import { currentGame, refreshGames } from "../../lib/store";
 import { applyGameTheme } from "../../lib/theme";
 import { getTextSize, setTextSize } from "../../lib/zoom";
-import { appUpdateCheckPref } from "./automatic";
+import { appUpdateModePref, type AppUpdateMode } from "./automatic";
 
 // ── the window's own choices (kept in localStorage, not the database) ──
 
 const isUiKey = (k: string) => k.startsWith("gm.theme.") || k.startsWith("gm.accent.") || k === "gm.scheme" || k.startsWith("gm.scheme.")
-  || k === "gm.motion" || k === "gm.layout" || k === "pm.textSize" || k === "gm.onlyGame" || k === "gm.schemeMode";
+  || k === "gm.motion" || k === "gm.layout" || k === "pm.textSize" || k === "gm.onlyGame" || k === "gm.schemeMode" || k === "gm.intro";
 
 function readUi(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -129,8 +129,20 @@ function ImportPlan({ plan }: { plan: ImportSummary }) {
 
 // ── updates (the "gachamod updates" panel on About and updates) ──
 
+const UPDATE_MODES: Array<{ value: AppUpdateMode; label: string; title: string }> = [
+  { value: "1", label: "Install", title: "Download new versions in the background and install them when you close gachamod" },
+  { value: "tell", label: "Only tell me", title: "Say when a new version is out and download nothing until you pick Update now" },
+  { value: "0", label: "Off", title: "Never look by itself. Use Check now" },
+];
+const MODE_SAID: Record<AppUpdateMode, string> = {
+  "1": "Updating gachamod automatically",
+  tell: "gachamod tells you about new versions without installing them",
+  "0": "Stopped looking for gachamod updates",
+};
+
 export function UpdateRow() {
-  const auto = appUpdateCheckPref.use();
+  const mode = appUpdateModePref.use();
+  const auto = mode === "1";
   const [state, setState] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -174,11 +186,14 @@ export function UpdateRow() {
     <div className="set-rows set-update">
       <div className="set-row" id="set-app-updates">
         <span><b className="set-tip" title="gachamod looks for a new version at start and every 6 hours. Off, it never looks by itself: use Check now">Update gachamod automatically</b>
-          <span className="hint">New versions download in the background and install when you close gachamod</span></span>
-        <Toggle checked={auto} onChange={(v) => void appUpdateCheckPref.set(v, v ? "Updating gachamod automatically" : "Stopped updating gachamod automatically")} />
+          <span className="hint">{mode === "1" ? "New versions download in the background and install when you close gachamod"
+            : mode === "tell" ? "A message says when a new version is out. Nothing downloads until you pick Update now"
+            : "gachamod doesn't look for new versions by itself"}</span></span>
+        <Segmented size="sm" label="Update gachamod automatically" value={mode} options={UPDATE_MODES}
+          onChange={(v) => { if (v !== mode) void appUpdateModePref.set(v, MODE_SAID[v]); }} />
       </div>
       <div className="set-row" id="set-app-check">
-        <span><b>Check for updates</b><span className="hint">{auto ? "Look now instead of waiting for the next check" : "gachamod doesn't look for new versions by itself"}</span></span>
+        <span><b>Check for updates</b><span className="hint">{mode !== "0" ? "Look now instead of waiting for the next check" : "gachamod doesn't look for new versions by itself"}</span></span>
         <Button size="sm" busy={checking} onClick={() => void checkNow()} title="Look for a newer gachamod now">Check now</Button>
       </div>
       {r && (

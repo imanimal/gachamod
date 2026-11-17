@@ -5,7 +5,8 @@
 // open by its "Close after picking" setting along the bottom. A mod that doesn't switch in game turns on alone (the
 // character's other mods go off); Shift+click, Shift+Enter or "Turn on with others" in its right-click menu keeps
 // the others on.
-// Keys: the toggle keys of the mods showing now (OverlayKeys.tsx). The key list's own key (F8) opens the menu here.
+// Keys: the toggle keys of the mods showing now, each one a button that rebinds it (OverlayKeys.tsx). The key list's
+// own key (F8) opens the menu here.
 // Browse: the app's own GameBanana browser (browse/GbBrowser.tsx), whole: every sort and filter, the character row,
 // more mods as the list scrolls, a mod's page with its files, and creators' pages.
 // Downloads: the app's Downloads screen.
@@ -13,7 +14,7 @@
 // page is a route. A page only the app has (Settings, Tools) opens in gachamod's own window.
 // In a browser, #overlay shows it with the demo data. Owner: INGAME area.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KEY_LIST_SHOWN, app as appApi, errorText, fileUrl, library, skinMenu, type GameId, type GameState, type LiveGroup, type ModEntry } from "../../lib/api";
+import { app as appApi, errorText, fileUrl, library, skinMenu, type GameId, type GameState, type LiveGroup, type LiveInfo, type ModEntry } from "../../lib/api";
 import { installGamepad, moveFocus } from "../../lib/gamepad";
 import { installUndoKeys } from "../../lib/history";
 import "../../lib/places";
@@ -110,8 +111,15 @@ export function Overlay() {
   );
 }
 
-/** One character in the list: the skins that switch in game (if any) and the rest of its mods. */
-interface Who { name: string; group: LiveGroup | null; mods: ModEntry[]; showing: string | null }
+/** One character in the list: the skins that switch in game (if any) and the rest of its mods. `here`: on screen in
+ *  the game when the menu opened. */
+interface Who { name: string; group: LiveGroup | null; mods: ModEntry[]; showing: string | null; here: boolean }
+
+/** The characters the game says are on screen, in the order of its groups. */
+function onScreenNames(info: LiveInfo | null): string[] {
+  const on = info?.onScreen ?? [];
+  return info && on.length ? info.groups.filter((g) => on.includes(g.group)).map((g) => g.character) : [];
+}
 
 /** The game's installed mods (null while reading), read again each time the menu opens and when the library changes. */
 function useMods(game: GameId, opened: number): [ModEntry[] | null, () => Promise<void>] {
@@ -133,7 +141,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const info = useLive(game);
   const [mods, reloadMods] = useMods(game, opened);
   const kl = useKeyList(game, opened);
-  const keysOn = KEY_LIST_SHOWN && (kl.list?.settings.on ?? true);
+  const keysOn = kl.list?.settings.on ?? true;
   const tabList = keysOn ? TABS : TABS.filter((t) => t !== "keys");
   const tabsRef = useRef(tabList);
   tabsRef.current = tabList;
@@ -154,6 +162,8 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const [sel, setSel] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  /** The focused tile can turn on next to the others (Shift+Enter), for the hint along the bottom. */
+  const [shiftOk, setShiftOk] = useState(false);
   /** Said along the bottom while a new skin has the pointer or the focus. */
   const [hint, setHint] = useState<string | null>(null);
   const closeAfter = closePref.use();
@@ -163,8 +173,11 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const close = useCallback(() => void skinMenu.hide(game), [game]);
   const detailRef = useRef(detail);
   detailRef.current = detail;
+  /** The Keys tab's search when a mod's Toggles tag opened it. */
+  const [keysQ, setKeysQ] = useState("");
   const setTab = useCallback((t: Tab) => {
     setDetail(null);
+    setKeysQ("");
     if (t === "keys") { setKeysAt(currentRoute()); return; }
     setKeysAt(null);
     go({ view: VIEW_OF[t] });
@@ -172,6 +185,12 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const openKeySettings = useCallback(() => {
     skinMenu.openInApp(game, { view: "tools", section: "keylist" }).catch((e) => toast(errorText(e), true));
   }, [game]);
+  /** A mod's Toggles tag: its keys on the Keys tab, or the key list's settings while the key list is off. */
+  const keysOf = (m: ModEntry) => {
+    if (!keysOn) { openKeySettings(); return; }
+    setTab("keys");
+    setKeysQ(m.name);
+  };
   /** Esc, B and the Back button: out of a mod's details, back from a creator's page to the mods, else close the menu. */
   const leave = useCallback(() => {
     const r = currentRoute();
@@ -180,12 +199,23 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     else close();
   }, [close]);
 
+  // Who is on screen, taken once each time the menu opens: first what is known, then the game's answer that comes
+  // in a moment later. After that it stays, so characters don't move in the list while the menu shows.
+  const [here, setHere] = useState<string[]>([]);
+  const hereAt = useRef<{ opened: number; info: LiveInfo | null; done: boolean }>({ opened: -1, info: null, done: false });
+  useEffect(() => {
+    const t = hereAt.current;
+    if (t.opened !== opened) { hereAt.current = { opened, info, done: false }; setHere(onScreenNames(info)); return; }
+    if (!t.done && info && info !== t.info) { t.done = true; setHere(onScreenNames(info)); }
+  }, [opened, info]);
+  const hereKey = here.join("\n");
+
   const everyone = useMemo<Who[]>(() => {
     if (!info || !mods) return [];
     const byId = new Map(mods.map((m) => [m.id, m]));
     const live = new Set(info.groups.flatMap((g) => g.mods.map((m) => m.modId)));
     const names = new Map<string, Who>();
-    const at = (name: string) => { let w = names.get(name); if (!w) { w = { name, group: null, mods: [], showing: null }; names.set(name, w); } return w; };
+    const at = (name: string) => { let w = names.get(name); if (!w) { w = { name, group: null, mods: [], showing: null, here: here.includes(name) }; names.set(name, w); } return w; };
     for (const g of info.groups) {
       const w = at(g.character);
       w.group = g;
@@ -198,9 +228,16 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     }
     const order = recent(game);
     const rank = (w: Who) => { const i = order.indexOf(w.name); return i < 0 ? order.length : i; };
-    return [...names.values()].sort((a, b) => Number(a.name === OTHER) - Number(b.name === OTHER) || rank(a) - rank(b) || a.name.localeCompare(b.name));
-  }, [info, mods, game, opened]); // eslint-disable-line react-hooks/exhaustive-deps
+    // the characters on screen first, then the ones played last
+    const seen = (w: Who) => { const i = here.indexOf(w.name); return i < 0 ? here.length : i; };
+    return [...names.values()].sort((a, b) => Number(a.name === OTHER) - Number(b.name === OTHER) || seen(a) - seen(b) || rank(a) - rank(b) || a.name.localeCompare(b.name));
+  }, [info, mods, game, opened, hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** The characters on screen, then the others as they were played last, for the Keys tab (read again each time the
+   *  menu opens). */
+  const order = useMemo(() => [...here, ...recent(game)], [game, opened, hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selRef = useRef(sel);
+  selRef.current = sel;
   const words = q.trim().toLowerCase();
   const shown = useMemo(() => {
     if (!words) return everyone;
@@ -253,6 +290,31 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     const t = window.setTimeout(() => (root.current?.querySelector<HTMLElement>(".ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-tile, .ov-who"))?.focus(), 80);
     return () => window.clearTimeout(t);
   }, [opened, loading]);
+  // Browse and Downloads: the focus goes to the first card or row once one shows (the tile that had it is gone), unless
+  // the player put it somewhere meanwhile
+  const pageKey = tab === "browse" ? `browse:${route.user ?? ""}` : tab;
+  useEffect(() => {
+    if (tab !== "browse" && tab !== "downloads") return;
+    const sel = tab === "browse" ? ".ov-page .gb-card" : ".ov-page .dl-item button, .ov-page button";
+    let n = 0;
+    const t = window.setInterval(() => {
+      const a = document.activeElement;
+      const free = !a || a === document.body || !root.current?.contains(a);
+      const el = free ? root.current?.querySelector<HTMLElement>(sel) : null;
+      if (el) el.focus({ preventScroll: true });
+      if (!free || el || ++n > 40) window.clearInterval(t);
+    }, 80);
+    return () => window.clearInterval(t);
+  }, [pageKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the game's answer came in after the menu opened: the focus follows to the character on screen, unless the player
+  // picked a character meanwhile
+  useEffect(() => {
+    if (loading || !hereKey || selRef.current !== null) return;
+    const t = window.setTimeout(() => {
+      if (selRef.current === null) root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on, .ov-pane .ov-tile")?.focus();
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // a mod's page, a window or a popover that is open (they close themselves on Esc)
@@ -273,6 +335,13 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       if (e.key === "Escape") { if (!open && !(typing && (e.target as HTMLInputElement).value)) leave(); return; }
       // a key something handled already: a card's I (install), a row of characters' arrows
       if (e.defaultPrevented) return;
+      // Shift+F10 and the Menu key: the focused tile's or card's right-click menu
+      if (!typing && ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu")) {
+        e.preventDefault();
+        document.documentElement.classList.add("kbd");
+        menuForFocus();
+        return;
+      }
       // a key the player picked for the menu does here what it does in the menu the game draws
       const bound = typing || open ? null : boundAction(e, bindsRef.current);
       if (bound) {
@@ -281,7 +350,14 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
         else if (bound === "down") moveFocus(0, 1);
         else if (bound === "show") (document.activeElement as HTMLElement | null)?.click();
         else if (bound === "close") close();
+        else if (bound === "keys") { if (tabsRef.current.includes("keys")) setTab("keys"); }
         else if (detailRef.current || currentRoute().user) leave();
+        else {
+          // back to the characters: the picked one in the rail, on My mods
+          const rail = () => root.current?.querySelector<HTMLElement>(".ov-rail .ov-who.on") ?? root.current?.querySelector<HTMLElement>(".ov-rail .ov-who");
+          if (tabRef.current === "mine" && rail()) rail()!.focus();
+          else { setTab("mine"); window.setTimeout(() => rail()?.focus(), 80); }
+        }
         return;
       }
       if (e.altKey && !e.ctrlKey && e.key === "ArrowLeft" && !typing) { e.preventDefault(); back(); return; }
@@ -305,7 +381,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mouseup", onMouse);
-    const offPad = installGamepad({ nextView: turn, play: () => {}, menu: menuForFocus, back: leave, palette: search });
+    const offPad = installGamepad({ nextView: turn, play: menuForFocus, menu: menuForFocus, back: leave, palette: search });
     return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("mouseup", onMouse); offPad(); };
   }, [game, leave, close, setTab]);
 
@@ -324,7 +400,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       if (p.send && skin) markShown(game, skin.modId);
       touch(game, w.name);
       await reloadLive(game);
-      const name = slot === 0 ? `${w.name}'s own look` : skin?.name ?? "That skin";
+      const name = slot === 0 ? `Vanilla ${w.name}` : skin?.name ?? "That skin";
       if (p.reload) say(`${name} was off. It shows after the game reloads.`);
       else if (p.note) say(`${p.note}.`, true);
       else say(p.send ? `${name} is showing.${fresh ? ` ${newSkinTip(w.name)}` : ""}` : `${name} shows the next time the game starts.`);
@@ -374,6 +450,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       onClick: () => void turn(m, true, true) },
     m.enabled && { label: "Turn off", icon: "block", keys: "Enter", onClick: () => void turn(m, false) },
     { label: "Details", icon: "info", keys: "I", onClick: () => setDetail({ mod: m }) },
+    m.hasKeys && { label: "Show its keys", icon: "keyboard", onClick: () => keysOf(m) },
   ];
 
   const modOf = (id: string) => mods?.find((m) => m.id === id) ?? null;
@@ -384,6 +461,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       title: `Turns it on next to ${w.showing} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods`,
       onClick: () => void beside(full!, w.showing!) },
     full && { label: "Details", icon: "info", keys: "I", onClick: () => setDetail({ mod: full }) },
+    !!full?.hasKeys && { label: "Show its keys", icon: "keyboard", onClick: () => keysOf(full!) },
   ];
   const key = info?.menu.key ?? "the menu key";
   /** Enter in the character search: on to the found character's skins. After the key is done, so the same Enter
@@ -391,19 +469,26 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const toSkins = () => window.setTimeout(() =>
     (root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile, .ov-rail .ov-who"))?.focus(), 0);
   const tipFor = (character: string) => (on: boolean) => setHint(on ? newSkinTip(character) : null);
-  const tabs = `Tab or the bumpers switch between My mods, ${keysOn ? "Keys, " : ""}Browse and Downloads`;
   const listKey = kl.list?.settings.key;
-  const keys = tab === "keys"
-    ? `Arrows or the D-pad move between mods, typing searches, ${tabs}, Esc${listKey ? `, ${listKey}` : ""} or ${key} closes.`
-    : tab === "mine"
-    ? `Arrows or the D-pad move, Enter or A picks, Shift+click or Shift+Enter turns a mod on next to the others, right-click or the menu button shows more, I shows details, ${tabs}, Esc or ${key} closes.`
-    : tab === "browse"
-      ? `Click a mod for its page with its files, I or X installs the one in focus, right-click or the menu button shows more, typing searches, ${tabs}, Esc or ${key} ${route.user ? "goes back to the mods" : "closes"}.`
-      : `${tabs}, Esc or ${key} closes.`;
-  const footText = hint ?? note?.text ?? keys;
+  /** The keys for what has the focus, along the bottom: [keys, what they do, a longer tip]. */
+  const tabsChip: [string, string, string] = ["Tab", "Tabs", `Tab or the bumpers switch between My mods, ${keysOn ? "Keys, " : ""}Browse and Downloads`];
+  const escChip: [string, string, string] = ["Esc", tab === "browse" && route.user ? "Back" : "Close",
+    tab === "browse" && route.user ? "Esc or B goes back to the mods" : `Esc, B or ${key}${tab === "keys" && listKey ? ` or ${listKey}` : ""} closes the menu`];
+  const menuChip: [string, string, string] = ["Menu", "More", "Right-click, Shift+F10, the Menu key or the controller's menu button shows more"];
+  const chips: Array<[string, string, string]> = tab === "keys" ? [["Enter", "Rebind", "A click, Enter or A on a key rebinds it"], tabsChip, escChip]
+    : tab === "mine" ? [["Enter", "Pick", "Enter or A picks"],
+      ...(shiftOk ? [["Shift+Enter", "With others", "Shift+click or Shift+Enter turns it on next to the others"] as [string, string, string]] : []),
+      ["I", "Details", "I shows its details"], menuChip, tabsChip, escChip]
+    : tab === "browse" ? [["Enter", "Open", "Enter or A opens a mod's page with its files"], ["I", "Install", "I or X installs the mod in focus"], menuChip, tabsChip, escChip]
+    : [tabsChip, escChip];
+  const footText = hint ?? note?.text ?? (
+    <span className="ov-kh-all">
+      {chips.map(([k, what, tip]) => <span key={k} className="ov-kh" title={tip}><kbd>{k}</kbd>{what}</span>)}
+    </span>
+  );
 
   return (
-    <div className="ov" ref={root} key={opened} style={{ "--ov-cover": `${cover}%` } as React.CSSProperties}>
+    <div className="ov" ref={root} key={opened} onFocus={(e) => setShiftOk(!!(e.target as HTMLElement).closest("[data-shift]"))} style={{ "--ov-cover": `${cover}%` } as React.CSSProperties}>
       <header className="ov-top">
         <Segmented size="sm" label="What to show" value={tab} onChange={setTab}
           options={[
@@ -433,11 +518,11 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
               {shown.map((w, i) => (
                 <button key={w.name} type="button" className={`ov-who${w === who ? " on" : ""}`} style={{ "--i": Math.min(i, 14) } as React.CSSProperties}
                   aria-current={w === who} onClick={() => setSel(w.name)} onFocus={() => setSel(w.name)}
-                  title={`${w.name}: ${plural((w.group?.mods.length ?? 0) + w.mods.length, "mod")}${w.showing ? `, ${w.showing} is showing` : ""}`}>
+                  title={`${w.name}: ${plural((w.group?.mods.length ?? 0) + w.mods.length, "mod")}${w.showing ? `, ${w.showing} is showing` : ""}${w.here ? ". On screen in the game now" : ""}`}>
                   {w.name === OTHER ? <span className="ov-who-i"><Icon name="mods" /></span> : <Portrait game={game} name={w.name} size={38} />}
                   <span className="ov-who-t">
-                    <span className="ov-who-n">{w.name}</span>
-                    <span className="ov-who-s">{w.showing ?? (w.name === OTHER ? plural(w.mods.length, "mod") : "The game's own look")}</span>
+                    <span className="ov-who-n">{w.name}{w.here && <span className="ov-who-here">On screen</span>}</span>
+                    <span className="ov-who-s">{w.showing ?? (w.name === OTHER ? plural(w.mods.length, "mod") : "Vanilla")}</span>
                   </span>
                   <span className="ov-who-c">{(w.group?.mods.length ?? 0) + w.mods.length}</span>
                 </button>
@@ -451,7 +536,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
                   {who.name === OTHER ? <span className="ov-who-i big"><Icon name="mods" /></span> : <Portrait game={game} name={who.name} size={64} />}
                   <div className="ov-hero-t">
                     <h1>{who.name}</h1>
-                    <span className="muted">{who.showing ? `${who.showing} is showing` : who.name === OTHER ? "Mods that aren't for one character" : "Wearing the game's own look"}</span>
+                    <span className="muted">{who.showing ? `${who.showing} is showing` : who.name === OTHER ? "Mods that aren't for one character" : "Vanilla"}</span>
                   </div>
                 </div>
                 {who.group && (
@@ -460,14 +545,14 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
                     <div className="ov-grid" role="radiogroup" aria-label={`${who.name}'s skin`}>
                       {!words && (
                         <Tile i={0} on={who.group.active === 0} busy={busy === `${who.name}-0`} name="None" icon="block"
-                          title={`${who.name} wears the game's own look`} onPick={() => void pick(who, 0)} menu={() => skinMenuOf(who, 0, null)} />
+                          title={`Vanilla ${who.name}: none of these skins`} onPick={() => void pick(who, 0)} menu={() => skinMenuOf(who, 0, null)} />
                       )}
                       {who.group.mods.filter((m) => !words || who.name.toLowerCase().includes(words) || m.name.toLowerCase().includes(words)).map((m, i) => {
                         const full = modOf(m.modId);
                         const fresh = !!info && isNewSkin(game, info, who.group!, m.modId);
                         return (
                           <Tile key={m.modId} i={i + 1} on={who.group!.active === m.slot} busy={busy === `${who.name}-${m.slot}`} name={m.name} src={fileUrl(m.preview)} blur={full?.nsfw}
-                            fresh={fresh} onHint={fresh ? tipFor(who.name) : undefined}
+                            fresh={fresh} onHint={fresh ? tipFor(who.name) : undefined} shift={!!full && !!who.showing && who.group!.active !== m.slot}
                             title={who.group!.active === m.slot ? `${m.name} is showing` : !m.enabled ? `${m.name} is off. Picking it turns it on, and it shows after the game reloads` : who.showing && full ? `Show ${m.name}. Shift+click or Shift+Enter shows it next to ${who.showing} instead, and it stops switching in game` : `Show ${m.name}`}
                             onPick={(shift) => void (shift && full && who.showing && who.group!.active !== m.slot ? beside(full, who.showing) : pick(who, m.slot))} onMore={full ? () => setDetail({ mod: full }) : undefined} menu={() => skinMenuOf(who, m.slot, full)} />
                         );
@@ -480,7 +565,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
                     <h2 className="ov-h" title={`Turning one on or off shows after the game reloads its mods (${reloadKeyOf(game)}).${who.name === OTHER ? "" : ` Turning one on turns ${who.name}'s other mods off. Shift+click keeps them on`}`}>{who.group ? "Other mods" : "Mods"}</h2>
                     <div className="ov-grid">
                       {who.mods.filter((m) => !words || who.name.toLowerCase().includes(words) || m.name.toLowerCase().includes(words)).map((m, i) => (
-                        <Tile key={m.id} i={i} on={m.enabled} check busy={busy === m.id} name={m.name} src={fileUrl(m.preview)} blur={m.nsfw}
+                        <Tile key={m.id} i={i} on={m.enabled} check shift={!m.enabled && !!m.character} busy={busy === m.id} name={m.name} src={fileUrl(m.preview)} blur={m.nsfw}
                           title={m.enabled ? `${m.name} is on. Click to turn it off` : m.character ? `Turn on ${m.name} and ${m.character}'s other mods off. Shift+click keeps them on` : `${m.name} is off. Click to turn it on`}
                           onPick={(shift) => void turn(m, !m.enabled, shift)} onMore={() => setDetail({ mod: m })} menu={() => modMenu(m)} />
                       ))}
@@ -491,7 +576,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
             )}
           </>)
         ) : tab === "keys" ? (
-          <KeysTab game={game} list={kl.list} error={kl.error} onRetry={() => void kl.reload()} onMine={() => setTab("mine")} onSettings={openKeySettings} />
+          <KeysTab key={keysQ} query={keysQ} game={game} list={kl.list} error={kl.error} order={order} onRetry={() => void kl.reload()} onMine={() => setTab("mine")} onSettings={openKeySettings} onSay={say} />
         ) : tab === "browse" ? (
           // the app's own browser and creator pages, scrolling inside the menu
           <div className="ov-page ov-scroll" key={route.user ?? "mods"}>
@@ -508,7 +593,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
           <aside className="ov-detail" aria-label="Details">
             <IconButton icon="x" label="Back" title="Back (Esc)" className="ov-detail-x" onClick={() => setDetail(null)} />
             <ModDetail game={game} m={detail.mod} group={everyone.find((w) => w.group?.mods.some((x) => x.modId === detail.mod.id)) ?? null} busy={!!busy}
-              onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} />
+              onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} onKeys={() => keysOf(detail.mod)} />
           </aside>
         )}
       </div>
@@ -532,14 +617,16 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
 
 /** `onPick` gets whether Shift was held. `menu`: its right-click menu. `fresh`: a skin not shown in game yet, marked
  *  New; `onHint` hears when it has the pointer or the focus, so the menu can say what to do if it looks wrong. */
-function Tile({ i, on, check, busy, name, src, icon = "mods", blur, fresh, title, onPick, onMore, onHint, menu }: {
-  i: number; on: boolean; check?: boolean; busy?: boolean; name: string; src?: string; icon?: "mods" | "block"; blur?: boolean; fresh?: boolean; title: string;
+function Tile({ i, on, check, busy, name, src, icon = "mods", blur, fresh, shift, title, onPick, onMore, onHint, menu }: {
+  i: number; on: boolean; check?: boolean;
+  /** Shift+Enter does something different here (turns it on next to the others). */
+  shift?: boolean; busy?: boolean; name: string; src?: string; icon?: "mods" | "block"; blur?: boolean; fresh?: boolean; title: string;
   onPick: (shift: boolean) => void; onMore?: () => void; onHint?: (on: boolean) => void; menu?: () => MenuEntry[];
 }) {
   const nsfw = useNsfw();
   return (
     <div className="ov-cell" style={{ "--i": Math.min(i, 16) } as React.CSSProperties} onContextMenu={menu ? menuHandler(menu) : undefined}>
-      <button type="button" role={check ? "checkbox" : "radio"} aria-checked={on} className={`ov-tile${on ? " on" : ""}${busy ? " busy" : ""}`}
+      <button type="button" role={check ? "checkbox" : "radio"} aria-checked={on} data-shift={shift || undefined} className={`ov-tile${on ? " on" : ""}${busy ? " busy" : ""}`}
         onClick={(e) => onPick(e.shiftKey)} title={title}
         onFocus={() => onHint?.(true)} onBlur={() => onHint?.(false)} onMouseEnter={() => onHint?.(true)} onMouseLeave={() => onHint?.(false)}
         onKeyDown={(e) => { if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); onPick(true); } }}>
@@ -551,8 +638,10 @@ function Tile({ i, on, check, busy, name, src, icon = "mods", blur, fresh, title
   );
 }
 
-function ModDetail({ game, m, group, busy, onShow, onTurn }: {
+function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
   game: GameId; m: ModEntry; group: Who | null; busy: boolean; onShow: (w: Who, slot: number) => void; onTurn: (on: boolean) => void;
+  /** Its keys on the Keys tab. */
+  onKeys: () => void;
 }) {
   const nsfw = useNsfw();
   const src = fileUrl(m.preview);
@@ -571,7 +660,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn }: {
             ? <Badge tone="accent" icon="update" title="GameBanana has a newer file. Click to update. Its options, tags and on/off state stay"
                 onClick={() => void installLatest(game, m.source!.modId, m.name, m.id)}>Update</Badge>
             : <Badge tone="accent">Update</Badge>)}
-          {m.hasKeys && <Badge title="It has keys that change parts of it while you play">Toggles</Badge>}
+          {m.hasKeys && <Badge title="It has keys that change parts of it while you play. Click to see them" onClick={onKeys}>Toggles</Badge>}
         </div>
         <p className="muted">{facts.join(", ")}</p>
         {m.tags.length > 0 && <p className="ov-tags">{m.tags.map((t) => <Badge key={t}>{t}</Badge>)}</p>}

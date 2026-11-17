@@ -1,15 +1,16 @@
 // The right-click menus for an installed mod and for a character (the same everywhere they show), and the global
 // search's characters and installed mods. Imported once by the Mods screen so they register at start.
 // Owner: LIBRARY area.
-import { library, type GameId, type ModEntry } from "../../lib/api";
-import { trashPhrase } from "../settings/automatic";
+import { errorText, library, settings, type GameId, type ModEntry } from "../../lib/api";
+import { trashDaysPref, trashPhrase } from "../settings/automatic";
 import type { ModHealth } from "../../lib/fixes";
 import { charNoun } from "../../lib/games";
+import { holdMods, holdOn, holdsNow, releaseMods } from "../../lib/holds";
 import { portraitNow } from "../../lib/portraits";
 import { registerCommands, scoreCommand, type Command } from "../../lib/search";
 import { currentGame, go, onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
-import { registerMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { menuFor, registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { isOwned, toggleOwned } from "../characters/owned";
 import { characterNames, isCharHidden, setCharHidden } from "../characters/roster";
 import {
@@ -19,7 +20,10 @@ import {
 import { askLib } from "./LibDialogs";
 import { overlappingAll } from "./overlap";
 import { liveCharacterOf, liveShownInstead } from "../ingame/data";
-import { onPublish } from "./data";
+import { changeStates, onPublish } from "./data";
+import { toast } from "../../ui/toast";
+import { queueLatest } from "../../lib/gamebanana";
+import { plural } from "../../ui/kit";
 
 // what the mod screens saw last, so menus opened anywhere know a mod's health and a character's mods
 const lastHealth = new Map<GameId, Map<string, ModHealth>>();
@@ -29,9 +33,27 @@ export function noteLibrary(game: GameId, mods: ModEntry[] | null, health?: Map<
   if (health) lastHealth.set(game, health);
 }
 export const healthOf = (game: GameId, id: string) => lastHealth.get(game)?.get(id);
+/** A mod as the mod screens saw it last, for menus opened elsewhere (Tools rows). Undefined before they've loaded. */
+export const knownMod = (game: GameId, id: string) => lastMods.get(game)?.find((m) => m.id === id);
 
 /** A hash swap fixes it, or a fixer gachamod gets and runs. */
-const isBroken = (h: ModHealth | undefined) => h?.status === "broken" || (h?.status === "unfixable" && !!h.tool);
+export const isBroken = (h: ModHealth | undefined) => h?.status === "broken" || (h?.status === "unfixable" && !!h.tool);
+
+/** Download the update of each of these mods that has one, with one toast for all of them. */
+export async function getUpdates(game: GameId, list: ModEntry[]) {
+  const due = list.filter((m) => m.updateAvailable && m.source);
+  if (due.length === 1) return getUpdate(game, due[0]!);
+  if (!due.length) return;
+  const missed: string[] = [];
+  for (const m of due) {
+    try { if (!(await queueLatest(game, m.source!.modId, m.id))) missed.push(m.name); }
+    catch { missed.push(m.name); }
+  }
+  const got = due.length - missed.length;
+  const text = [got && `Downloading ${plural(got, "update")}`, missed.length && `Couldn't find a newer file for ${missed.slice(0, 3).join(", ")}${missed.length > 3 ? ` and ${missed.length - 3} more` : ""}`]
+    .filter(Boolean).join(". ");
+  toast(text, !got, got ? { label: "Downloads", run: () => go("downloads") } : undefined);
+}
 
 /** "Make sub-mod of" with the mods it could go with (the same character's first), or "Unlink" for a sub-mod. */
 function subModItem(game: GameId, mod: ModEntry): MenuEntry {
@@ -73,8 +95,15 @@ registerMenu("mod", ({ game, mod, selection }) => {
   const allFav = list.every((m) => m.favorite);
   const broken = list.filter((m) => isBroken(healthOf(game, m.id)));
   const fromGb = list.filter((m) => m.source);
+  const due = fromGb.filter((m) => m.updateAvailable);
   const onScreen = onlyOnScreenFn();
-  const reasons = broken.flatMap((m) => healthOf(game, m.id)?.reasons ?? []);
+  const reasons = [...new Set(broken.flatMap((m) => healthOf(game, m.id)?.reasons ?? []))];
+  // problems the user can set aside, and mods whose problems were set aside already (lib/holds)
+  const holds = holdsNow(game);
+  const heldList = list.filter((m) => holdOn(holds, m));
+  const hurt = (m: ModEntry) => ["broken", "unfixable"].includes(healthOf(game, m.id)?.status ?? "");
+  const loud = list.filter((m) => holdOn(holds, m)?.kind !== "ignore" && (m.conflicts > 0 || m.iniCount === 0 || hurt(m)));
+  const canWait = list.filter((m) => !holdOn(holds, m) && hurt(m));
   // turning on next to the character's other mods that are on (live skins switch instead, one at a time)
   const going = list.filter((m) => !m.enabled && !liveCharacterOf(game, m.id));
   const beside = !allOn && going.length ? overlappingAll(going, lastMods.get(game) ?? []).filter((o) => !liveCharacterOf(game, o.id)) : [];
@@ -94,6 +123,15 @@ registerMenu("mod", ({ game, mod, selection }) => {
     !many && mod.conflicts > 0 && { label: "Conflicts", icon: "warn", title: "Mods that change the same parts as this one, to pick which one wins", onClick: () => openDetails(mod, "conflicts") },
     !many && mod.iniCount > 0 && { label: "View in 3D", icon: "box", title: "Turn the mod's model around, as its toggles are set now", onClick: () => openDetails(mod, "model") },
     broken.length > 0 && { label: "Attempt fix for the game update", icon: "wand", title: reasons.slice(0, 3).join(". ") || "A game update broke it. Swaps its outdated hashes, or runs the fixer it needs", onClick: () => void fixForUpdate(game, broken) },
+    canWait.length > 0 && { label: "Wait for an update", icon: "bell-off",
+      title: `Stops the game update warning until you install a newer version of ${many ? "them" : "it"} from ${many ? "their" : "its"} author. If that one is still broken, it warns again`,
+      onClick: () => void holdMods(game, canWait, "update") },
+    loud.length > 0 && { label: "Ignore problems", icon: "hide",
+      title: `Stops every warning about ${many ? "them" : "it"}: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back`,
+      onClick: () => void holdMods(game, loud, "ignore") },
+    heldList.length > 0 && { label: "Show problems again", icon: "eye",
+      title: heldList.every((m) => holds[m.id]?.kind === "update") ? "Stop waiting for an update and warn about it again now" : "Warn about its problems again",
+      onClick: () => void releaseMods(game, heldList) },
     onScreen && mod.hasKeys && { label: "Toggles only while on screen", icon: "keyboard", title: "Its toggles only work while its character is on screen, so they stop taking keys meant for other mods", onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
     !many && { label: "Rename", icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
@@ -107,33 +145,54 @@ registerMenu("mod", ({ game, mod, selection }) => {
     !many && mod.customPreview && { label: "Reset preview", icon: "undo", title: "Go back to the picture the mod came with", onClick: () => void resetPreview(game, mod) },
     !many && { label: "Open folder", icon: "folder", onClick: () => openFolder(mod) },
     !many && mod.source && { label: "Open on GameBanana", icon: "external", onClick: () => openOnGb(mod) },
-    !many && mod.updateAvailable && mod.source && { label: "Get the update", icon: "update", onClick: () => void getUpdate(game, mod) },
-    fromGb.length > 0 && { label: "Check for update", icon: "refresh", onClick: () => void checkForUpdates(game, fromGb) },
+    due.length > 0 && { label: due.length === 1 ? "Update" : `Update (${due.length})`, icon: "update",
+      title: many && due.length === 1 ? `Only ${due[0]!.name} has one` : undefined, onClick: () => void getUpdates(game, due) },
+    fromGb.length > 0 && { label: "Check for updates", icon: "refresh", onClick: () => void checkForUpdates(game, fromGb) },
     many && { label: "Combine into one mod", icon: "layers", title: "One mod with each of these as a part you can turn on or off in its details. For mods that came in the same download", onClick: () => void combineMods(game, list) },
     { label: "Share as .gachamod", icon: "share", title: "A small file with GameBanana links and your settings, to send to a friend or another PC", onClick: () => exportMods(game, list) },
     "-",
-    { label: "Move to trash", icon: "trash", danger: true, keys: "Del", title: `The files ${trashPhrase()}. A short record stays in Mods, Trash so you can download it again`, onClick: () => void trashMods(game, list) },
+    trashDaysPref.get() > 0
+      ? { label: "Move to trash", icon: "trash", danger: true, keys: "Del", title: `The files ${trashPhrase()}. Undo or Mods, Trash puts ${many ? "them" : "it"} back`, onClick: () => void trashMods(game, list) }
+      : { label: "Delete", icon: "trash", danger: true, keys: "Del", title: `The files ${trashPhrase()}. Mods from GameBanana can be downloaded again from Undo or Mods, Trash; others are asked about first`, onClick: () => void trashMods(game, list) },
   ];
 });
 
+// whether "<game>.oneSkin" keeps mods of one character on together ("0"), read when a character menu opens
+const togetherOk = new Map<GameId, boolean>();
+const readTogether = (game: GameId) => void settings.get(`${game}.oneSkin`).then((v) => togetherOk.set(game, v === "0"), () => {});
+
 registerMenu("character", ({ game, name }) => {
-  const mods = (lastMods.get(game) ?? []).filter((m) => m.character?.toLowerCase() === name.toLowerCase());
+  const same = (m: ModEntry) => m.character?.toLowerCase() === name.toLowerCase();
+  const mods = (lastMods.get(game) ?? []).filter(same);
   const known = lastMods.has(game);
   const hidden = isCharHidden(game, name);
+  readTogether(game);
   const forAll = async (on: boolean) => {
     const all = await library.list(game);
-    await setOn(game, all.filter((m) => m.character?.toLowerCase() === name.toLowerCase()), on, all);
+    await setOn(game, all.filter(same), on, all);
   };
+  // wear one outfit: it goes on, the character's other outfits go off (sub-mods follow their parent)
+  const wear = async (id: string) => {
+    try {
+      const all = await library.list(game);
+      const mod = all.find((m) => m.id === id);
+      if (!mod) return;
+      const offs = all.filter((m) => same(m) && !m.parent && m.enabled && m.id !== id).map((m) => m.id);
+      await changeStates(game, `${name} wears ${mod.name}`, mod.enabled ? [] : [id], offs, all);
+    } catch (e) { toast(errorText(e), true); }
+  };
+  const outfits = mods.filter((m) => !m.parent).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
   return [
     { header: name },
     { label: "Open page", icon: "characters", onClick: () => go({ view: "characters", character: name }) },
     { label: "Find mods online", icon: "browse", onClick: () => go({ view: "characters", character: name, tab: "online" }) },
     "-",
-    { label: "Turn on all mods", icon: "power", disabled: known && (!mods.length || mods.every((m) => m.enabled)),
-      title: "With one skin per character on, only the last one stays on", onClick: () => void forAll(true) },
-    { label: "Turn off all mods", icon: "power", disabled: known && !mods.some((m) => m.enabled), onClick: () => void forAll(false) },
+    { label: "Wear", icon: "layers", disabled: known && !outfits.length, title: known && !outfits.length ? `No mods for ${name} yet` : `Pick the mod ${name} wears. The others turn off`,
+      items: outfits.slice(0, 40).map((m) => ({ label: m.name, checked: m.enabled, onClick: () => void wear(m.id) })) },
+    togetherOk.get(game) && { label: "Turn on all mods", icon: "power", disabled: known && (!mods.length || mods.every((m) => m.enabled)), onClick: () => void forAll(true) },
+    { label: "Default outfit", icon: "undo", disabled: known && !mods.some((m) => m.enabled), title: `Turns off every mod for ${name}`, onClick: () => void forAll(false) },
     "-",
-    { label: "Owned", keys: "O", checked: isOwned(game, name), title: "Owned ones show under Owned on the Characters page", onClick: () => void toggleOwned(game, name) },
+    { label: "Owned", keys: "O", checked: isOwned(game, name), title: `Owned ones show under Owned on the ${charNoun(game)} page`, onClick: () => void toggleOwned(game, name) },
     { label: "Set a picture", icon: "image", title: `A file, a link or one of ${name}'s mod previews`, onClick: () => askLib({ kind: "portrait", game, name }) },
     hidden
       ? { label: "Show in the roster", icon: "eye", onClick: () => setCharHidden(game, name, false) }
@@ -197,7 +256,7 @@ registerCommands("library.characters", async (query) => {
     // the character page goes before "<name> mods online" even with no mods
     out.push({ id: `char:${g.id}:${c.name}`, title: c.name, section: many, img, icon: "characters",
       keywords: `${one} ${many} character page skins outfits`, hint: n ? `${n} ${n === 1 ? "mod" : "mods"}` : undefined, priority: n ? 4 : 1,
-      run: () => go({ view: "characters", character: c.name }) });
+      run: () => go({ view: "characters", character: c.name }), menu: () => menuFor("character", { game: g.id, name: c.name }) });
     if (n) out.push({ id: `charmods:${g.id}:${c.name}`, title: `${c.name}'s mods`, section: "Mods", img, icon: "mods",
       keywords: `${one} installed mods skins my`, hint: `${n}`, where: "Mods", priority: 5, run: () => go({ view: "library", character: c.name }) });
   }
@@ -215,6 +274,7 @@ registerCommands("library.mods", async (query) => {
       id: `mod:${g.id}:${m.id}`, title: m.name, section: "Mods", icon: "mods",
       keywords: `${m.character ?? ""} ${one} installed mod ${m.tags.join(" ")} ${m.source?.submitter ?? ""}`,
       hint: m.enabled ? "On" : "Off", where: `Mods › ${m.character ?? "No character"}`, run: () => go({ view: "library", modId: m.id }),
+      menu: () => menuFor("mod", { game: g.id, mod: m }),
     }))
     .map((c) => ({ c, s: scoreCommand(query, c) }))
     .filter((x) => x.s > 0)

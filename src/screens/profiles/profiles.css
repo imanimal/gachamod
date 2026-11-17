@@ -2,27 +2,27 @@
    --p-color is the profile's own colour (user data, set inline); everything else comes from theme tokens. */
 
 /* cards */
-.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .7rem; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: var(--s-3); }
 .profile-card-skel { height: 15rem; border-radius: var(--radius); }
 .profile-card { display: flex; flex-direction: column; }
 .profile-card-main { display: flex; flex-direction: column; text-align: left; color: inherit; flex: 1; }
 .profile-card-main:disabled { cursor: progress; }
 .profile-card-banner { height: 8.5rem; width: 100%; }
-.profile-card-head { display: flex; align-items: center; gap: .7rem; padding: 0 .9rem; margin-top: -1.4rem; position: relative; }
+.profile-card-head { display: flex; align-items: center; gap: var(--s-3); padding: 0 var(--s-4); margin-top: -1.4rem; position: relative; }
 .profile-card-head .profile-icon { box-shadow: 0 0 0 3px var(--surface); background: var(--surface-2); }
 .profile-card-t { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-top: 1.4rem; }
 .profile-card-head .badge { margin-top: 1.4rem; }
 .profile-card-name { font-weight: 700; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.profile-card-sub { color: var(--text-3); font-size: .85em; }
-.profile-card-desc { padding: .5rem .9rem 0; color: var(--text-2); font-size: .92em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.profile-card-a { display: flex; align-items: center; gap: .3rem; padding: .7rem .9rem .8rem; }
+.profile-card-sub { color: var(--text-3); font-size: var(--t-small); }
+.profile-card-desc { padding: var(--s-2) var(--s-4) 0; color: var(--text-2); font-size: var(--t-small); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.profile-card-a { display: flex; align-items: center; gap: var(--s-1); padding: var(--s-3) var(--s-4); }
 
 .profile-card .pthumb-card.profile-card-banner { aspect-ratio: auto; border-radius: var(--radius) var(--radius) 0 0; }
 .profile-card .pthumb-face { padding-bottom: 1.2rem; }
-.profile-rename { width: 100%; min-width: 0; height: 1.9rem; padding: 0 .45rem; border: 0; border-radius: var(--radius-sm); font: inherit; font-weight: 700;
+.profile-rename { width: 100%; min-width: 0; height: 1.9rem; padding: 0 var(--s-2); border: 0; border-radius: var(--radius-sm); font: inherit; font-weight: 700;
   color: var(--text); background: var(--bg-2); box-shadow: inset 0 0 0 1.5px var(--accent); outline: none; }
-.profile-card-a .kbd { font-size: .78em; }
-.profile-card-a .link-btn { font-size: .85em; }
+.profile-card-a .kbd { font-size: var(--t-meta); }
+.profile-card-a .link-btn { font-size: var(--t-small); }
 
 .profile-icon.is-emoji { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
 /* the Default profile's layers glyph: themes style every .avatar (a dark disc with a ring in ZZZ), which hid the glyph
@@ -35,8 +35,8 @@
 .pe-banner { position: relative; display: block; width: 100%; padding: 0; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; cursor: pointer; }
 .profile-editor-banner { display: block; height: 8.5rem; width: 100%; transition: filter var(--dur-fast) var(--ease); }
 .pe-banner:hover .profile-editor-banner { filter: brightness(.9); }
-.pe-hint { position: absolute; right: .6rem; bottom: .6rem; display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .65rem; border-radius: 999px;
-  font-size: .84em; font-weight: 650; color: #fff; background: rgb(0 0 0 / .6); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.pe-hint { position: absolute; right: .6rem; bottom: .6rem; display: inline-flex; align-items: center; gap: var(--s-1); padding: var(--s-1) var(--s-3); border-radius: 999px;
+  font-size: var(--t-small); font-weight: 650; color: #fff; background: rgb(0 0 0 / .6); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
 .pe-hint .i { width: 1rem; height: 1rem; }
 .pe-banner:is(:hover, :focus-visible, .on) .pe-hint, .pe-banner:not(:has(img)) .pe-hint { opacity: 1; }
 .pe-icon { position: absolute; left: 1rem; bottom: -2.2rem; padding: 0; border-radius: 30%; cursor: pointer; }
@@ -46,13 +46,13 @@
   background: var(--surface); color: var(--text-2); box-shadow: var(--shadow), inset 0 0 0 1px var(--line-2); }
 .pe-icon-edit .i { width: .85rem; height: .85rem; }
 .pe-icon:is(:hover, .on) .pe-icon-edit { color: var(--accent-ink); }
-.profile-editor-fields { display: flex; flex-direction: column; gap: .8rem; }
+.profile-editor-fields { display: flex; flex-direction: column; gap: var(--s-3); }
 
 /* the pickers */
-.pe-pick { display: flex; flex-direction: column; gap: .7rem; padding: .45rem; }
-.pe-pick-h { display: flex; align-items: center; gap: .5rem; }
+.pe-pick { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-2); }
+.pe-pick-h { display: flex; align-items: center; gap: var(--s-2); }
 .pe-pick-h .tabs { flex: 1; min-width: 0; }
-.pe-colors { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: 3px; }
+.pe-colors { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); padding: 3px; }
 .pe-colors .swatch { width: 1.5rem; height: 1.5rem; }
 .pe-nocolor { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; color: var(--text-3); box-shadow: inset 0 0 0 1.5px var(--line-2); }
 .pe-nocolor .i { width: 1rem; height: 1rem; }
@@ -60,7 +60,7 @@
 .pe-anycolor { position: relative; overflow: hidden; cursor: pointer; background: conic-gradient(#f43f5e, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #f43f5e); }
 .pe-anycolor.on { background: var(--c); }
 .pe-anycolor input { position: absolute; inset: -.5rem; width: 3rem; height: 3rem; border: 0; padding: 0; opacity: 0; cursor: pointer; }
-.pe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr)); gap: .35rem; max-height: 18rem; overflow: auto; padding: 4px; }
+.pe-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.5rem, 1fr)); gap: var(--s-1); max-height: 18rem; overflow: auto; padding: 4px; }
 .pe-tile { display: grid; place-items: center; aspect-ratio: 1; padding: 0; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); font-size: 1.3rem; line-height: 1;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .pe-tile .i { width: 1.25rem; height: 1.25rem; }
@@ -71,30 +71,30 @@
 .pe-portraits { grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr)); }
 .pe-portrait { border-radius: 50%; padding: .12rem; overflow: hidden; }
 .pe-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.pe-banners { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: .5rem; max-height: 17rem; overflow: auto; padding: 4px; }
+.pe-banners { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: var(--s-2); max-height: 17rem; overflow: auto; padding: 4px; }
 .pe-banner-tile { padding: 0; border-radius: var(--radius-sm); overflow: hidden; }
 .pe-banner-tile.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 .pe-banner-img { display: block; aspect-ratio: 16 / 9; width: 100%; }
-.banner-link { display: flex; gap: .5rem; align-items: flex-end; }
+.banner-link { display: flex; gap: var(--s-2); align-items: flex-end; }
 .banner-link .field { flex: 1; }
 
 /* hotkey capture field (HotkeyField.tsx), also used in Settings */
-.hotkey-row { display: flex; align-items: center; gap: .4rem; }
+.hotkey-row { display: flex; align-items: center; gap: var(--s-2); }
 .hotkey-row input { flex: 1; min-width: 0; cursor: pointer; caret-color: transparent; }
 .hotkey-field.bad input { box-shadow: inset 0 0 0 1.5px var(--bad); }
 .hotkey-field.bad .hint { color: var(--bad); }
-.set-hotkeys { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .8rem; margin-top: .8rem; }
+.set-hotkeys { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--s-3); margin-top: var(--s-3); }
 
 /* a profile's page */
 .char-hero-skel { height: 9rem; margin-bottom: .9rem; border-radius: var(--radius-lg); }
 .profile-hero-pic { flex: none; border-radius: 50%; }
 .profile-hero-pic:hover .profile-icon { box-shadow: 0 0 0 3px var(--accent); }
-.profile-hero .char-hero-nav { align-items: center; gap: .4rem; }
-.profile-page-bar { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; margin-bottom: .9rem; }
+.profile-hero .char-hero-nav { align-items: center; gap: var(--s-2); }
+.profile-page-bar { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; margin-bottom: var(--s-4); }
 .profile-page-bar .search { flex: 0 1 22rem; }
 
 /* the icon picker's "From this PC" tab */
-.pe-file { display: flex; align-items: center; gap: .9rem; padding: .6rem .2rem; }
-.pe-file-t { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; flex: 1; min-width: 0; }
+.pe-file { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-2) var(--s-1); }
+.pe-file-t { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-1); flex: 1; min-width: 0; }
 .pe-file-t .hint { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-icon.is-img img { width: 100%; height: 100%; object-fit: cover; }

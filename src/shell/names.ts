@@ -12,7 +12,7 @@ import type { IconName } from "../ui/Icon";
 
 export const VIEW_INFO: Record<View, { label: string; icon: IconName }> = {
   home: { label: "Home", icon: "home" },
-  library: { label: "My Mods", icon: "mods" },
+  library: { label: "Mods", icon: "mods" },
   characters: { label: "Characters", icon: "characters" },
   browse: { label: "Browse", icon: "browse" },
   downloads: { label: "Downloads", icon: "downloads" },

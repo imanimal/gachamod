@@ -12,11 +12,13 @@ import { heldOf, modifierOf, tokenOf } from "../modtools/keyNames";
 import { askTesterRisks } from "./TesterConfirm";
 
 const infos = new Map<GameId, LiveInfo | null>();
+/** Why the game's live info couldn't be read, for the panel's "Try again". */
+const errors = new Map<GameId, string>();
 const subs = new Set<() => void>();
 const ping = () => subs.forEach((f) => f());
 
 export async function reloadLive(game: GameId) {
-  try { infos.set(game, await live.info(game)); } catch { infos.set(game, { groups: [], ready: [], running: false, menu: { style: "window", key: "F7", pad: true, fastSave: true, binds: {} }, blocked: false, all: false, allowed: false, checked: false }); }
+  try { infos.set(game, await live.info(game)); errors.delete(game); } catch (e) { errors.set(game, errorText(e)); infos.set(game, { groups: [], ready: [], running: false, menu: { style: "window", key: "F7", pad: true, fastSave: true, binds: {} }, blocked: false, all: false, allowed: false, checked: false }); }
   ping();
 }
 
@@ -81,6 +83,12 @@ export function useLive(game: GameId): LiveInfo | null {
   const v = useSyncExternalStore(subscribe, () => infos.get(game) ?? null);
   useEffect(() => load(game), [game]);
   return v;
+}
+
+/** Why the game's live info couldn't be read the last time, or null. */
+export function useLiveError(game: GameId): string | null {
+  wire();
+  return useSyncExternalStore(subscribe, () => errors.get(game) ?? null);
 }
 
 /** The same outside React: null when it isn't a live skin or the game's groups haven't loaded. */
@@ -162,18 +170,35 @@ export async function setAll(game: GameId, on: boolean) {
   } catch (e) { toast(errorText(e), true); }
 }
 
-/** Change how the skin menu opens while playing. Undo puts the old way back. */
-export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSettings) {
+/** Change how the skin menu opens while playing. Undo puts the old way back. `label`: what the Undo step says, when
+ *  the caller knows better (which key changed). */
+export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSettings, label?: string) {
   try {
     await live.setMenu(game, menu);
     await reloadLive(game);
     record({
-      label: JSON.stringify(before.binds) !== JSON.stringify(menu.binds) ? "Changed the in-game menu's keys"
-        : `Set the in-game menu to ${menu.style === "window" ? "open over the game" : "be drawn by the game"} with ${menu.key}`,
+      label: label ?? (JSON.stringify(before.binds) !== JSON.stringify(menu.binds) ? "Changed the in-game menu's keys"
+        : `Set the in-game menu to ${menu.style === "window" ? "open over the game" : "be drawn by the game"} with ${menu.key}`),
       undo: async () => { await live.setMenu(game, before); await reloadLive(game); },
       redo: async () => { await live.setMenu(game, menu); await reloadLive(game); },
     });
   } catch (e) { toast(errorText(e), true); }
+}
+
+/** Changes waiting to save, per game: each one starts from the one before it, not from what the panel showed when it
+ *  was made, so two quick changes both stay. */
+const menuQueue = new Map<GameId, { last: MenuSettings; chain: Promise<void> }>();
+
+/** Change part of the menu's settings, after any change still saving. `patch` can read the settings it applies to. */
+export function patchMenu(game: GameId, menu: MenuSettings, patch: Partial<MenuSettings> | ((m: MenuSettings) => Partial<MenuSettings>), label?: string): Promise<void> {
+  const q = menuQueue.get(game);
+  const before = q?.last ?? menu;
+  const next = { ...before, ...(typeof patch === "function" ? patch(before) : patch) };
+  const chain = (q?.chain ?? Promise.resolve()).then(() => setMenu(game, before, next, label));
+  const entry = { last: next, chain };
+  menuQueue.set(game, entry);
+  void chain.finally(() => { if (menuQueue.get(game) === entry) menuQueue.delete(game); });
+  return chain;
 }
 
 // ── the menu's own keys in the menu over the game ──
@@ -182,14 +207,14 @@ export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSett
 const WINDOW_KEYS = new Set(["VK_UP", "VK_DOWN", "VK_LEFT", "VK_RIGHT", "VK_RETURN"]);
 
 /** What a key press does in the skin menu by the keys the player picked (`MenuSettings.binds`): "up", "down", "show",
- *  "back" or "close". Null for a key that isn't bound, a modifier by itself, and the arrow keys and Enter. */
+ *  "back", "keys" or "close". Null for a key that isn't bound, a modifier by itself, and the arrow keys and Enter. */
 export function boundAction(e: KeyboardEvent, binds: Record<string, string[]> | undefined): string | null {
   if (!binds || modifierOf(e)) return null;
   const key = tokenOf(e);
   if (!key) return null;
   const pressed = [...heldOf(e), key].join(" ");
   if (WINDOW_KEYS.has(pressed)) return null;
-  return ["up", "down", "show", "back", "close"].find((a) => binds[a]?.includes(pressed)) ?? null;
+  return ["up", "down", "show", "back", "keys", "close"].find((a) => binds[a]?.includes(pressed)) ?? null;
 }
 
 // ── skins not shown in game yet ──

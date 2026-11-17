@@ -2,15 +2,16 @@
 // is older than 30 seconds, re-lists on backend and app events, and changes from actions applied in place.
 // Owner: LIBRARY area.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { errorText, library, type GameId, type ModChange, type ModEntry } from "../../lib/api";
+import { errorKind, errorText, library, type GameId, type ModChange, type ModEntry } from "../../lib/api";
 import { held } from "../../lib/tauri";
 import { checkUpdates, queueLatest } from "../../lib/gamebanana";
-import { go, onApp, setBadge } from "../../lib/store";
+import { go, onApp, recountMods } from "../../lib/store";
 import { record, undo } from "../../lib/history";
 import { toast } from "../../ui/toast";
 import { plural } from "../../ui/kit";
 import { notesText } from "../../lib/notes";
-import { autoRescanPref } from "../settings/automatic";
+import { autoRescanPref, trashDaysPref } from "../settings/automatic";
+import { confirmDelete } from "./confirmDelete";
 import { sayF10 } from "../../lib/elevation";
 
 const count = (n: number) => (n === 1 ? "1 mod" : `${n} mods`);
@@ -23,7 +24,7 @@ let purged = false;
 
 type Listener = (game: GameId, change: ModChange) => void;
 const listeners = new Set<Listener>();
-export function publish(game: GameId, change: ModChange) { listeners.forEach((f) => f(game, change)); }
+export function publish(game: GameId, change: ModChange) { listeners.forEach((f) => f(game, change)); recountMods(game); }
 /** Hear every published change (live switching keeps its picks in step with the library). */
 export function onPublish(f: Listener) { listeners.add(f); return () => { listeners.delete(f); }; }
 
@@ -50,25 +51,59 @@ export function reuse(prev: ModEntry[], next: ModEntry[]): ModEntry[] {
   return same ? prev : out;
 }
 
-export function useMods(game: GameId) {
-  const [mods, setMods] = useState<ModEntry[]>([]);
-  const [loaded, setLoaded] = useState(false);
+/** Why the list couldn't be read. `kind` is the backend's: "not_set_up" when the game's Mods folder is missing. */
+export interface ModsError { kind: string; text: string }
+
+/** The last list of each game, so coming back to a screen shows it at once while the folder is read again. */
+const lastList = new Map<GameId, ModEntry[]>();
+
+/** `showsErrors`: the screen draws `error` itself, so a failure is toasted only while a list stays on screen. */
+export function useMods(game: GameId, { showsErrors = false }: { showsErrors?: boolean } = {}) {
+  const [mods, setMods] = useState<ModEntry[]>(() => lastList.get(game) ?? []);
+  const [loaded, setLoaded] = useState(() => lastList.has(game));
+  const [error, setError] = useState<ModsError | null>(null);
   const [scanning, setScanning] = useState(false);
+  // another game: start from its last list (or nothing) in this same render, so the old game's cards never show
+  const [owner, setOwner] = useState(game);
+  if (owner !== game) {
+    setOwner(game);
+    setMods(lastList.get(game) ?? []);
+    setLoaded(lastList.has(game));
+    setError(null);
+    setScanning(false);
+  }
   const alive = useRef(true);
+  // the game on screen now: an answer for another game (a scan still running across a switch) is dropped
+  const gameRef = useRef(game);
+  gameRef.current = game;
+  const listRef = useRef(mods);
+  listRef.current = mods;
+
+  useEffect(() => { if (owner === game && loaded && !error) lastList.set(game, mods); }, [owner, game, mods, loaded, error]);
+
+  const fail = useCallback((e: unknown) => {
+    const err = { kind: errorKind(e), text: errorText(e) };
+    setError(err);
+    setLoaded(true);
+    // a missing Mods folder is drawn by the screen in place of the list, even when an old list was showing
+    if (!showsErrors || (err.kind !== "not_set_up" && listRef.current.length > 0)) toast(err.text, true);
+  }, [showsErrors]);
 
   const relist = useCallback(async () => {
     try {
       const l = await library.list(game);
-      if (alive.current) { setMods((was) => reuse(was, l)); setLoaded(true); }
-    } catch (e) { if (alive.current) { setLoaded(true); toast(errorText(e), true); } }
-  }, [game]);
+      // list only reads the database, so it can't tell the Mods folder is back: only a scan clears that error
+      if (alive.current && gameRef.current === game) { setMods((was) => reuse(was, l)); setLoaded(true); setError((e) => (e?.kind === "not_set_up" ? e : null)); }
+    } catch (e) { if (alive.current && gameRef.current === game) fail(e); }
+  }, [game, fail]);
 
   const rescan = useCallback(async (quiet = false) => {
     setScanning(true);
     try {
       const l = await library.scan(game);
       lastScan.set(game, Date.now());
-      if (alive.current) { setMods((was) => reuse(was, l)); setLoaded(true); }
+      const mine = () => alive.current && gameRef.current === game;
+      if (mine()) { setMods((was) => reuse(was, l)); setLoaded(true); setError(null); }
       if (quiet) return;
       // asked for by hand: also look for updates now, whatever the automatic check is set to
       const linked = l.filter((m) => m.source);
@@ -78,35 +113,43 @@ export function useMods(game: GameId) {
         const ids = await checkUpdates(l);
         await library.markUpdates(game, ids);
         const want = new Set(ids);
-        if (alive.current) setMods((now) => now.map((m) => (m.updateAvailable === want.has(m.id) ? m : { ...m, updateAvailable: want.has(m.id) })));
-        setBadge("library", ids.length ? { count: ids.length, tone: "accent" } : null);
+        if (mine()) setMods((now) => now.map((m) => (m.updateAvailable === want.has(m.id) ? m : { ...m, updateAvailable: want.has(m.id) })));
+        recountMods(game);
         toast(ids.length ? `${ids.length === 1 ? "1 mod has" : `${ids.length} mods have`} an update` : "Every mod is up to date");
       } catch (e) { toast(`Couldn't check for updates: ${errorText(e)}`, true); }
     } catch (e) {
-      if (alive.current) setLoaded(true);
-      toast(errorText(e), true);
-    } finally { if (alive.current) setScanning(false); }
-  }, [game]);
+      if (alive.current && gameRef.current === game) fail(e);
+      else toast(errorText(e), true);
+    } finally { if (alive.current && gameRef.current === game) setScanning(false); }
+  }, [game, fail]);
 
   useEffect(() => {
     alive.current = true;
     let live = true;
     library.list(game).then((l) => {
       if (!live) return;
-      setMods(l);
-      if (l.length) setLoaded(true);
+      setMods((was) => reuse(was, l));
+      setError(null);
+      // an empty list waits for the scan below, so a first visit doesn't flash "No mods yet"
+      setLoaded(l.length > 0);
       if (Date.now() - (lastScan.get(game) ?? 0) > SCAN_AGE) void autoRescanPref.ready.then(() => { if (!live) return; if (autoRescanPref.get() || !l.length) void rescan(true); else setLoaded(true); });
       else setLoaded(true);
-    }).catch((e) => { if (live) { setLoaded(true); toast(errorText(e), true); } });
+    }).catch((e) => { if (live) fail(e); });
     if (!purged) { purged = true; library.trashPurge(null).catch(() => {}); }
-    const onChange: Listener = (g, change) => { if (g === game && live) setMods((l) => applyChange(l, change)); };
+    const onChange: Listener = (g, change) => {
+      if (g !== game || !live) return;
+      const was = new Map(listRef.current.map((m) => [m.id, m.enabled]));
+      setMods((l) => applyChange(l, change));
+      // a mod turned on, off or removed changes the Conflict tag on the mods it shares parts with
+      if (change.removed.length || change.changed.some((m) => was.get(m.id) !== m.enabled)) void relist();
+    };
     listeners.add(onChange);
     const offBackend = held(library.onChanged((p) => { if (p.game === game && live) void relist(); }));
     const offApp = onApp((e) => { if (e.type === "library-refresh" && e.game === game && live) void relist(); });
     return () => { live = false; alive.current = false; listeners.delete(onChange); offBackend(); offApp(); };
-  }, [game, relist, rescan]);
+  }, [game, relist, rescan, fail]);
 
-  return { mods, setMods, loaded, scanning, rescan, relist };
+  return { mods, setMods, loaded, error, scanning, rescan, relist };
 }
 
 // ── actions with Undo ──
@@ -144,8 +187,8 @@ export async function toggleMods(game: GameId, ids: string[], on: boolean, prior
     if (rest.length) toast(notesText(rest));
     return change;
   }
-  const mine = change.changed.filter((m) => ids.includes(m.id));
-  const main = mine.length ? `Turned ${on ? "on" : "off"} ${nameOf(mine, "mods")}` : summarize(change);
+  // names everything that changed, so a skin the one-skin rule turned off shows up too ("Turned on X, turned off Y")
+  const main = summarize(change);
   record({
     label: notesText([main, ...sayF10(change.notes)]),
     undo: () => restoreStates(game, before, changedIds),
@@ -182,8 +225,11 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
   return merged;
 }
 
-/** Send mods to the trash with Undo (restores them from the trash). */
+/** Send mods to the trash with Undo (restores them from the trash, or downloads them again). When the trash keeps no
+ *  files, mods with no GameBanana link can't come back, so that is asked first. */
 export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModChange> {
+  const lost = trashDaysPref.get() > 0 ? [] : list.filter((m) => !m.source);
+  if (lost.length && !(await confirmDelete(lost, list.length))) return { changed: [], removed: [], notes: [] };
   const ids = list.map((m) => m.id);
   const change = await library.remove(game, ids);
   publish(game, change);
@@ -198,6 +244,7 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
       const trash = await library.trash(game);
       const back: string[] = [];
       const fetch: number[] = [];
+      const stuck: string[] = [];
       for (const id of gone) {
         const t = trash.find((x) => x.modId === id);
         if (t) {
@@ -207,11 +254,15 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
           continue;
         }
         // its files were deleted (Keep removed mods' files is off): download it again, its settings come back
-        const src = list.find((m) => m.id === id)?.source;
-        if (src) fetch.push(src.modId);
+        const m = list.find((x) => x.id === id);
+        if (m?.source) fetch.push(m.source.modId);
+        else stuck.push(m?.name ?? id);
       }
       for (const gb of fetch) await queueLatest(game, gb);
       if (fetch.length) toast(`Downloading ${plural(fetch.length, "mod")} again. Settings come back when they install`, false, { label: "Downloads", run: () => go("downloads") });
+      if (stuck.length) {
+        toast(`Couldn't bring back ${stuck.slice(0, 3).join(", ")}${stuck.length > 3 ? ` and ${stuck.length - 3} more` : ""}. ${stuck.length === 1 ? "Its files were" : "Their files were"} deleted and ${stuck.length === 1 ? "it has" : "they have"} no GameBanana link`, true);
+      }
       gone = back;
     },
     redo: async () => {

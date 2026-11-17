@@ -8,7 +8,8 @@ import { checkUpdates, modPage, queueLatest } from "../../lib/gamebanana";
 import { fixMods } from "../../lib/fixes";
 import { record } from "../../lib/history";
 import { currentRoute, emitApp, go } from "../../lib/store";
-import { toast } from "../../ui/toast";
+import { useSyncExternalStore } from "react";
+import { retoast, toast } from "../../ui/toast";
 import { profilesChanged } from "../profiles/data";
 import { changeStates, publish, removeMods, toggleMods } from "./data";
 import { previewChanged } from "./Preview";
@@ -222,10 +223,16 @@ export async function resetPreview(game: GameId, m: ModEntry) {
   } catch (e) { toast(`Couldn't reset the preview. ${errorText(e)}`, true); }
 }
 
-/** Check some mods for updates now, keeping the marks on the others. */
+/** Check some mods for updates now, keeping the marks on the others. A toast says what it's waiting on, and the
+ *  result replaces it. */
 export async function checkForUpdates(game: GameId, list: ModEntry[]) {
   const withSource = list.filter((m) => m.source);
   if (!withSource.length) { toast("Only mods from GameBanana can be checked"); return; }
+  const waitText = withSource.length === 1 ? `Checking ${withSource[0]!.name} on GameBanana` : `Checking ${withSource.length} mods on GameBanana`;
+  let waitId = toast(waitText);
+  // keep the wait showing until the answer comes (a toast times out by itself)
+  const hold = window.setInterval(() => { if (!retoast(waitId, waitText)) waitId = toast(waitText); }, 4000);
+  const say = (text: string, action?: Parameters<typeof toast>[2]) => { if (!retoast(waitId, text, action)) toast(text, false, action); };
   try {
     const found = new Set(await checkUpdates(withSource));
     const all = await library.list(game);
@@ -234,19 +241,37 @@ export async function checkForUpdates(game: GameId, list: ModEntry[]) {
     await library.markUpdates(game, marks);
     emitApp({ type: "library-refresh", game });
     const hits = withSource.filter((m) => found.has(m.id));
-    if (!hits.length) toast(withSource.length === 1 ? `${withSource[0]!.name} is up to date` : "They're all up to date");
-    else toast(`${hits.length === 1 ? `${hits[0]!.name} has` : `${hits.length} mods have`} an update`, false,
+    window.clearInterval(hold);
+    if (!hits.length) say(withSource.length === 1 ? `${withSource[0]!.name} is up to date` : "They're all up to date");
+    else say(`${hits.length === 1 ? `${hits[0]!.name} has` : `${hits.length} mods have`} an update`,
       { label: "Get it", run: () => void Promise.all(hits.map((m) => getUpdate(game, m))) });
-  } catch (e) { fail(e); }
+  } catch (e) {
+    window.clearInterval(hold);
+    if (!retoast(waitId, errorText(e), undefined, true)) fail(e);
+  }
+}
+
+// mods whose update is being looked up on GameBanana, so their Update badge shows it's busy
+const updating = new Set<string>();
+const updatingSubs = new Set<() => void>();
+const setUpdating = (id: string, on: boolean) => {
+  if (on) updating.add(id); else updating.delete(id);
+  updatingSubs.forEach((f) => f());
+};
+/** True while getUpdate is finding this mod's newer file. */
+export function useUpdating(id: string): boolean {
+  return useSyncExternalStore((f) => { updatingSubs.add(f); return () => { updatingSubs.delete(f); }; }, () => updating.has(id));
 }
 
 export async function getUpdate(game: GameId, m: ModEntry) {
-  if (!m.source) return;
+  if (!m.source || updating.has(m.id)) return;
+  setUpdating(m.id, true);
   try {
     const item = await queueLatest(game, m.source.modId, m.id);
     if (item) toast(`Downloading the update for ${m.name}`, false, { label: "Downloads", run: () => go("downloads") });
     else toast(`Couldn't find a newer file for ${m.name} on GameBanana`, true);
   } catch (e) { fail(e); }
+  finally { setUpdating(m.id, false); }
 }
 
 // ── fixes and keys ──

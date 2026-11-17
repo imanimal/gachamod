@@ -10,6 +10,8 @@
   /* the accent: gold unless the user picks an element colour (data-accent) */
   --acc: #d3bc8e; --acc-hi: #e6d3ab; --acc-ink: #7a5722;
   --gold: #d3bc8e; --yellow: #ffcc32; --orange: #f39000; --lime: #c3f436; --red: #b75b4a; --red-hi: #e0523f; --blue: #39a0e3;
+  /* the status colours lightened for text on navy sheets and drawers */
+  --orange-lt: #ffb347; --red-lt: #ff9a8a; --blue-lt: #6cc0f0;
   /* rarity backgrounds for item cards (1 to 5 stars) */
   --r1: linear-gradient(160deg, #5f6478, #72778b); --r2: linear-gradient(160deg, #4b7259, #5f8b6f); --r3: linear-gradient(160deg, #436f95, #5392b8);
   --r4: linear-gradient(160deg, #6f5591, #9c75b7); --r5: linear-gradient(160deg, #94603a, #c8823c);
@@ -33,7 +35,7 @@
 
   /* context tokens: dark surfaces (sky, slate, navy). Cream containers redefine these below. */
   --title: var(--gold); --b-fill: var(--cream); --b-ink: var(--ink); --b-line: rgb(236 229 216 / .55); --b-line-ink: var(--cream);
-  --f-bg: rgb(14 19 30 / .42); --f-ring: rgb(236 229 216 / .4); --row: rgb(59 67 84 / .82);
+  --f-bg: rgb(14 19 30 / .42); --f-ring: rgb(236 229 216 / .62); --row: rgb(59 67 84 / .82);
   /* the white cursor ring round a hovered or picked card */
   --cursor-ring: 0 0 0 2px #fff, 0 0 14px 2px rgb(255 255 255 / .45); --cursor-sel: 0 0 0 2.5px #fff, 0 0 16px 3px rgb(255 255 255 / .55);
 
@@ -58,7 +60,7 @@
   /* ── cream containers: their own ink ── */
   .side, .panel, .dialog, .card, .tile, .mod-card, .gb-card, .home-tile, .dl-item {
     --title: var(--ink); --b-fill: var(--slate-btn); --b-ink: var(--cream); --b-line: #8d8372; --b-line-ink: var(--ink);
-    --f-bg: var(--paper); --f-ring: var(--tan-2); --row: var(--paper);
+    --f-bg: var(--paper); --f-ring: #807769; --row: var(--paper);
     --bg-2: var(--paper); --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #fff;
     --line: #d9cebc; --line-2: var(--tan-2);
     --text: var(--ink); --text-2: #4f5567; --text-3: var(--tan-ink);
@@ -70,15 +72,17 @@
   /* navy panels (drawers) and slate pop-ups go back to the dark ink */
   .drawer, .drawer .panel, .popover, .toast, .floatbar, .library-bulk {
     --title: var(--gold); --b-fill: var(--cream); --b-ink: var(--ink); --b-line: rgb(236 229 216 / .55); --b-line-ink: var(--cream);
-    --f-bg: rgb(10 14 24 / .35); --f-ring: rgb(236 229 216 / .35); --row: var(--slate-row);
+    --f-bg: rgb(10 14 24 / .35); --f-ring: rgb(236 229 216 / .6); --row: var(--slate-row);
     --bg-2: #1d2633; --surface: #3b4354; --surface-2: #495366; --surface-3: #566074; --raised: #5d677b;
     --line: rgb(236 229 216 / .13); --line-2: rgb(236 229 216 / .26);
-    --text: #ece5d8; --text-2: #c9c3b6; --text-3: #959cab;
+    --text: #ece5d8; --text-2: #c9c3b6; --text-3: #adb3c0;
     --accent-ink: var(--acc); --accent-soft: rgb(211 188 142 / .18);
-    --ok: var(--lime); --warn: var(--orange); --bad: var(--red-hi); --info: var(--blue);
+    --ok: var(--lime); --warn: var(--orange-lt); --bad: var(--red-lt); --info: var(--blue-lt); --on-bad: #1b2232;
     --hover: rgb(236 229 216 / .08); --img-bg: #2a3242; --ring: #fff;
     color: var(--text);
   }
+  /* pop-up menus are a lighter slate than drawers, so their faint text and status colours are lighter too */
+  .popover { --text-2: #d3cec4; --text-3: #c3c8d2; --warn: #ffbe5c; --bad: #ffb8ab; --info: #92d1f5; }
 
   /* ── buttons: pills; the icon sits in a dark round cap at the left end ── */
   .btn, .ibtn { border-radius: 999px; font-weight: 700; letter-spacing: 0;
@@ -201,9 +205,9 @@
   .badge[class*="t-"] { background: rgb(18 23 35 / .62); color: var(--cream); box-shadow: none; }
   .badge.t-accent { background: var(--acc); color: var(--ink); }
   .badge.t-ok { background: var(--lime); color: #263011; }
-  .badge.t-warn { background: var(--orange); color: #fff; border-radius: 4px; }
-  .badge.t-bad { background: #f0705a; color: #fff; border-radius: 4px; }
-  .badge.t-info { background: var(--blue); color: #fff; }
+  .badge.t-warn { background: var(--orange); color: #1b2232; border-radius: 4px; }
+  .badge.t-bad { background: #f0705a; color: #1b2232; border-radius: 4px; }
+  .badge.t-info { background: var(--blue); color: #1b2232; }
   .badge.t-muted { background: rgb(18 23 35 / .62); color: var(--cream); }
   :is(.side, .panel, .dialog) .badge.t-muted, :is(.panel, .dialog) .badge:not([class*="t-"]) { background: var(--band); color: var(--ink); box-shadow: inset 0 0 0 1px var(--tan); }
   .dot { box-shadow: 0 0 0 2px rgb(0 0 0 / .2); }
@@ -279,7 +283,7 @@
   .qlink { text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
 
   /* ── toast: a dark see-through strip with gold hairlines top and bottom ── */
-  .toast { border-radius: 3px; padding: .6rem .6rem .6rem .95rem; background: rgb(20 25 37 / .9); backdrop-filter: blur(10px); color: var(--cream); font-weight: 600;
+  .toast { border-radius: 3px; padding: .6rem .6rem .6rem .95rem; background: rgb(20 25 37 / .9); color: var(--cream); font-weight: 600;
     box-shadow: inset 0 1px 0 rgb(211 188 142 / .45), inset 0 -1px 0 rgb(211 188 142 / .45), 0 10px 30px rgb(4 7 14 / .5); animation: giToast var(--dur-slow) var(--ease-out); }
   .toast > .i { color: var(--yellow); }
   .toast.bad > .i { color: #ff7a66; }
@@ -315,13 +319,13 @@
   .sec-h::after { height: 10px; background: var(--rule); }
   :is(.panel, .dialog) .sec-h::after { background: var(--rule-ink); }
   .note { border-radius: 3px; background: color-mix(in srgb, var(--tone) 13%, transparent); box-shadow: inset 3px 0 0 var(--tone); color: var(--text); font-weight: 500; }
-  .floatbar { border-radius: 1.5rem; background: rgb(20 25 37 / .9); backdrop-filter: blur(10px); box-shadow: inset 0 0 0 1px rgb(211 188 142 / .4), var(--shadow-lg); }
+  .floatbar { border-radius: 1.5rem; background: rgb(20 25 37 / .9);box-shadow: inset 0 0 0 1px rgb(211 188 142 / .4), var(--shadow-lg); }
   .codeblock { border-radius: 4px; background: rgb(10 14 24 / .35); box-shadow: inset 0 0 0 1px var(--line); }
   :is(.panel, .dialog) .codeblock { background: var(--paper); }
   .gallery-main { border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line-2); }
   .gallery-th { border-radius: 3px; }
   .gallery-th.on { box-shadow: var(--cursor-ring); }
-  .lightbox { background: rgb(10 13 22 / .92); backdrop-filter: blur(8px); }
+  .lightbox { background: rgb(10 13 22 / .92); }
   .swatch { box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / .15); }
   .swatch.on { box-shadow: 0 0 0 2px var(--parch), 0 0 0 4px var(--ink); }
   .prose a, a { color: var(--accent-ink); }
@@ -351,7 +355,7 @@
 [data-theme="gi"][data-scheme="light"] {
   color-scheme: light;
   --title: var(--ink); --b-fill: var(--slate-btn); --b-ink: var(--cream); --b-line: #8d8372; --b-line-ink: var(--ink);
-  --f-bg: var(--paper); --f-ring: var(--tan-2); --row: var(--paper);
+  --f-bg: var(--paper); --f-ring: #807769; --row: var(--paper);
   --bg: #ebe4d6; --bg-2: #e1d8c7; --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #fff;
   --line: #d9cebc; --line-2: var(--tan-2);
   --text: var(--ink); --text-2: #4f5567; --text-3: var(--tan-ink);
@@ -367,7 +371,7 @@
   /* drawers are paper sheets with a slate title */
   .drawer, .drawer .panel {
     --title: var(--ink); --b-fill: var(--slate-btn); --b-ink: var(--cream); --b-line: #8d8372; --b-line-ink: var(--ink);
-    --f-bg: var(--paper); --f-ring: var(--tan-2); --row: var(--paper);
+    --f-bg: var(--paper); --f-ring: #807769; --row: var(--paper);
     --bg-2: var(--paper); --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #fff;
     --line: #d9cebc; --line-2: var(--tan-2);
     --text: var(--ink); --text-2: #4f5567; --text-3: var(--tan-ink);

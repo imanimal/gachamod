@@ -47,12 +47,14 @@ export async function setupDone() {
 
 const immMods = (i: ImmInfo | null) => (i?.found ? i.games.reduce((n, g) => n + g.mods, 0) : 0);
 
-/** The main view while no game has a Mods folder. `looking`: the first search hasn't finished yet. */
-export function SetupPage({ looking }: { looking: boolean }) {
+/** The main view while no game has a Mods folder. `looking`: the first search hasn't finished yet. `error`: reading
+ *  the games failed at start, and `retry` reads them again. */
+export function SetupPage({ looking, error, retry }: { looking: boolean; error?: string | null; retry?: () => Promise<void> }) {
   const all = useGames();
   const setup = useSetup();
   const [immInfo, setImm] = useState<ImmInfo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   useEffect(() => { imm.detect().then(setImm).catch(() => {}); }, []);
 
   // keep looking while this page is open: every 10 seconds and when the window comes back to the front
@@ -70,13 +72,29 @@ export function SetupPage({ looking }: { looking: boolean }) {
     setBusy(true);
     const list = await recheck(true);
     setBusy(false);
-    if (list && !list.some((g) => g.modsDir || canInstallLoader(g))) toast("Still no games. gachamod keeps looking while this page is open");
+    if (list && !list.some((g) => g.modsDir || canInstallLoader(g))) toast("Still no games. gachamod keeps looking while this page is open", "info");
   };
+  const tryAgain = async () => {
+    if (!retry) return;
+    setRetrying(true);
+    try { await retry(); } finally { setRetrying(false); }
+  };
+  const install = () => void installLoaders(can.map((g) => g.id));
   const n = immMods(immInfo);
 
   return (
     <div className="page setup-page">
-      {can.length > 0 ? (
+      {error && can.length === 0 ? (
+        <>
+          <h1>Couldn't read your games</h1>
+          <p>gachamod couldn't read its list of games when it started. Your mods and files weren't touched.</p>
+          <pre className="crash-msg">{error}</pre>
+          <div className="row setup-go">
+            <Button variant="primary" size="lg" icon="refresh" busy={retrying} autoFocus onClick={() => void tryAgain()} title="Read the saved games again">Try again</Button>
+            <Button size="lg" icon="search" busy={busy} onClick={() => void lookAgain()} title="Look for games and XXMI Launcher again">Look again</Button>
+          </div>
+        </>
+      ) : can.length > 0 ? (
         <>
           <h1>Get your games ready for mods</h1>
           <div className="setup-games">
@@ -86,12 +104,15 @@ export function SetupPage({ looking }: { looking: boolean }) {
           </div>
           <p>One click installs XXMI Launcher and the mod loader for {listNames(can)}. It downloads about 65 MB from GitHub and takes a minute or two.</p>
           {setup.running ? <Installing /> : (
-            <div className="row setup-go">
-              <Button variant="primary" size="lg" icon="install" autoFocus onClick={() => void installLoaders(can.map((g) => g.id))}
-                title="Downloads XXMI Launcher and each game's mod loader from their GitHub pages and sets them up in %APPDATA%\XXMI Launcher">
-                Install mod loaders
-              </Button>
-            </div>
+            <>
+              {setup.error && <SetupError error={setup.error} />}
+              <div className="row setup-go">
+                <Button variant="primary" size="lg" icon={setup.error ? "refresh" : "install"} autoFocus onClick={install}
+                  title="Downloads XXMI Launcher and each game's mod loader from their GitHub pages and sets them up in %APPDATA%\XXMI Launcher">
+                  {setup.error ? "Try again" : "Install mod loaders"}
+                </Button>
+              </div>
+            </>
           )}
         </>
       ) : (
@@ -119,6 +140,16 @@ export function SetupPage({ looking }: { looking: boolean }) {
         gachamod sends its developer anonymous usage counts and crash reports.{" "}
         <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "privacy" })} title="Opens Settings, Feedback, privacy and logs">Turn them off</button> any time.
       </p>
+    </div>
+  );
+}
+
+/** Why the last mod loader install failed, under its button (the setup page and Settings, Games). */
+export function SetupError({ error }: { error: string }) {
+  return (
+    <div className="setup-err" role="alert">
+      <p>Couldn't install the mod loaders.</p>
+      <pre className="crash-msg">{error}</pre>
     </div>
   );
 }

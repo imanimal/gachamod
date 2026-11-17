@@ -4,10 +4,12 @@
 /* the action row always has its own line under the title, so the Installed/Trash switch at its start sits in the same
    place on both pages at any window width */
 .library > .page-h .page-h-a { flex-basis: 100%; }
-.library > .page-h .library-search { flex: 1 1 14rem; min-width: 12rem; }
-.library-chars { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; width: 100%; }
+/* in a small window the search shrinks first, so the other controls stay on one line */
+.library > .page-h .library-search { flex: 1 1 14rem; min-width: 7rem; }
+.library > .page-h .page-h-a > :not(.library-search) { flex: none; }
+.library-chars { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; width: 100%; }
 /* types (UI, Tools and fixes ...) then characters, in one row that scrolls sideways (Library.tsx CharRow) */
-.library-chars-wrap { display: flex; align-items: center; gap: .25rem; width: 100%; min-width: 0; }
+.library-chars-wrap { display: flex; align-items: center; gap: var(--s-1); width: 100%; min-width: 0; }
 .library-chars-wrap > .ibtn:disabled { opacity: .25; }
 /* laid out in full (ui/ShowAll.tsx): the buttons stay by the first line */
 .page-h:not(.is-stuck) .library-chars-wrap.is-all { align-items: flex-start; }
@@ -16,28 +18,35 @@
 .library-chars { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; padding: 5px; margin-block: calc(.2rem - 5px); scrollbar-width: none; scroll-padding-inline: 2rem; }
 .library-chars::-webkit-scrollbar { display: none; }
 .library-chars .char-chip { flex: none; }
-.library-chars-sep { flex: none; align-self: stretch; width: 1px; margin: .3rem .2rem; background: var(--line); }
+.library-chars-sep { flex: none; align-self: stretch; width: 1px; margin: var(--s-1); background: var(--line); }
 
 
 /* the shared grid (ModGrid): the bulk bar floats at the bottom of the view while there is a selection */
-.mod-grid-wrap { display: flex; flex-direction: column; gap: .8rem; min-height: 100%; }
-.mod-bulk { flex-wrap: wrap; justify-content: center; max-width: 100%; gap: .3rem; }
+.mod-grid-wrap { display: flex; flex-direction: column; gap: var(--s-3); min-height: 100%; }
+.mod-bulk { flex-wrap: wrap; justify-content: center; max-width: 100%; gap: var(--s-1); }
 
 /* the grid: kit .cards gives the columns */
 .mod-grid { --card-min: 11.2rem; }
-.mod-grid.is-loading { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.2rem, 1fr)); gap: .6rem; }
+.mod-grid.is-loading { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.2rem, 1fr)); gap: var(--s-4); }
 .mod-card-skel { height: 12.5rem; border-radius: var(--radius); }
-.mod-grid.is-list { display: flex; flex-direction: column; gap: .35rem; }
+.mod-grid.is-list { display: flex; flex-direction: column; gap: var(--s-1); }
+:where(:root:not([data-theme]), [data-theme="default"]) .mod-grid.is-list { gap: 0; }
 
-/* one mod */
+/* one mod. The button holds only the picture, and its ::after covers the card so a click anywhere opens it and the
+   focus ring goes round the whole card. Later positioned parts (badges, switch, the character link) sit above it */
 .mod-card { content-visibility: auto; contain-intrinsic-size: auto 12.5rem; }
-.mod-card-hit { display: flex; flex-direction: column; width: 100%; text-align: left; color: inherit; }
-.mod-card-hit:focus-visible { outline-offset: -2px; }
+.mod-card-hit { display: flex; flex-direction: column; width: 100%; text-align: left; color: inherit; border-radius: inherit; }
+.mod-card-hit::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.mod-card-hit:focus-visible, html.kbd .mod-card-hit:focus { outline: none; }
+.mod-card-hit:focus-visible::after, html.kbd .mod-card-hit:focus::after { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* moving onto a card with the keys scrolls its name into view too, not just the picture */
+.mod-card:not(.is-row) .mod-card-hit { scroll-margin-bottom: 3.5rem; }
+.mod-card-char .qlink { position: relative; }
 .mod-card-img { aspect-ratio: 16 / 10; width: 100%; }
-.mod-card-body { display: flex; flex-direction: column; gap: .05rem; padding: .4rem 3.3rem .45rem .6rem; min-width: 0; }
+.mod-card-body { display: flex; flex-direction: column; gap: .05rem; padding: var(--s-2) 3.3rem var(--s-2) var(--s-2); min-width: 0; }
 .mod-card-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mod-card-char, .mod-card-meta { color: var(--text-3); font-size: .86em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mod-card-badges { position: absolute; top: .45rem; left: .45rem; right: 2.4rem; display: flex; gap: .3rem; flex-wrap: wrap; pointer-events: none; }
+.mod-card-char, .mod-card-meta { color: var(--text-3); font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mod-card-badges { position: absolute; top: .45rem; left: .45rem; right: 2.4rem; display: flex; gap: var(--s-1); flex-wrap: wrap; pointer-events: none; }
 .mod-card-badges > * { pointer-events: auto; }
 .mod-card-update { cursor: pointer; }
 .mod-card-fav { display: inline-flex; align-items: center; justify-content: center; width: 1.45rem; height: 1.45rem; border-radius: 99px; background: var(--surface); color: var(--accent); }
@@ -53,13 +62,19 @@
 .mod-card.is-off .mod-card-img { opacity: .55; filter: grayscale(.6); }
 .mod-card.is-off .mod-card-name { color: var(--text-2); }
 
-/* list rows */
-.mod-card.is-row { flex-direction: row; align-items: center; contain-intrinsic-size: auto 3.6rem; }
-.mod-card.is-row .mod-card-hit { flex-direction: row; align-items: center; gap: .8rem; flex: 1; min-width: 0; padding: .35rem; }
+/* Default draws list rows like kit .list.lined: no frame, a hairline between rows, a fill when selected. Game
+   themes keep their own framed rows, so this is Default only and kept low (:where) */
+.mod-card.is-row { flex-direction: row; align-items: center; gap: var(--s-3); contain-intrinsic-size: auto 3.6rem; }
+:where(:root:not([data-theme]), [data-theme="default"]) .mod-card:where(.is-row) { border-radius: 0; background: none; box-shadow: none; }
+:where(:root:not([data-theme]), [data-theme="default"]) :where(.mod-card.is-row) + .mod-card:where(.is-row) { box-shadow: inset 0 1px 0 var(--line); }
+:where(:root:not([data-theme]), [data-theme="default"]) .mod-card:where(.is-row:hover) { background: var(--hover); }
+:where(:root:not([data-theme]), [data-theme="default"]) .mod-card.sel:where(.is-row) { background: var(--accent-soft); box-shadow: none; }
+.mod-card.is-row .mod-card-hit { width: auto; flex: none; padding: var(--s-1) 0 var(--s-1) var(--s-1); }
 .mod-card.is-row .mod-card-img { width: 4.6rem; aspect-ratio: 16 / 10; border-radius: var(--radius-sm); flex: none; }
 .mod-card.is-row .mod-card-body { padding: 0; flex: 1; }
-.mod-card.is-row .mod-card-badges { position: static; flex-wrap: nowrap; margin: 0 .5rem; }
-.mod-card.is-row .mod-card-foot { display: flex; align-items: center; gap: .4rem; flex: none; padding-right: .4rem; }
+/* badges wrap onto a second line instead of squeezing the name */
+.mod-card.is-row .mod-card-badges { position: relative; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 50%; }
+.mod-card.is-row .mod-card-foot { position: relative; display: flex; align-items: center; gap: var(--s-2); flex: none; padding-right: var(--s-2); }
 .mod-card.is-row .mod-card-foot .toggle, .mod-card.is-row .mod-card-more { position: static; opacity: 1; }
 
 /* preview images everywhere in this area */
@@ -73,21 +88,21 @@
 .mod-img-ghost { position: absolute; left: -.2rem; right: -.2rem; bottom: -.35rem; font-family: var(--font-display); font-size: 2.1rem; font-weight: 800; line-height: .9; text-transform: uppercase; white-space: nowrap; overflow: hidden; color: var(--text); opacity: .09; }
 
 /* details drawer */
-.mod-drawer-hero { position: relative; margin: -.25rem 0 1rem; }
+.mod-drawer-hero { position: relative; margin: -.25rem 0 var(--s-4); }
 .mod-drawer-img { aspect-ratio: 16 / 9; width: 100%; border-radius: var(--radius); }
 .mod-drawer-reveal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-.mod-drawer-badges { position: absolute; left: .6rem; bottom: .6rem; display: flex; gap: .4rem; flex-wrap: wrap; }
-.mod-drawer-fields { display: flex; flex-direction: column; gap: .9rem; }
+.mod-drawer-badges { position: absolute; left: .6rem; bottom: .6rem; display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.mod-drawer-fields { display: flex; flex-direction: column; gap: var(--s-4); }
 .mod-drawer-char input { width: 100%; }
-.mod-drawer-taglist { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.mod-drawer-taglist { display: flex; flex-wrap: wrap; gap: var(--s-1); align-items: center; }
 .mod-tag .i { width: .9em; height: .9em; }
-.mod-drawer-tagin { flex: 1; min-width: 8rem; height: 2rem; padding: 0 .6rem; border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); }
-.mod-drawer-flags { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+.mod-drawer-tagin { flex: 1; min-width: 8rem; height: 2rem; padding: 0 var(--s-2); border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); }
+.mod-drawer-flags { display: flex; align-items: center; gap: var(--s-6); flex-wrap: wrap; }
 .mod-drawer-flags > span { display: flex; }
-.mod-drawer-facts { display: flex; flex-direction: column; gap: .4rem; margin: 1.2rem 0; padding-top: 1rem; border-top: 1px solid var(--line); }
-.mod-drawer-facts .kv-v { display: flex; align-items: center; gap: .6rem; min-width: 0; }
-.mod-drawer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: .9em; }
-.link-btn { display: inline-flex; align-items: center; gap: .3rem; color: var(--accent); }
+.mod-drawer-facts { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-5) 0; padding-top: var(--s-4); border-top: 1px solid var(--line); }
+.mod-drawer-facts .kv-v { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.mod-drawer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: var(--t-small); }
+.link-btn { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--accent); }
 .link-btn:hover { text-decoration: underline; }
 
 /* health mark on a card: a game update broke it */
@@ -98,54 +113,54 @@
 .mod-card-char .qlink:hover { text-decoration: underline; }
 
 /* drawer additions */
-.mod-drawer-who { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; margin: -.4rem 0 .9rem; }
-.mod-drawer-family { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .6rem; margin: -.4rem 0 .9rem; color: var(--text-2); }
-.mod-drawer-sub { display: inline-flex; align-items: center; gap: .35rem; }
-.mod-drawer-health { margin-bottom: 1rem; }
-.mod-drawer-health-t { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
-.mod-drawer-health-a { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .2rem; }
-.mod-drawer-adult { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.mod-drawer-who { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1); margin: -.4rem 0 var(--s-4); }
+.mod-drawer-family { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1) var(--s-2); margin: -.4rem 0 var(--s-4); color: var(--text-2); }
+.mod-drawer-sub { display: inline-flex; align-items: center; gap: var(--s-1); }
+.mod-drawer-health { margin-bottom: var(--s-4); }
+.mod-drawer-health-t { display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; }
+.mod-drawer-health-a { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-1); }
+.mod-drawer-adult { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-4); }
 .mod-drawer-sec:empty { display: none; }
-.mod-parts-list { display: flex; flex-direction: column; gap: .6rem; }
-.mod-drawer-sec { display: flex; flex-direction: column; gap: var(--stack-gap); margin-top: 1.2rem; scroll-margin-top: 1rem; }
+.mod-parts-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.mod-drawer-sec { display: flex; flex-direction: column; gap: var(--stack-gap); margin-top: var(--s-5); scroll-margin-top: 1rem; }
 
 /* archive */
-.archive { display: flex; flex-direction: column; gap: .9rem; }
-.archive-top { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; }
+.archive { display: flex; flex-direction: column; gap: var(--s-4); }
+.archive-top { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; }
 .archive-hint { flex: 1 1 22rem; max-width: 48rem; }
 .archive-grid { --tile-min: 13.5rem; }
 .archive-img { position: absolute; inset: 0; }
 .archive-card .tile-sub .qlink { text-decoration: none; }
-.archive-a { display: flex; gap: .4rem; margin-top: .45rem; }
+.archive-a { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
 
 /* small windows from the menus (LibDialogs.tsx) */
-.lib-ask { display: flex; flex-direction: column; gap: .7rem; }
+.lib-ask { display: flex; flex-direction: column; gap: var(--s-3); }
 .lib-ask .field input { width: 100%; }
-.lib-ask-picks { display: flex; flex-wrap: wrap; gap: .35rem; }
+.lib-ask-picks { display: flex; flex-wrap: wrap; gap: var(--s-1); }
 .lib-ask-picks .chip .portrait { flex: none; margin-left: -.5rem; }
 .lib-ask-picks .chip .i { width: .85em; height: .85em; }
 .lib-ask-now { display: flex; justify-content: center; }
-.lib-ask-url { display: flex; align-items: flex-end; gap: .5rem; }
+.lib-ask-url { display: flex; align-items: flex-end; gap: var(--s-2); }
 .lib-ask-url .field { flex: 1; }
-.lib-ask-previews { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; }
+.lib-ask-previews { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); }
 .lib-ask-prev { aspect-ratio: 1; border-radius: var(--radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
 .lib-ask-prev:hover { box-shadow: 0 0 0 2px var(--accent); }
 .lib-ask-prev .mod-img { width: 100%; height: 100%; }
 .mod-drawer-hero.is-drop .mod-drawer-img { outline: 2px dashed var(--accent); outline-offset: 2px; }
-.mod-drawer-picact { position: absolute; right: .6rem; top: .6rem; display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+.mod-drawer-picact { position: absolute; right: .6rem; top: .6rem; display: flex; gap: var(--s-1); flex-wrap: wrap; justify-content: flex-end; }
 .mod-drawer-drop { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--radius); background: var(--scrim); color: var(--text); font-weight: 600; pointer-events: none; }
 
 /* a long name wraps to a second line on a card before it is cut */
 .mod-card:not(.is-row) .mod-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
 
 /* the 3D view in a mod's details: taller than the picture, since characters stand */
-.mod-viewer-wrap { display: flex; flex-direction: column; gap: .4rem; }
+.mod-viewer-wrap { display: flex; flex-direction: column; gap: var(--s-2); }
 .mod-viewer { position: relative; aspect-ratio: 4 / 3; width: 100%; border-radius: var(--radius); overflow: hidden; background: var(--surface-2); outline-offset: 2px; touch-action: none; }
 .mod-viewer:focus-visible { outline: 2px solid var(--accent); }
 .mod-viewer-canvas { position: absolute; inset: 0; display: block; cursor: grab; }
 .mod-viewer-canvas:active { cursor: grabbing; }
 .mod-viewer.is-wait { display: grid; place-items: center; }
-.mod-viewer-msg { display: inline-flex; align-items: center; gap: .5rem; max-width: 80%; text-align: center; color: var(--text-2); }
+.mod-viewer-msg { display: inline-flex; align-items: center; gap: var(--s-2); max-width: 80%; text-align: center; color: var(--text-2); }
 .mod-viewer-note { margin: 0; }
 /* Rescan's icon turns while the folder is read */
 .lib-scanning .i { animation: spin 1s linear infinite; }

@@ -5,8 +5,8 @@ import { library, type ModEntry } from "../../lib/api";
 import { chillPref, PULL_PITY, pullPref, pullsSince, pullWord, seasonPref, type SeasonPick } from "../../lib/fun";
 import { motdPref, useMotdOn } from "../../lib/motd";
 import { playedIn } from "../../lib/playtime";
-import { useGame, useGames } from "../../lib/store";
-import { Button, Dialog, Panel, Segmented, Select, Spinner, Toggle } from "../../ui/kit";
+import { go, useGame, useGames } from "../../lib/store";
+import { Button, Dialog, Panel, Segmented, Select, Toggle, Waiting } from "../../ui/kit";
 import { SetRow } from "./parts";
 
 const SEASONS: Array<{ value: SeasonPick; label: string }> = [
@@ -36,7 +36,10 @@ export function FunSection() {
           <Toggle checked={pull} onChange={(v) => void pullPref.set(v, v ? `Turned on the ${word} button` : `Turned off the ${word} button`)} />
         </SetRow>
         <SetRow id="set-seasonal" label="Seasonal touches" hint="By the date: bats and pumpkins the week before Halloween, snow from 20 December, hearts on Valentine's Day. Not while Animations is off">
-          <Select<SeasonPick> value={season} onChange={(v) => void seasonPref.set(v, `Seasonal touches: ${v === "off" || v === "date" ? SEASONS.find((s) => s.value === v)!.label.toLowerCase() : SEASONS.find((s) => s.value === v)!.label}`)} options={SEASONS} />
+          <span className="set-btns">
+            <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-motion" })} title="Opens Animations in Appearance">Animations</Button>
+            <Select<SeasonPick> value={season} onChange={(v) => void seasonPref.set(v, `Seasonal touches: ${v === "off" || v === "date" ? SEASONS.find((s) => s.value === v)!.label.toLowerCase() : SEASONS.find((s) => s.value === v)!.label}`)} options={SEASONS} />
+          </span>
         </SetRow>
         {motdOn && (
           <SetRow id="set-motd" label="Mod of the day" hint="A mod picked by animal, behind the gift button at the top of Browse">
@@ -95,7 +98,7 @@ function YearDialog({ onClose }: { onClose: () => void }) {
   const sinceThisYear = data && data.since && new Date(data.since).getFullYear() === y ? new Date(data.since).toLocaleDateString(undefined, { month: "long", day: "numeric" }) : null;
   return (
     <Dialog title={`Your ${y} in mods`} icon="calendar" onClose={onClose} size="sm" footer={<Button variant="primary" onClick={onClose}>Close</Button>}>
-      {!data ? <Spinner /> : (
+      {!data ? <Waiting what="Counting your mods and play time" /> : (
         <div className="year">
           <div className="year-stat"><b>{data.installed}</b><span>{data.installed === 1 ? "mod" : "mods"} installed this year, {data.total} in all</span></div>
           {data.topChar && <div className="year-stat"><b className="motd-name">{data.topChar.name}</b><span>has the most mods: {data.topChar.n}{games.length > 1 ? ` (${data.topChar.game})` : ""}</span></div>}

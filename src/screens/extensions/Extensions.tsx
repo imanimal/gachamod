@@ -7,7 +7,7 @@ import { fileUrl, shell, type ExtPermissions, type InstalledExt } from "../../li
 import { extName, installFromDisk, installListed, linkFolder, listedPackages, loadRepos, reloadExtensions, reloadPages, removeExtension,
   setExtensionEnabled, sharePackage, updateFor, useExtensions, useRepos, type Listed } from "../../lib/extensions";
 import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
-import { openMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ICONS } from "../../ui/icons";
 import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, Skeleton, Tabs, Waiting, Toggle, formatBytes, timeAgo } from "../../ui/kit";
@@ -34,7 +34,12 @@ function Catalog() {
   const list = useExtensions();
   const { repos, loading } = useRepos();
   const listed = useMemo(() => listedPackages(repos), [repos]);
-  const updates = (list ?? []).filter((e) => updateFor(e, listed));
+  const updates = (list ?? []).flatMap((e) => updateFor(e, listed) ?? []);
+  const [updatingAll, setUpdatingAll] = useState(false);
+  const updateAll = async () => {
+    setUpdatingAll(true);
+    try { for (const u of updates) await installListed(u); } finally { setUpdatingAll(false); }
+  };
 
   const match = (name: string, author: string, desc: string, k: string) =>
     (kind === "all" || k === kind) && (!q.trim() || `${name} ${author} ${desc}`.toLowerCase().includes(q.trim().toLowerCase()));
@@ -64,10 +69,15 @@ function Catalog() {
         <div className="ext-bar">
           <Tabs value={tab} onChange={(v) => patchRoute({ tab: v === "installed" ? "installed" : undefined })}
             tabs={[{ value: "available", label: "Available", icon: "browse", count: listed.length || undefined },
-              { value: "installed", label: "Installed", icon: "check", count: list?.length || undefined, title: updates.length ? `${updates.length} with an update` : undefined }]} />
+              { value: "installed", label: updates.length ? <>Installed <Badge tone="info" icon="update">{updates.length}</Badge></> : "Installed", icon: "check",
+                count: list?.length || undefined, title: updates.length ? `${updates.length === 1 ? "1 has" : `${updates.length} have`} an update` : undefined }]} />
           <Segmented size="sm" label="Show" value={kind} onChange={(v) => patchRoute({ section: v === "theme" ? "themes" : v === "extension" ? "extensions" : undefined })}
             options={[{ value: "all", label: "All" }, { value: "theme", label: "Themes" }, { value: "extension", label: "Extensions" }]} />
           <SearchField value={q} onChange={setQ} placeholder="Search extensions" className="ext-search" />
+          {tab === "installed" && updates.length > 1 && (
+            <Button variant="primary" size="sm" icon="update" busy={updatingAll} onClick={() => void updateAll()}
+              title={`Update ${updates.map((u) => u.name).join(", ")}. Each one can be undone`}>Update all ({updates.length})</Button>
+          )}
         </div>
       </PageHeader>
 
@@ -75,10 +85,14 @@ function Catalog() {
         <>
           {errors.map((r) => (
             <p key={r.source} className="hint ext-err" title={r.source}>
-              Couldn't reach {r.name || "the extension list"} ({r.error}).{r.fetchedAt ? ` Showing the list from ${timeAgo(r.fetchedAt)}.` : ""}
+              {r.name ? `${r.name}: ` : ""}{r.error}.{r.fetchedAt ? ` Showing the list from ${timeAgo(r.fetchedAt)}.` : ""}
             </p>
           ))}
-          {!repos && loading ? <div className="ext-grid">{[0, 1, 2].map((i) => <Skeleton key={i} h="9.5rem" />)}</div>
+          {!repos && loading ? (
+            <Waiting what="Reading extension lists">
+              <div className="ext-grid">{[0, 1, 2].map((i) => <Skeleton key={i} h="9.5rem" />)}</div>
+            </Waiting>
+          )
             : shownListed.length ? (
               <div className="ext-grid">
                 {shownListed.map((p) => <ListedCard key={`${p.source}:${p.id}`} p={p} have={list?.find((e) => e.id === p.id) ?? null} />)}
@@ -86,7 +100,7 @@ function Catalog() {
             ) : (
               <Empty icon="puzzle" title={q || kind !== "all" ? "Nothing matches" : errors.length ? "Couldn't load the extension list" : "Nothing listed yet"}
                 actions={errors.length ? <Button icon="refresh" busy={loading} onClick={() => void loadRepos(true)}>Try again</Button> : undefined}>
-                {errors.length ? "Check your connection, then try again." : q ? "Try other words." : ""}
+                {q ? "Try other words." : ""}
               </Empty>
             )}
         </>
@@ -143,8 +157,14 @@ function ListedCard({ p, have }: { p: Listed; have: InstalledExt | null }) {
   const [busy, setBusy] = useState(false);
   const run = async () => { setBusy(true); try { await installListed(p); } finally { setBusy(false); } };
   const newer = have?.manifest && updateFor(have, [p]);
+  const menu = (): MenuEntry[] => [
+    !have && { label: "Install", icon: "install", disabled: busy, onClick: () => void run() },
+    !!newer && { label: `Update to ${p.version}`, icon: "update", disabled: busy, onClick: () => void run() },
+    !!have && { label: "View under Installed", icon: "check", onClick: () => patchRoute({ tab: "installed" }) },
+    !!p.homepage && { label: "Homepage", icon: "external", onClick: () => void shell.openUrl(p.homepage!) },
+  ];
   return (
-    <article className="ext-card">
+    <article className="ext-card" onContextMenu={menuHandler(menu)}>
       <ExtIcon src={p.icon} kind={p.kind} />
       <div className="ext-main">
         <div className="ext-head">
@@ -181,6 +201,8 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
   const name = extName(e);
   const run = async () => { if (!update) return; setBusy(true); try { await installListed(update); } finally { setBusy(false); } };
   const menu: MenuEntry[] = [
+    !!update && { label: `Update to ${update.version}`, icon: "update", disabled: busy, onClick: () => void run() },
+    !!m && { label: e.enabled ? `Turn off ${name}` : `Turn on ${name}`, icon: "power", onClick: () => void setExtensionEnabled(e, !e.enabled) },
     m?.page && e.enabled && { label: `Open ${m.page.title}`, icon: extIcon(m.page.icon), onClick: () => go({ view: "extensions", ext: e.id }) },
     { label: "Open folder", icon: "folder", onClick: () => void shell.openPath(e.dir) },
     e.linked && { label: "Reload pages", icon: "refresh", title: "Shows your latest edits", onClick: () => { void reloadExtensions(); reloadPages(); } },
@@ -189,7 +211,7 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
     { label: e.linked ? "Unlink" : "Remove", icon: "trash", danger: true, onClick: () => void removeExtension(e) },
   ];
   return (
-    <article className={`ext-card${e.enabled ? "" : " is-off"}`}>
+    <article className={`ext-card${e.enabled ? "" : " is-off"}`} onContextMenu={menuHandler(() => menu)}>
       <ExtIcon src={fileUrl(e.icon)} kind={e.kind} />
       <div className="ext-main">
         <div className="ext-head">
@@ -201,7 +223,7 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
           <div className="ext-act">
             {update && <Button variant="primary" size="sm" icon="update" busy={busy} onClick={() => void run()} title={`From ${m?.version} to ${update.version}`}>Update</Button>}
             {m && <span title={e.enabled ? `Turn ${name} off` : `Turn ${name} on`}><Toggle size="sm" checked={e.enabled} onChange={(v) => void setExtensionEnabled(e, v)} label={e.enabled ? "On" : "Off"} /></span>}
-            <IconButton icon="more" size="sm" label="More: open folder, remove" onClick={(ev) => openMenu(ev.currentTarget, menu)} />
+            <IconButton icon="more" size="sm" label="More (or right-click): open folder, remove" onClick={(ev) => openMenu(ev.currentTarget, menu)} />
           </div>
         </div>
         {m && <p className="ext-by">By {m.author}<Games ids={m.games} />{e.source === null && !e.linked ? <span>From a file</span> : null}</p>}

@@ -50,6 +50,8 @@
   --text: var(--ink); --text-2: #464646; --text-3: #5e5e5e;
   --accent: var(--acc); --on-accent: #111; --accent-soft: color-mix(in srgb, var(--acc) 30%, transparent); --accent-ink: var(--acc-ink); --accent-2: var(--blue);
   --ok: var(--green); --warn: #e79a00; --bad: var(--red); --info: var(--blue); --on-bad: #fff;
+  /* signal amber is a fill; warning text on a light sheet uses this darker one */
+  --warn-ink: #7d5200;
   --ring: var(--ink); --hover: rgb(0 0 0 / .06);
   --radius: 4px; --radius-sm: 3px; --radius-lg: 6px; --radius-xs: 2px; --radius-pill: 999px; --stack-gap: .65rem;
   --shadow: 0 1px 0 rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .1); --shadow-lg: 0 18px 44px rgb(0 0 0 / .4), 0 2px 0 rgb(0 0 0 / .25);
@@ -71,7 +73,7 @@
   }
   /* charcoal name plates on cards: light text, the signal colour reads as text */
   :is(.tile-body, .mod-card-body, .gb-card, .home-tile, .char-skin, .char-tile-name, .portrait-n) {
-    --text: #fff; --text-2: #c4c4c4; --text-3: #a3a3a3; --hover: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .14); --accent-ink: var(--acc);
+    --text: #fff; --text-2: #c4c4c4; --text-3: #b0b0b0; --hover: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .14); --accent-ink: var(--acc);
   }
 
   /* ── glyph strips (ui/Deco.tsx): a running code ticker ── */
@@ -209,8 +211,11 @@
   .badge .i { stroke-width: 2.4; }
   .badge[class*="t-"] { background: var(--tone); color: #fff; box-shadow: none; }
   .badge.t-accent { background: var(--acc); color: #111; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2); }
-  .badge.t-warn { color: #111; }
+  .badge.t-warn, .badge.t-ok, .badge.t-info { color: #111; }
   .badge.t-ok { background: #2fb36b; }
+  .badge.t-bad { background: #c8323a; }
+  /* warning text on a sheet, where the amber fill is too light to read */
+  :is(.ext-err, .pack-skip, .ctheme-probs) { color: var(--warn-ink); }
   .badge.t-muted { background: var(--plate); color: #f2f2f2; }
   .dot { box-shadow: 0 0 0 1.5px rgb(0 0 0 / .25); border-radius: 1px; }
 
@@ -395,7 +400,7 @@
   --line: rgb(255 255 255 / .1); --line-2: rgb(255 255 255 / .22);
   --text: var(--ink); --text-2: #bdbdbd; --text-3: #8e8e8e;
   --accent-soft: color-mix(in srgb, var(--acc) 20%, transparent); --accent-ink: var(--acc);
-  --ok: var(--green); --warn: #f2b233; --bad: var(--red); --info: var(--blue);
+  --ok: var(--green); --warn: #f2b233; --bad: var(--red); --info: var(--blue); --warn-ink: var(--warn);
   --hover: rgb(255 255 255 / .06);
   --shadow: 0 1px 0 rgb(0 0 0 / .5), 0 1px 3px rgb(0 0 0 / .4); --shadow-lg: 0 18px 44px rgb(0 0 0 / .65), 0 2px 0 rgb(0 0 0 / .5);
   --scrim: rgb(0 0 0 / .72); --img-bg: #2a2a2a;
@@ -421,7 +426,9 @@
   .mod-img .mod-img-portrait, .char-tile-portrait img { background: #333; box-shadow: 0 0 0 1px rgb(255 255 255 / .2), 0 0 0 4px rgb(255 255 255 / .08); }
   .mod-img-ghost { -webkit-text-stroke-color: rgb(255 255 255 / .16); }
   .mod-card.is-off .mod-card-body { background: #2e2e2e; }
-  .mod-card.is-row .toggle-track { background: #4a4a48; }
+  /* the off track stays 3:1 against the dark sheets */
+  .toggle:not(.on) .toggle-track { background: #747472; }
+  .mod-card.is-row .toggle-track { background: #747472; }
   .profile-card-head .profile-icon, .profile-editor-top .profile-icon { box-shadow: 0 0 0 3px var(--paper), 0 0 0 4px rgb(255 255 255 / .2); }
   .profile-card-a, .mod-drawer-facts, .set-row, .tools-dev-row, .set-game, .mi-key-row { border-color: rgb(255 255 255 / .12); }
   .mi-opt:nth-child(odd) { background: rgb(255 255 255 / .03); }

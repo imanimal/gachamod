@@ -24,7 +24,9 @@ export function batches(done: QueueItem[]): QueueItem[][] {
     if (last && i.addedAt <= last.until + GAP_SECS) { last.items.push(i); last.until = Math.max(last.until, end(i)); }
     else out.push({ items: [i], until: end(i) });
   }
-  return out.reverse().map((b) => b.items.sort((x, y) => end(y) - end(x)));
+  // failures first in each batch, so one doesn't sit below thirty finished rows
+  const rank = (i: QueueItem) => (i.state === "failed" || i.state === "needsChoice" ? 0 : 1);
+  return out.reverse().map((b) => b.items.sort((x, y) => rank(x) - rank(y) || end(y) - end(x)));
 }
 
 /** "Today at 2:04 AM", "Yesterday at 9:15 PM", "Nov 3 at 6:40 PM". */
@@ -40,13 +42,20 @@ export function batchWhen(unixSecs: number): string {
 
 /** Every mod of these games by id, kept current with on/off changes and installs. */
 export function useInstalled(gameIds: string[]): Map<string, ModEntry> {
+  return useInstalledState(gameIds).byId;
+}
+
+/** useInstalled, plus which games' lists have loaded (until then a missing mod isn't "removed", just not read yet). */
+export function useInstalledState(gameIds: string[]): { byId: Map<string, ModEntry>; loaded: Set<string> } {
   const key = [...new Set(gameIds)].sort().join(",");
   const [byId, setById] = useState<Map<string, ModEntry>>(new Map());
+  const [loaded, setLoaded] = useState<Set<string>>(new Set());
   useEffect(() => {
     let live = true;
     const games = key ? key.split(",") : [];
     const load = (g: string) => library.list(g as ModEntry["game"]).then((l) => {
       if (!live) return;
+      setLoaded((s) => (s.has(g) ? s : new Set(s).add(g)));
       setById((prev) => {
         const n = new Map([...prev].filter(([, m]) => m.game !== g));
         for (const m of l) n.set(m.id, m);
@@ -66,7 +75,7 @@ export function useInstalled(gameIds: string[]): Map<string, ModEntry> {
     const offBackend = held(library.onChanged((p) => { if (games.includes(p.game)) void load(p.game); }));
     return () => { live = false; offPub(); offBackend(); };
   }, [key]);
-  return byId;
+  return { byId, loaded };
 }
 
 /** Turn these mods on or off as one action, with the usual Undo and one-skin rule. `all` is every mod of the game. */
@@ -139,7 +148,7 @@ export function InstalledList({ mods, all, gone }: { mods: ModEntry[]; all: Map<
 }
 
 /** A batch's heading: when it ran, what it holds, and switches for all of it. */
-export function BatchHead({ items, all, onClear }: { items: QueueItem[]; all: Map<string, ModEntry>; onClear: () => void }) {
+export function BatchHead({ items, all, onClear, onRetry }: { items: QueueItem[]; all: Map<string, ModEntry>; onClear: () => void; onRetry?: () => void }) {
   const mods = useMemo(() => items.flatMap((i) => modsOf(i, all)), [items, all]);
   const when = Math.max(...items.map((i) => i.finishedAt ?? i.addedAt));
   const failed = items.filter((i) => i.state === "failed").length;
@@ -149,6 +158,7 @@ export function BatchHead({ items, all, onClear }: { items: QueueItem[]; all: Ma
       <span className="dl-batch-t">{batchWhen(when)}</span>
       <span className="hint">{parts.join(" · ")}</span>
       <span className="dl-batch-act">
+        {failed > 0 && onRetry && <Button size="sm" icon="refresh" onClick={onRetry} title={`Try the ${plural(failed, "failed download")} in this batch again`}>Retry failed</Button>}
         {mods.length > 1 && <AllSwitches mods={mods} all={all} what="from this batch" />}
         <IconButton icon="x" size="sm" label="Clear this batch from the list. Its mods stay installed" onClick={onClear} />
       </span>

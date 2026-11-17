@@ -159,3 +159,7 @@ PC without XXMI, check:
   outfit stays on. Another outfit turns the first one off.
 - Change several mods quickly with the game in front: gachamod presses the reload key once, then waits at least 10
   seconds before the next press, and never more than three times a minute.
+- Install a ShaderFixes-only download (ZZZ's Censor Remover): its files land in the loader's ShaderFixes folder, a
+  backup is made, and after a restart the effect shows. Restoring the backup removes them again.
+- Install a download with a `BufferValues` folder (LeoTools' FixDash.ini): it lands in `Mods/BufferValues` and fixes
+  the mods it's meant for. Only LeoTools documents that folder, so check it loads from there.

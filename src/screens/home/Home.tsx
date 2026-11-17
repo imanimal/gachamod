@@ -2,7 +2,7 @@
 // Play with the profiles and quick actions, updates, new high-quality mods, picks for you, followed creators, your
 // characters, recent installs and a small GameBanana browser. A widget with nothing to show is left out (in Customise
 // it says so instead). Owner: HOME/PROFILES area.
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { dialogs, errorText, fileUrl, type GameState, type ModEntry, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
 import { useCreators, useNsfw, type NsfwMode } from "../../lib/prefs";
@@ -15,6 +15,7 @@ import { Badge, Button, IconButton, plural, Skeleton, timeAgo } from "../../ui/k
 import { Icon } from "../../ui/Icon";
 import { Portrait } from "../../ui/Portrait";
 import { menuFor, menuHandler } from "../../ui/ContextMenu";
+import { withoutKeys } from "../../lib/menuHints";
 import { toast } from "../../ui/toast";
 import { checkModUpdates, openModsFolder, rescan } from "../../shell/commands";
 import { GbBrowser, AdultSwitch } from "../browse/GbBrowser";
@@ -24,8 +25,9 @@ import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { useMods } from "../library/data";
 import { getUpdate } from "../library/actions";
 import { useRoster } from "../characters/roster";
-import { startNewProfile, switchTo } from "../profiles/actions";
-import { useProfiles } from "../profiles/data";
+import { quickNewProfile, switchTo } from "../profiles/actions";
+import { useProfiles, useSwitching } from "../profiles/data";
+import { newProfileMenu } from "../profiles/menus";
 import { ProfileThumb } from "../profiles/ProfileThumb";
 import "../profiles/menus";
 import { PlayButton } from "./PlayButton";
@@ -73,6 +75,24 @@ function HomeFor({ game }: { game: GameState }) {
     }
   }
   const put = (l: HomeLayout) => void homeLayoutPref.set(l);
+  // the characters widget is named with the game's word ("Your resonators"), here and in Customise
+  const noun = charNoun(game.id);
+  const titleOf = (id: WidgetId) => id === "characters" ? `Your ${noun.toLowerCase()}` : WIDGETS[id].title;
+  const tipOf = (id: WidgetId) => id === "characters" ? `${noun} you have mods for` : WIDGETS[id].tip;
+
+  // right-click on a widget's header: hide it, with Undo
+  const headerMenu = (id: WidgetId) => (e: MouseEvent) => {
+    if (!(e.target as Element | null)?.closest?.("header")) return;
+    menuHandler(() => [
+      { label: "Hide from Home", icon: "hide", onClick: () => {
+        const from = normalize(homeLayoutPref.get());
+        const to = setShown(from, id, false);
+        put(to);
+        record({ label: `Hid ${titleOf(id)} from Home`, undo: async () => homeLayoutPref.set(from), redo: async () => homeLayoutPref.set(to) });
+      } },
+      { label: "Customise Home", icon: "layout", onClick: () => setHomeEditing(true) },
+    ])(e);
+  };
 
   const body = (id: WidgetId) => {
     switch (id) {
@@ -89,6 +109,11 @@ function HomeFor({ game }: { game: GameState }) {
   };
 
   const shown = layout.order.filter((id) => editing || !layout.hidden.includes(id));
+  // no mods yet: the getting-started prompt (in Recently installed) goes right after Play
+  if (!editing && lib.loaded && !lib.mods.length && shown.includes("recent")) {
+    shown.splice(shown.indexOf("recent"), 1);
+    shown.splice(shown.indexOf("start") + 1, 0, "recent");
+  }
   return (
     <div className={`page home${editing ? " is-editing" : ""}`}>
       {editing && (
@@ -102,7 +127,7 @@ function HomeFor({ game }: { game: GameState }) {
       )}
       {shown.map((id, i) => {
         const hidden = layout.hidden.includes(id);
-        if (!editing) return <div key={id} className={`home-w home-w-${id}`}>{body(id)}</div>;
+        if (!editing) return <div key={id} className={`home-w home-w-${id}`} onContextMenu={headerMenu(id)}>{body(id)}</div>;
         const onKey = (e: KeyboardEvent) => {
           if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
           e.preventDefault();
@@ -112,11 +137,11 @@ function HomeFor({ game }: { game: GameState }) {
           <div key={id} className={`home-w home-w-${id} is-edit${hidden ? " is-hidden" : ""}`} onKeyDown={onKey}>
             <div className="home-w-edit">
               <Icon name={WIDGETS[id].icon} />
-              <span className="home-w-edit-t" title={WIDGETS[id].tip}>{WIDGETS[id].title}</span>
+              <span className="home-w-edit-t" title={tipOf(id)}>{titleOf(id)}</span>
               {hidden && <Badge tone="muted">Hidden</Badge>}
               <span className="grow" />
-              <IconButton size="sm" icon="up" label={`Move ${WIDGETS[id].title} up`} title="Move up (Alt+Up)" disabled={i === 0} onClick={() => put(move(layout, id, -1))} />
-              <IconButton size="sm" icon="down" label={`Move ${WIDGETS[id].title} down`} title="Move down (Alt+Down)" disabled={i === shown.length - 1} onClick={() => put(move(layout, id, 1))} />
+              <IconButton size="sm" icon="up" label={`Move ${titleOf(id)} up`} title="Move up (Alt+Up)" disabled={i === 0} onClick={() => put(move(layout, id, -1))} />
+              <IconButton size="sm" icon="down" label={`Move ${titleOf(id)} down`} title="Move down (Alt+Down)" disabled={i === shown.length - 1} onClick={() => put(move(layout, id, 1))} />
               <Button size="sm" variant={hidden ? "primary" : "secondary"} icon={hidden ? "eye" : "hide"} onClick={() => put(setShown(layout, id, hidden))}
                 title={hidden ? "Show it on Home" : "Hide it from Home"}>{hidden ? "Show" : "Hide"}</Button>
             </div>
@@ -181,7 +206,9 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
           <h1 className="home-quick-name">{game.name}</h1>
           <p className="home-quick-status">
             <span>{status}</span>
-            <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+3)">{on} of {plural(total, "mod")} on</button>
+            {total
+              ? <button type="button" className="home-quick-count" onClick={() => go("library")} title="Open your mods (Ctrl+3)">{on} of {plural(total, "mod")} on</button>
+              : <button type="button" className="home-quick-count" onClick={() => go("browse")} title="Find mods on GameBanana (Ctrl+2)">No mods yet</button>}
             {importerUpdate && <Badge tone="info" icon="update" title={`XXMI Launcher installs ${game.importer} ${game.importerLatest} when it next starts. Click for its settings`} onClick={() => go({ view: "settings", section: "xxmi" })}>{game.importerLatest} available</Badge>}
           </p>
         </div>
@@ -204,14 +231,15 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
 
 function ProfileRow({ game }: { game: GameState }) {
   const { list } = useProfiles(game.id);
-  const [busy, setBusy] = useState<number | null>(null);
+  // a switch started anywhere (here, the sidebar, a menu, search) shows on its chip
+  const sw = useSwitching();
+  const busy = sw?.game === game.id ? sw.id : null;
   const row = useRef<HTMLDivElement>(null);
   const [all, toggleAll] = useRowOpen("home.profiles");
   const { left, right } = useSideScroll(row, [list?.length, all]);
-  const pick = async (p: Profile) => {
-    if (p.active || busy !== null) return;
-    setBusy(p.id);
-    try { await switchTo(game.id, p, list); } finally { setBusy(null); }
+  const pick = (p: Profile) => {
+    if (p.active) { go({ view: "profiles", profile: p.id }); return; }
+    if (!sw) void switchTo(game.id, p, list);
   };
   return (
     <div className={`home-profiles-wrap${all ? " is-all" : ""}`}>
@@ -220,14 +248,15 @@ function ProfileRow({ game }: { game: GameState }) {
       {(list ?? []).map((p) => (
         <button key={p.id} type="button" className={`home-pchip${p.active ? " on" : ""}`} aria-pressed={p.active}
           style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
-          title={p.active ? `${p.name} is on now. Right-click for more` : `Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
-          onClick={() => void pick(p)} onContextMenu={menuHandler(() => menuFor("profile", { game: game.id, id: p.id }))}>
+          title={busy === p.id ? `Switching to ${p.name}` : p.active ? `${p.name} is on${p.hotkey ? ` (${p.hotkey} in game)` : ""}. Click to see its mods` : `Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
+          onClick={() => void pick(p)} onContextMenu={menuHandler(() => withoutKeys(menuFor("profile", { game: game.id, id: p.id })))}>
           <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={26} />
           <span className="home-pchip-t">{p.name}</span>
           {busy === p.id ? <span className="spin" aria-hidden="true" /> : p.active ? <Icon name="check" className="home-pchip-on" /> : null}
         </button>
       ))}
-      <button type="button" className="home-pchip add" onClick={() => startNewProfile(game.id)} title="Save the mods on now as a new profile" aria-label="New profile">
+      <button type="button" className="home-pchip add" onClick={() => void quickNewProfile(game.id)} onContextMenu={menuHandler(() => newProfileMenu(game.id))}
+        title="Save the mods on now as a new profile. Right-click for one with no mods, or to pick its name and icon first" aria-label="New profile">
         <Icon name="plus" />
       </button>
     </div>
@@ -237,6 +266,9 @@ function ProfileRow({ game }: { game: GameState }) {
 }
 
 // ── a sideways row with its own header (updates, characters, recent installs) ──
+
+/** The list item around a row's button. It keeps a box of its own so the row can measure it when paging. */
+const ITEM: CSSProperties = { display: "flex", flex: "none" };
 
 function Row({ id, title, count, all: allLabel, more, moreLabel, moreTip, children, deps }: {
   /** Names the row for remembering whether it shows everything. */
@@ -286,9 +318,9 @@ function Updates({ game, mods, editing }: { game: GameState; mods: ModEntry[]; e
   };
   return (
     <Row id="updates" title={WIDGETS.updates.title} count={list.length} all={`Show every update (${list.length})`} deps={[list.length]}
-      more={() => go("library")} moreLabel="In Mods" moreTip="Open Mods">
+      more={() => go("library")} moreLabel="Open Mods">
       {list.map((m) => (
-        <div key={m.id} role="listitem" className="home-tile" onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>
+        <div key={m.id} role="listitem" className="home-tile" onContextMenu={menuHandler(() => withoutKeys(menuFor("mod", { game: game.id, mod: m }), ["Enter"]))}>
           <button type="button" className="home-item home-tile-main" onClick={() => go({ view: "library", modId: m.id })} title={`${m.name}. Click for details`}>
             <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
             <span className="home-tile-name">{m.name}</span>
@@ -297,9 +329,11 @@ function Updates({ game, mods, editing }: { game: GameState; mods: ModEntry[]; e
         </div>
       ))}
       {list.length > 1 && (
-        <button type="button" className="home-item home-all" disabled={busy} onClick={() => void all()} title="Download every update listed here">
-          <Icon name="downloads" /><span>Update all {list.length}</span>
-        </button>
+        <div role="listitem" style={ITEM}>
+          <button type="button" className="home-item home-all" disabled={busy} onClick={() => void all()} title="Download every update listed here">
+            <Icon name="downloads" /><span>Update all {list.length}</span>
+          </button>
+        </div>
       )}
     </Row>
   );
@@ -317,13 +351,15 @@ function Characters({ game, mods, loaded, editing }: { game: GameState; mods: Mo
   return (
     <Row id="chars" title={title} count={withMods.length} all={`Show every ${charNoun(game.id, true).toLowerCase()} (${withMods.length})`} deps={[withMods.length]} more={() => go("characters")} moreLabel={`All ${noun.toLowerCase()}`}>
       {withMods.map((c) => (
-        <button key={c.name} type="button" role="listitem" className="home-item home-char" onClick={() => go({ view: "characters", character: c.name })}
-          title={`${c.name}: ${plural(c.mods.length, "mod")}, ${c.on} on. Click for their mods`}
-          onContextMenu={menuHandler(() => menuFor("character", { game: game.id, name: c.name }))}>
-          <Portrait game={game.id} name={c.name} icon={c.icon} size={64} />
-          <span className="home-char-t">{c.name}</span>
-          <span className="home-char-n">{c.on ? `${c.on} of ${c.mods.length} on` : plural(c.mods.length, "mod")}</span>
-        </button>
+        <div key={c.name} role="listitem" style={ITEM}>
+          <button type="button" className="home-item home-char" onClick={() => go({ view: "characters", character: c.name })}
+            title={`${c.name}: ${plural(c.mods.length, "mod")}, ${c.on} on. Click for their mods`}
+            onContextMenu={menuHandler(() => withoutKeys(menuFor("character", { game: game.id, name: c.name })))}>
+            <Portrait game={game.id} name={c.name} icon={c.icon} size={64} />
+            <span className="home-char-t">{c.name}</span>
+            <span className="home-char-n">{c.on ? `${c.on} of ${c.mods.length} on` : plural(c.mods.length, "mod")}</span>
+          </button>
+        </div>
       ))}
     </Row>
   );
@@ -334,7 +370,7 @@ function Recent({ game, mods, loaded, editing }: { game: GameState; mods: ModEnt
   const recent = [...mods].sort((a, b) => b.installedAt - a.installedAt).filter((m) => !(m.nsfw && nsfw === "hide")).slice(0, 16);
   if (!loaded) return null;
   if (!recent.length) {
-    return editing ? <Nothing title={WIDGETS.recent.title}>Mods you install show here.</Nothing> : (
+    return editing ? <Nothing title={WIDGETS.recent.title}>Mods you install show here.</Nothing> : mods.length ? null : (
       <section className="home-section home-first">
         <header className="home-section-h"><h3 className="sub-h">No mods yet</h3></header>
         <p className="hint">Install from Browse, or drop an archive anywhere on this window.</p>
@@ -345,12 +381,14 @@ function Recent({ game, mods, loaded, editing }: { game: GameState; mods: ModEnt
   return (
     <Row id="recent" title={WIDGETS.recent.title} all={`Show all ${recent.length} recent mods`} deps={[recent.length]} more={() => go("library")} moreLabel="All mods">
       {recent.map((m) => (
-        <button key={m.id} type="button" role="listitem" className={`home-item home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })}
-          title={`${m.name}${m.enabled ? "" : " (off)"}`} onContextMenu={menuHandler(() => menuFor("mod", { game: game.id, mod: m }))}>
-          <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
-          <span className="home-tile-name">{m.name}</span>
-          <span className="hint home-tile-sub">{m.character ?? "No character"}, {timeAgo(m.installedAt)}</span>
-        </button>
+        <div key={m.id} role="listitem" style={ITEM}>
+          <button type="button" className={`home-item home-tile${m.enabled ? "" : " off"}`} onClick={() => go({ view: "library", modId: m.id })}
+            title={`${m.name}${m.enabled ? "" : " (off)"}`} onContextMenu={menuHandler(() => withoutKeys(menuFor("mod", { game: game.id, mod: m }), ["Enter"]))}>
+            <ModThumb src={fileUrl(m.preview)} adult={m.nsfw} mode={nsfw} />
+            <span className="home-tile-name">{m.name}</span>
+            <span className="hint home-tile-sub">{m.character ?? "No character"}, {timeAgo(m.installedAt)}</span>
+          </button>
+        </div>
       ))}
     </Row>
   );

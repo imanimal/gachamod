@@ -1,18 +1,28 @@
 // The Keys tab of the menu over the game (Overlay.tsx): the toggle keys of the mods showing now, grouped by
-// character, with a search by character, mod or key. Mods that show their own key help, and mods the player left out,
-// aren't listed (Tools > Key list in game). Owner: INGAME area.
+// character (the ones played last first), with a search by character, mod or key. A click on a key rebinds it in the
+// mod's ini, with Undo (keys.rs through ui/KeyEditor.tsx). Mods the player left out aren't listed (Tools > Key list
+// in game). Owner: INGAME area.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fileUrl, type GameId, type KeyList, type ModKeyList } from "../../lib/api";
+import { errorText, fileUrl, modKeys, type GameId, type KeyLine, type KeyList, type KeyRow, type ModKeyList } from "../../lib/api";
 import { Icon } from "../../ui/Icon";
+import { KeyChip, recordEdit } from "../../ui/KeyEditor";
 import { Button, SearchField, Waiting, plural } from "../../ui/kit";
 import { LazyImg } from "../../ui/LazyImg";
 import { Portrait } from "../../ui/Portrait";
-import { KeyCombo, byCharacter, keyHits, rowNote, rowTip } from "./KeyListParts";
+import { byCharacter, keyHits, rowNote, rowTip } from "./KeyListParts";
+import "../../ui/key-editor.css";
 
-export function KeysTab({ game, list, error, onRetry, onMine, onSettings }: {
-  game: GameId; list: KeyList | null; error: string | null; onRetry: () => void; onMine: () => void; onSettings: () => void;
+export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSettings, onSay }: {
+  game: GameId; list: KeyList | null; error: string | null;
+  /** What the search starts with: a mod's name when its Toggles tag opened this tab. */
+  query?: string;
+  /** Characters in the order they were played last (the same order as My mods). */
+  order: string[];
+  onRetry: () => void; onMine: () => void; onSettings: () => void;
+  /** A line for the bottom of the menu ("Press F10 in game to load the change"). */
+  onSay: (text: string, bad?: boolean) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(query ?? "");
   const root = useRef<HTMLDivElement>(null);
   const words = q.trim().toLowerCase();
   const showing = useMemo(() => list?.mods.filter((m) => m.showing) ?? [], [list]);
@@ -20,18 +30,30 @@ export function KeysTab({ game, list, error, onRetry, onMine, onSettings }: {
   const hidden = showing.length - listed.length;
   const groups = useMemo(() => {
     const found = listed.flatMap((m) => { const rows = keyHits(m, words); return rows ? [{ ...m, rows }] : []; });
-    return byCharacter(found);
-  }, [listed, words]);
+    return byCharacter(found, order);
+  }, [listed, words, order]);
+  // one rebind at a time. The keys stay enabled meanwhile, so the one in focus keeps the focus
+  const busy = useRef(false);
+  /** Write the keys the player pressed to the mod's ini. The list reads itself again when the keys change. */
+  const rebind = async (m: ModKeyList, r: KeyRow, l: KeyLine, binding: string) => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const edit = await modKeys.rebind(game, m.modId, { ini: r.ini, section: r.section, field: l.field, index: l.index }, binding);
+      recordEdit(game, m.modId, edit, "That's already the key");
+      if (edit.backup && edit.note) onSay(`${edit.note}.`);
+    } catch (e) { onSay(errorText(e), true); } finally { busy.current = false; }
+  };
 
-  // on the first mod once the list is read, so arrows and the D-pad move from there
+  // on the first mod's first key once the list is read, so arrows and the D-pad move from there
   const ready = !!list;
   useEffect(() => {
     if (!ready) return;
-    const t = window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod")?.focus({ preventScroll: true }), 80);
+    const t = window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod .ke-chip")?.focus({ preventScroll: true }), 80);
     return () => window.clearTimeout(t);
   }, [ready]);
-  /** Enter in the search: on to the first mod found. After the key is done, so the same Enter does nothing more. */
-  const toFirst = () => window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod")?.focus(), 0);
+  /** Enter in the search: on to the first key found. After the key is done, so the same Enter does nothing more. */
+  const toFirst = () => window.setTimeout(() => root.current?.querySelector<HTMLElement>(".ov-kmod .ke-chip")?.focus(), 0);
 
   if (error && !list) {
     return (
@@ -54,7 +76,7 @@ export function KeysTab({ game, list, error, onRetry, onMine, onSettings }: {
     <div className="ov-empty"><p className="muted">None of the mods showing now has keys. Turn one on in My mods.</p>
       <Button size="sm" icon="mods" onClick={onMine} title="Your characters and their mods (Tab switches)">My mods</Button></div>
   ) : !listed.length ? (
-    <div className="ov-empty"><p className="muted">The mods showing now show their own key help in the game, or you left them out of the list.</p>
+    <div className="ov-empty"><p className="muted">You left the mods showing now out of the list.</p>
       <Button size="sm" icon="settings" onClick={onSettings} title="Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window">Choose mods</Button></div>
   ) : null;
 
@@ -73,13 +95,13 @@ export function KeysTab({ game, list, error, onRetry, onMine, onSettings }: {
                 <span>{g.name}</span>
               </h2>
               <div className="ov-kgrid">
-                {g.mods.map((m, i) => <KeyCard key={m.modId} m={m} i={i} />)}
+                {g.mods.map((m, i) => <KeyCard key={m.modId} m={m} i={i} onBinding={(r, l, b) => void rebind(m, r, l, b)} />)}
               </div>
             </section>
           ))}
           {hidden > 0 && !words && (
             <p className="muted ov-khidden">
-              {hidden === 1 ? "1 mod showing now isn't listed: it shows" : `${plural(hidden, "mod")} showing now aren't listed: they show`} their own key help, or you left {hidden === 1 ? "it" : "them"} out.
+              {hidden === 1 ? "1 mod showing now isn't listed: you left it out." : `${plural(hidden, "mod")} showing now aren't listed: you left them out.`}
               <Button size="sm" variant="ghost" onClick={onSettings} title="Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window">Choose mods</Button>
             </p>
           )}
@@ -89,24 +111,31 @@ export function KeysTab({ game, list, error, onRetry, onMine, onSettings }: {
   );
 }
 
-function KeyCard({ m, i }: { m: ModKeyList; i: number }) {
+function KeyCard({ m, i, onBinding }: { m: ModKeyList; i: number; onBinding: (r: KeyRow, l: KeyLine, binding: string) => void }) {
   const src = fileUrl(m.preview);
   return (
-    <div className="ov-kmod" tabIndex={0} role="group" aria-label={`Keys of ${m.name}`} style={{ "--i": Math.min(i, 16) } as React.CSSProperties}>
+    <div className="ov-kmod" role="group" aria-label={`Keys of ${m.name}`} style={{ "--i": Math.min(i, 16) } as React.CSSProperties}>
       <div className="ov-kmod-h">
         <span className="ov-kpic">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
         <span className="ov-kmod-t">
           <span className="ov-kmod-n">{m.name}</span>
-          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">Its own key help: {m.helpKey}</span>}
+          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">Shows its key help with {m.helpKey}</span>}
         </span>
       </div>
       <ul className="ov-krows">
         {m.rows.map((r, n) => {
           const note = rowNote(r);
           return (
-            <li key={n} title={rowTip(r, m.character)}>
-              <KeyCombo keys={r.keys} />
-              <span className="ov-kwhat">{r.what}{note && <span className="ov-knote">{note}</span>}</span>
+            <li key={n}>
+              <span className="ov-kchips">
+                {r.lines.map((l) => (
+                  <span key={`${l.field}-${l.index}`} className="ke-line">
+                    {l.field === "back" && <span className="ke-back hint" title="Steps back through the looks">Back</span>}
+                    <KeyChip line={l} onBinding={(b) => onBinding(r, l, b)} />
+                  </span>
+                ))}
+              </span>
+              <span className="ov-kwhat" title={rowTip(r, m.character)}>{r.what}{note && <span className="ov-knote">{note}</span>}</span>
             </li>
           );
         })}

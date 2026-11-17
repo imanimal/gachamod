@@ -206,11 +206,11 @@ pub async fn fetch_github(http: &reqwest::Client, data_dir: &Path, game: &str, s
         (raw, rest.last().copied().unwrap_or("fix.py").to_string(), link_id(source))
     } else {
         let r = http.get(format!("https://api.github.com/repos/{owner}/{repo}/releases/latest"))
-            .header("Accept", "application/vnd.github+json").send().await?;
+            .header("Accept", "application/vnd.github+json").send().await.map_err(|e| Error::unreachable("GitHub", e.without_url()))?;
         if r.status().as_u16() == 403 || r.status().as_u16() == 429 {
-            return Err(Error::Network("GitHub is limiting downloads from this PC for a while. Try again in an hour".into()));
+            return Err(Error::RateLimited { site: "GitHub".into(), wait: "an hour" });
         }
-        if !r.status().is_success() { return Err(Error::Http { status: r.status().as_u16(), message: format!("GitHub didn't send {tool}'s newest release") }); }
+        if !r.status().is_success() { return Err(Error::Site { site: "GitHub".into(), status: r.status().as_u16(), message: format!("{tool}'s newest release didn't come") }); }
         let rel: Release = r.json().await.map_err(|e| Error::Decode(e.to_string()))?;
         let a = windows_asset(&rel.assets).ok_or_else(|| Error::Invalid(format!("{tool}'s newest release has no Windows program")))?;
         (a.browser_download_url.clone(), a.name.clone(), a.id)

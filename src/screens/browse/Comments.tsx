@@ -1,7 +1,7 @@
 // A GameBanana mod's comments in the Browse drawer: loaded only once the section scrolls into view, 15 at a time,
-// replies on request. Reading only; replying happens on GameBanana. Owner: BROWSE area.
+// replies on request, popular or newest first (remembered for every mod). Reading only; replying happens on GameBanana. Owner: BROWSE area.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { Avatar, Badge, Button, Skeleton, timeAgo } from "../../ui/kit";
+import { Avatar, Badge, Button, Segmented, Waiting, timeAgo } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CreatorLink } from "../../ui/Links";
 import { toast } from "../../ui/toast";
@@ -10,10 +10,17 @@ import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, typ
 
 type OnLink = (e: MouseEvent | KeyboardEvent) => void;
 
+type CommentSort = "popular" | "newest";
+/** The comment order, kept for every mod. */
+const SORT_KEY = "gm.browse.commentSort";
+function readSort(): CommentSort {
+  try { return localStorage.getItem(SORT_KEY) === "newest" ? "newest" : "popular"; } catch { return "popular"; }
+}
+
 interface Pages { items: GbComment[]; total: number; page: number; complete: boolean }
 
 /** Paged loading shared by the comment list and each reply list. */
-function usePages(load: (page: number, signal: AbortSignal) => Promise<GbCommentPage>, start: boolean) {
+function usePages(load: (page: number, signal: AbortSignal) => Promise<GbCommentPage>, start: boolean, order = "") {
   const [data, setData] = useState<Pages | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -36,6 +43,13 @@ function usePages(load: (page: number, signal: AbortSignal) => Promise<GbComment
       .finally(() => { if (!c.signal.aborted) setBusy(false); });
   };
   useEffect(() => { if (start && !data && !busy && !error) fetchPage(1); }, [start]); // the first page, once it is wanted
+  // another order starts over from the first page
+  const lastOrder = useRef(order);
+  useEffect(() => {
+    if (lastOrder.current === order) return;
+    lastOrder.current = order;
+    if (start) { setData(null); fetchPage(1); }
+  }, [order]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => ctl.current?.abort(), []);
   const more = () => fetchPage((data?.page ?? 0) + 1);
   const retry = () => fetchPage(data ? data.page + 1 : 1);
@@ -52,7 +66,9 @@ export function Comments({ modId, model = "Mod", url, onLink }: { modId: number;
     io.observe(el);
     return () => io.disconnect();
   }, [seen]);
-  const { data, error, busy, more, retry } = usePages((p, s) => modComments(modId, p, "popular", s, model), seen);
+  const [sort, setSort] = useState<CommentSort>(readSort);
+  const pickSort = (v: CommentSort) => { setSort(v); try { localStorage.setItem(SORT_KEY, v); } catch { /* storage off */ } };
+  const { data, error, busy, more, retry } = usePages((p, s) => modComments(modId, p, sort, s, model), seen, sort);
   const openSite = () => void shell.openUrl(url).catch((e) => toast(errorText(e), true));
 
   return (
@@ -61,9 +77,15 @@ export function Comments({ modId, model = "Mod", url, onLink }: { modId: number;
         <h3 className="sub-h">Comments</h3>
         {data && data.total > 0 && <span className="muted">{data.total}</span>}
         <span className="grow" />
+        <Segmented<CommentSort> label="Sort comments" size="sm" value={sort} onChange={pickSort} options={[
+          { value: "popular", label: "Popular", title: "Most liked comments first" },
+          { value: "newest", label: "Newest", title: "Newest comments first, such as reports after a game update" },
+        ]} />
         <Button size="sm" variant="ghost" icon="external" onClick={openSite} title="Comments are written on GameBanana">Reply on GameBanana</Button>
       </div>
-      {!data && !error && <div className="gb-comments-skel"><Skeleton w="100%" h="3.5rem" /><Skeleton w="100%" h="3.5rem" /></div>}
+      {!data && !error && (seen || busy) && (
+        <Waiting className="gb-comments-skel" what="Loading comments" hold="GameBanana is slow to answer. Reply on GameBanana opens the comments there" />
+      )}
       {data && data.items.length === 0 && !error && <p className="muted">No comments yet.</p>}
       {data && data.items.length > 0 && (
         <ol className="gb-comment-list">{data.items.map((c) => <Comment key={c.id} c={c} onLink={onLink} />)}</ol>
@@ -111,7 +133,7 @@ function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: b
 
 function Replies({ postId, onLink }: { postId: number; onLink: OnLink }) {
   const { data, error, busy, more, retry } = usePages((p, s) => commentReplies(postId, p, s), true);
-  if (!data && !error) return <Skeleton w="100%" h="2.5rem" />;
+  if (!data && !error) return <Waiting what="Loading replies" hold="GameBanana is slow to answer. Reply on GameBanana opens the comments there" />;
   return (
     <>
       {data && data.items.length > 0 && <ol className="gb-comment-list">{data.items.map((r) => <Comment key={r.id} c={r} onLink={onLink} reply />)}</ol>}

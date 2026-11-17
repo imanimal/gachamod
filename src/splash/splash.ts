@@ -10,18 +10,27 @@ import { konamiBusy } from "../lib/fun";
 import { pickTip, tipNodes } from "./tips";
 import type { Intro, IntroCtx } from "./types";
 import { intro as plain } from "./intros/plain";
-import { intro as zzz } from "./intros/zzz";
-import { intro as gi } from "./intros/gi";
-import { intro as hsr } from "./intros/hsr";
-import { intro as ww } from "./intros/ww";
-import { intro as ef } from "./intros/ef";
-import "./intros/zzz.css";
-import "./intros/gi.css";
-import "./intros/hsr.css";
-import "./intros/ww.css";
-import "./intros/ef.css";
 
-const INTROS: Record<string, Intro> = { plain, zzz, gi, hsr, ww, ef };
+// each game's intro (script and CSS) loads only when it plays; the plain one is always here, and stands in when one
+// fails to load
+const INTROS: Record<string, () => Promise<Intro>> = {
+  plain: () => Promise.resolve(plain),
+  zzz: () => import("./intros/zzz.css").then(() => import("./intros/zzz")).then((m) => m.intro),
+  gi: () => import("./intros/gi.css").then(() => import("./intros/gi")).then((m) => m.intro),
+  hsr: () => import("./intros/hsr.css").then(() => import("./intros/hsr")).then((m) => m.intro),
+  ww: () => import("./intros/ww.css").then(() => import("./intros/ww")).then((m) => m.intro),
+  ef: () => import("./intros/ef.css").then(() => import("./intros/ef")).then((m) => m.intro),
+};
+const loaded = new Map<string, Promise<Intro>>();
+/** The intro named `id`, loading it the first time. */
+function loadIntro(id: string): Promise<Intro> {
+  let p = loaded.get(id);
+  if (!p) {
+    p = (INTROS[id] ?? INTROS.plain!)().catch((e: unknown) => { loaded.delete(id); console.error("opening screen", e); return plain; });
+    loaded.set(id, p);
+  }
+  return p;
+}
 /** Every intro by name, for Settings. Each theme with one shares its id. */
 export const INTRO_LIST: Array<{ id: string; name: string }> = [
   { id: "zzz", name: "New Eridu" }, { id: "gi", name: "Teyvat" },
@@ -66,10 +75,13 @@ const reduced = () => document.documentElement.dataset.motion === "reduced" || m
 
 let showing = false;
 
-/** At start, before the app renders (main.tsx): show the opening screen if index.html marked one. */
-export function startSplash() {
+/** At start, before the app renders (main.tsx): show the opening screen if index.html marked one. Resolves once its
+    intro has loaded and the screen is up, so the app can render behind it. */
+export function startSplash(): Promise<void> {
   const id = document.documentElement.dataset.splash;
-  if (id) void run(introFor(id), false);
+  if (!id) return Promise.resolve();
+  void run(introFor(id), false);
+  return loadIntro(introFor(id)).then(() => {});
 }
 
 /** Play the opening over the running app (Settings, "Play it"): the one picked, else the theme's. */
@@ -89,10 +101,11 @@ async function run(id: string, replay: boolean) {
 async function show(id: string, replay: boolean) {
   showing = true;
   const r = document.documentElement;
-  const intro = INTROS[id] ?? plain;
+  const t0 = performance.now();
+  // index.html's colour covers the screen while the intro loads
+  const intro = await loadIntro(id);
   const app = document.getElementById("root")!;
   const ac = new AbortController();
-  const t0 = performance.now();
 
   const stage = document.createElement("div");
   stage.className = "splash";
@@ -188,7 +201,9 @@ async function show(id: string, replay: boolean) {
     stage.getAnimations({ subtree: true }).forEach((a) => a.pause());
     app.getAnimations().forEach((a) => a.cancel());
     app.removeAttribute("style");
-    await stage.animate([{ opacity: getComputedStyle(stage).opacity }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "forwards" }).finished.catch(() => {});
+    // a window that draws no frames never finishes the fade, so it ends on a timer too
+    const fade = stage.animate([{ opacity: getComputedStyle(stage).opacity }, { opacity: 0 }], { duration: 140, easing: "ease-out", fill: "forwards" }).finished.catch(() => {});
+    await Promise.race([fade, sleep(400)]);
     finish();
   } catch (e) {
     console.error("opening screen", e);

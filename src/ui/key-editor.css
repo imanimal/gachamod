@@ -1,26 +1,26 @@
 /* A mod's editable keys (ui/KeyEditor.tsx) and the key clashes list in Tools (screens/modtools/ToolsPanels.tsx). */
-.ke-failed, .ke-loading { margin: 0 0 1rem; }
-.ke-loading { display: grid; gap: .45rem; }
+.ke-failed, .ke-loading { margin: 0 0 var(--s-4); }
+.ke-loading { display: grid; gap: var(--s-2); }
 
-.ke-os { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .15rem 0 .65rem; margin-bottom: .35rem; border-bottom: 1px solid var(--line); }
+.ke-os { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: .15rem 0 var(--s-3); margin-bottom: var(--s-1); border-bottom: 1px solid var(--line); }
 .ke-os .toggle { flex: 1 1 16rem; min-width: 0; }
-.ke-os-global { margin: 0 0 .5rem; }
-.ke-running { margin: 0 0 .4rem; }
+.ke-os-global { margin: 0 0 var(--s-2); }
+.ke-running { margin: 0 0 var(--s-2); }
 
-.ke-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.ke-row { display: grid; grid-template-columns: minmax(8rem, 1fr) auto auto; align-items: center; gap: .3rem .9rem; padding: .4rem 0;
+.ke-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container: ke / inline-size; }
+.ke-row { display: grid; grid-template-columns: minmax(8rem, 1fr) auto auto; align-items: center; gap: var(--s-1) var(--s-4); padding: var(--s-2) 0;
   border-bottom: 1px solid var(--line); }
 .ke-row:last-child { border-bottom: 0; }
 .ke-what { display: flex; flex-direction: column; min-width: 0; }
 .ke-name { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
-.ke-kind { font-size: .82em; }
+.ke-kind { font-size: var(--t-meta); }
 .ke-row.off .ke-name { color: var(--text-3); }
-.ke-keys { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: .3rem; }
-.ke-line { display: inline-flex; align-items: center; gap: .3rem; }
-.ke-back { font-size: .78em; }
+.ke-keys { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s-1); }
+.ke-line { display: inline-flex; align-items: center; gap: var(--s-1); }
+.ke-back { font-size: var(--t-meta); }
 .ke-on { display: inline-flex; }
 
-.ke-chip { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-width: 3.4rem; height: 2.1rem; padding: 0 .45rem 0 .35rem;
+.ke-chip { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); min-width: 3.4rem; height: 2.1rem; padding: 0 .45rem 0 .35rem;
   border-radius: var(--radius-sm); cursor: pointer; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line);
   transition: background-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
 .ke-chip .kbd { font-size: .92em; min-width: 1.7em; height: 1.65em; }
@@ -31,37 +31,41 @@
 .ke-chip:disabled { cursor: default; }
 .ke-chip.changed .kbd { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-ink); }
 .ke-chip.off .kbd { opacity: .45; text-decoration: line-through; }
-.ke-chip.capturing { padding: .2rem .55rem; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.ke-chip-live { min-width: 5.5rem; font-size: .86em; font-weight: 650; color: var(--accent-ink); text-align: center; animation: keWait 1.2s var(--ease) infinite alternate; }
+.ke-chip.capturing { padding: var(--s-1) var(--s-2); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.ke-chip-live { min-width: 5.5rem; font-size: var(--t-small); font-weight: 650; color: var(--accent-ink); text-align: center; animation: keWait 1.2s var(--ease) infinite alternate; }
 @keyframes keWait { from { opacity: 1; } to { opacity: .55; } }
 
-.ke-compact .ke-row { padding: .3rem 0; }
-.ke-compact .ke-os { padding-bottom: .45rem; }
-.ke-foot { display: flex; justify-content: flex-end; padding-top: .4rem; }
+/* always there, under the keys: what a click on one does */
+.ke-tip { margin: var(--s-1) 0 0; font-size: var(--t-meta); text-align: right; }
 
-@media (max-width: 40rem) {
+.ke-compact .ke-row { padding: var(--s-1) 0; }
+.ke-compact .ke-os { padding-bottom: var(--s-2); }
+.ke-foot { display: flex; justify-content: flex-end; padding-top: var(--s-2); }
+
+@container ke (max-width: 30rem) {
   .ke-row { grid-template-columns: 1fr auto; }
   .ke-keys { grid-column: 1; justify-content: flex-start; }
   .ke-on { grid-row: 1; grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) { .ke-chip-live { animation: none; } }
 
-/* key clashes in Tools */
-.kc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
-.kc-item { padding: .55rem .7rem; border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
-.kc-h { display: flex; align-items: center; gap: .5rem; margin-bottom: .35rem; }
+/* key clashes in Tools: hairline rows, the key as the heading and the mods that use it indented under it */
+.kc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container: ke / inline-size; }
+.kc-item { padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
+.kc-item:last-child { border-bottom: 0; }
+.kc-h { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-1); }
 .kc-h .hint { margin-left: auto; }
-.kc-mods { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-.kc-mod { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .2rem .7rem; }
+.kc-mods { list-style: none; margin: 0; padding: 0 0 0 var(--s-4); display: flex; flex-direction: column; gap: var(--s-1); }
+.kc-mod { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s-1) var(--s-3); }
 .kc-name { min-width: 0; overflow-wrap: anywhere; }
-.kc-name .hint { display: block; font-size: .82em; }
-.kc-acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .35rem; }
-.kc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
-.kc-skipped { margin: .5rem 0 0; padding-left: 1.1rem; }
-@media (max-width: 40rem) { .kc-mod { grid-template-columns: 1fr; } .kc-acts { justify-content: flex-start; } }
-.kc-skip { margin-top: .7rem; }
-.kc-gated { margin-top: .7rem; }
-.kc-gated-t { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .4rem; margin-left: -.4rem; border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; }
+.kc-name .hint { display: block; font-size: var(--t-meta); }
+.kc-acts { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s-1); }
+.kc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+.kc-skipped { margin: var(--s-2) 0 0; padding-left: var(--s-4); }
+@container ke (max-width: 30rem) { .kc-mod { grid-template-columns: 1fr; } .kc-acts { justify-content: flex-start; } }
+.kc-skip { margin-top: var(--s-3); }
+.kc-gated { margin-top: var(--s-3); }
+.kc-gated-t { display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-2); margin-left: calc(-1 * var(--s-2)); border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; }
 .kc-gated-t:hover { background: var(--hover); }
-.kc-gated > .hint { margin: .3rem 0 .5rem; }
-.kc-gated-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; max-height: 22rem; overflow-y: auto; }
+.kc-gated > .hint { margin: var(--s-1) 0 var(--s-2); }
+.kc-gated-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); max-height: 22rem; overflow-y: auto; }

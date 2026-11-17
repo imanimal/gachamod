@@ -1,55 +1,55 @@
 /* Extensions: package cards, extension pages and their frames, the Settings section. Layout only; colours are theme
    tokens. Owner: EXTENSIONS area. */
 
-.ext-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
+.ext-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); }
 .ext-search { flex: 1 1 14rem; max-width: 22rem; margin-left: auto; }
-.ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: .8rem; }
+.ext-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: var(--s-3); }
 .ext-wait { align-items: center; padding: 3rem 0; text-align: center; }
-.ext-err { margin: 0 0 .7rem; color: var(--warn); }
+.ext-err { margin: 0 0 var(--s-3); color: var(--warn); }
 
-.ext-card { display: flex; gap: .9rem; padding: .9rem 1rem; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
+.ext-card { display: flex; gap: var(--s-4); padding: var(--s-4) var(--inset-panel); border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); min-width: 0; }
 .ext-card.is-off .ext-ic, .ext-card.is-off .ext-top, .ext-card.is-off .ext-main > :not(.ext-head) { opacity: .6; }
 .ext-ic { flex: none; display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2); color: var(--text-2); }
 .ext-ic img { width: 100%; height: 100%; object-fit: cover; }
 .ext-ic .i { width: 1.5rem; height: 1.5rem; }
-.ext-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
-.ext-head { display: flex; align-items: flex-start; gap: .6rem; }
-.ext-top { flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; min-width: 0; min-height: 2rem; }
+.ext-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s-1); }
+.ext-head { display: flex; align-items: flex-start; gap: var(--s-2); }
+.ext-top { flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); min-width: 0; min-height: 2rem; }
 .ext-top h3 { margin: 0; font-size: 1.02em; overflow-wrap: anywhere; }
-.ext-ver { font-family: var(--font-num); font-size: .82em; color: var(--text-3); }
-.ext-by { display: flex; flex-wrap: wrap; gap: .25rem .7rem; margin: 0; font-size: .86em; color: var(--text-2); }
+.ext-ver { font-family: var(--font-num); font-size: var(--t-meta); color: var(--text-3); }
+.ext-by { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-3); margin: 0; font-size: var(--t-small); color: var(--text-2); }
 .ext-desc { margin: 0; overflow-wrap: anywhere; }
-.ext-perms { list-style: none; margin: .1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .2rem; font-size: .86em; color: var(--text-2); }
-.ext-perms li { display: flex; align-items: center; gap: .4rem; overflow-wrap: anywhere; }
+.ext-perms { list-style: none; margin: .1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); font-size: var(--t-small); color: var(--text-2); }
+.ext-perms li { display: flex; align-items: center; gap: var(--s-2); overflow-wrap: anywhere; }
 .ext-perms .i { flex: none; color: var(--text-3); }
-.ext-perm-none { margin: 0; font-size: .86em; color: var(--text-3); }
-.ext-needs-line { display: flex; align-items: flex-start; gap: .4rem; margin: 0; font-size: .86em; color: var(--text-2); }
+.ext-perm-none { margin: 0; font-size: var(--t-small); color: var(--text-3); }
+.ext-needs-line { display: flex; align-items: flex-start; gap: var(--s-2); margin: 0; font-size: var(--t-small); color: var(--text-2); }
 .ext-needs-line .i { flex: none; margin-top: .15em; color: var(--text-3); }
 .ext-perms li { align-items: flex-start; }
 .ext-perms .i { margin-top: .15em; }
 .ext-link { color: var(--accent-ink); font-weight: 600; }
 .ext-link:hover { text-decoration: underline; text-underline-offset: 2px; }
-.ext-where { display: flex; flex-wrap: wrap; gap: .35rem; }
-.ext-problem { display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--bad); font-size: .9em; }
-.ext-act { flex: none; display: flex; align-items: center; gap: .4rem; }
+.ext-where { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.ext-problem { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--bad); font-size: var(--t-small); }
+.ext-act { flex: none; display: flex; align-items: center; gap: var(--s-2); }
 
 /* a page an extension draws, in its frame */
 .ext-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: normal; }
 .ext-frame:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--radius-xs); }
 .ext-frame-wait { align-items: center; justify-content: center; min-height: 8rem; text-align: center; }
-.ext-frame-err { margin: .5rem 0; color: var(--bad); }
-.ext-needs { display: flex; flex-direction: column; gap: .4rem; margin: 0 0 .8rem; }
-.ext-needs p { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; margin: 0; padding: .6rem .8rem; border-radius: var(--radius-sm); background: var(--surface-2); }
+.ext-frame-err { margin: var(--s-2) 0; color: var(--bad); }
+.ext-needs { display: flex; flex-direction: column; gap: var(--s-2); margin: 0 0 var(--s-3); }
+.ext-needs p { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2) var(--s-4); margin: 0; padding: var(--s-2) var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); }
 .ext-needs p > span { flex: 1 1 18rem; }
-.ext-main .ext-needs { margin: .2rem 0 0; }
-.ext-main .ext-needs p { padding: .45rem .6rem; font-size: .9em; }
-.char-ext { margin-top: .4rem; }
+.ext-main .ext-needs { margin: var(--s-1) 0 0; }
+.ext-main .ext-needs p { padding: var(--s-2); font-size: var(--t-small); }
+.char-ext { margin-top: var(--s-2); }
 
 /* Settings, Extensions */
-.set-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .4rem; }
-.ext-sources { display: flex; flex-direction: column; gap: .35rem; }
-.ext-src { display: flex; align-items: center; gap: .5rem; min-height: 2rem; margin: 0; padding: 0 .3rem 0 .7rem; border-radius: var(--radius-sm); background: var(--surface-2); }
-.ext-src > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: .86em; }
+.set-btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); }
+.ext-sources { display: flex; flex-direction: column; gap: var(--s-1); }
+.ext-src { display: flex; align-items: center; gap: var(--s-2); min-height: 2rem; margin: 0; padding: 0 var(--s-1) 0 var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); }
+.ext-src > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-small); }
 .ext-src:first-child > span { font-family: inherit; font-size: inherit; color: var(--text-2); }
-.ext-src-add { display: flex; align-items: flex-end; gap: .5rem; }
+.ext-src-add { display: flex; align-items: flex-end; gap: var(--s-2); }
 .ext-src-add .field { flex: 1; }

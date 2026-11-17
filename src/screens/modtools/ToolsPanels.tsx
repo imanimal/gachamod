@@ -2,20 +2,22 @@
 // Owner: MODTOOLS area. SYSTEM's Tools screen renders them.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { inTauri } from "../../lib/tauri";
-import { emitApp, go, onApp, useGame, useGames } from "../../lib/store";
+import { currentGame, emitApp, onApp, useGame, useGames } from "../../lib/store";
 import {
-  dialogs, errorKind, errorText, imm, modKeys, modtools, type ConflictGroup, type HashHit, type ImmInfo, type KeyClash, type KeyEdit,
+  dialogs, errorKind, errorText, imm, library, modKeys, modtools, shell, type ConflictGroup, type HashHit, type ImmInfo, type KeyClash, type KeyEdit,
   type ModSkip, type OnScreenMod,
 } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
-import { Badge, Button, Confirm, Panel, Skeleton, TextField, plural } from "../../ui/kit";
+import { Badge, Button, Confirm, Panel, Skeleton, TextField, Waiting, plural } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { KeyChip, keysChanged, onKeysChanged, recordBackups, recordEdit } from "../../ui/KeyEditor";
 import { toast } from "../../ui/toast";
 import { notesText, oxford } from "../../lib/notes";
+import { jsonPref } from "../../lib/prefs";
 import { conflictKey, dropShared, ignoreConflict, setToolsCount, turnOff } from "./toolsBadge";
 import { SharedParts } from "./ModInsides";
 import "./modtools.css";
+import { ModLink } from "./ModLink";
 
 /** Skipped mods grouped by why, so one reason is said once. */
 function byReason(list: ModSkip[]): Array<[string, string[]]> {
@@ -53,7 +55,7 @@ function useGameList<T>(load: (game: string) => Promise<T[]>): { game: string | 
   return { game, list: state.game === game ? state.list : null, reload };
 }
 
-const Loading = () => <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>;
+const Loading = ({ what }: { what: string }) => <Waiting what={what} className="tp-loading"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></Waiting>;
 
 // ── conflicts ──
 
@@ -87,8 +89,8 @@ export function ConflictsPanel() {
       actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title="Look for conflicts again">Check again</Button>}>
       <p className="hint tp-intro">Mods that are on and change the same parts of a model. Only one of them shows in game.
         Keep one, take the shared parts out of one so each shows the rest, or ignore it.</p>
-      {!shown ? <Loading /> : shown.length === 0 ? (
-        <p className="tp-none muted">No conflicts between the mods that are on{ignored.length ? ", apart from the ones you ignore" : ". Enjoy it while it lasts"}.</p>
+      {!shown ? <Loading what="Looking for mods that clash" /> : shown.length === 0 ? (
+        <p className="tp-none muted">No conflicts between the mods that are on{ignored.length ? ", apart from the ones you ignore" : ""}.</p>
       ) : (
         <ul className="tp-list tp-conflict-list">
           {shown.map((g) => {
@@ -108,7 +110,7 @@ export function ConflictsPanel() {
                     const others = oxford(g.mods.filter((o) => o.modId !== m.modId).map((o) => o.name));
                     return (
                       <li key={m.modId} className="tp-conflict-mod row">
-                        <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
+                        <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
                         <Button size="sm" variant="ghost" busy={busy === `d:${m.modId}`} disabled={!!busy}
                           title={`Take the ${n} out of ${m.name}'s files, so ${others} shows them and ${m.name} keeps the rest. Undo puts them back`}
                           onClick={() => game && act(`d:${m.modId}`, () => dropShared(game, m.modId, g.hashes))}>Remove from this mod</Button>
@@ -146,6 +148,20 @@ export function ConflictsPanel() {
 
 // ── key clashes ──
 
+/** Key clashes the user chose to ignore, by game. A clash is its key plus the mods sharing it, so another mod joining
+ *  it shows it again. */
+const ignoredClashesPref = jsonPref<Record<string, string[]>>("keyClashes.ignored", {});
+const clashKey = (c: KeyClash) => `${c.label}|${[...new Set(c.keys.map((k) => k.modId))].sort().join("+")}`;
+const clashNames = (c: KeyClash) => oxford([...new Set(c.keys.map((k) => k.name))]);
+function ignoreClash(game: string, c: KeyClash, on: boolean) {
+  const all = { ...ignoredClashesPref.get() };
+  const k = clashKey(c);
+  const now = (all[game] ?? []).filter((x) => x !== k);
+  all[game] = on ? [...now, k] : now;
+  if (!all[game]!.length) delete all[game];
+  void ignoredClashesPref.set(all, on ? `Ignored the ${c.label} clash` : `Showing the ${c.label} clash again`);
+}
+
 export function KeyClashesPanel() {
   const { game, list, reload } = useGameList<KeyClash>(modKeys.clashes);
   const gated = useGameList<OnScreenMod>(modKeys.onScreenMods);
@@ -154,6 +170,10 @@ export function KeyClashesPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<ModSkip[]>([]);
   const live = useMounted();
+  const ignoredKeys = ignoredClashesPref.use();
+  const ign = new Set(game ? ignoredKeys[game] ?? [] : []);
+  const shown = list?.filter((c) => !ign.has(clashKey(c))) ?? null;
+  const ignored = list?.filter((c) => ign.has(clashKey(c))) ?? [];
   useAiShow();
   useEffect(() => onKeysChanged((g) => { if (g === game && live.current) { reload(); reloadGated(); } }), [game, reload, reloadGated, live]);
   useEffect(() => { setSkipped([]); setGatedOpen(false); }, [game]);
@@ -186,24 +206,27 @@ export function KeyClashesPanel() {
   };
 
   return (
-    <Panel id="key-clashes" title="Key clashes" icon="keyboard" className="tp tp-keys" count={list ? list.length : undefined}
+    <Panel id="key-clashes" title="Key clashes" icon="keyboard" className="tp tp-keys" count={shown ? shown.length : undefined}
       actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title="Look for key clashes again">Check again</Button>}>
       <p className="hint tp-intro">Keys that two mods that are on both use, at times when both can react. Mods for different characters only clash when one of them takes keys while its character isn't on screen.</p>
-      {!list ? <Loading /> : list.length === 0 ? (
-        <p className="tp-none muted">No two mods that are on react to the same key.</p>
+      {!shown ? <Loading what="Reading mod keys" /> : shown.length === 0 ? (
+        <p className="tp-none muted">No two mods that are on react to the same key{ignored.length ? ", apart from the clashes you ignore" : ""}.</p>
       ) : (
         <ul className="kc-list">
-          {list.map((c) => (
+          {shown.map((c) => (
             <li key={c.keys.map((k) => `${k.modId}|${k.section}|${k.field}|${k.index}`).join(",")} className="kc-item">
-              <div className="kc-h">
+              <div className="kc-h row">
                 <span className="kbd">{c.label}</span>
-                <span className="hint">{plural(new Set(c.keys.map((k) => k.modId)).size, "mod")}</span>
+                <span className="hint grow">{plural(new Set(c.keys.map((k) => k.modId)).size, "mod")}</span>
+                <Button size="sm" variant="ghost" icon="hide" disabled={!game || !!busy}
+                  title="Stop listing this clash. Nothing in the mods changes, and it moves to Ignored below"
+                  onClick={() => game && ignoreClash(game, c, true)}>Ignore</Button>
               </div>
               <ul className="kc-mods">
                 {c.keys.map((k) => (
                   <li key={`${k.modId}|${k.section}|${k.field}|${k.index}`} className="kc-mod">
                     <span className="kc-name">
-                      <button type="button" className="tp-link" title="Open in Mods" onClick={() => go({ view: "library", modId: k.modId })}>{k.name}</button>
+                      <ModLink game={game} modId={k.modId} name={k.name} />
                       <span className="hint">{k.what}{k.onScreen ? ", only while on screen" : ", any time"}</span>
                     </span>
                     <span className="kc-acts">
@@ -223,13 +246,27 @@ export function KeyClashesPanel() {
           ))}
         </ul>
       )}
+      {ignored.length > 0 && (
+        <details className="tp-ignored">
+          <summary className="hint">Ignored ({ignored.length})</summary>
+          <ul className="tp-list">
+            {ignored.map((c) => (
+              <li key={clashKey(c)} className="tp-conflict-mod row">
+                <span className="grow"><span className="kbd">{c.label}</span> {clashNames(c)}</span>
+                <Button size="sm" variant="ghost" disabled={!game} title="Warn about this key clash again"
+                  onClick={() => game && ignoreClash(game, c, false)}>Stop ignoring</Button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <div className="kc-foot">
         <Button size="sm" icon="keyboard" busy={busy === "all-on"} disabled={!game || (!!busy && busy !== "all-on")}
           title="For every mod with toggles: its toggles work only while its character is on screen. Mods that already do this are left alone"
-          onClick={() => all(true)}>Toggles only while on screen for all mods</Button>
+          onClick={() => all(true)}>Limit all toggles to on screen</Button>
         <Button size="sm" variant="ghost" busy={busy === "all-off"} disabled={!game || (!!busy && busy !== "all-off")}
           title="Take gachamod's on-screen check out of every mod again"
-          onClick={() => all(false)}>Take it out of all mods</Button>
+          onClick={() => all(false)}>Remove on-screen check from all</Button>
       </div>
       {gated.list && gated.list.length > 0 && (
         <div className="kc-gated">
@@ -244,7 +281,7 @@ export function KeyClashesPanel() {
                 {gated.list.map((g) => (
                   <li key={g.modId} className="kc-mod">
                     <span className="kc-name">
-                      <button type="button" className="tp-link" title="Open in Mods" onClick={() => go({ view: "library", modId: g.modId })}>{g.name}</button>
+                      <ModLink game={game} modId={g.modId} name={g.name} />
                       {(g.character || g.partial || !g.enabled) && (
                         <span className="hint">{[g.character, g.partial ? "some of its files" : null, g.enabled ? null : "turned off"].filter(Boolean).join(", ")}</span>
                       )}
@@ -291,6 +328,8 @@ export function HashLookupPanel() {
   const [hits, setHits] = useState<{ hash: string; list: HashHit[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const live = useMounted();
+  // results name the last game's mods: a game switch clears them
+  useEffect(() => setHits(null), [game]);
 
   const find = (e: FormEvent) => {
     e.preventDefault();
@@ -298,7 +337,7 @@ export function HashLookupPanel() {
     if (!game || !h) return;
     setBusy(true);
     modtools.hashLookup(game, h)
-      .then((list) => { if (live.current) setHits({ hash: h, list }); })
+      .then((list) => { if (live.current && currentGame()?.id === game) setHits({ hash: h, list }); })
       .catch((err) => toast(errorText(err), true))
       .finally(() => { if (live.current) setBusy(false); });
   };
@@ -318,8 +357,9 @@ export function HashLookupPanel() {
         <ul className="tp-list tp-hash-list">
           {hits.list.map((h, i) => (
             <li key={`${h.modId}-${h.ini}-${h.section}-${i}`} className="tp-hash-hit row">
-              <button type="button" className="tp-link" title="Open in Mods" onClick={() => go({ view: "library", modId: h.modId })}>{h.name}</button>
-              <span className="hint mono grow">{h.ini} [{h.section}]</span>
+              <ModLink game={game} modId={h.modId} name={h.name} />
+              <span className="grow"><button type="button" className="tp-link hint mono" title={`Open ${h.ini}`}
+                onClick={() => void openIni(game, h)}>{h.ini}</button> <span className="hint mono">[{h.section}]</span></span>
               <Badge tone={h.enabled ? "ok" : "muted"}>{h.enabled ? "On" : "Off"}</Badge>
             </li>
           ))}
@@ -327,6 +367,15 @@ export function HashLookupPanel() {
       ))}
     </Panel>
   );
+}
+
+/** Open the ini a hash result names, in the app Windows uses for .ini files. */
+async function openIni(game: string | null, h: HashHit) {
+  if (!game) return;
+  try {
+    const m = await library.get(game, h.modId);
+    await shell.openPath(`${m.path.replace(/[\\/]+$/, "")}\\${h.ini.replace(/\//g, "\\")}`);
+  } catch (e) { toast(errorText(e), true); }
 }
 
 // ── packs ──
@@ -417,7 +466,7 @@ export function ImmPanel() {
       </ul>
       {asked && (
         <Confirm title={`Move ${plural(asked.mods, "mod")} from IMM?`} yes="Move them" onClose={() => setAsk(null)} onYes={() => move(asked.game)}>
-          <p>Close Integrated Mod Manager and {nameOf(asked.game)} first. The mods move out of IMM's folders, so IMM won't list them any more. Nothing is deleted.</p>
+          <p>The mods move out of IMM's folders, so IMM won't list them any more. Nothing is deleted.</p>
         </Confirm>
       )}
     </Panel>

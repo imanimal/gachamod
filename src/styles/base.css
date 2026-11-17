@@ -9,6 +9,8 @@
    --surface-3             a third layer (a hovered row on --surface-2, a pressed key)
    --raised                something lifted out of a well (the selected part of a Segmented)
    --line, --line-2        hairlines, stronger borders
+   --line-3                a 3:1 edge for controls that must read against the panel: check boxes, fields, the off
+                           switch (optional: kit.css falls back to the plain lines)
    --text, --text-2, --text-3   primary, secondary, faint text
    --accent, --on-accent   the one bright colour (current view, primary buttons), text on it
    --accent-soft           accent at low alpha for selected backgrounds
@@ -16,6 +18,7 @@
    --accent-2              a second highlight (New Eridu's yellow; the default theme's is a cooler tint)
    --ok, --warn, --bad, --info   status colours
    --on-bad                text on a --bad fill
+   --on-ok, --on-warn, --on-info   text on an --ok, --warn or --info fill (optional: kit.css falls back to white)
    --ring                  keyboard and controller focus ring
    --hover                 neutral wash for hovered rows and ghost buttons
    --radius, --radius-sm, --radius-lg   corner sizes
@@ -29,11 +32,20 @@
    --font-num              numbers in stats and counters (tabular figures)
    --fs                    base text size (lib/zoom.ts changes it)
    --ease, --dur           motion
-   --ease-out, --ease-spring   a plain ease-out, an overshoot for things that pop in
+   --ease-out, --ease-spring   a plain ease-out, a quick settle for things that pop in (Default's has no overshoot;
+                           a game theme may give it one, as New Eridu does)
    --dur-fast, --dur-slow  short hover feedback, entering panels
    --game-accent           the current game's brand colour (set by lib/theme.ts, with --game-on-accent for text on
                            it and --game-accent-dk, a darker shade that reads on white)
    --d                     spacing factor from data-density (compact .86, cozy 1, roomy 1.15): kit sizes multiply by it
+
+   Set here for every theme (not per theme):
+   --s-1 … --s-8           spacing in 4px steps at 16px text (.25rem to 2rem), already multiplied by --d
+   --inset-page, --inset-panel, --inset-dialog   side padding of a page, a panel body, a dialog or drawer
+     (.page uses a fixed 1.2rem and .panel-b 1.1rem today, so moving them onto these changes them a little
+     and makes them follow density)
+   --t-meta, --t-small     text sizes in em of the surrounding text: counts and timestamps (.8em), secondary lines (.88em)
+   --t-title, --t-display  page titles and hero names (1.6rem), the largest headings (2rem); rem follows --fs
 
    Layout attributes on <html> (lib/theme.ts applyLayout(), used by custom themes): data-density, data-corners here;
    data-sidebar and data-nav in shell.css. */
@@ -44,6 +56,13 @@
 :root { --d: 1; }
 :root[data-density="compact"] { --d: .86; }
 :root[data-density="roomy"] { --d: 1.15; }
+/* spacing scale and type roles (see the list above). --d is set on the same element, so density changes these too. */
+:root {
+  --s-1: calc(.25rem * var(--d)); --s-2: calc(.5rem * var(--d)); --s-3: calc(.75rem * var(--d)); --s-4: calc(1rem * var(--d));
+  --s-5: calc(1.25rem * var(--d)); --s-6: calc(1.5rem * var(--d)); --s-7: calc(1.75rem * var(--d)); --s-8: calc(2rem * var(--d));
+  --inset-page: var(--s-5); --inset-panel: var(--s-4); --inset-dialog: var(--s-5);
+  --t-meta: .8em; --t-small: .88em; --t-title: 1.6rem; --t-display: 2rem;
+}
 :root:root[data-corners="sharp"], :root[data-corners="sharp"] [data-theme] { --radius: 3px; --radius-sm: 2px; --radius-lg: 4px; --radius-xs: 2px; }
 :root:root[data-corners="round"], :root[data-corners="round"] [data-theme] { --radius: 18px; --radius-sm: 13px; --radius-lg: 26px; --radius-xs: 7px; }
 html, body, #root { height: 100%; margin: 0; }
@@ -89,6 +108,8 @@ html:is([data-motion="reduced"], [data-motion="0"]) :is(.spin, .progress.indet .
 @media (prefers-reduced-motion: reduce) {
   html :is(.spin, .progress.indet .progress-bar, .skel, .nv-b.t-run) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
 }
+/* without hardware acceleration (lib/idle.ts sets html[data-gpu="off"]) nothing blurs, in any theme */
+[data-gpu="off"] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
 .i { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -5,24 +5,28 @@
 // Layout attributes on <html> (set by lib/theme.ts): data-density, data-sidebar, data-nav, data-corners.
 // Owner: SHELL area.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import { errorText, type GameState, type Profile } from "../lib/api";
+import { errorText, queue, type GameState, type Profile } from "../lib/api";
 import { charNoun } from "../lib/games";
 import { extensionPages, useExtensions } from "../lib/extensions";
-import { go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
+import { allGames, currentGame, go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { GameBadge, gameIconNow } from "../ui/GameBadge";
 import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
+import { withoutKeys } from "../lib/menuHints";
 import { SideDeco } from "../ui/Deco";
 import { toast } from "../ui/toast";
 import { PlayButton } from "../screens/home/PlayButton";
 import { extIcon } from "../screens/extensions/Extensions";
-import { startNewProfile } from "../screens/profiles/actions";
-import { switchProfile, useProfiles } from "../screens/profiles/data";
+import { quickNewProfile, switchTo } from "../screens/profiles/actions";
+import { useProfiles, useSwitching } from "../screens/profiles/data";
+import { newProfileMenu } from "../screens/profiles/menus";
 import { ProfileThumb } from "../screens/profiles/ProfileThumb";
+import { downloadsTipText, useDownloadsCounts } from "../screens/browse/downloadsTip";
 import { AccountCard, MiniAccount } from "./AccountCard";
 import { useHint } from "./hints";
 import { KEY_VIEWS, VIEW_INFO } from "./names";
 import { toggleSide, useSideCollapsed } from "./state";
+import { checkModUpdates, openModsFolder, rescan } from "./commands";
 
 // Profiles has its own list under the views
 const NAV: View[] = KEY_VIEWS.filter((v) => v !== "profiles");
@@ -61,7 +65,7 @@ export function switchEntries(cur: GameState | null, daily: GameState[], shown: 
   return [
     { header: "Switch game" },
     ...(daily.length > 1 ? daily : []).map((g) => ({ label: g.name, img: gameIconNow(g.id), checked: g.id === cur?.id, onClick: () => setGame(g.id) })),
-    rest.length > 0 && { label: "Other games", icon: "swap", title: "One-game mode keeps these out of the way. Turn it off in Settings, Games and mod loaders", items: rest.map((g) => ({ label: g.name, img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
+    rest.length > 0 && { label: "Other games", icon: "swap", title: cur ? `One-game mode keeps these out of the way. Untick "Only show ${cur.short}" below to bring them back` : "One-game mode keeps these out of the way", items: rest.map((g) => ({ label: g.name, img: gameIconNow(g.id), onClick: () => setGame(g.id) })) },
   ];
 }
 
@@ -96,13 +100,14 @@ function GameHeader() {
         </span>
         <Icon name="down" className="side-game-dd" />
       </button>
-      {many && !collapsed && <GameStrip others={others} more={(el) => openMenu(below(el), sw)} />}
+      {many && !collapsed && <GameStrip others={others} next={daily[(daily.findIndex((g) => g.id === game.id) + 1) % daily.length]?.id} more={(el) => openMenu(below(el), sw)} />}
     </div>
   );
 }
 
 /** The other games as one row of icons. When they don't all fit, the last place opens a menu with the rest. */
-function GameStrip({ others, more }: { others: GameState[]; more: (el: Element) => void }) {
+/** `next`: the game Ctrl+Tab goes to, the only icon whose tip names the key. */
+function GameStrip({ others, next, more }: { others: GameState[]; next?: string; more: (el: Element) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(others.length);
   useLayoutEffect(() => {
@@ -129,7 +134,7 @@ function GameStrip({ others, more }: { others: GameState[]; more: (el: Element) 
     <div className="side-games" role="group" aria-label="Other games" ref={ref}>
       <span className="side-games-h" aria-hidden="true"><Icon name="swap" />Switch</span>
       {list.map((g) => (
-        <button key={g.id} type="button" className={`side-g${g.running ? " running" : ""}`} title={`Switch to ${g.name} (Ctrl+Tab)`} aria-label={`Switch to ${g.name}`}
+        <button key={g.id} type="button" className={`side-g${g.running ? " running" : ""}`} title={`Switch to ${g.name}${g.id === next ? " (Ctrl+Tab)" : ""}`} aria-label={`Switch to ${g.name}`}
           onClick={() => setGame(g.id)} onContextMenu={ctx(g)} style={{ "--g-accent": g.accent } as CSSProperties}>
           <GameBadge game={g} size={26} />
         </button>
@@ -144,9 +149,37 @@ function GameStrip({ others, more }: { others: GameState[]; more: (el: Element) 
 
 // ── views ──
 
+/** Right-click on a nav item: the everyday actions for that page. Others get the page menu. */
+const navMenu = (v: View) => {
+  if (v !== "library" && v !== "downloads") return undefined;
+  return (e: ReactMouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    const at = { x: e.clientX, y: e.clientY };
+    if (v === "library") {
+      const g = currentGame();
+      if (!g) return;
+      openMenu(at, [
+        { label: "Check for updates", icon: "update", onClick: () => void checkModUpdates(g) },
+        { label: "Rescan mods", icon: "refresh", title: "Reads the Mods folder again, then checks every mod for updates on GameBanana", disabled: !g.modsDir, onClick: () => void rescan(g) },
+        { label: "Open Mods folder", icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
+      ]);
+      return;
+    }
+    void queue.get().then((s) => {
+      const failed = s.items.filter((i) => i.state === "failed" && allGames().find((g) => g.id === i.req.game)?.modsDir);
+      openMenu(at, [
+        { label: "Open Downloads", icon: "downloads", keys: `Ctrl+${KEY_VIEWS.indexOf("downloads") + 1}`, onClick: () => go("downloads") },
+        failed.length > 0 && { label: `Retry failed (${failed.length})`, icon: "refresh", title: "Try every failed download again",
+          onClick: () => void Promise.all(failed.map((i) => queue.retry(i.id))).catch((err) => toast(errorText(err), true)) },
+      ]);
+    }).catch((err) => toast(errorText(err), true));
+  };
+};
+
 function Nav({ disabled }: { disabled: boolean }) {
   const route = useRoute();
   const badges = useBadges();
+  const dl = useDownloadsCounts();
   const game = useGame();
   const pages = extensionPages(useExtensions(), game?.id);
   const ringBrowse = useHint("browse") && !disabled && route.view !== "browse";
@@ -168,13 +201,14 @@ function Nav({ disabled }: { disabled: boolean }) {
         const key = KEY_VIEWS.indexOf(v) + 1;
         const ring = (v === "browse" && ringBrowse) || (v === "downloads" && ringDownloads);
         const off = disabled && v !== "settings";
-        const tip = `${label} (Ctrl+${key})${b?.count ? `. ${b.count} ${v === "library" ? "with updates" : v === "downloads" ? "downloading" : "to look at"}` : ""}`
+        const count = v === "downloads" ? (b?.count ? downloadsTipText(dl) : "") : b?.count ? `${b.count} ${v === "library" ? "with updates" : "to look at"}` : "";
+        const tip = `${label} (Ctrl+${key})${count ? `. ${count}` : ""}`
           + (ring ? (v === "browse" ? ". Find mods on GameBanana and install them in one click" : ". See how your downloads are going") : "");
         // Extensions opens from Settings, so Settings stays marked there
         const on = route.view === v || (v === "settings" && route.view === "extensions" && !route.ext);
         return (
           <button key={v} type="button" className={`nv${on ? " on" : ""}${ring ? " is-hint" : ""}`} aria-current={on ? "page" : undefined}
-            onClick={() => go(v)} title={tip} disabled={off} data-view={v}>
+            onClick={() => go(v)} title={tip} disabled={off} data-view={v} onContextMenu={off ? undefined : navMenu(v)}>
             <Icon name={VIEW_INFO[v].icon} /><span className="nv-t">{label}</span>
             {b && <span className={`nv-b t-${b.tone ?? "accent"}`}>{b.count ? b.count : ""}</span>}
           </button>
@@ -199,20 +233,20 @@ function Nav({ disabled }: { disabled: boolean }) {
 function ProfileList({ game }: { game: GameState }) {
   const { list } = useProfiles(game.id);
   const collapsed = useSideCollapsed();
-  const [busy, setBusy] = useState<number | null>(null);
-  const active = list?.find((p) => p.active) ?? null;
+  // a switch started anywhere (this list, Home, a menu, search) shows here
+  const sw = useSwitching();
+  const busy = sw?.game === game.id ? sw.id : null;
 
-  const pick = async (p: Profile) => {
+  const pick = (p: Profile) => {
     if (p.active) { go({ view: "profiles", profile: p.id }); return; }
-    if (busy !== null) return;
-    setBusy(p.id);
-    try { await switchProfile(game.id, p, active); } catch (e) { toast(errorText(e), true); } finally { setBusy(null); }
+    if (!sw) void switchTo(game.id, p, list);
   };
 
-  const create = () => startNewProfile(game.id);
+  const create = () => void quickNewProfile(game.id);
+  const createMenu = (e: ReactMouseEvent) => { e.preventDefault(); e.stopPropagation(); openMenu({ x: e.clientX, y: e.clientY }, newProfileMenu(game.id)); };
 
   const ctx = (p: Profile) => (e: ReactMouseEvent) => {
-    const items = menuFor("profile", { game: game.id, id: p.id });
+    const items = withoutKeys(menuFor("profile", { game: game.id, id: p.id }));
     const fallback: MenuEntry[] = [
       { label: p.active ? "Active" : `Switch to ${p.name}`, icon: "swap", disabled: p.active, onClick: () => void pick(p) },
       { label: "Manage profiles", icon: "profiles", onClick: () => go("profiles") },
@@ -228,22 +262,28 @@ function ProfileList({ game }: { game: GameState }) {
         <button type="button" className="side-hk" onClick={() => go("profiles")} aria-label="Manage profiles" title="Manage profiles (Ctrl+6)"><Icon name="sliders" /></button>
       </div>
       <div className="side-prof-list" role="list">
-        {list === null && <span className="side-prof-wait" />}
+        {list === null && <span className="side-prof-wait" aria-hidden="true" />}
         {(list ?? []).map((p) => (
-          <button key={p.id} type="button" role="listitem" className={`side-p${p.active ? " on" : ""}`} aria-current={p.active ? "true" : undefined}
-            style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
-            title={p.active ? `${p.name} is on${p.hotkey ? ` (${p.hotkey} in game)` : ""}. Click to see its mods` :`Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
-            onClick={() => void pick(p)} onContextMenu={ctx(p)}>
-            <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={collapsed ? 34 : 28} />
-            <span className="side-p-t">{p.name}</span>
-            {busy === p.id ? <span className="spin" aria-hidden="true" /> : p.active ? <Icon name="check" className="side-p-on" /> : p.hotkey ? <kbd className="side-p-k">{p.hotkey}</kbd> : null}
-          </button>
+          // the list item adds no box, so the button stays the list's flex item
+          <div key={p.id} role="listitem" style={{ display: "contents" }}>
+            <button type="button" className={`side-p${p.active ? " on" : ""}`} aria-current={p.active ? "true" : undefined}
+              style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
+              title={busy === p.id ? `Switching to ${p.name}` : p.active ? `${p.name} is on${p.hotkey ? ` (${p.hotkey} in game)` : ""}. Click to see its mods` :`Switch to ${p.name}${p.hotkey ? ` (${p.hotkey} in game)` : ""}`}
+              onClick={() => void pick(p)} onContextMenu={ctx(p)}>
+              <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={collapsed ? 34 : 28} />
+              <span className="side-p-t">{p.name}</span>
+              {busy === p.id ? <span className="spin" aria-hidden="true" /> : p.active ? <Icon name="check" className="side-p-on" /> : p.hotkey ? <kbd className="side-p-k">{p.hotkey}</kbd> : null}
+            </button>
+          </div>
         ))}
         {list !== null && (
-          <button type="button" className="side-p side-p-add" onClick={create} title="New profile from the mods on now">
-            <span className="side-p-plus"><Icon name="plus" /></span>
-            <span className="side-p-t">New profile</span>
-          </button>
+          <div role="listitem" style={{ display: "contents" }}>
+            <button type="button" className="side-p side-p-add" onClick={create} onContextMenu={createMenu}
+              title="New profile from the mods on now. Right-click for one with no mods, or to pick its name and icon first">
+              <span className="side-p-plus"><Icon name="plus" /></span>
+              <span className="side-p-t">New profile</span>
+            </button>
+          </div>
         )}
       </div>
     </section>

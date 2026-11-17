@@ -28,12 +28,17 @@ const PLACEHOLDER: Record<FeedbackKind, string> = {
   other: "Anything you'd like the developer to know.",
 };
 
+/** What was typed into the form, kept for the rest of the session so closing it (Esc, Cancel) loses nothing. Cleared on send. */
+const draft = { kind: null as FeedbackKind | null, text: "", contact: "" };
+
 function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => void }) {
-  const [kind, setKind] = useState<FeedbackKind>(s.kind);
-  const [text, setText] = useState(s.text);
-  const [contact, setContact] = useState("");
-  const [logs, setLogs] = useState(s.kind === "problem");
+  const keep = !s.text && !!draft.text.trim();
+  const [kind, setKind] = useState<FeedbackKind>(keep && draft.kind ? draft.kind : s.kind);
+  const [text, setText] = useState(keep ? draft.text : s.text);
+  const [contact, setContact] = useState(draft.contact);
+  const [logs, setLogs] = useState((keep && draft.kind ? draft.kind : s.kind) === "problem");
   const [busy, setBusy] = useState(false);
+  useEffect(() => { draft.kind = kind; draft.text = text; draft.contact = contact; }, [kind, text, contact]);
   const pick = (k: FeedbackKind) => { setKind(k); setLogs(k === "problem"); };
   const send = async () => {
     if (busy || !text.trim()) return;
@@ -41,6 +46,7 @@ function FeedbackDialog({ start: s, onClose }: { start: Start; onClose: () => vo
     try {
       await report.feedback({ kind, text, contact: contact.trim() || undefined, logs, screen: currentRoute().view, game: currentGame()?.id });
       toast("Thanks. Your feedback was sent");
+      draft.kind = null; draft.text = "";
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }
   };
@@ -96,6 +102,8 @@ export function FeedbackSection() {
   );
 }
 
+const TELEMETRY_DOC = "https://github.com/imanimal/gachamod/blob/main/docs/telemetry.md";
+
 /** Usage counts and crash reports: what gachamod sends by itself, each with a switch. */
 export function PrivacySection() {
   const st = useReport();
@@ -106,8 +114,12 @@ export function PrivacySection() {
     <Panel title="Usage counts and crash reports" icon="eye" id="privacy">
       <div className="set-rows">
         <SetRow id="set-usage" label="Usage counts" hint="Sends anonymous counts of which screens and buttons get used, so the developer knows what to work on. No mod names, file paths or account details"
-          tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. docs/telemetry.md in gachamod's source lists every one">
-          <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
+          tip="Each count has a random id for this install, the app version, the game's short name and whether the mouse, keyboard or a controller was used. The list of counts names every one">
+          <span className="set-admin">
+            <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(TELEMETRY_DOC).catch((e) => toast(errorText(e), true))}
+              title="Opens docs/telemetry.md in gachamod's source, which lists every count">List of counts</Button>
+            <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
+          </span>
         </SetRow>
         <SetRow id="set-crashes" label="Crash reports" hint="When gachamod crashes or its window goes black, sends what went wrong and the end of its log, with your user folder's name taken out">
           <Toggle checked={st?.crashes ?? true} disabled={!st} onChange={(v) => set({ crashes: v })} />
@@ -135,7 +147,7 @@ export function LogsSection() {
 
 const RENDER_TIP = "Each problem gets an incident file with your graphics card, driver, screens and what the window showed. "
   + "Attach gachamod's logs when you send feedback to include the newest one. "
-  + "If the window is black, press Win+R and open %APPDATA%\app.gachamod.desktop\logs\rendering";
+  + String.raw`If the window is black, press Win+R and open %APPDATA%\app.gachamod.desktop\logs\rendering`;
 
 /** Settings, under Log files and under Appearance (with Hardware acceleration): the rendering log and its folder. Both copies share the setting.
  *  `id` goes on one copy, the one a route scrolls to. */
@@ -150,7 +162,7 @@ export function RenderLogRow({ id }: { id?: string }) {
       <span className="set-admin">
         <Button size="sm" icon="folder" disabled={!st?.dir} title={st?.dir ?? undefined}
           onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>Open folder</Button>
-        <Toggle checked={on} label="Rendering log" onChange={(v) => void renderLogPref.set(v)} />
+        <Toggle checked={on} ariaLabel="Rendering log" onChange={(v) => void renderLogPref.set(v)} />
       </span>
     </SetRow>
   );

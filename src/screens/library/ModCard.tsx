@@ -3,13 +3,14 @@
 import { memo, type KeyboardEvent, type MouseEvent } from "react";
 import type { GameId, ModEntry } from "../../lib/api";
 import type { ModHealth } from "../../lib/fixes";
+import type { HoldKind } from "../../lib/holds";
 import { go, reloadKeyOf } from "../../lib/store";
 import { kindName, libKind } from "./kinds";
 import { Badge, IconButton, Toggle, formatBytes } from "../../ui/kit";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
 import { useLiveCharacter, useLiveWaiting } from "../ingame/data";
-import { openDetails, setFavourite } from "./actions";
+import { openDetails, setFavourite, useUpdating } from "./actions";
 import { Preview, type NsfwMode } from "./Preview";
 
 export interface ModCardProps {
@@ -33,6 +34,8 @@ export interface ModCardProps {
   tip?: string;
   /** The name of the mod this one is a sub-mod of. */
   parentName?: string;
+  /** Its problems were set aside (lib/holds): "ignore" hides every warning, "update" the game update ones. */
+  held?: HoldKind | null;
 }
 
 /** The type of a mod without a character ("UI", "Tools and fixes"): click shows every mod of that type on Mods. */
@@ -45,28 +48,32 @@ export function KindLink({ mod }: { mod: ModEntry }) {
   );
 }
 
-export const ModCard = memo(function ModCard({ game, mod, index, row, selected, nsfw, showCharacter, health, portrait, onOpen, onToggle, onMenu, onUpdate, tip, parentName }: ModCardProps) {
+export const ModCard = memo(function ModCard({ game, mod, index, row, selected, nsfw, showCharacter, health, portrait, onOpen, onToggle, onMenu, onUpdate, tip, parentName, held }: ModCardProps) {
+  const quiet = held === "ignore";
   const cls = ["card", "mod-card", row && "is-row", selected && "sel", !mod.enabled && "is-off"].filter(Boolean).join(" ");
   const broken = health && (health.status === "broken" || health.status === "unfixable");
   const by = mod.source?.submitter;
   const live = useLiveCharacter(game, mod.id);
   const waiting = useLiveWaiting(game, mod.id);
+  const updating = useUpdating(mod.id);
   return (
     <div className={cls} data-pad-x data-mod={mod.id}>
-      <button type="button" className="mod-card-hit" data-idx={index} aria-pressed={selected}
-        title={tip ?? `${mod.name}. Enter opens the details, Space turns it ${mod.enabled ? "off" : "on"}, Ctrl+click selects`}
+      {/* the button holds the picture; its ::after covers the whole card, so a click anywhere opens it. The text sits
+          beside it, so the character link isn't inside a button and stays above the cover (library.css) */}
+      <button type="button" className="mod-card-hit" data-idx={index} aria-pressed={selected} aria-label={mod.name}
+        title={tip ?? `${mod.name}. Enter opens the details, Space turns it ${mod.enabled ? "off" : "on"}, Ctrl+click or Ctrl+Space selects`}
         onClick={(e) => onOpen(mod, e)}>
-        <Preview className="mod-card-img" src={mod.preview} blur={mod.nsfw && nsfw === "blur"} icon="mods" portrait={portrait} label={row ? null : mod.character ?? mod.name} />
-        <span className="mod-card-body">
-          <span className="mod-card-name">{mod.name}</span>
-          <span className="mod-card-char">
-            {showCharacter
-              ? mod.character ? <CharLink game={game} name={mod.character} /> : <KindLink mod={mod} />
-              : by ? `by ${by}` : mod.version ? `v${mod.version.replace(/^v/i, "")}` : formatBytes(mod.sizeBytes)}
-          </span>
-          {row && <span className="mod-card-meta">{formatBytes(mod.sizeBytes)}{mod.version ? ` · v${mod.version.replace(/^v/i, "")}` : ""}</span>}
-        </span>
+        <Preview className="mod-card-img" src={mod.preview} thumb={mod.thumb} blur={mod.nsfw && nsfw === "blur"} icon="mods" portrait={portrait} label={row ? null : mod.character ?? mod.name} />
       </button>
+      <span className="mod-card-body">
+        <span className="mod-card-name">{mod.name}</span>
+        <span className="mod-card-char">
+          {showCharacter
+            ? mod.character ? <CharLink game={game} name={mod.character} /> : <KindLink mod={mod} />
+            : by ? `by ${by}` : mod.version ? `v${mod.version.replace(/^v/i, "")}` : formatBytes(mod.sizeBytes)}
+        </span>
+        {row && <span className="mod-card-meta">{formatBytes(mod.sizeBytes)}{mod.version ? ` · v${mod.version.replace(/^v/i, "")}` : ""}</span>}
+      </span>
       <span className="mod-card-badges">
         {broken && (
           <button type="button" className={`mod-card-health${health.status === "unfixable" ? " is-bad" : ""}`} aria-label="Broken by a game update"
@@ -81,15 +88,20 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
           <button type="button" className="mod-card-fav" title="Favourite. Click to take it out of your favourites"
             onClick={() => void setFavourite(game, [mod], false)}><Icon name="star" /></button>
         )}
-        {mod.updateAvailable && mod.source && (
-          <button type="button" className="badge t-accent mod-card-update" title="A newer version is on GameBanana. Click to download it"
-            onClick={() => onUpdate(mod)}><Icon name="update" />Update</button>
+        {held === "update" && !(mod.updateAvailable && mod.source) && (
+          <Badge tone="muted" icon="bell-off" onClick={() => openDetails(mod)}
+            title="A game update broke it, and you're waiting for its author to post an update. Its warnings show again once you install a newer version. Click for details">Waiting for update</Badge>
         )}
-        {mod.conflicts > 0 && (
+        {mod.updateAvailable && mod.source && (
+          <button type="button" className="badge t-accent mod-card-update" aria-busy={updating} disabled={updating}
+            title={updating ? "Finding the newer file on GameBanana" : "A newer version is on GameBanana. Click to download it"}
+            onClick={() => onUpdate(mod)}><Icon name={updating ? "clock" : "update"} />{updating ? "Finding file" : "Update"}</button>
+        )}
+        {mod.conflicts > 0 && !quiet && (
           <Badge tone="bad" icon="warn" onClick={() => openDetails(mod, "conflicts")}
             title={`Changes the same parts as ${mod.conflicts === 1 ? "another mod" : `${mod.conflicts} other mods`} that ${mod.conflicts === 1 ? "is" : "are"} on. Click to pick which one wins`}>Conflict</Badge>
         )}
-        {mod.iniCount === 0 && <Badge tone="warn" icon="warn" onClick={() => openDetails(mod, "files")} title="No .ini file found, so the game won't load it. Click to see its files">No ini</Badge>}
+        {mod.iniCount === 0 && !quiet && <Badge tone="warn" icon="warn" onClick={() => openDetails(mod, "files")} title="No .ini file found, so the game won't load it. Click to see its files">No ini</Badge>}
         {(mod.parts ?? 0) > 0 && <Badge tone="muted" icon="layers" onClick={() => openDetails(mod, "parts")} title="Folders inside it that turn on and off by themselves. Click to switch them">{mod.parts} parts</Badge>}
         {mod.parent && parentName && <Badge tone="muted" icon="link" onClick={() => openDetails({ id: mod.parent! })}
           title={`A sub-mod of ${parentName}: it turns off with it and never counts as another skin. Click to open ${parentName}`}>Sub-mod</Badge>}
@@ -100,10 +112,10 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
           title={`gachamod couldn't key this pick into the game, so ${live} wears it after the game reloads its mods (${reloadKeyOf(game)}). Click for its in-game options`}>Next reload</Badge>}
       </span>
       <span className="mod-card-foot">
-        <Toggle size="sm" checked={mod.enabled} onChange={(v, shift) => onToggle(mod, v, shift)} label={<span className="sr-only">{mod.enabled ? "On" : "Off"}</span>}
+        <Toggle size="sm" checked={mod.enabled} onChange={(v, shift) => onToggle(mod, v, shift)} ariaLabel={mod.name}
           title={mod.enabled ? "Turn off (Space)" : live ? `Turn on (Space). It replaces ${live}'s skin in game. Shift+click or Shift+Space shows it next to that skin instead, and it stops switching in game`
-            : mod.character ? `Turn on (Space). Shift+click or Shift+Space keeps ${mod.character}'s other mods on too` : "Turn on (Space)"} />
-        <IconButton icon="more" size="sm" label="More actions (right-click, or X on a controller)" className="mod-card-more" data-pad-x-target
+            : mod.character ? `Turn on (Space). Shift+click or Shift+Space turns it on next to ${mod.character}'s other mods without asking` : "Turn on (Space)"} />
+        <IconButton icon="more" size="sm" label="More actions (right-click or Shift+F10, X on a controller)" className="mod-card-more" data-pad-x-target
           onClick={(e) => onMenu(mod, e.currentTarget)} />
       </span>
     </div>

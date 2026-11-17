@@ -1,7 +1,7 @@
 // Small windows the mod and character menus open from anywhere (a menu is built outside React): rename a mod, set
 // the character of some mods, edit their tags, and pick a character's picture. They mount themselves on first use.
 // Owner: LIBRARY area.
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { dialogs, errorText, fileUrl, library, type GameId, type ModEntry } from "../../lib/api";
 import { inTauri } from "../../lib/tauri";
@@ -48,8 +48,21 @@ function Host() {
   return <PortraitDialog game={a.game} name={a.name} />;
 }
 
+/** Every tag used in the library, once each (the first spelling met), for a tag field's suggestions. */
+export function libraryTags(mods: ModEntry[]): string[] {
+  const seen = new Map<string, string>();
+  for (const m of mods) for (const t of m.tags) if (!seen.has(t.toLowerCase())) seen.set(t.toLowerCase(), t);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
 function RenameDialog({ game, mod }: { game: GameId; mod: ModEntry }) {
   const [name, setName] = useState(mod.name);
+  const input = useRef<HTMLInputElement>(null);
+  // the name starts selected, as in Explorer, so typing replaces it
+  useEffect(() => {
+    const f = requestAnimationFrame(() => { input.current?.focus(); input.current?.select(); });
+    return () => cancelAnimationFrame(f);
+  }, []);
   const save = async () => { await renameMod(game, mod, name); close(); };
   return (
     <Dialog title="Rename" icon="edit" size="sm" onClose={close} footer={<>
@@ -57,7 +70,11 @@ function RenameDialog({ game, mod }: { game: GameId; mod: ModEntry }) {
       <Button variant="primary" disabled={!name.trim()} onClick={() => void save()}>Rename</Button>
     </>}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
-        <TextField label="Name" value={name} onChange={setName} autoFocus hint="Only the name shown here changes. The folder stays as it is." />
+        <label className="field">
+          <span className="field-l">Name</span>
+          <input ref={input} value={name} autoFocus onChange={(e) => setName(e.target.value)} />
+          <span className="hint">Only the name shown here changes. The folder stays as it is.</span>
+        </label>
       </form>
     </Dialog>
   );
@@ -103,6 +120,9 @@ function CharacterDialog({ game, mods }: { game: GameId; mods: ModEntry[] }) {
 function TagsDialog({ game, ids, first }: { game: GameId; ids: string[]; first: ModEntry[] }) {
   const [mods, setMods] = useState(first);
   const [tag, setTag] = useState("");
+  const listId = useId();
+  const [known, setKnown] = useState<string[]>([]);
+  useEffect(() => { library.list(game).then((all) => setKnown(libraryTags(all))).catch(() => {}); }, [game]);
   // follow the mods as tags change, so counts stay right
   const refresh = async () => {
     const all = await library.list(game).catch(() => null);
@@ -119,7 +139,11 @@ function TagsDialog({ game, ids, first }: { game: GameId; ids: string[]; first: 
   return (
     <Dialog title={`Tags for ${modsName(mods)}`} icon="tag" size="sm" onClose={close} footer={<Button variant="primary" onClick={close}>Done</Button>}>
       <form className="lib-ask" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-        <TextField label="Add a tag" value={tag} onChange={setTag} autoFocus placeholder="Like outfit or summer" />
+        <label className="field">
+          <span className="field-l">Add a tag</span>
+          <input list={listId} value={tag} autoFocus spellCheck={false} placeholder="Like outfit or summer" onChange={(e) => setTag(e.target.value)} />
+          <datalist id={listId}>{known.filter((t) => !counts.has(t.toLowerCase()) || counts.get(t.toLowerCase())!.n < mods.length).map((t) => <option key={t} value={t} />)}</datalist>
+        </label>
         {counts.size > 0 && (
           <div className="lib-ask-picks">
             {[...counts.values()].sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)).map((c) => (
@@ -197,7 +221,7 @@ function PortraitDialog({ game, name }: { game: GameId; name: string }) {
           <div className="lib-ask-previews">
             {previews.map((m) => (
               <button key={m.id} type="button" className="lib-ask-prev" title={m.name} onClick={() => use(fileUrl(m.preview) ?? m.preview!)}>
-                <Preview src={m.preview} alt={m.name} />
+                <Preview src={m.preview} thumb={m.thumb} alt={m.name} />
               </button>
             ))}
           </div>

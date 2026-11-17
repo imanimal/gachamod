@@ -9,8 +9,12 @@ export interface ToastEvent {
   text: string; bad?: boolean; open?: { game: GameId; modId: string } | null;
   /** A new install (not an update): these mods are turned on next, by the "Turn on new mods" setting. */
   installed?: string[];
-  /** A download that failed: its game and queue item, so the toast can offer a fix. */
-  failed?: { game: GameId; item: number };
+  /** A download that failed: its game and queue item, so the toast can offer a fix, and the file when it is kept. */
+  failed?: { game: GameId; item: number; file?: string | null };
+  /** A folder the install put files in outside Mods (ShaderFixes), for a button that shows it. */
+  reveal?: string | null;
+  /** The mod folder of an install whose files gachamod couldn't place, so the user can check them. */
+  review?: string | null;
 }
 
 export const app = {

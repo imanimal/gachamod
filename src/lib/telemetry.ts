@@ -7,6 +7,7 @@
 // the player typed. Errors in the window's code are logged and kept as crash reports; failed calls and console
 // errors go to gachamod.log. docs/telemetry.md lists every event.
 import { report, type UsageEvent } from "./api/report";
+import { errorKind, errorText } from "./api/types";
 import { inTauri, watchCalls } from "./tauri";
 import { currentGame, currentRoute, onRoute } from "./store";
 
@@ -40,7 +41,7 @@ function noteCall(cmd: string, args: Record<string, unknown>) {
 /** A backend command failed: one line in the log. */
 function noteFailure(cmd: string, e: unknown) {
   if (UNCOUNTED.has(cmd)) return;
-  log("warn", `${cmd} failed: ${e instanceof Error ? e.message : String(e)}`);
+  log("warn", `${cmd} failed: ${e instanceof Error ? e.message : `${errorKind(e)}: ${errorText(e)}`}`);
 }
 
 export function log(level: "info" | "warn" | "error", text: string) {

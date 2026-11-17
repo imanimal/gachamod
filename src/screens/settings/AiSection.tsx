@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { currentGame } from "../../lib/store";
 import { Button, Chip, Panel, Segmented, TextField, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
+import { toast } from "../../ui/toast";
 
 export function AiSection() {
   const show = useAiShow();
@@ -16,6 +17,13 @@ export function AiSection() {
   useEffect(() => { setDraft(url); }, [url]);
   useEffect(() => { if (show !== "off") void installedChatbots().then(setInstalled); }, [show]);
   const game = currentGame();
+  // chat.example.com is saved as https://chat.example.com; another scheme (ftp://) can't be opened, so it goes back
+  const saveUrl = () => {
+    let v = draft.trim();
+    if (v && !v.includes("://")) v = `https://${v.replace(/^\/+/, "")}`;
+    if (v === "" || /^https?:\/\//i.test(v)) { setDraft(v); void chatbotUrlPref.set(v); }
+    else { setDraft(url); toast("A chatbot's web address starts with https://", true); }
+  };
   const order = [...CHATBOTS].sort((a, b) => Number(installed.includes(b.id)) - Number(installed.includes(a.id)));
 
   return (
@@ -30,20 +38,20 @@ export function AiSection() {
             <span><b>Your chatbot</b><span className="hint">The helper writes the prompt and opens it. You paste the answer back. No account or key</span></span>
             <div className="set-ai-bots">
               {order.map((b) => (
-                <Chip key={b.id} on={bot === b.id} onClick={() => void chatbotPref.set(b.id)} title={chatbotTip(b, installed.includes(b.id))}>{b.name}</Chip>
+                <Chip key={b.id} on={(bot || installed[0]) === b.id} onClick={() => void chatbotPref.set(b.id)} title={chatbotTip(b, installed.includes(b.id))}>{b.name}</Chip>
               ))}
             </div>
             {bot === "other" && (
               <TextField label="Its web address (optional)" value={draft} placeholder="https://chat.example.com" mono
-                onChange={setDraft} onBlur={() => { const v = draft.trim(); if (v === "" || /^https?:\/\//i.test(v)) void chatbotUrlPref.set(v); else setDraft(url); }}
-                hint="Leave empty to only copy the prompt" />
+                onChange={setDraft} onBlur={saveUrl}
+                hint="Leave empty to only copy the prompt. An address without https:// gets it added" />
             )}
           </div>
         )}
         {show !== "off" && (
           <SetRow id="set-ai-adult" label="Hide adult mods from the chatbot"
             hint={hideAdult ? "Adult mods are left out of prompts and explicit words in ini names are swapped out. Chatbots often refuse a whole request over one of them" : "Every mod and name is sent as it is. Chatbots often refuse requests with explicit words in them"}>
-            <Toggle checked={hideAdult} onChange={(v) => void aiHideAdultPref.set(v, v ? "Adult mods hidden from the chatbot" : "Adult mods sent to the chatbot")} label="Hide adult mods from the chatbot" />
+            <Toggle checked={hideAdult} onChange={(v) => void aiHideAdultPref.set(v, v ? "Adult mods hidden from the chatbot" : "Adult mods sent to the chatbot")} ariaLabel="Hide adult mods from the chatbot" />
           </SetRow>
         )}
         {show !== "off" && (

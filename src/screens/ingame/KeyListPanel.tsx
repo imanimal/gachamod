@@ -66,7 +66,8 @@ export function KeyListPanel({ game }: { game: GameId }) {
     <Panel id="keylist" title="Key list in game" icon="keyboard" count={list.mods.length || undefined}>
       <div className="kl-all">
         <Toggle checked={s.on} disabled={busy === "settings"} onChange={(on) => void save({ ...s, on })} label="Show mod keys while playing"
-          hint={s.on ? `Press ${s.key} while you play to see the toggle keys of the mods showing now.${s.own ? "" : " Mods that show their own key help are left out."}`
+          hint={s.on && !list.available ? `${s.key} shows the toggle keys of the mods showing now, once Switch skins in game is on.`
+            : s.on ? `Press ${s.key} while you play to see the toggle keys of the mods showing now.${s.own ? "" : " Mods that show their own key help are left out."}`
             : `Off: ${s.key} does nothing in the game.`} />
         {!list.available && (
           <div className="kl-off">

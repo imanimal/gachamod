@@ -11,42 +11,45 @@ html.ov-window { --title-h: 0px; }
 html.ov-window .toasts { bottom: 3.4rem; }
 .ov { display: flex; flex-direction: column; height: 100vh; background: color-mix(in srgb, var(--bg) var(--ov-cover, 85%), transparent); color: var(--text);
   border: 1px solid var(--line-2); animation: ov-open .18s ease-out both; }
-.ov-top { display: flex; align-items: center; gap: .6rem; padding: .6rem .7rem; border-bottom: 1px solid var(--line); }
+.ov-top { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--line); }
 .ov-top .search { flex: 1; min-width: 0; }
 .ov-top .grow { flex: 1; }
 .ov-body { position: relative; flex: 1; min-height: 0; display: flex; }
-.ov-wait { flex: 1; display: grid; place-items: center; padding: 2rem; }
-.ov-empty { flex: 1; margin: 2rem 1.2rem; }
+.ov-wait { flex: 1; display: grid; place-items: center; padding: var(--s-8); }
+.ov-empty { flex: 1; margin: var(--s-8) var(--s-5); }
 .ov-empty.bad { color: var(--bad); }
 
 /* the characters, with a search above them */
 .ov-side { flex: none; width: 15.5rem; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
-.ov-side > .search { flex: none; margin: .5rem .5rem 0; }
-.ov-none { margin: .8rem .7rem; }
-.ov-rail { flex: none; width: 15.5rem; overflow-y: auto; padding: .5rem; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.ov-side > .search { flex: none; margin: var(--s-2) var(--s-2) 0; }
+.ov-none { margin: var(--s-3); }
+.ov-rail { flex: none; width: 15.5rem; overflow-y: auto; padding: var(--s-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .ov-side > .ov-rail { flex: 1; width: auto; min-height: 0; border-right: 0; }
-.ov-who { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .35rem .5rem; border: 0; border-radius: var(--radius); background: none;
+.ov-who { display: flex; align-items: center; gap: var(--s-2); width: 100%; padding: var(--s-1) var(--s-2); border: 0; border-radius: var(--radius-sm); background: none;
   color: var(--text-2); font: inherit; text-align: left; cursor: pointer; transition: background-color .12s, color .12s;
   animation: ov-rise .22s ease-out both; animation-delay: calc(var(--i, 0) * 14ms); }
 .ov-who:hover { background: var(--surface); color: var(--text); }
-.ov-who.on { background: var(--surface-2); color: var(--text); box-shadow: inset 3px 0 0 var(--accent); }
+.ov-who.on { background: var(--surface-2); color: var(--text); }
 .ov-who:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ov-who-i { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--surface-2); color: var(--text-3); }
 .ov-who-i.big { width: 64px; height: 64px; font-size: 1.5rem; }
 .ov-who-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .ov-who-n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-who-s { color: var(--text-3); font-size: .82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-who-c { flex: none; color: var(--text-3); font-size: .82em; font-variant-numeric: tabular-nums; }
+/* the character is on screen in the game: the menu opens on them */
+.ov-who-here { margin-left: var(--s-2); padding: 0 .35rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: .72em; font-weight: 600; vertical-align: .08em; }
+.ov-who-s { color: var(--text-3); font-size: var(--t-meta); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-who-c { flex: none; color: var(--text-3); font-size: var(--t-meta); font-variant-numeric: tabular-nums; }
 
 /* the picked character */
-.ov-pane { flex: 1; min-width: 0; overflow-y: auto; padding: .9rem 1rem 1.2rem; display: flex; flex-direction: column; gap: 1.1rem;
+.ov-pane { flex: 1; min-width: 0; overflow-y: auto; padding: var(--s-4) var(--s-4) var(--s-5); display: flex; flex-direction: column; gap: var(--s-4);
   animation: ov-slide .2s ease-out both; }
-.ov-hero { display: flex; align-items: center; gap: .9rem; }
+.ov-hero { display: flex; align-items: center; gap: var(--s-4); }
 .ov-hero.slim { min-height: 2.4rem; }
 .ov-hero-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.ov-hero h1 { margin: 0; font-size: 1.35em; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-h { margin: 0 0 .5rem; font-size: .95em; font-weight: 600; color: var(--text-2); }
-.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: .65rem; }
+.ov-hero h1 { margin: 0; font-family: var(--font-display); font-size: var(--t-title); font-weight: 800; line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-h { margin: 0 0 var(--s-2); font-size: .95em; font-weight: 600; color: var(--text-2); }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: var(--s-3); }
 
 .ov-cell { position: relative; animation: ov-rise .24s ease-out both; animation-delay: calc(var(--i, 0) * 18ms); }
 .ov-tile { display: flex; flex-direction: column; width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius);
@@ -59,43 +62,47 @@ html.ov-window .toasts { bottom: 3.4rem; }
 .ov-pic img { width: 100%; height: 100%; object-fit: cover; object-position: center top; transition: transform .25s ease-out; }
 .ov-tile:hover .ov-pic img, .ov-tile:focus-visible .ov-pic img { transform: scale(1.05); }
 .ov-pic.blur img, .ov-detail-pic.blur img { filter: blur(18px); transform: scale(1.15); }
-.ov-label { display: flex; align-items: center; gap: .35rem; padding: .4rem .55rem; font-size: .9em; }
+.ov-label { display: flex; align-items: center; gap: var(--s-1); padding: var(--s-2); font-size: var(--t-small); }
 .ov-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-check { flex: none; display: grid; place-items: center; color: var(--accent-ink); animation: ov-pop .16s ease-out both; }
-.ov-new { flex: none; padding: 0 .35rem; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-size: .8em; font-weight: 600;
+.ov-new { flex: none; padding: 0 .35rem; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-size: var(--t-meta); font-weight: 600;
   box-shadow: inset 0 0 0 1px var(--line-2); }
-.ov-likes { flex: none; display: inline-flex; align-items: center; gap: .2rem; color: var(--text-3); font-size: .9em; font-variant-numeric: tabular-nums; }
+.ov-likes { flex: none; display: inline-flex; align-items: center; gap: .2rem; color: var(--text-3); font-size: var(--t-small); font-variant-numeric: tabular-nums; }
 .ov-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; background: var(--bg); transition: opacity .12s; }
 .ov-cell:hover .ov-more, .ov-cell:focus-within .ov-more { opacity: 1; }
 
 /* Browse and Downloads: the app's own screens (GbBrowser, CreatorPage, Downloads), scrolling inside the menu */
 .ov-page { flex: 1; min-width: 0; overflow-y: auto; overscroll-behavior: contain; animation: ov-slide .2s ease-out both; }
 .ov-page > .page { min-height: 0; }
-/* search, sort and filters stay in reach while the mods scroll under them. Solid, so cards don't show through */
+/* search, sort and filters stay in reach while the mods scroll under them. Solid, so cards don't show through.
+   The negative margin cancels the top and side padding of .page (shell.css). */
 .ov-page .gbb-bar { position: sticky; top: 0; z-index: 3; margin: -1rem -1.2rem 0; padding: .7rem 1.2rem .6rem; background: var(--bg); border-bottom: 1px solid var(--line); }
 
 /* Keys: the toggle keys of the mods showing now, by character (OverlayKeys.tsx) */
-.ov-keys { padding: 0 1rem 1.2rem; display: flex; flex-direction: column; gap: 1rem; }
-.ov-kbar { position: sticky; top: 0; z-index: 2; margin: 0 -1rem; padding: .6rem 1rem .5rem; background: var(--bg); border-bottom: 1px solid var(--line); }
+.ov-keys { padding: 0 var(--s-4) var(--s-5); display: flex; flex-direction: column; gap: var(--s-4); }
+.ov-kbar { position: sticky; top: 0; z-index: 2; margin: 0 calc(-1 * var(--s-4)); padding: var(--s-2) var(--s-4); background: var(--bg); border-bottom: 1px solid var(--line); }
 .ov-kbar .search { max-width: 24rem; }
-.ov-kwho-h { display: flex; align-items: center; gap: .55rem; margin: 0 0 .5rem; font-size: 1.05em; font-weight: 650; }
+.ov-kwho-h { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-2); font-size: 1.05em; font-weight: 650; }
 .ov-kwho-h .ov-who-i { width: 30px; height: 30px; }
-.ov-kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .6rem; }
-.ov-kmod { display: flex; flex-direction: column; gap: .5rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+.ov-kgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: var(--s-2); }
+.ov-kmod { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-2) var(--s-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
   animation: ov-rise .24s ease-out both; animation-delay: calc(var(--i, 0) * 18ms); }
 .ov-kmod:focus-visible, html.kbd .ov-kmod:focus, html.pad .ov-kmod:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ov-kmod-h { display: flex; align-items: center; gap: .55rem; min-width: 0; }
-.ov-kpic { flex: none; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; overflow: hidden; border-radius: calc(var(--radius) * .6); background: var(--surface-2); color: var(--text-3); }
+.ov-kmod-h { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.ov-kpic { flex: none; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-3); }
 .ov-kpic img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .ov-kmod-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .ov-kmod-n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ov-kmod-s { color: var(--text-3); font-size: .82em; }
-.ov-krows { display: flex; flex-direction: column; gap: .35rem; margin: 0; padding: 0; list-style: none; }
-.ov-krows li { display: flex; align-items: center; gap: .6rem; min-width: 0; }
+.ov-kmod-s { color: var(--text-3); font-size: var(--t-meta); }
+.ov-krows { display: flex; flex-direction: column; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+.ov-krows li { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+/* the keys are buttons that rebind (ui/KeyEditor.tsx KeyChip), a little smaller here */
+.ov-kchips { flex: none; display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); max-width: 62%; }
+.ov-kchips .ke-chip { min-width: 2.9rem; height: 1.9rem; }
 .ov-kwhat { min-width: 0; color: var(--text-2); line-height: 1.35; overflow-wrap: anywhere; }
-.ov-knote { margin-left: .4rem; color: var(--text-3); font-size: .86em; }
-.ov-khidden { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .6rem; margin: 0; font-size: .9em; }
-.ov-empty > p { margin: 0 0 .6rem; }
+.ov-knote { margin-left: var(--s-2); color: var(--text-3); font-size: var(--t-small); }
+.ov-khidden { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin: 0; font-size: var(--t-small); }
+.ov-empty > p { margin: 0 0 var(--s-2); }
 
 /* one mod in full, over the right side */
 .ov-detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(26rem, 62%); overflow-y: auto; background: var(--bg); border-left: 1px solid var(--line-2);
@@ -103,21 +110,21 @@ html.ov-window .toasts { bottom: 3.4rem; }
 .ov-detail-x { position: absolute; top: .5rem; right: .5rem; z-index: 1; background: var(--bg); }
 .ov-detail-pic { flex: none; display: grid; place-items: center; aspect-ratio: 4 / 3; overflow: hidden; background: var(--surface-2); color: var(--text-3); font-size: 2rem; }
 .ov-detail-pic img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
-.ov-detail-t { padding: .9rem 1rem 1.2rem; display: flex; flex-direction: column; gap: .55rem; }
+.ov-detail-t { padding: var(--s-4) var(--s-4) var(--s-5); display: flex; flex-direction: column; gap: var(--s-2); }
 .ov-detail-t h1 { margin: 0; font-size: 1.2em; font-weight: 650; }
 .ov-detail-t p { margin: 0; }
-.ov-detail-who { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
-.ov-tags { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ov-detail-who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.ov-tags { display: flex; flex-wrap: wrap; gap: var(--s-1); }
 .ov-notes { white-space: pre-wrap; color: var(--text-2); }
-.ov-detail-a { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .3rem; }
+.ov-detail-a { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-1); }
 
 /* along the bottom: what just happened (or the keys), and the menu's own settings */
-.ov-foot { display: flex; align-items: center; gap: .6rem 1.2rem; flex-wrap: wrap; padding: .45rem .8rem; border-top: 1px solid var(--line); font-size: .82em; }
+.ov-foot { display: flex; align-items: center; gap: var(--s-2) var(--s-5); flex-wrap: wrap; padding: var(--s-2) var(--s-3); border-top: 1px solid var(--line); font-size: var(--t-meta); }
 .ov-say { flex: 1 1 20rem; min-width: 0; color: var(--text-3); }
 .ov-say.said { color: var(--text); }
 .ov-say.bad { color: var(--bad); }
-.ov-quick { flex: none; display: flex; align-items: center; gap: .5rem; margin-left: auto; }
-.ov-quick-l { color: var(--text-2); margin-left: .6rem; }
+.ov-quick { flex: none; display: flex; align-items: center; gap: var(--s-2); margin-left: auto; }
+.ov-quick-l { color: var(--text-2); margin-left: var(--s-2); }
 
 @keyframes ov-open { from { opacity: 0; transform: translateX(-10px); } }
 @keyframes ov-rise { from { opacity: 0; transform: translateY(6px); } }
@@ -135,3 +142,5 @@ html.ov-window .toasts { bottom: 3.4rem; }
   .ov-side { width: 11rem; }
   .ov-side .ov-who-t { display: flex; }
 }
+.ov-kh-all { display: inline-flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); }
+.ov-kh { display: inline-flex; align-items: center; gap: var(--s-1); }

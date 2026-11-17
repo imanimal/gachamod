@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
-import { useGame, useGames } from "../../lib/store";
+import { go, useGame, useGames } from "../../lib/store";
 import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, plural } from "../../ui/kit";
+import { nsfwTip } from "../browse/menus";
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, trashDaysPref, useTrashDays } from "./automatic";
+import { autoRescanPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, reviewUnsurePref, trashDaysPref, useTrashDays } from "./automatic";
 import { SetRow, useSetting } from "./parts";
 import { MatchGbAdultRow } from "./AccountSection";
 import { autoMutePref, fixWarningsPref } from "../../lib/fixes";
@@ -57,7 +58,7 @@ export function ModsSection() {
   return (
     <Panel title="Turning mods on and reloading the game" icon="mods" id="mods">
       <div className="set-rows">
-        <SetRow id="set-enable-new" label="Turn on new mods" hint="A mod you install turns on right away, and its character's other skin turns off"
+        <SetRow id="set-enable-new" label="Turn on new mods" hint="A mod you install turns on right away, and its character's other skin turns off unless that game is set to Keep"
           tip="Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was">
           <EnableNewSwitch />
         </SetRow>
@@ -66,7 +67,7 @@ export function ModsSection() {
       {shown.length > 0 && (
         <div className="set-pergame" id="set-pergame">
           <div className="set-pergame-h"><span />
-            <span title="What happens when you turn on a mod and its character already has another one on. Sub-mods never count">Another skin already on</span>
+            <span title="What happens when you turn on a mod and its character already has another one on. Sub-mods never count. A mod that just installed only follows Keep: otherwise the other skin goes off, and Ctrl+Z puts it back">Another skin already on</span>
             <span title="Presses the game's reload key for you when you switch back to it after a change, so 3DMigoto loads the mods again. The key is F10 unless the game's d3dx.ini sets another">Reload in game</span>
           </div>
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
@@ -84,7 +85,7 @@ export function AdultSection() {
       <div className="set-rows">
         <SetRow id="set-nsfw" label="Mods marked for adults" hint="Marked NSFW on GameBanana or by you. Hide leaves them out, Blur blurs their pictures until opened">
           <Segmented value={nsfw} onChange={setNsfw} label="Mods for adults"
-            options={[{ value: "hide", label: "Hide" }, { value: "blur", label: "Blur" }, { value: "show", label: "Show", title: "Pictures show unblurred. Warning: No panic button, sorry" }]} />
+            options={[{ value: "hide", label: "Hide", title: nsfwTip("hide") }, { value: "blur", label: "Blur", title: nsfwTip("blur") }, { value: "show", label: "Show", title: nsfwTip("show") }]} />
         </SetRow>
         <MatchGbAdultRow id="set-gb-adult" />
       </div>
@@ -93,7 +94,7 @@ export function AdultSection() {
 }
 
 const ONE_SKIN: Array<{ value: string; label: string; title: string }> = [
-  { value: "ask", label: "Ask", title: "Ask each time: turn the other off, keep both on, or make the new one a sub-mod of it" },
+  { value: "ask", label: "Ask", title: "When you turn a mod on, ask: turn the other off, keep both on, or make the new one a sub-mod of it. A mod that just installed turns the other off without asking, and Ctrl+Z puts it back" },
   { value: "auto", label: "Turn off", title: "Turn the other one off without asking, so two never load at once" },
   { value: "0", label: "Keep", title: "Keep both on without asking" },
 ];
@@ -106,7 +107,7 @@ function PerGame({ game }: { game: GameState }) {
     <div className="set-pergame-r">
       <span className="row"><GameBadge game={game} size={24} />{game.name}</span>
       <Segmented size="sm" label={`${game.name}: another skin already on`} value={one === "auto" || one === "0" ? one : "ask"} onChange={setOne} options={ONE_SKIN} />
-      <Toggle size="sm" checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
+      <Toggle size="sm" ariaLabel={`${game.name}: reload in game`} checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")} />
     </div>
   );
 }
@@ -136,6 +137,10 @@ export function InstallingSection() {
         <SetRow id="set-other-servers" label="Move slow downloads to another server" hint="When a GameBanana download stays under 1 MB/s"
           tip="GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one">
           <Switch p={otherServersPref} on="Slow downloads move to another server" off="Downloads stay on the server GameBanana picks" />
+        </SetRow>
+        <SetRow id="set-review-unsure" label="Ask me to check files gachamod can't place" hint="Files with no .ini that nothing says where to put"
+          tip="They go in Mods as they came, and the download's row says so. This adds a message with a button that shows the files">
+          <Switch p={reviewUnsurePref} on="Asking you to check files gachamod can't place" off="Stopped asking about files gachamod can't place" />
         </SetRow>
         <SetRow id="set-onscreen" label="Toggles only while on screen, for new mods"
           tip="A mod's toggles stop working when its character isn't on screen, so two mods can share a key">
@@ -179,6 +184,9 @@ export function BrokenModsSection() {
           tip="Same as Always turn off and mute mods that need their author in Tools > Fixes. Undo turns them back on, and Muted in Tools > Fixes lists them">
           <Switch p={autoMutePref} on="Turning off mods that need their author" off="Listing mods that need their author again" />
         </SetRow>
+        <SetRow label="Fixes in Tools" hint="The fixers, the broken mods and the muted ones">
+          <Button size="sm" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title="Opens Tools > Fixes">Open Fixes</Button>
+        </SetRow>
       </div>
     </Panel>
   );
@@ -213,6 +221,7 @@ export function StorageSection() {
             ? "Removed mods stay on your PC for a while so Put back works without downloading. Mods, Trash keeps their GameBanana link either way"
             : "Off: removing a mod deletes its files. Mods, Trash keeps its GameBanana link and settings so you can download it again"}>
           <span className="set-inline">
+            <Button size="sm" variant="ghost" icon="trash" onClick={() => go({ view: "library", tab: "archive" })} title="Opens Mods > Trash">Open Trash</Button>
             {days > 0 && <Select value={String(days)} onChange={(v) => void choose(Number(v))} options={opts} />}
             <Toggle checked={days > 0} onChange={(v) => void choose(v ? 14 : 0)} />
           </span>

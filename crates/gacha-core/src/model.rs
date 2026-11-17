@@ -33,6 +33,9 @@ pub struct GameState {
     pub importer_dir: Option<String>,
     /// Usually `<importer_dir>\Mods`.
     pub mods_dir: Option<String>,
+    /// `mods_dir` is saved but isn't on disk: moved, deleted, or on a drive that isn't plugged in.
+    #[serde(default)]
+    pub mods_missing: bool,
     /// XXMI Launcher manages this importer, so launches go through it.
     pub via_xxmi: bool,
     pub importer_version: Option<String>,
@@ -147,6 +150,10 @@ pub struct ModEntry {
     pub conflicts: u32,
     /// A newer version is on GameBanana (set by the UI's update check through `mods_mark_updates`).
     pub update_available: bool,
+    /// A small copy of a local `preview` (about 400 px, in the app's cache) for cards and lists. None for a remote,
+    /// animated or already small picture, or before it is made; the full `preview` is for the drawer and lightbox.
+    #[serde(default)]
+    pub thumb: Option<String>,
     /// The preview is one the user picked (library::set_preview).
     #[serde(default)]
     pub custom_preview: bool,
@@ -229,6 +236,8 @@ pub mod events {
     pub const LIBRARY_CHANGED: &str = "library-changed";
     /// The download queue snapshot.
     pub const QUEUE: &str = "queue";
+    /// Between queue snapshots: a list of `QueueProgress` with the bytes or install step of each running item.
+    pub const QUEUE_PROGRESS: &str = "queue-progress";
     /// An archive held several mods or variants and the user must pick.
     pub const VARIANTS_NEEDED: &str = "variants-needed";
     /// `{ game, running }`

@@ -98,7 +98,10 @@ export const dev = {
   clearShaderCache: (game: GameId) => call<number>("dev_clear_shader_cache", { game }),
   clearFrameDumps: (game: GameId) => call<number>("dev_clear_frame_dumps", { game }),
   reload: (game: GameId) => call<void>("dev_reload", { game }),
-  wipeUserConfig: (game: GameId) => call<void>("dev_wipe_user_config", { game }),
+  /** False when there was nothing to clear. */
+  wipeUserConfig: (game: GameId) => call<boolean>("dev_wipe_user_config", { game }),
+  /** Put back the d3dx_user.ini the last wipe kept a copy of. */
+  unwipeUserConfig: (game: GameId) => call<void>("dev_unwipe_user_config", { game }),
 };
 
 export const integrations = {
@@ -180,4 +183,6 @@ export const appUpdate = {
   onProgress: (cb: (p: { done: number; total: number | null }) => void) => listen<{ done: number; total: number | null }>("app-update-progress", cb),
   /** A newer version finished downloading in the background. */
   onReady: (cb: (p: { version: string }) => void) => listen<{ version: string }>("app-update-ready", cb),
+  /** With updates set to only tell, a background check found a newer version (once per version). */
+  onFound: (cb: (p: { version: string }) => void) => listen<{ version: string }>("app-update-found", cb),
 };

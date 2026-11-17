@@ -124,27 +124,38 @@ pub fn clear_shader_cache_in(importer: &Path, game: &str) -> Result<u64> {
     remove_contents(&importer.join("ShaderCache"))
 }
 
-/// Delete FrameAnalysis-* folders. Returns bytes freed.
+/// Send the FrameAnalysis-* folders to the Recycle Bin (they can be gigabytes, and someone may want one back).
+/// Returns bytes freed.
 pub fn clear_frame_dumps(db: &Db, game: &str) -> Result<u64> { clear_frame_dumps_in(&crate::games::importer_dir(db, game)?) }
 
 pub fn clear_frame_dumps_in(importer: &Path) -> Result<u64> {
     let dumps = frame_dump_dirs(importer);
     let (_, bytes) = usage(&dumps);
-    for d in dumps { std::fs::remove_dir_all(d)?; }
+    // tests delete for good, so they don't fill the Recycle Bin
+    if cfg!(test) { for d in &dumps { std::fs::remove_dir_all(d)?; } } else { crate::recycle::to_recycle_bin(&dumps)?; }
     Ok(bytes)
 }
 
 /// Clear the d3dx_user.ini saved values for every mod (3DMigoto's wipe_user_config), after a backup.
-pub fn wipe_user_config(db: &Db, game: &str) -> Result<()> { wipe_user_config_in(&crate::games::importer_dir(db, game)?, game) }
+/// Returns false when there was nothing to clear (no backup is written then).
+pub fn wipe_user_config(db: &Db, game: &str) -> Result<bool> { wipe_user_config_in(&crate::games::importer_dir(db, game)?, game) }
 
-pub fn wipe_user_config_in(importer: &Path, game: &str) -> Result<()> {
+pub fn wipe_user_config_in(importer: &Path, game: &str) -> Result<bool> {
     refuse_while_running(game)?;
     let path = importer.join("d3dx_user.ini");
-    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
+    let Ok(text) = std::fs::read_to_string(&path) else { return Ok(false) };
     let out = without_mod_values(&text);
-    if out == text { return Ok(()); }
+    if out == text { return Ok(false); }
     std::fs::copy(&path, importer.join("d3dx_user.ini.wiped.bak"))?;
-    crate::xxmi::write_atomic(&path, out.as_bytes())
+    crate::xxmi::write_atomic(&path, out.as_bytes())?;
+    Ok(true)
+}
+
+/// Put back the d3dx_user.ini that the last wipe saved as d3dx_user.ini.wiped.bak.
+pub fn unwipe_user_config_in(importer: &Path, game: &str) -> Result<()> {
+    refuse_while_running(game)?;
+    let saved = std::fs::read(importer.join("d3dx_user.ini.wiped.bak"))?;
+    crate::xxmi::write_atomic(&importer.join("d3dx_user.ini"), &saved)
 }
 
 /// d3dx_user.ini without the `$\mods\...` lines; comments and the importer's own values stay.

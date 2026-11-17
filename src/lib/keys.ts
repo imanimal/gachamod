@@ -1,20 +1,47 @@
 // Keyboard shortcuts for what is used over and over, none of them taken by Windows or the webview. Typing in a
 // field is never interrupted (only Escape and Ctrl combinations work there). Ctrl+Z/Y (lib/history.ts) and
 // Ctrl+= - 0 (lib/zoom.ts) live with what they change. Owner: SHELL area.
+import { KEY_VIEWS, viewLabel } from "../shell/names";
+import { currentGame } from "./store";
+
+// The Ctrl+1 ... 8 line names the fourth page as the current game does (Resonators in WuWa, Agents in ZZZ). It's
+// read each time the list draws, so it follows game switches.
+const viewKeys = ["Ctrl+1 … Ctrl+8", ""] as [string, string];
+Object.defineProperty(viewKeys, 1, {
+  enumerable: true,
+  get: () => KEY_VIEWS.map((v) => viewLabel(v, currentGame()?.id)).join(", "),
+});
+
 export const SHORTCUTS: Array<[string, string]> = [
   ["Ctrl+K, or start typing", "Search everything: pages, mods, characters, settings, actions"],
   ["/", "Find: the search field of the screen or the open window"],
   ["Ctrl+F", "Find, too"],
-  ["Ctrl+1 … Ctrl+8", "Home, Browse, Mods, Characters, Downloads, Profiles, Tools, Settings"],
+  viewKeys,
   ["Alt+Left, Alt+Right", "Back, forward (mouse buttons 4 and 5 too)"],
   ["Ctrl+Tab, Ctrl+Shift+Tab", "Next or previous game"],
   ["Ctrl+Enter", "Play the current game"],
   ["Ctrl+B", "Fold the sidebar to icons, or unfold it"],
+  ["F6, Shift+F6", "Move between the page, messages, title bar and sidebar"],
   ["Shift+F10, Menu key", "The focused thing's right-click menu"],
   ["Escape", "Close the top window, drawer or menu"],
   ["Ctrl+Z, Ctrl+Y", "Undo, redo"],
   ["Ctrl+=, Ctrl+-, Ctrl+0", "Text size"],
   ["?", "This list"],
+];
+
+/** Keys on a mod card or row, for the shortcuts list. */
+export const MOD_SHORTCUTS: Array<[string, string]> = [
+  ["Enter", "Open its details"],
+  ["Space", "Turn it on or off (the selected mods, when it's one of them)"],
+  ["Shift+Space", "Turn it on and keep the character's other mods on too"],
+  ["Ctrl+Space, Ctrl+click", "Select it, or take it out of the selection"],
+  ["Shift+arrow keys, Shift+click", "Select a range"],
+  ["Ctrl+A", "Select every mod shown"],
+  ["F2", "Rename"],
+  ["Del", "Move to the trash"],
+  ["Arrow keys, Home, End", "Move between mods"],
+  ["I", "Install, on a Browse card"],
+  ["O", "Mark as owned, on a character's page"],
 ];
 
 /** The controller's buttons (Xbox names; PlayStation's are in the same places), for the shortcuts list. */
@@ -25,8 +52,10 @@ export const PAD_SHORTCUTS: Array<[string, string]> = [
   ["X", "The focused mod's main action"],
   ["Y", "Find, or search everything"],
   ["LB, RB", "Previous, next view"],
+  ["View + LB, View + RB", "Previous, next game"],
+  ["View + Y", "The newest message's button"],
   ["LT, RT, right stick", "Scroll"],
-  ["View", "Back"],
+  ["View (tap)", "Back"],
   ["Right stick press", "The focused thing's menu"],
   ["Menu", "Play"],
 ];
@@ -49,6 +78,44 @@ export function focusSearch(): boolean {
   field.focus();
   field.select();
   return true;
+}
+
+// F6 regions, in the order F6 visits them. Messages are skipped when none show
+const REGIONS = ["main.view", ".toasts", "header.titlebar", "aside.side"];
+const visible = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2 && getComputedStyle(el).visibility !== "hidden"; };
+const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Focus the newest message's button (its action, else Dismiss). False when no message shows. */
+export function focusToast(): boolean {
+  const all = [...document.querySelectorAll<HTMLElement>(".toasts .toast:not(.gone)")];
+  const t = all[all.length - 1];
+  const b = t?.querySelector<HTMLElement>(".toast-act") ?? t?.querySelector<HTMLElement>(".toast-x");
+  if (!b) return false;
+  document.documentElement.classList.add("kbd");
+  b.focus();
+  return true;
+}
+
+function focusRegion(sel: string): boolean {
+  if (sel === ".toasts") return focusToast();
+  const root = document.querySelector<HTMLElement>(sel);
+  if (!root) return false;
+  const el = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].find(visible);
+  if (!el) return false;
+  el.focus();
+  el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  return true;
+}
+
+/** F6: jump to the next part of the window (page, messages, title bar, sidebar), skipping long runs of Tab stops. */
+export function nextRegion(d: 1 | -1) {
+  const a = document.activeElement;
+  const at = REGIONS.findIndex((sel) => a?.closest(sel));
+  for (let n = 1; n <= REGIONS.length; n++) {
+    const i = ((at < 0 ? (d > 0 ? -1 : 0) : at) + d * n + REGIONS.length * 2) % REGIONS.length;
+    if (i === at) break;
+    if (focusRegion(REGIONS[i]!)) return;
+  }
 }
 
 export interface KeyActions {
@@ -80,15 +147,25 @@ export function installKeys(opts: KeyActions): () => void {
     if (ctrl && !e.altKey && !e.shiftKey && k === "b" && !(e.target as HTMLElement | null)?.isContentEditable) { e.preventDefault(); opts.sidebar(); return; }
     if (ctrl && !e.altKey && k === "f") { if (focusSearch()) e.preventDefault(); return; }
     if (ctrl && e.key === "Tab") { e.preventDefault(); opts.nextGame(e.shiftKey ? -1 : 1); return; }
-    if (ctrl && e.key === "Enter") { e.preventDefault(); opts.play(); return; }
+    // Play only from the screen: in a field or with a window or menu open, Ctrl+Enter belongs to that
+    if (ctrl && e.key === "Enter") {
+      if (inField || document.querySelector(".overlay, .popover, .ctx, .lightbox")) return;
+      e.preventDefault(); opts.play(); return;
+    }
     if (e.altKey && !ctrl && e.key === "ArrowLeft" && !inField) { e.preventDefault(); opts.back(); return; }
     if (e.altKey && !ctrl && e.key === "ArrowRight" && !inField) { e.preventDefault(); opts.forward(); return; }
     if ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu") { e.preventDefault(); opts.menu(); return; }
+    if (e.key === "F6" && !ctrl && !e.altKey) {
+      // inside a window or menu, F6 stays there
+      if (document.querySelector(".overlay, .popover, .ctx, .lightbox")) return;
+      e.preventDefault(); nextRegion(e.shiftKey ? -1 : 1); return;
+    }
     if (e.key === "BrowserBack") { e.preventDefault(); opts.back(); return; }
     if (e.key === "BrowserForward") { e.preventDefault(); opts.forward(); return; }
     if (inField || ctrl || e.altKey) return;
     if (e.key === "/") { if (focusSearch()) e.preventDefault(); return; }
-    if (e.key === "?") { e.preventDefault(); opts.help(); return; }
+    // the shortcuts list opens over the screen, not over a window or menu that is already open
+    if (e.key === "?") { if (!document.querySelector(".overlay, .ctx, .popover, .lightbox")) { e.preventDefault(); opts.help(); } return; }
     // type to search: a letter or digit with nothing to type into opens the search with it. Screens with their own
     // letter keys (I on a card, O on a character page) handle them first, and anything open on top keeps them
     if (e.key.length === 1 && /[\p{L}\p{N}]/u.test(e.key) && !document.querySelector(".overlay, .ctx, .popover, .lightbox")) {
@@ -156,7 +233,10 @@ export function installTips(): () => void {
   };
   const down = (e: MouseEvent) => { hide(); clicked = tipped(e.target); };
   // keyboard or controller in use: focus shows tips and rings; the mouse puts it back
-  const kbd = (e: KeyboardEvent) => { if (e.key === "Tab" || e.key.startsWith("Arrow")) document.documentElement.classList.add("kbd"); };
+  // Shift+F10, the Menu key and F6 move focus too, so they turn the rings on before the menu or region takes it
+  const kbd = (e: KeyboardEvent) => {
+    if (e.key === "Tab" || e.key.startsWith("Arrow") || e.key === "F10" || e.key === "F6" || e.key === "ContextMenu") document.documentElement.classList.add("kbd");
+  };
   // mouseover only fires on entering an element, so after a scroll hid the tip, moving the pointer brings it back
   const move = (e: MouseEvent) => {
     document.documentElement.classList.remove("kbd", "pad");

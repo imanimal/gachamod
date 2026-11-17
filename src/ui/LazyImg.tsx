@@ -1,7 +1,9 @@
 // A picture that loads only once it's on screen (or 48 px from it). The browser's own lazy loading starts more than a
 // screen early, which fetched thumbnails nobody scrolled to; here a hidden page or the far end of a sideways strip
 // asks for nothing. One observer serves every picture. A picture shown once shows at once after that, so a list that
-// re-renders doesn't blink. Owner: KIT area.
+// re-renders doesn't blink. The 48 px lead is a scroll margin as well as a root margin: pictures sit inside scrolling
+// boxes (.view, sideways strips), and a root margin only grows the window's edge, which those boxes clip.
+// Owner: KIT area.
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 const waiting = new Map<Element, () => void>();
@@ -17,7 +19,7 @@ function watch(el: Element, show: () => void): () => void {
       io?.unobserve(e.target);
       f?.();
     }
-  }, { rootMargin: "48px" });
+  }, { rootMargin: "48px", scrollMargin: "48px" } as IntersectionObserverInit & { scrollMargin?: string });
   waiting.set(el, show);
   io.observe(el);
   return () => { waiting.delete(el); io?.unobserve(el); };

@@ -554,43 +554,65 @@ tester options off) gets a message to set its window mode to borderless instead,
   It is two lists wide: the left half is the menu as it shows, the right half has every row drawn as the picked row
   (and the back button lit), which live.ini lays over the left half where the keys or the mouse are.
 - `menu0.dds`: the list of characters, one row each, when there are two or more. Two halves the same way.
-- `menu.dds`: the two footers with the key hints, then a strip with the scroll buttons, the same buttons lit, the check
-  mark and the check mark for the picked row (`Layout::btn_u`, `chk_u`). In Zenless Zone Zero two more strips follow: the
-  list's top corners and its bottom corners.
+- `menu.dds`: the two footers with the key hints, then a strip with the up and down arrows, the same arrows lit, the
+  check mark, the check mark for the picked row and the scroll bar's round ends (`Layout::arrow_u`, `chk_u`, `cap_u`).
+  In Zenless Zone Zero two more strips follow: the list's top corners and its bottom corners.
 - `menu.json`: a hash per picture, so only pictures whose names or previews changed are made again.
 
 Sections added to live.ini: `[Present]` runs `CommandListMenuFrame` while `$open` is 1, which works out the window size
-(the same fallbacks as the ZZMI core's text printer), which row the mouse is over, and draws about eight rectangles
-through `[CustomShaderMenuQuad]`. There is no scroll bar: 3DMigoto can't read the mouse wheel, and a bar made it
-look as if the wheel worked. A list longer than eight rows shows the two scroll buttons in the footer. Showing a
-row sets `$g<group>`, the number the gates read, so no tap from the app is needed.
+(the same fallbacks as the ZZMI core's text printer), which row the mouse is over, and draws about a dozen rectangles
+through `[CustomShaderMenuQuad]`. Showing a row sets `$g<group>`, the number the gates read, so no tap from the app is
+needed.
+
+A list longer than eight rows (`$rows > $vis`) gets a scroll bar along its right side and arrows on its edges. The
+bar is a track the length of the list less `Layout::bar_in` at each end, and a thumb `track * $vis / $rows` long (at
+least 28 px) whose top is `($top / ($rows - $vis))` of the way down the free part (`$th`, `$ty`, worked out in
+`CommandListMenuPointer`). Both are flat rectangles (`$qflat = 1` with the colour in `$qr`, `$qg`, `$qb`); looks with
+round ends add half a pill from `menu.dds` at each end. On such a list the rows' art ends `Layout::room` further from
+the right so the bar never sits on a pill or a plate, and the check moves in with it (`$cx`). An up arrow straddles the
+list's top edge while `$top > 0` and a down arrow its bottom edge while `$top + $vis < $rows`, centred, mostly over the
+first and last row in view and 6 px into the header and the footer. 3DMigoto can't read the mouse wheel, so the bar
+and the arrows scroll by clicks: an arrow (zones 4 and 5) or the track above or below the thumb (zones 6 and 7) pages
+the list by seven rows with the same `CommandListMenuPageUp` and `PageDown` the footer's scroll buttons used to run.
+The thumb itself is no zone, and the footer no longer has scroll buttons, so the key hints get its whole width. Keys
+and a controller still move the picked row, and the list follows it.
 
 Each game's menu is drawn after its own menus (`Look`, picked from the game id; every size goes through `Layout` so the
 pictures and live.ini agree). All of it is shapes drawn in code and Windows fonts: Bahnschrift's widths for the games
 with condensed or DIN-like type, Segoe UI for the rest, and Segoe UI for any name the chosen font has no letters for.
 
 - Zenless Zone Zero: a grey frame with a black outline round a black well with a dot matrix. The header holds one
-  black capsule as wide as the rows' pills (`zzz_bar`): the back button or an orange slanted tag, the name in bold
-  italic condensed capitals, then halftone dots growing into its right end, which is orange with black stripes behind
-  a leaning edge. Rows are grey pills with round pictures; the picked one turns orange with black text, a hard shadow
-  and stripes. The check is an orange disc (black on the picked row), key hints are white capsules. The accent is
+  black capsule as wide as the rows' pills (`zzz_bar`) with the well's dot matrix over it: the back button or an
+  orange slanted tag, the name in bold italic condensed capitals, and a right end that is orange with black stripes
+  behind a leaning edge. Rows are grey pills with round pictures; the picked one turns orange with black text, a hard
+  shadow and stripes that run over its right end, round end included. The check is an orange disc (black on the picked row), key hints are white capsules. The accent is
   the game's orange (`#ff7a1c`, the same as its theme's default); it was lime until 2026-11-16. The gap between two
   pills, above the first, under the last and at their sides is the same 6 px: a pill sits 3 inside its row, and the
   header's last 3 px and the footer's first 3 px are drawn as the list's own background (`Layout::gut`). The well's
   corners are round like the game's own insets (`Layout::round`, 22 px; 12 px on a key sheet). The rows scroll
   under them, so the corners are two more strips at the end of `menu.dds` (`well_corners`) that live.ini lays over
-  the first and the last row in view, after the footer.
+  the first and the last row in view, after the footer. The scroll bar is 8 px wide with round ends: an orange thumb
+  on a grey track, 6 px from the frame like the pills, and the pills end 14 px sooner to keep 6 px from it. Its top
+  and bottom line up with the first and last pill. The arrows are black capsules with a grey rim, orange under the
+  mouse.
 - Genshin Impact: see-through navy with a thin gold border, gems on its corners, a four-point star and a gold rule with
-  diamond ends. The picked row is a cream pill with dark text and the picture in a dark round cap at its left end.
+  diamond ends. The picked row is a cream pill with dark text and the picture in a dark round cap at its left end. A
+  thin gold bar with round ends on a faint gold track, inside the gold border; navy arrow pills with a gold line, cream
+  under the mouse.
 - Honkai: Star Rail: smoked glass with faint stars and the top right corner cut round. Rows are cells with that cut;
-  the picked one is a pale plate with a line set inside it and an orange mark. Gold check, pale key pills.
+  the picked one is a pale plate with a line set inside it and an orange mark. Gold check, pale key pills. A thin pale
+  bar with round ends on a faint white track; glass arrow pills, pale under the mouse.
 - Wuthering Waves: see-through black with 3 px corners, faint nested curves and a gold hairline with diamond ends. The
-  picked row turns white with a small gold diamond; the check is a gold diamond.
+  picked row turns white with a small gold diamond; the check is a gold diamond. A 3 px square bar, muted gold on a
+  faint white track; black arrow tabs with a white line, white under the mouse.
 - Honkai Impact 3rd: deep blue with cut corners and a cyan edge, slanted cyan ticks. The picked row is a cyan to blue
-  plate with a yellow tag.
+  plate with a yellow tag. A square cyan bar on a faint cyan track; arrow tabs with cut corners, filled cyan under the
+  mouse.
 - Arknights: Endfield: a charcoal header with a yellow edge, a ruler and a crosshair over a light grey sheet. The picked
-  row is signal yellow with stripes down its left and corner brackets.
-- Community games: plain dark panels, the picked row a soft box with a violet edge.
+  row is signal yellow with stripes down its left and corner brackets. A square black bar on a faint black track;
+  black arrow capsules with a yellow chevron, yellow under the mouse.
+- Community games: plain dark panels, the picked row a soft box with a violet edge. A grey bar with round ends; arrow
+  tabs violet under the mouse.
 
 Pages: one per character (by name) with its skins, and with two or more characters one more that lists the characters.
 Up and down move, right (or A) shows the row, a click on a row shows it (hold Alt for the cursor). Left, or a click on a
@@ -611,9 +633,42 @@ does the same there (`ingame/data.ts` `boundAction`); arrow keys and Enter alway
 and a controller moves in it as in the rest of the app (`lib/gamepad.ts`), whatever the bindings say.
 
 Which character is on screen: every gated TextureOverride starts with `run = CommandList\gachamod\live\Seen<group>`,
-which sets a flag that `[Present]` reads and clears. The menu opens on that character each time its key is pressed, and
-the list of characters has its check on them. A live skin's keys also get `&& $\gachamod\live\open == 0`, so arrow keys
-in the menu don't flip its toggles. Mods gated by an older version get both on the next scan.
+which sets the frame's flag `$s<group>`; `[Present]` reads it and clears it with `post`. A live skin's keys also get
+`&& $\gachamod\live\open == 0`, so arrow keys in the menu don't flip its toggles. Mods gated by an older version get
+both on the next scan.
+
+From those flags live.ini keeps one saved value per group, `$o<group>` (0 or 1): the character is on screen. It is
+declared in `[Constants]` and kept by `[CommandListOnScreen]`, run from `[Present]` whether the drawn menu is on or not.
+`$o<group>` follows the flag only once the flag has held its new value for `menu::HOLD` frames in a row (30: half a
+second at 60 fps, a second at 30), counted in `$h<group>`; a frame that agrees again starts the count over. So a
+character who blinks out of view for a moment changes nothing. That matters because `$o` is saved, and every change
+of a saved value makes the game write d3dx_user.ini again. Per frame it costs one comparison and one assignment per
+group, and a few more lines on the frames where a flag disagrees. No draws.
+
+The game writes the new value within a second only while `settings_auto_save_interval` is 1 (`live::fast_saves`,
+"fast save" on); with the loader's own 60 it can be a minute late. The app reads it in `live::info`
+(`LiveInfo.on_screen`: the groups whose `$o` is 1, in the order of the groups), and only while the game runs, since the
+values left from the last run say nothing. The window over the game asks for `live_info` each time it opens, puts
+those characters first, tags them "On screen" and opens on the first. `follow_game` doesn't look at `$o`, so these
+saves don't make the app's windows reload their lists. They don't read back as picks either: such a save holds the
+same `$g` values the game already had, and the rules above (picks waiting for a load, picks still being keyed in, saves
+older than the app's last tap) apply to it like to any other save.
+
+Opening the menu (`CommandListMenuToggle`) first copies the `$o` values into `$m<group>` (`CommandListMenuFreeze`), and
+that set stays until the menu opens again, so rows don't move while it shows, also after going into a character and
+back. `$seen` counts them. One character on screen opens that character's skins. Two or more open the list of
+characters with the keys on the first of them. None opens the character seen last (`$here`), as before.
+
+On the list of characters the ones on screen come first, in the list's usual order, each with the check, then
+everyone else in the usual order. Freeze gives each group its place on the list, `$p<group>`; `CommandListMenuWho`
+turns a place (`$at`) back into a page (`$who`) with one `if` per group. The rows, `$sel`, `$top`, `$hover`, the
+scroll bar and the arrows all count places, so keys, the controller, the mouse and the bar work as on any page: Show
+and a click open `$who` of the picked place, and going back from a character puts the keys on its place. The list's
+picture keeps its usual order. While characters on screen are listed, live.ini draws the rows in view one quad each,
+from their character's row in `menu0.dds`, instead of one quad for the whole strip: about eight lookups a frame of
+one `if` per group, only while the list shows and only when someone was on screen as the menu opened. In Zenless Zone
+Zero the list's picture starts its dot matrix again on each row so rows line up wherever they land. With nobody on
+screen the list is drawn and marked as before, the check on `$here`.
 
 Checked without a game: the shader compiles with fxc for vs_5_0 and ps_5_0, the generated sections balance their ifs and
 only run lists that exist (tests in `menu.rs`), and the .dds reads back. `GACHAMOD_MENU_PNG=<folder> cargo test -p gacha-core
@@ -621,7 +676,12 @@ mock_picture` writes a picture of each look's menu (`menu-<look>.png`: skins, ch
 sheet) and the generated sections there; `GACHAMOD_MENU_THUMB=<picture>` puts a preview on every row.
 
 Still to check in a game for the looks: the see-through panels (Genshin, Star Rail, Wuthering Waves, Honkai Impact 3rd)
-over bright scenes, and how the pictures read at 1440 and 2160.
+over bright scenes, and how the pictures read at 1440 and 2160. For the scroll bar and the arrows, on a character with
+more than eight skins: the thumb's length and place follow the list as it scrolls by keys and by clicks, its round
+ends meet the flat middle with no seam or gap at 1440 and at a window smaller than the screen, the decimal colours in
+`$qr`, `$qg`, `$qb` come out as the look's colours, a click on each arrow and on the track above and below the thumb
+pages the list (with Alt held for the cursor), a click on the thumb picks nothing, and the arrows don't cover a
+skin's name or the footer's hints.
 
 ### Games that run as administrator
 
@@ -661,13 +721,16 @@ its window while gachamod was in front and did nothing while the game was, and i
 
 ### The key list
 
-Held back since 2026-11-16: `keylist::SHOWN` and `KEY_LIST_SHOWN` (src/lib/api/keylist.ts) are false, so the list is off,
-F8 isn't held, live.ini gets none of its sections and the UI shows none of it. Saved settings stay. Set both to true
-to bring it back.
-
 `crates/gacha-core/src/keylist.rs`, `src/lib/api/keylist.ts`. While playing, one key (F8 by default) shows each mod's
 toggle keys: the key, what it changes ("Jacket"), and a note for keys that are held or cycle through more than two
 options. It rides on the skin menu, so it needs a game with live characters (`KeyList.available`).
+
+In the Keys tab every key is a button (`KeyChip`, the same one the key editor uses): click it, or press Enter or A on
+it, then press the new keys. That writes the mod's ini through `keys::rebind`, with a backup and an Undo step. A line
+under each mod's keys says "Click a key to rebind it"; the key editor and Menu keys carry the same line. Each row has
+what a rebind needs (`KeyRow.ini`, `section`, `lines`). After a rebind, a key turned off or an Undo, the list reads
+itself again (`onKeysChanged`) and the pictures of the drawn list are made again (`keylist::keys_changed`). Characters
+come in the order they were played last, the same as My mods.
 
 Where it shows (`<game>.keyListStyle`):
 
@@ -680,14 +743,25 @@ As with the skin menu, live.ini binds the key itself when the game runs as admin
 window opens on its Keys tab through the event `overlay-open` with `{ game, tab: "keys" }` (`overlay::toggle_keys`), and
 a press while the window shows closes it.
 
-Settings, per game: `<game>.keyList` ("0" turns it off), `<game>.keyListKey`, `<game>.keyListOwn` (also list mods with
-their own key help), and the player's pick per mod in `keyList.pick.<game>`. The key can't be the skin menu key or a
-profile hotkey, and the skin menu key can't be changed to the key list key (`keylist::set`, `live::set_menu`).
+Settings, per game: `<game>.keyList` ("0" turns it off), `<game>.keyListKey`, `<game>.keyListOwnHelp` ("0" leaves out
+mods with their own key help), and the player's pick per mod in `keyList.pick.<game>`. The key can't be the skin menu
+key or a profile hotkey, and the skin menu key can't be changed to the key list key (`keylist::set`, `live::set_menu`).
 
-Mods with their own key help are left out unless the player picks them or turns on `own`. A mod counts as having its
-own help when a key section or its variables name a help panel (`[KeyHelp]`, `$showinfo`, words like help, info, guide,
-hotkey, or ui, hud, menu as whole words), or when the mod loads a picture with such a name or with "toggle" in it
+Every mod with keys is listed. Mods with their own key help are listed too, with a line naming the key that shows it;
+the player can leave them out, all of them (`own` off) or one by one. A mod counts as having its own help when a key
+section's name names a help panel (`[KeyHelp]`, words like help, info, guide, hotkey, or ui, hud, menu as whole
+words), when every variable such a section sets does (`$showinfo`), or when the mod loads a picture with such a name
 (`ToggleGuide.dds`). The key that shows the mod's help is kept when found (`helpKey`).
+
+Until 2026-11-16 mods with their own help were left out by default, and the check was much wider: any variable with
+such a word counted, and so did any picture with "toggle" in its name. Most Genshin mods clear a credits picture on
+every key (`$creditinfo = 0` in each key section), so "info" matched and about half the mods with keys in a real
+library went missing from the list. Names with "credit" in them never count now, a section that changes a part and
+also clears a help or credits variable is a plain toggle, and the old setting `<game>.keyListOwn` isn't read any more.
+
+What a key changes comes from `keys::entry_name`: the variable's name, or the section's when the variable is one from
+a template (`$swapvar`, `$swapvarg`, `$swaptex2`) or the credits one. A key that sets more than three things is named
+by its section ("Reset"), or by the first two and how many more.
 
 The panel the game draws (`live/menu.rs`, `key_list_sections`): one picture per listed live skin, `menuk<group>_<slot>.dds`,
 with a header holding the mod's name, a row per key (at most 14, the last one "<n> more keys" when cut) and a footer
@@ -756,9 +830,18 @@ helper, the app's logic driven from a small program on the real library):
    page handed to gachamod's own window (the Mods for adults button on an empty list) bringing that window forward.
 8. The key list the game draws, in ZZZ: the sheets show in the top right corner at the right size, stack for two
    characters on screen, follow a skin picked in either menu, and "No mod keys" shows for a character without a sheet.
-   IniParams put back after it don't disturb other mods.
+   IniParams put back after it don't disturb other mods. A key rebound in the Keys tab shows on its sheet after the
+   game reloads.
 9. F8 in exclusive fullscreen with Over the game chosen: the number 2 shows and hides the drawn key list.
 10. Y in the drawn skin menu shows the key list, and doesn't also do something in the game that matters.
+11. Who is on screen (`$o<group>`), in ZZZ with fast save on: d3dx_user.ini gets the new value about a second after a
+    character comes on screen or leaves, and not more often than that in a fight with quick swaps. A character drawn
+    only some frames (a cutscene, the party screen, a portrait) doesn't flip it on and off, and 30 frames is long enough
+    at the game's real frame rate. The window over the game, opened with two characters on screen, lists both first.
+12. The drawn menu with two characters on screen: it opens on the list with both first and checked, the keys on the
+    first; the rows stay put while the game swaps characters under the open menu; the mouse and a click pick the row
+    under them, Alt held; on a list longer than eight rows the bar and the arrows scroll the reordered rows with no
+    seam between rows, and the per-row draws cost nothing noticeable.
 
 Known limits: the game also sees the keys and buttons pressed in the drawn menu. A pick from the app or the menu window
 brings the game forward first and takes most of a second. XXMI Launcher writes `check_foreground_window` into d3dx.ini at

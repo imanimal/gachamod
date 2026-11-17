@@ -178,12 +178,34 @@ fn not_set_up(id: &str, what: &str) -> Error {
     Error::NotSetUp(format!("{name} has no {what} yet. Settings, Games and mod loaders installs its mod loader or finds the folder"))
 }
 
-/// The game's Mods folder (created if its importer folder exists). Every area uses this.
+/// The game's Mods folder. Every area uses this. A missing one is made again only when its importer folder is still
+/// there with its d3dx.ini (a fresh loader install). Otherwise the folder was moved, deleted or sits on a drive that
+/// isn't plugged in, so this says so and keeps the saved path, instead of making an empty folder that reads as
+/// "no mods".
 pub fn mods_dir(db: &Db, id: &str) -> Result<PathBuf> {
     let p = paths(db, id)?;
-    let dir = p.mods_dir.map(PathBuf::from).ok_or_else(|| not_set_up(id, "Mods folder"))?;
-    if !dir.exists() { std::fs::create_dir_all(&dir)?; }
-    Ok(dir)
+    let dir = p.mods_dir.as_deref().map(PathBuf::from).ok_or_else(|| not_set_up(id, "Mods folder"))?;
+    if dir.is_dir() { return Ok(dir); }
+    if loader_there(&dir) && std::fs::create_dir(&dir).is_ok() { return Ok(dir); }
+    Err(mods_gone(id, &dir))
+}
+
+/// The missing Mods folder sat right inside a loader folder that still has its d3dx.ini, so it can be made again. A Mods
+/// folder picked somewhere else (D:\ZZZ Mods) is never remade: it was moved or deleted, and an empty one would wipe the
+/// library on the next scan.
+fn loader_there(mods: &Path) -> bool {
+    mods.parent().is_some_and(|p| p.join("d3dx.ini").is_file())
+}
+
+/// The Mods folder is saved but isn't on disk. Worded so the message gets its "Mods folders" button (lib/places.ts).
+pub(crate) fn mods_gone(id: &str, dir: &Path) -> Error {
+    let name = def(id).map(|g| g.name).unwrap_or(id);
+    Error::NotSetUp(format!("{name} has no Mods folder at {} anymore. Pick it again, or install the mod loader again if it was removed", dir.display()))
+}
+
+/// The saved Mods folder isn't on disk and `mods_dir` won't make it again.
+pub fn mods_missing(p: &GamePaths) -> bool {
+    p.mods_dir.as_deref().map(Path::new).is_some_and(|m| !m.is_dir() && !loader_there(m))
 }
 
 /// The importer folder (d3dx.ini, d3dx_user.ini, Mods, ShaderFixes). Falls back to the Mods folder's parent.
@@ -234,6 +256,7 @@ pub fn list(db: &Db) -> Result<Vec<GameState>> {
             running: running.contains(&g.id),
             mod_count, enabled_count,
             reload_key: crate::devtools::reload_key(db, g.id).name,
+            mods_missing: mods_missing(&p),
             game_dir: p.game_dir, importer_dir: p.importer_dir, mods_dir: p.mods_dir, via_xxmi: p.via_xxmi,
             ..Default::default()
         });
@@ -552,6 +575,30 @@ mod tests {
         data.extend_from_slice(br#"{"gameBiz":"nap_global","installPath":"","persistentInstallPath":"D:\\Games\\ZenlessZoneZero Game"}"#);
         let p = parse_hoyoplay(&data);
         assert_eq!(p, vec![PathBuf::from(r"C:\Program Files\HoYoPlay\games\Honkai Impact 3rd game"), PathBuf::from(r"D:\Games\ZenlessZoneZero Game")]);
+    }
+
+    #[test]
+    fn a_missing_mods_folder_is_made_again_only_next_to_its_loader() {
+        let db = Db::memory().unwrap();
+        let imp = temp("mods-gone").join("ZZMI");
+        std::fs::create_dir_all(&imp).unwrap();
+        let mods = imp.join("Mods");
+        save_paths(&db, "zzz", &GamePaths { importer_dir: Some(imp.to_string_lossy().into()), mods_dir: Some(mods.to_string_lossy().into()), ..Default::default() }).unwrap();
+        // no d3dx.ini: the loader is gone, so nothing is made and the saved path stays
+        assert!(matches!(mods_dir(&db, "zzz"), Err(Error::NotSetUp(m)) if m.contains("no Mods folder at")));
+        assert!(!mods.exists());
+        assert!(list(&db).unwrap().iter().find(|g| g.id == "zzz").is_some_and(|g| g.mods_missing && g.mods_dir.is_some()));
+        std::fs::write(imp.join("d3dx.ini"), "").unwrap();
+        assert!(!list(&db).unwrap().iter().find(|g| g.id == "zzz").unwrap().mods_missing);
+        assert_eq!(mods_dir(&db, "zzz").unwrap(), mods);
+        assert!(mods.is_dir());
+        // a Mods folder picked outside the loader folder is reported missing, never remade, even with the loader fine
+        let elsewhere = imp.parent().unwrap().join("ZZZ Mods");
+        save_paths(&db, "zzz", &GamePaths { importer_dir: Some(imp.to_string_lossy().into()), mods_dir: Some(elsewhere.to_string_lossy().into()), ..Default::default() }).unwrap();
+        assert!(mods_dir(&db, "zzz").is_err());
+        assert!(!elsewhere.exists());
+        assert!(list(&db).unwrap().iter().find(|g| g.id == "zzz").unwrap().mods_missing);
+        let _ = std::fs::remove_dir_all(imp.parent().unwrap());
     }
 
     #[test]

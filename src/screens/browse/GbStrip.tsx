@@ -3,11 +3,11 @@
 // Owner: BROWSE area.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, type GameId } from "../../lib/api";
-import { filterHq, isAbort, listByCreators, listMods, useCharacterList, type GbCard, type GbSort } from "../../lib/gamebanana";
+import { filterHq, isAbort, listByCreators, listMods, useCharacterListOrNull, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { useCreators, useHiddenMods, useNsfw } from "../../lib/prefs";
 import { recommend } from "../../lib/recommend";
 import { go, useGames } from "../../lib/store";
-import { Button, IconButton } from "../../ui/kit";
+import { Button, IconButton, Waiting } from "../../ui/kit";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { rowKeys, useSideScroll } from "./sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
@@ -29,7 +29,8 @@ const COUNT = 16;
 
 export function GbStrip({ game, title, query, more }: { game: GameId; title: string; query: GbStripQuery; more?: () => void }) {
   const gs = useGames().find((g) => g.id === game);
-  const chars = useCharacterList(game);
+  // null while the character list loads (a few seconds at most); then a name it lacks is searched for instead
+  const chars = useCharacterListOrNull(game);
   const creators = useCreators();
   const hidden = useHiddenMods();
   const nsfw = useNsfw();
@@ -38,8 +39,8 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const sort = SORT[query.sort ?? "new"];
-  const charId = query.character ? chars.find((c) => c.name.toLowerCase() === query.character!.toLowerCase())?.id ?? null : null;
-  const waitChars = !!query.character && !charId && !chars.length;
+  const charId = query.character ? chars?.find((c) => c.name.toLowerCase() === query.character!.toLowerCase())?.id ?? null : null;
+  const waitChars = !!query.character && chars === null;
   const subIds = useMemo(() => Object.values(creators).filter((c) => (c.sub || c.prio) && !c.blocked).map((c) => c.id).sort((a, b) => a - b), [creators]);
   const prio = useMemo(() => new Set(Object.values(creators).filter((c) => c.prio).map((c) => c.id)), [creators]);
   const subKey = query.followed ? subIds.join(",") : "";
@@ -103,10 +104,13 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
         <div className="gb-strip-msg hint">
           {query.followed && !subIds.length ? "Follow creators (right-click a creator's name) and their new mods show here." : "Nothing new here right now."}
         </div>
+      ) : !items ? (
+        <Waiting what="Asking GameBanana for mods">
+          <div className="gb-strip-row" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}</div>
+        </Waiting>
       ) : (
         <div ref={row} className={`gb-strip-row${all ? " is-all" : ""}`} role="list" onKeyDown={(e) => rowKeys(e, ".gb-card")}>
-          {items ? shown.map((m) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && prio.has(m.submitter.id))} />)
-            : Array.from({ length: 6 }, (_, i) => <CardSkeleton key={i} />)}
+          {shown.map((m) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && prio.has(m.submitter.id))} />)}
         </div>
       )}
     </section>

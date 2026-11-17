@@ -98,7 +98,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".toggle > .toggle-track (.toggle-knob), .toggle-l (.toggle-t, .hint); .on, .off, .toggle-sm", what: "switch; .off when disabled" },
       { sel: ".check > .check-box (.i), .check-t; .on, .off", what: "checkbox" },
       { sel: ".swatch; .on", what: "round colour button, --c its colour" },
-      { sel: ".pchips > .pchip (.pchip-img, .pchip-t, .pchip-n); .on", what: "row of round character pictures" },
+      { sel: ".pchips .pchip (.pchip-img, .pchip-t, .pchip-n); .on", what: "row of round character pictures" },
     ],
   },
   {
@@ -139,7 +139,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
     id: "library", name: "Mods screen", parts: [
       { sel: ".library-chars > .chip.char-chip, .library-chars-sep", what: "type and character chips under the header" },
       { sel: ".mod-grid; .cards, .is-list", what: "mods as cards or a list" },
-      { sel: ".mod-card.card > .mod-card-hit (.mod-card-img, .mod-card-name, .mod-card-char), .mod-card-badges, .mod-card-foot", what: "one mod; .mod-card-hit opens it" },
+      { sel: ".mod-card.card > .mod-card-hit (.mod-card-img), .mod-card-body (.mod-card-name, .mod-card-char, .mod-card-meta), .mod-card-badges, .mod-card-foot", what: "one mod; .mod-card-hit holds the picture and its ::after covers the card to open it" },
       { sel: ".mod-card-badges > .mod-card-health, .mod-card-fav, .badge", what: "tags on the picture" },
       { sel: ".mod-card-foot > .toggle, .mod-card-more", what: "on/off switch, menu key shown on hover" },
       { sel: ".mod-card; .is-off, .sel, .is-row", what: "off, selected, list row" },
@@ -152,7 +152,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
   },
   {
     id: "browse", name: "Browse screen", parts: [
-      { sel: ".gbb > .gbb-bar, .gb-chars, .gbb-chips (.gbb-fchip), .gbb-scroll (.gb-grid)", what: "search and filters, characters, active filters, results" },
+      { sel: ".gbb > .gbb-bar, .gb-chars, .gbb-chips (.gbb-fchip), .gb-grid", what: "search and filters, characters, active filters, results" },
       { sel: ".gb-chars-list > .gb-ch (.gb-ch-img, .gb-ch-t); .on", what: "character picker" },
       { sel: ".gb-card.card > .gb-card-img (.gb-nsfw-badge, .gb-card-state, .gb-card-quick), .gb-card-b", what: "a GameBanana mod: picture with tags and install key, text" },
       { sel: ".gb-card-b > .gb-card-t, .gb-card-c, .gb-card-meta (.gb-card-by, .gb-stat)", what: "name, character, creator, likes" },

@@ -1,9 +1,9 @@
 // The Problems panel on the Tools screen: broken parts of mods and warnings, each with its fix when gachamod has one,
 // and a way to ignore the rest. Owner: MODTOOLS area.
 import { useEffect, useRef, useState } from "react";
-import { go, useGame } from "../../lib/store";
+import { useGame } from "../../lib/store";
 import type { GameId, ModProblems, Problem } from "../../lib/api";
-import { Badge, Button, Panel, Skeleton, plural } from "../../ui/kit";
+import { Badge, Button, Panel, Skeleton, Waiting, plural } from "../../ui/kit";
 import { FixButton } from "./FixButton";
 import { severityHint, severityLabel, severityTone } from "./ModInsides";
 import {
@@ -11,6 +11,7 @@ import {
   needsDownload, shownProblems, unignore, useIgnored, useLint,
 } from "./problems";
 import "./modtools.css";
+import { ModLink } from "./ModLink";
 
 const rank = (s: string) => (s === "bad" ? 0 : s === "warn" ? 1 : 2);
 
@@ -42,7 +43,8 @@ export function ProblemsPanel() {
   // warnings alone (a texture the .ini names but the mod doesn't ship) rarely show in game: folded away, not counted
   const brokenRows = listed.filter((r) => r.shown.some((p) => p.severity === "bad"));
   const warnRows = listed.filter((r) => !brokenRows.includes(r));
-  const badCount = brokenRows.reduce((s, r) => s + r.shown.filter((p) => p.severity === "bad").length, 0);
+  // mods that are off don't count, the same as on the Tools badge (problems.ts badgeKeys)
+  const badCount = brokenRows.reduce((s, r) => s + (r.m.enabled ? r.shown.filter((p) => p.severity === "bad").length : 0), 0);
   const auto = list ? autoFixes(list, ign, game).length : 0;
 
   return (
@@ -60,7 +62,7 @@ export function ProblemsPanel() {
       </>}>
       <p className="hint tp-intro">What could stop a mod from showing right in game. Warnings, like a file the .ini names that the mod doesn't ship, usually make no difference, so they're folded away.</p>
       {!list ? (
-        <div className="tp-loading" aria-busy="true"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></div>
+        <Waiting what="Checking mods for problems" className="tp-loading"><Skeleton h="2.6rem" /><Skeleton h="2.6rem" /></Waiting>
       ) : brokenRows.length === 0 ? (
         <p className="tp-none muted">{warnRows.length ? "Nothing broken. Only warnings, below." : ignored.length ? "Nothing else to fix. The problems you ignored are below." : "No problems found."}</p>
       ) : (
@@ -86,7 +88,7 @@ export function ProblemsPanel() {
           <ul className="tp-list">
             {ignored.map(({ m, hidden }) => (
               <li key={m.modId} className="tp-ignored-mod row">
-                <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
+                <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
                 <span className="hint">{plural(hidden.length, "problem")}</span>
                 <Button size="sm" variant="ghost" icon="eye" title="List these problems again" onClick={() => unignore(game, m)}>Show again</Button>
               </li>
@@ -106,7 +108,7 @@ function ModRow({ game, m, shown, busy, run }: {
   return (
     <li className="tp-problem">
       <div className="tp-problem-h row">
-        <button type="button" className="tp-link grow" title="Open in Mods" onClick={() => go({ view: "library", modId: m.modId })}>{m.name}</button>
+        <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
         {!m.enabled && <Badge tone="muted" title="This mod is off, so its problems don't count on Tools">Off</Badge>}
         {download && (m.source
           ? <Button size="sm" variant={broken ? undefined : "ghost"} icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}

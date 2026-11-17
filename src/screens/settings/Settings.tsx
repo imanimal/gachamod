@@ -28,7 +28,7 @@ import { PAGES, sectionOf } from "./settingsSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
 import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
-import { Installing } from "./Onboarding";
+import { Installing, SetupError } from "./Onboarding";
 import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
 export { SetRow, openXxmi, useSetting };
@@ -88,7 +88,14 @@ function GamesSection() {
   const community = list.filter((g) => !g.xxmi);
   return (
     <Panel title="Games and their folders" icon="controller" id="games" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title="Look for XXMI Launcher and game folders again">Detect again</Button>}>
-      {setup.running ? <Installing compact /> : can.length > 1 && (
+      {!setup.running && setup.error && can.length > 0 && (
+        <div className="set-note">
+          <SetupError error={setup.error} />
+          <Button size="sm" variant="primary" icon="refresh" onClick={() => void installLoaders(can.map((g) => g.id))}
+            title="Installs XXMI Launcher and each game's mod loader from their GitHub pages">Try again</Button>
+        </div>
+      )}
+      {setup.running ? <Installing compact /> : !setup.error && can.length > 1 && (
         <div className="set-note row">
           <span>{can.map((g) => g.short).join(", ")} have no mod loader yet.</span>
           <Button size="sm" variant="primary" icon="install" onClick={() => void installLoaders(can.map((g) => g.id))}
@@ -190,7 +197,7 @@ function GameRow({ game }: { game: GameState }) {
         </div>
         {folder("Game", game.gameDir, "gameDir", "Where the game's exe is")}
         {folder("Mod loader", game.importerDir, "importerDir", "The folder with d3dx.ini and Mods")}
-        {game.modsDir && game.importerDir && game.modsDir.toLowerCase() !== `${game.importerDir}\\Mods`.toLowerCase() && folder("Mods", game.modsDir, "modsDir", "Where mods live")}
+        {game.modsDir && folder("Mods", game.modsDir, "modsDir", "Where mods live")}
         {notes.map((n) => <span key={n} className="hint set-game-note">{n}</span>)}
         {!game.modsDir && game.xxmi && (
           <span className="row set-game-fix">
@@ -280,6 +287,7 @@ function XxmiSection() {
     try { await settings.set("xxmi.root", ""); load(); await refreshGames(true); } catch (e) { toast(errorText(e), true); }
   };
   const update = st?.version && st.latest && st.version !== st.latest;
+  const loaderUpdate = !!update || !!st?.importers.some((i) => i.latestVersion && i.deployedVersion && i.latestVersion !== i.deployedVersion);
   const [asking, setAsking] = useState(false);
 
   return (
@@ -297,7 +305,7 @@ function XxmiSection() {
         <>
           <div className="set-kv">
             <span className="muted">Version</span>
-            <span>{st.version ?? "Unknown"}{update && <> <Badge tone="info">{st.latest} available</Badge></>}{st.running && <> <Badge tone="ok">Open</Badge></>}</span>
+            <span>{st.version ?? "Unknown"}{update && <> <Badge tone="info" onClick={openXxmi} title="Opens XXMI Launcher, which installs its own updates">{st.latest} available</Badge></>}{st.running && <> <Badge tone="ok">Open</Badge></>}</span>
             <span className="muted">Folder</span>
             <span className="mono set-path">{st.root}</span>
           </div>
@@ -305,12 +313,13 @@ function XxmiSection() {
             {st.importers.filter((i) => i.deployedVersion || i.importerDir && i.enabled).map((i) => (
               <span key={i.code} className="set-importer" title={i.importerDir ?? ""}>
                 <b>{i.code}</b> {i.deployedVersion ?? "not installed"}
-                {i.latestVersion && i.deployedVersion && i.latestVersion !== i.deployedVersion && <Badge tone="info">{i.latestVersion}</Badge>}
+                {i.latestVersion && i.deployedVersion && i.latestVersion !== i.deployedVersion && <Badge tone="info" onClick={openXxmi} title={`${i.code} ${i.latestVersion} is out. Opens XXMI Launcher, which updates its mod loaders`}>{i.latestVersion}</Badge>}
               </span>
             ))}
           </div>
           <div className="row">
-            <Button icon="external" onClick={openXxmi}>Open XXMI Launcher</Button>
+            <Button icon={loaderUpdate ? "update" : "external"} variant={loaderUpdate ? "primary" : undefined} onClick={openXxmi}
+              title={loaderUpdate ? "XXMI Launcher installs the updates when it opens" : undefined}>{loaderUpdate ? "Update in XXMI Launcher" : "Open XXMI Launcher"}</Button>
             <Button variant="ghost" onClick={() => void pick()} title="For a portable copy of XXMI Launcher">Use another folder</Button>
             {root && <Button variant="ghost" onClick={() => void reset()} title="Look for XXMI Launcher where its installer puts it">Use the usual folder</Button>}
             <Button id="set-xxmi-uninstall" variant="ghost" icon="trash" disabled={setup.running} onClick={() => setAsking(true)}

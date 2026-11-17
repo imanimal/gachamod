@@ -45,7 +45,7 @@
   .gbadge.has-img { background: var(--img-bg); }
 
   /* ── sidebar: the phone menu ── */
-  .side { padding: .55rem; gap: .45rem; background: linear-gradient(180deg, rgb(18 18 21 / .9), rgb(14 14 18 / .92)); box-shadow: inset -1px 0 0 rgb(255 255 255 / .1); backdrop-filter: blur(18px); scrollbar-width: none; }
+  .side { padding: .55rem; gap: .45rem; background: linear-gradient(180deg, rgb(18 18 21 / .9), rgb(14 14 18 / .92)); box-shadow: inset -1px 0 0 rgb(255 255 255 / .1); scrollbar-width: none; }
   &[data-sidebar="right"] .side { box-shadow: inset 1px 0 0 rgb(255 255 255 / .1); }
   /* the profile block at the top of the phone */
   .player-card { border: 0; border-radius: var(--cut); background: #1c1c1f; padding: 1.25rem .65rem .55rem; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07); }
@@ -225,6 +225,12 @@
   .keys-list > div > * { background: #f4f5f6; }
   &.kbd .menu-i:focus { background: #d2d4d8; color: var(--ink); }
 }
+
+/* nobody looking (lib/idle.ts: the window is in the background or a game runs): the stars and rings hold still,
+   the small orbit by the profiles and the title bar's rail too */
+[data-theme="hsr"][data-idle] .backdrop::before, [data-theme="hsr"][data-idle] .backdrop::after,
+[data-theme="hsr"][data-idle] .backdrop-wall, [data-theme="hsr"][data-idle] .side-deco::before,
+[data-theme="hsr"][data-idle] .sp .glyphs.run { animation-play-state: paused; }
 
 @keyframes hsrTwinkle { from { opacity: .45; } to { opacity: .95; } }
 @keyframes hsrRail { to { background-position: 16px 50%, 0 50%; } }

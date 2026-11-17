@@ -651,16 +651,35 @@ fn section_vars(doc: &Doc, s: &Sec) -> Vec<KeyVar> {
     }).collect()
 }
 
-/// "Jacket" from `$jacket`, or from the section name when the variable says nothing (`$swapvar` in [KeyHat]).
+/// A variable that says nothing about what a key does: the credits picture many mods clear on any key
+/// (`$creditinfo = 0` in every key section).
+pub(crate) fn noise_var(var: &str) -> bool { var.to_lowercase().contains("credit") }
+
+/// `$swapvar`, `$swapvarg`, `$swaptex2`: names from a template, so the section name is used when it says more.
+fn stock_var(var: &str) -> bool {
+    let v = var.to_lowercase();
+    let Some(rest) = v.strip_prefix("swap") else { return false };
+    let rest = rest.strip_prefix("var").or_else(|| rest.strip_prefix("tex")).unwrap_or(rest);
+    rest.len() <= 2 && rest.bytes().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// "Jacket" from `$jacket`, or from the section name when the variable says nothing (`$swapvar` in [KeyHat]). A key
+/// that sets more than three things is named by its section ("Reset"), or by the first two and how many more.
 fn entry_name(section: &str, vars: &[KeyVar]) -> String {
     let from_section = ini::section_label(section);
+    let section_says = !ini::generic_label(&from_section);
     let mut names: Vec<String> = Vec::new();
-    for v in vars {
+    for v in vars.iter().filter(|v| !noise_var(&v.var)) {
         let mut l = ini::var_label(&v.var);
-        if ini::generic_label(&l) && !ini::generic_label(&from_section) { l = from_section.clone(); }
+        if section_says && (ini::generic_label(&l) || stock_var(&v.var)) { l = from_section.clone(); }
         if !names.contains(&l) { names.push(l); }
     }
-    if names.is_empty() { from_section } else { names.join(", ") }
+    match names.len() {
+        0 => from_section,
+        1..=3 => names.join(", "),
+        _ if section_says => from_section,
+        n => format!("{}, {} and {} more", names[0], names[1], n - 2),
+    }
 }
 
 fn state_of(a: &Analysis, docs: &[IniDoc]) -> (String, Option<String>) {
@@ -1132,6 +1151,8 @@ fn to_original(db: &Db, game: &str, mod_id: &str, docs: &mut [IniDoc]) {
 fn finish(db: &Db, game: &str, m: &ModEntry, docs: &mut [IniDoc], label: &str, note: Option<String>) -> Result<KeyEdit> {
     to_original(db, game, &m.id, docs);
     let backup = commit(db, game, m, docs, label)?;
+    // the key list the game draws shows these keys
+    if backup.is_some() { crate::keylist::keys_changed(db, game); }
     let note = note.or_else(|| backup.as_ref().and_then(|_| running_note(game)));
     Ok(KeyEdit { keys: keys_in(&m.id, Path::new(&m.path)), backup, note })
 }
@@ -1150,10 +1171,36 @@ pub fn list(db: &Db, game: &str, id: &str) -> Result<ModKeys> {
 
 pub fn rebind(db: &Db, game: &str, id: &str, target: &KeyTarget, binding: &str) -> Result<KeyEdit> {
     let m = mod_of(db, game, id)?;
+    let before = keys_in(&m.id, Path::new(&m.path));
     let mut docs = load(Path::new(&m.path));
     let d = doc_for(&mut docs, &target.ini)?;
     let (old, new) = rebind_doc(&mut d.doc, &d.rel, target, binding)?;
-    finish(db, game, &m, &mut docs, &format!("Changed {old} to {new} in {}", m.name), None)
+    let note = if old == new { None } else { clash_note(db, game, &before, target, binding, &new) }
+        .map(|c| match running_note(game) { Some(r) => format!("{c}. {r}"), None => c });
+    finish(db, game, &m, &mut docs, &format!("Changed {old} to {new} in {}", m.name), note)
+}
+
+/// What else the new key does: the mod's other toggles on it and gachamod's own keys ("Ctrl+Alt+J also changes
+/// Jacket"). The change still goes through; this is said with it.
+fn clash_note(db: &Db, game: &str, before: &ModKeys, t: &KeyTarget, binding: &str, label: &str) -> Option<String> {
+    let ini = t.ini.replace('\\', "/");
+    let is_target = |e: &KeyEntry| e.ini.eq_ignore_ascii_case(&ini) && e.section.eq_ignore_ascii_case(&t.section);
+    let line = before.keys.iter().find(|e| is_target(e))?.lines.iter().find(|l| l.field == t.field && l.index == t.index)?;
+    let want = combo(&compose(&line.value, binding).ok()?)?;
+    let hits = |value: &str| combo(value).is_some_and(|c| overlap(&c, &want));
+    let mut what: Vec<String> = Vec::new();
+    for e in before.keys.iter().filter(|e| !e.off) {
+        if is_target(e) || !e.lines.iter().any(|l| !l.off && hits(&l.value)) { continue; }
+        let s = format!("changes {}", e.name);
+        if !what.contains(&s) { what.push(s); }
+    }
+    let own = |key: &str| hits(&crate::hotkeys::migoto_form(key));
+    if crate::live::has_groups(db, game) && own(&crate::live::menu_settings(db, game).key) { what.push("opens gachamod's menu".into()); }
+    let list = crate::keylist::settings(db, game);
+    if list.on && own(&list.key) { what.push("shows the key list".into()); }
+    if own(&crate::devtools::key_name(game)) { what.push("reloads mods in game".into()); }
+    if what.is_empty() { return None; }
+    Some(format!("{label} also {}", what.join(" and ")))
 }
 
 pub fn set_off(db: &Db, game: &str, id: &str, ini: &str, section: &str, off: bool) -> Result<KeyEdit> {

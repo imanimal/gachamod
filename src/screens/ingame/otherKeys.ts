@@ -81,11 +81,12 @@ const answer = (c: AppKeyClash): ToastAction => c.suggestion
   ? { label: `Use ${c.suggestion}`, run: () => moveKey(c) }
   : { label: "Hotkey settings", run: () => go({ view: "settings", section: "hotkeys" }) };
 
-/** One toast per clash, with the button that moves gachamod's key. The backend stops after three per clash. */
+/** One toast per clash, with the button that moves gachamod's key and one that keeps it as it is (and stops asking).
+ *  The backend stops after three per clash. */
 export async function askKeyClashes() {
   let ask: AppKeyClash[];
   try { ask = await otherKeys.ask(); } catch { return; }
-  for (const c of ask) toast(c.ask, false, answer(c));
+  for (const c of ask) toast(c.ask, false, answer(c), { label: `Keep ${c.key}`, run: () => keepKey(c) });
 }
 
 /** Ask a moment after the window shows (the opening screen is over by then) and each time a game starts. Returns

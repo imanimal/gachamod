@@ -14,7 +14,8 @@ interface PageEvent { text: string; incident?: string; title?: string }
 
 const queue: PageEvent[] = [];
 let lastFrame = performance.now();
-let framesThisSecond = 0;
+let sampling = false;
+let watching = false;
 let fps = 0;
 let stalledAt: number | null = null;
 let slowFor = 0;
@@ -43,18 +44,29 @@ function state(): string {
     + `theme ${document.documentElement.dataset.theme ?? "default"}, ${innerWidth}x${innerHeight} at ${devicePixelRatio}x`;
 }
 
-function frame() {
-  lastFrame = now();
-  framesThisSecond++;
-  requestAnimationFrame(frame);
+/** One sample a second instead of a frame loop: two frames in a row, timed. The gap between them gives the frame
+ *  rate, and a sample still waiting means no frame came. */
+function sample() {
+  if (sampling) return;
+  sampling = true;
+  requestAnimationFrame((a) => {
+    lastFrame = now();
+    requestAnimationFrame((b) => {
+      lastFrame = now();
+      fps = Math.min(1000, Math.round(1000 / Math.max(1, b - a)));
+      sampling = false;
+    });
+  });
 }
 
 function tick() {
   const t = now();
   const late = t - lastTick - 1000;
   lastTick = t;
-  fps = framesThisSecond;
-  framesThisSecond = 0;
+  if (!renderLogPref.get()) { watching = false; return; }
+  // just turned on: start counting from now, not from when it was turned off
+  if (!watching) { watching = true; lastFrame = t; stalledAt = null; slowFor = 0; sample(); return; }
+  sample();
   if (late > 2000) send({ text: `The window's code was busy or paused for ${secs(late)}. ${state()}` });
   const visible = document.visibilityState === "visible";
   const since = t - lastFrame;
@@ -115,7 +127,7 @@ export function installRenderWatch(where: "main" | "overlay") {
   if (!inTauri()) return;
   installRedraw();
   (window as unknown as { __gmRenderProbe?: () => string }).__gmRenderProbe = probe;
-  requestAnimationFrame(frame);
+  // with the rendering log off, nothing here draws or waits on frames
   window.setInterval(tick, 1000);
   window.setInterval(flush, 2000);
   window.setInterval(() => { budget = 30; }, 60_000);

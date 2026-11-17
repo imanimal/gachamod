@@ -10,12 +10,12 @@
   /* the sheets keep the sky's tokens; --ink, their text colour, turns cream */
   .side, .panel, .dialog, .card, .tile, .mod-card, .gb-card, .home-tile, .dl-item, .portraits > .portrait, .profile-card, .dropzone-card {
     --title: var(--gold); --b-fill: var(--cream); --b-ink: #3b4255; --b-line: rgb(236 229 216 / .55); --b-line-ink: var(--cream);
-    --f-bg: rgb(10 14 24 / .35); --f-ring: rgb(236 229 216 / .35); --row: var(--slate-row);
+    --f-bg: rgb(10 14 24 / .35); --f-ring: rgb(236 229 216 / .5); --row: var(--slate-row);
     --bg-2: #1d2633; --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #5d677b;
     --line: rgb(236 229 216 / .13); --line-2: rgb(236 229 216 / .26);
     --text: #ece5d8; --text-2: #c9c3b6; --text-3: #a3abbb;
     --accent-ink: var(--acc); --accent-soft: rgb(211 188 142 / .18);
-    --ok: var(--lime); --warn: var(--orange); --bad: var(--red-hi); --info: var(--blue);
+    --ok: var(--lime); --warn: var(--orange-lt); --bad: var(--red-lt); --info: var(--blue-lt); --on-bad: #1b2232;
     --hover: rgb(236 229 216 / .08); --img-bg: #2a3242; --ring: #fff;
     --ink: #ece5d8;
     color: var(--text);
@@ -28,8 +28,8 @@
   .dialog-h > .ibtn:last-child { box-shadow: inset 0 0 0 2.5px #eee5d8, inset 0 0 0 4.5px #3b4255, 0 1px 4px rgb(0 0 0 / .3); }
   .dialog-h > .ibtn:last-child:hover:not(:disabled) { color: #3b4255; box-shadow: inset 0 0 0 2.5px #fff, inset 0 0 0 4.5px #3b4255, 0 0 12px rgb(255 255 255 / .5); }
 
-  /* ── sidebar: a navy glass column ── */
-  .side { background: var(--weave-l), linear-gradient(180deg, rgb(36 46 64 / .94), rgb(28 36 52 / .96)); backdrop-filter: blur(12px);
+  /* ── sidebar: a navy column (nearly opaque, so it doesn't blur what's behind) ── */
+  .side { background: var(--weave-l), linear-gradient(180deg, rgb(36 46 64 / .94), rgb(28 36 52 / .96));
     box-shadow: inset -1px 0 0 rgb(211 188 142 / .2), 6px 0 18px rgb(4 7 14 / .35); }
   .player-card { box-shadow: inset 0 0 0 1px rgb(236 229 216 / .1), 0 1px 3px rgb(4 7 14 / .3); }
   .side-game-cur:hover { background: var(--band); }

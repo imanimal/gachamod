@@ -2,13 +2,13 @@
 // open character, mod, creator or section; the chevrons between them open a menu), the search box in the middle
 // (it opens the palette, and grows in when the app opens to show it's there), Undo and Redo (right-click lists the
 // history), what gachamod is waiting on (shell/Activity.tsx), Help (shortcuts, feedback) and the window keys. The empty parts drag the window. Owner: SHELL area.
-import { useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Icon } from "../ui/Icon";
-import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
+import { menuFor, menuIsOpen, openMenu, type MenuEntry } from "../ui/ContextMenu";
 import { Glyphs } from "../ui/Deco";
 import { inTauri, windowAction } from "../lib/tauri";
 import { redo, undo, useHistory } from "../lib/history";
-import { allGames, back, forward, go, goIndex, recentPages, useDailyGames, useGame, useNav, useRoute, useShownGames, VIEWS, type Route } from "../lib/store";
+import { allGames, back, currentGame, forward, go, goIndex, recentPages, useDailyGames, useGame, useNav, useRoute, useShownGames, VIEWS, type Route } from "../lib/store";
 import { pageName, subCrumbs, useNamesVersion, VIEW_INFO, viewLabel } from "./names";
 import { switchEntries } from "./Sidebar";
 import { openPalette, toggleHelp, useSearchIntro } from "./state";
@@ -20,15 +20,23 @@ const at = (e: ReactMouseEvent) => ({ x: e.clientX, y: e.clientY });
 const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
 
 function historyMenu(dir: -1 | 1): MenuEntry[] {
-  const list = recentPages(dir, 12);
+  const list = recentPages(dir, 40);
   if (!list.length) return [];
-  return [
-    { header: dir < 0 ? "Back to" : "Forward to" },
-    ...list.map((p) => {
-      const g = allGames().find((x) => x.id === p.game);
-      return { label: pageName(p.route, p.game), icon: VIEW_INFO[p.route.view].icon, title: g?.name, onClick: () => goIndex(p.index) } satisfies MenuEntry;
-    }),
-  ];
+  const here = currentGame()?.id ?? null;
+  const items: MenuEntry[] = [];
+  let last = "";
+  for (const p of list) {
+    const g = allGames().find((x) => x.id === p.game);
+    const name = pageName(p.route, p.game);
+    const label = g && p.game !== here ? `${name}, ${g.short}` : name;
+    // A run of the same page in the same game is one entry: it jumps to the nearest of them.
+    const key = `${p.game ?? ""}|${name}`;
+    if (key === last) continue;
+    last = key;
+    items.push({ label, icon: VIEW_INFO[p.route.view].icon, title: g?.name, onClick: () => goIndex(p.index) });
+    if (items.length >= 12) break;
+  }
+  return [{ header: dir < 0 ? "Back to" : "Forward to" }, ...items];
 }
 
 export function Titlebar() {
@@ -41,6 +49,12 @@ export function Titlebar() {
   const introN = useSearchIntro();
   useNamesVersion();
   const gameBtn = useRef<HTMLButtonElement>(null);
+  // which button's menu is open, for aria-expanded
+  const [menuOf, setMenuOf] = useState<string | null>(null);
+  const openFrom = (which: string, el: Element, items: MenuEntry[]) => {
+    openMenu(below(el), items, () => setMenuOf((m) => (m === which ? null : m)));
+    if (menuIsOpen()) setMenuOf(which);
+  };
   const gid = game?.id ?? null;
   const subs = subCrumbs(route, gid);
 
@@ -90,7 +104,8 @@ export function Titlebar() {
           {game && (
             <>
               <button ref={gameBtn} type="button" className="crumb-b crumb-game" title={`${game.name}. Click for games and more`}
-                onClick={(e) => openMenu(below(e.currentTarget), gameMenu())}
+                aria-haspopup="menu" aria-expanded={menuOf === "game"}
+                onClick={(e) => openFrom("game", e.currentTarget, gameMenu())}
                 onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), gameMenu()); }}>
                 <span className="crumb-t">{game.short}</span><Icon name="down" className="crumb-dd" />
               </button>
@@ -100,15 +115,17 @@ export function Titlebar() {
           {crumbs.map((c, i) => {
             const last = i === crumbs.length - 1;
             return (
-              <span key={c.key} className="crumb-part">
-                <button type="button" className={`crumb-b${last ? " crumb-view" : ""}`} aria-current={last ? "page" : undefined} title={c.title ?? (last ? undefined : `Go to ${c.label}`)}
+              // the page you're on keeps room for a few letters while the parts before it shrink first
+              <span key={c.key} className="crumb-part" style={last ? { flexShrink: 0.25, minWidth: "4.5rem" } : { flexShrink: 4 }}>
+                <button type="button" className={`crumb-b${last ? " crumb-view" : ""}`} aria-current={last ? "page" : undefined} title={c.title ?? (last ? c.label : `Go to ${c.label}`)}
                   onClick={() => go(c.route)}
                   onContextMenu={c.menu ? (e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), c.menu!()); } : undefined}>
                   <span className="crumb-t">{c.label}</span>
                 </button>
                 {c.menu && (
                   <button type="button" className="crumb-sep crumb-sep-b" aria-label="Other pages" title="Other pages"
-                    onClick={(e) => openMenu(below(e.currentTarget), c.menu!())}><Icon name={last ? "down" : "chevron"} /></button>
+                    aria-haspopup="menu" aria-expanded={menuOf === `crumb:${c.key}`}
+                    onClick={(e) => openFrom(`crumb:${c.key}`, e.currentTarget, c.menu!())}><Icon name={last ? "down" : "chevron"} /></button>
                 )}
                 {!c.menu && !last && <Icon name="chevron" className="crumb-sep" />}
               </span>
@@ -133,7 +150,8 @@ export function Titlebar() {
             onClick={() => void redo()} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), redoMenu()); }}><Icon name="redo" /></button>
         </span>
         <button type="button" className="tb-k tb-help" aria-label="Help" title="Help: shortcuts and feedback (? for shortcuts)"
-          onClick={(e) => openMenu(below(e.currentTarget), helpMenu())}><Icon name="help" /></button>
+          aria-haspopup="menu" aria-expanded={menuOf === "help"}
+          onClick={(e) => openFrom("help", e.currentTarget, helpMenu())}><Icon name="help" /></button>
 
         <span className="winkeys">
           <button type="button" className="wk" aria-label="Minimise" onClick={() => void windowAction("minimize")}><Icon name="minus" /></button>

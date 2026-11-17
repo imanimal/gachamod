@@ -1,6 +1,6 @@
 //! Settings export and import, and gachamod's own updates. Owner: SYSTEM area.
 use crate::state::{blocking, AppState};
-use gacha_core::app_update::{self, Release, UpdateCheck};
+use gacha_core::app_update::{self, AutoMode, Release, UpdateCheck};
 use gacha_core::settings_file::{self, ImportSummary};
 use gacha_core::{Error, Result};
 use std::collections::BTreeMap;
@@ -15,6 +15,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 pub const UPDATE_PROGRESS: &str = "app-update-progress";
 /// A newer version finished downloading in the background: `{ version }`.
 pub const UPDATE_READY: &str = "app-update-ready";
+/// With updates set to only tell, a background check found a newer version: `{ version }`. Once per version.
+pub const UPDATE_FOUND: &str = "app-update-found";
 
 fn lock(db: &gacha_core::db::Shared) -> Result<std::sync::MutexGuard<'_, gacha_core::db::Db>> {
     db.lock().map_err(|_| Error::Invalid("The app's database stopped responding. Restart gachamod".into()))
@@ -91,15 +93,19 @@ pub struct Updates {
     ready: Mutex<Option<(Update, Vec<u8>)>>,
     /// One download at a time.
     downloading: AtomicBool,
+    /// The version a background check last told about, so it says so once.
+    told: Mutex<Option<String>>,
 }
 
 fn app_version(app: &AppHandle) -> String { app.package_info().version.to_string() }
 
-fn auto_on(app: &AppHandle) -> bool {
+fn auto_mode(app: &AppHandle) -> AutoMode {
     let st = app.state::<AppState>();
-    let Ok(d) = st.db.lock() else { return false };
-    d.setting(app_update::SETTING).ok().flatten().as_deref() != Some("0")
+    let Ok(d) = st.db.lock() else { return AutoMode::Off };
+    AutoMode::from_setting(d.setting(app_update::SETTING).ok().flatten().as_deref())
 }
+
+fn auto_on(app: &AppHandle) -> bool { auto_mode(app) == AutoMode::Install }
 
 fn release_of(u: &Update) -> Release { Release::new(&u.version, u.body.as_deref(), u.date.map(|d| d.to_string())) }
 
@@ -187,13 +193,25 @@ pub async fn app_update_install(app: AppHandle) -> Result<()> {
 }
 
 /// Automatic updates: at start and every 6 hours, unless turned off. A newer version downloads quietly and a toast
-/// says it's ready.
+/// says it's ready; set to only tell, a toast says it's out and nothing downloads.
 pub fn start_auto_update(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         // give the window time to start listening for the toast
         tokio::time::sleep(Duration::from_secs(12)).await;
         loop {
-            if auto_on(&app) {
+            let mode = auto_mode(&app);
+            if mode == AutoMode::Tell {
+                find(&app).await;
+                let found = app.state::<Updates>().found.lock().unwrap().as_ref().map(|u| u.version.clone());
+                if let Some(version) = found {
+                    let up = app.state::<Updates>();
+                    let mut told = up.told.lock().unwrap();
+                    if told.as_deref() != Some(version.as_str()) {
+                        let _ = app.emit(UPDATE_FOUND, serde_json::json!({ "version": version }));
+                        *told = Some(version);
+                    }
+                }
+            } else if mode == AutoMode::Install {
                 let c = find(&app).await;
                 let found = app.state::<Updates>().found.lock().unwrap().clone();
                 if let (false, Some(u)) = (c.ready, found) {

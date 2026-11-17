@@ -194,6 +194,10 @@
   &.kbd .menu-i:focus { background: var(--dots-ink), var(--acc); color: #0a0a0a; }
 }
 
+/* nobody looking (lib/idle.ts: the window is in the background or a game runs): the wall and the glyph ticker
+   hold still */
+[data-theme="zzz"][data-idle] :is(.backdrop-row, .glyphs.run) { animation-play-state: paused; }
+
 @keyframes zzDrift { to { transform: translateX(-50%); } }
 @keyframes zzSnap { from { clip-path: inset(0 72% 0 0); } }
 /* the shell's grid tiles draw hover and open as rectangles; New Eridu's plates replace them */

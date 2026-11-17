@@ -70,6 +70,13 @@ fn key_gate(group: u32, slot: u32) -> String { format!("{} && $\\gachamod\\live\
 /// The line a gated section runs when it draws, which tells the menu the character is on screen.
 const SEEN: &str = "run = CommandList\\gachamod\\live\\Seen";
 pub(crate) fn var_name(group: u32) -> String { format!("gachamod\\live\\g{group}") }
+/// The saved value that says a group's character is on screen (`menu::constants`, `CommandListOnScreen`).
+fn on_screen_name(group: u32) -> String { format!("gachamod\\live\\o{group}") }
+
+/// The groups among `groups` whose character the game saved as on screen, in that order.
+fn on_screen(importer: &Path, groups: impl Iterator<Item = u32>) -> Vec<u32> {
+    groups.filter(|n| crate::ini::user_value(importer, &on_screen_name(*n)).and_then(|v| v.parse::<f64>().ok()).is_some_and(|v| v >= 0.5)).collect()
+}
 
 // ── what the app remembers (setting "live.<game>") ──
 
@@ -143,6 +150,9 @@ pub struct LiveInfo {
     /// The drawn menu needs no tester options here (`drawn_menu_open`). Elsewhere it is marked as a tester option,
     /// also once they are on.
     pub checked: bool,
+    /// The groups whose character the game last saved as on screen (`$o<group>` in d3dx_user.ini), in the order of
+    /// `groups`. Empty while the game isn't running: values left from its last run say nothing.
+    pub on_screen: Vec<u32>,
 }
 
 /// How the skin menu opens while playing. `style`: "window" (gachamod's menu over the game; the game draws its own
@@ -738,7 +748,7 @@ fn write_live_ini(db: &Db, game: &str, store: &Store) -> Result<bool> {
         n: g.n, character: g.character.clone(),
         rows: g.slots.iter().map(|s| {
             let m = by_id.get(s.mod_id.as_str());
-            menu::Row { name: m.map_or_else(|| "A mod that's gone".to_string(), |m| m.name.clone()), preview: m.and_then(|m| m.preview.clone()) }
+            menu::Row { name: m.map_or_else(|| "A mod that's gone".to_string(), |m| m.name.clone()), preview: m.and_then(|m| m.thumb.clone().or(m.preview.clone())) }
         }).collect(),
     }).collect();
     Ok(menu::write_assets(&dir, &pages, &lay, &hint_keys(&set)).unwrap_or(false) || changed)
@@ -863,7 +873,9 @@ pub fn follow_game(db: &Db, game: &str) -> bool {
     let before = load(db, game);
     if before.groups.is_empty() { return false; }
     let after = load_synced(db, game);
-    after.waiting != before.waiting
+    // a skin picked in the game's menu whose folder is off: it goes on, and shows after the reload
+    let opened = open_folders(db, game);
+    opened || after.waiting != before.waiting
         || after.groups.iter().any(|g| before.groups.iter().any(|b| b.n == g.n && b.active != g.active))
 }
 
@@ -915,7 +927,10 @@ fn load_synced(db: &Db, game: &str) -> Store {
     }
     if moved { let _ = save(db, game, &store); }
     // the library's rows show what the game picked, not what the app picked last
-    if !read_back.is_empty() { sync_rows(db, game, &store, &read_back); }
+    if !read_back.is_empty() {
+        sync_rows(db, game, &store, &read_back);
+        game_picks(|l| l.extend(read_back.iter().map(|n| (game.to_string(), *n))));
+    }
     store
 }
 
@@ -1010,7 +1025,15 @@ pub fn info(db: &Db, game: &str) -> Result<LiveInfo> {
         .map(|(c, l)| LiveReady { character: c, mods: l.into_iter().filter(|m| !live.contains(m.id.as_str())).map(|m| live_mod(Some(m), &m.id, 0)).collect() })
         .collect();
     ready.sort_by(|a, b| a.character.to_lowercase().cmp(&b.character.to_lowercase()));
-    Ok(LiveInfo { groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game), checked: drawn_menu_open(game) })
+    // fresh only while the game saves every second (`fast_saves`); its windows ask each time they open
+    let on_screen = match crate::games::importer_dir(db, game) {
+        Ok(imp) if running => on_screen(&imp, store.groups.iter().map(|g| g.n)),
+        _ => Vec::new(),
+    };
+    Ok(LiveInfo {
+        groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game),
+        checked: drawn_menu_open(game), on_screen,
+    })
 }
 
 /// Make mods live: each joins its character's group (made when missing). Mods that are off get turned on, since
@@ -1131,8 +1154,64 @@ pub(crate) fn auto_add(db: &Db, game: &str) -> bool {
 pub(crate) fn settle(db: &Db, game: &str) -> bool {
     let joined = auto_add(db, game);
     let regated = regate(db, game);
+    // after the gates: a skin that couldn't be gated has left its group by now, and stays off
+    let opened = open_folders(db, game);
     menu_sync(db, game);
-    joined || regated
+    joined || regated || opened
+}
+
+// Groups whose pick was just read back from the game (made in its own menu), until `open_folders` looks at them.
+shared_list!(game_picks, (String, u32));
+// Live skins whose folders couldn't be turned on (open in another program, read-only). They aren't tried again until
+// the app starts again, so a scan doesn't wait on them each time. A click on the mod still tries, and says why.
+shared_list!(stuck, String);
+
+/// Live skins whose folders are off: another manager named them or a folder above them DISABLED_..., or an older
+/// gachamod couldn't name them back. The ones on standby go on, since picked in the game's own menu they would show
+/// nothing; their gates keep them from drawing until then. The one a group shows goes on only when the game itself
+/// just picked it. Found off any other time, someone turned it off outside gachamod: with the game closed the group
+/// shows none of its mods from then on, so nothing comes back that the player turned off. True when anything changed.
+fn open_folders(db: &Db, game: &str) -> bool {
+    let picked: HashSet<u32> = game_picks(|l| {
+        let mine = l.iter().filter(|(g, _)| g == game).map(|(_, n)| *n).collect();
+        l.retain(|(g, _)| g != game);
+        mine
+    });
+    let mut store = load(db, game);
+    let is_off = |id: &str| crate::library::get(db, game, id).is_ok_and(|m| !m.loaded() && Path::new(&m.path).is_dir());
+    let running = crate::launch::running(game);
+    let (mut on, mut cleared): (Vec<(String, bool)>, Vec<u32>) = (Vec::new(), Vec::new());
+    for g in &mut store.groups {
+        let mut clear = false;
+        for s in g.slots.iter().filter(|s| is_off(&s.mod_id)) {
+            if s.slot == g.active && !picked.contains(&g.n) {
+                // while the game runs it keeps its own pick, which draws nothing with the folder off
+                clear = !running;
+            } else if !stuck(|l| l.contains(&s.mod_id)) {
+                on.push((s.mod_id.clone(), true));
+            }
+        }
+        if clear { g.active = 0; cleared.push(g.n); }
+    }
+    if on.is_empty() && cleared.is_empty() { return false; }
+    if !cleared.is_empty() {
+        if save(db, game, &store).is_err() { return false; }
+        let _ = write_live_ini(db, game, &store);
+        for g in store.groups.iter().filter(|g| cleared.contains(&g.n)) { save_active(db, game, g); }
+    }
+    let mut opened = false;
+    if !on.is_empty() {
+        opened = crate::library::apply_folders(db, game, &on).is_ok_and(|c| !c.changed.is_empty());
+        for (id, _) in &on { if is_off(id) { stuck(|l| l.push(id.clone())); } }
+    }
+    if !opened && cleared.is_empty() { return false; }
+    let all: HashSet<u32> = store.groups.iter().map(|g| g.n).collect();
+    sync_rows(db, game, &store, &all);
+    // the active profile keeps what shows: a skin on standby is off there, whatever its folder says
+    let rows: Vec<ModEntry> = on.iter().filter_map(|(id, _)| crate::library::get(db, game, id).ok()).collect();
+    let _ = crate::profiles::on_change(db, game, &ModChange { changed: rows, ..Default::default() });
+    crate::devtools::mark_changed(game);
+    true
 }
 
 /// Stop switching mods live: their gates come out. The one showing stays on; the others are turned off, so the
@@ -1221,43 +1300,55 @@ pub(crate) fn switch(db: &Db, game: &str, targets: &[(String, bool)]) -> Result<
     let live_now = crate::launch::running(game);
     for g in &mut store.groups {
         let Some(&slot) = want.get(&g.n) else { continue };
+        // the pick's folder is off (renamed DISABLED... by another manager, or a folder above it was): it goes on
+        // even when the group already shows it
+        if let Some(s) = g.slots.iter().find(|s| s.slot == slot) {
+            if crate::library::get(db, game, &s.mod_id).is_ok_and(|m| !m.loaded()) { folders_on.push((s.mod_id.clone(), true)); }
+        }
         if slot == g.active {
             // the game may show another one (picked in its own menu), so say it again
             if live_now { queue_send(game, g.n, slot); }
             continue;
         }
-        if let Some(s) = g.slots.iter().find(|s| s.slot == slot) {
-            if crate::library::get(db, game, &s.mod_id).is_ok_and(|m| !m.loaded()) { folders_on.push((s.mod_id.clone(), true)); }
-        }
         g.active = slot;
         touched.insert(g.n);
     }
-    if touched.is_empty() {
+    if touched.is_empty() && folders_on.is_empty() {
         // the library's rows may be behind what the game picked: bring them in line
         change.changed = sync_rows(db, game, &store, &asked);
         return Ok(change);
     }
-    save(db, game, &store)?;
-    write_live_ini(db, game, &store)?;
     let running = crate::launch::running(game);
-    for g in store.groups.iter().filter(|g| touched.contains(&g.n)) {
-        if running { queue_send(game, g.n, g.active); } else { save_active(db, game, g); }
+    if !touched.is_empty() {
+        save(db, game, &store)?;
+        write_live_ini(db, game, &store)?;
+        for g in store.groups.iter().filter(|g| touched.contains(&g.n)) {
+            if running { queue_send(game, g.n, g.active); } else { save_active(db, game, g); }
+        }
     }
+    let mut folders = Vec::new();
     if !folders_on.is_empty() {
         // a skin whose folder was off has to load first
         let c = crate::library::apply_folders(db, game, &folders_on)?;
         change.notes.extend(c.notes);
         if running && !c.changed.is_empty() { change.notes.push("It shows after the game reloads".into()); }
+        folders = c.changed;
     }
-    change.changed = sync_rows(db, game, &store, &asked);
+    // rows whose folders were renamed (new paths), then the picks over them
+    change.changed = folders;
+    for e in sync_rows(db, game, &store, &asked) {
+        match change.changed.iter_mut().find(|c| c.id == e.id) { Some(c) => *c = e, None => change.changed.push(e) }
+    }
     Ok(change)
 }
 
 /// "Coca Cola isn't showing. Ellen Joe wears Bunny in the game".
 fn not_showing(db: &Db, game: &str, g: &GroupRec, id: &str) -> String {
     let name_of = |id: &str| crate::library::get(db, game, id).map(|m| m.name).unwrap_or_else(|_| "That mod".into());
-    let wears = g.slots.iter().find(|s| s.slot == g.active).map_or_else(|| "the game's own look".to_string(), |s| name_of(&s.mod_id));
-    format!("{} isn't showing. {} wears {wears} in the game", name_of(id), g.character)
+    match g.slots.iter().find(|s| s.slot == g.active) {
+        Some(s) => format!("{} isn't showing. {} wears {} in the game", name_of(id), g.character, name_of(&s.mod_id)),
+        None => format!("{} isn't showing. {} is vanilla in the game", name_of(id), g.character),
+    }
 }
 
 /// A mod of `character` that isn't live was turned on (library one-skin rule): the character's live group shows

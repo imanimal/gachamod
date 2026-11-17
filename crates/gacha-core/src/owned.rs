@@ -15,7 +15,7 @@
 
 use crate::aliases::{self, Matcher};
 use crate::db::{now, Db};
-use crate::error::{Error, Result};
+use crate::error::{Error, IoAt, Result};
 use crate::library;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -94,9 +94,9 @@ pub fn import(db: &Db, game: &str, text: &str) -> Result<OwnedImport> {
 
 /// The same, from a file.
 pub fn import_file(db: &Db, game: &str, path: &Path) -> Result<OwnedImport> {
-    let len = std::fs::metadata(path)?.len();
+    let len = std::fs::metadata(path).at(path)?.len();
     if len > 50 * 1024 * 1024 { return Err(Error::Invalid("That file is too big to be a character export".into())); }
-    let text = crate::ini::decode(&std::fs::read(path)?);
+    let text = crate::ini::decode(&std::fs::read(path).at(path)?);
     import(db, game, &text)
 }
 
@@ -135,14 +135,14 @@ pub async fn fetch_profile(http: &reqwest::Client, game: &str, uid: &str) -> Res
     let Some(url) = profile_url(game, uid) else {
         return Err(Error::Invalid("Reading a profile by UID works for Genshin, Star Rail and Zenless".into()));
     };
-    let r = http.get(&url).timeout(std::time::Duration::from_secs(20)).send().await?;
+    let r = http.get(&url).timeout(std::time::Duration::from_secs(20)).send().await.map_err(|e| Error::unreachable("Enka.Network", e.without_url()))?;
     let status = r.status().as_u16();
     let text = match status {
-        200 => r.text().await?,
+        200 => r.text().await.map_err(|e| Error::unreachable("Enka.Network", e.without_url()))?,
         400 | 404 => return Err(Error::Invalid(format!("Enka.Network has no player with UID {uid} in this game. Check the number"))),
         424 => return Err(Error::Invalid("The game is down for maintenance, so profiles can't be read until it's back".into())),
-        429 => return Err(Error::Invalid("Enka.Network asked to slow down. Try again in a minute".into())),
-        _ => return Err(Error::Network(format!("Enka.Network answered {status}"))),
+        429 => return Err(Error::RateLimited { site: "Enka.Network".into(), wait: "a minute" }),
+        _ => return Err(Error::Site { site: "Enka.Network".into(), status, message: "The profile didn't come. Try again in a few minutes".into() }),
     };
     if parse(&text).ids.is_empty() {
         return Err(Error::Invalid("That profile shows no characters. Put the ones you own on your showcase in game, wait a few minutes and try again".into()));

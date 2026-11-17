@@ -3,6 +3,7 @@
 // Profiles), letters skipped ("rscn" finds Rescan), one typo in words of 4+ letters ("charcters"), and each command
 // carries the other names people use for it in `keywords` ("nsfw 18+ adult lewd" for the adult content switch).
 // Owner: skeleton.
+import type { MenuEntry } from "../ui/ContextMenu";
 import type { IconName } from "../ui/Icon";
 
 export interface Command {
@@ -23,6 +24,8 @@ export interface Command {
   priority?: number;
   /** Shown after everything else that matches, whatever its score ("Search GameBanana for ..."). */
   fallback?: boolean;
+  /** The thing's usual right-click menu (a mod's, a profile's), shown on right-click or Shift+F10 on the result. */
+  menu?: () => MenuEntry[];
   run: () => void;
 }
 

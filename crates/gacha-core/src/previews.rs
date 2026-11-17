@@ -149,9 +149,142 @@ pub async fn download(http: &reqwest::Client, link: &str) -> Result<(Vec<u8>, St
     Ok((bytes, ext.to_string()))
 }
 
+// ── thumbnails ──
+//
+// Mod cards show a small copy of the preview, so a grid of 4K screenshots doesn't decode 4K pictures. The copies live
+// in `<data>/cache/thumbs` (library::thumbs_dir); the drawer and the lightbox keep using the full picture.
+
+/// The shorter side of a thumbnail, in pixels: sharp on a mod card at 150% display scaling.
+pub const THUMB_SIDE: u32 = 400;
+
+/// What the cache has for a picture.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Thumb {
+    Ready(PathBuf),
+    /// Nothing to make: a remote picture, a GIF (a copy would stop moving), one already about thumbnail size, or one
+    /// that can't be read.
+    NotNeeded,
+    ToMake,
+}
+
+/// A local picture's thumbnail name (no extension), from its file name, size and modified time: a mod folder that is
+/// renamed or turned off keeps its thumbnail, and a changed picture gets a new one.
+fn thumb_key(preview: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    if preview.contains("://") { return None; }
+    let p = Path::new(preview);
+    let name = p.file_name()?.to_string_lossy().to_lowercase();
+    if !is_image_name(&name) || ext_of(&name) == "gif" { return None; }
+    let meta = std::fs::metadata(p).ok().filter(|m| m.is_file())?;
+    let t = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos()).unwrap_or(0);
+    let mut h = Sha256::new();
+    h.update(name.as_bytes());
+    h.update(meta.len().to_le_bytes());
+    h.update(t.to_le_bytes());
+    Some(hex::encode(&h.finalize()[..10]))
+}
+
+/// Look up a picture's thumbnail in `cache` without making it.
+pub fn find_thumb(cache: &Path, preview: &str) -> Thumb {
+    let Some(key) = thumb_key(preview) else { return Thumb::NotNeeded };
+    for ext in ["jpg", "png"] {
+        let p = cache.join(format!("{key}.{ext}"));
+        if p.is_file() { return Thumb::Ready(p); }
+    }
+    if cache.join(format!("{key}.none")).is_file() { Thumb::NotNeeded } else { Thumb::ToMake }
+}
+
+/// The picture's thumbnail, made now when it isn't in `cache` yet (one picture: fine on a user's click, too slow for a
+/// whole scan, which uses `make_thumbs_later`). None when the full picture should show.
+pub fn thumb_now(cache: &Path, preview: &str) -> Option<PathBuf> {
+    match find_thumb(cache, preview) {
+        Thumb::Ready(p) => Some(p),
+        Thumb::NotNeeded => None,
+        Thumb::ToMake => make_thumb(cache, preview),
+    }
+}
+
+/// Make a thumbnail: JPEG, or PNG when the picture has see-through parts. A picture that is already small or can't
+/// be read gets a `.none` marker so it isn't tried again.
+fn make_thumb(cache: &Path, preview: &str) -> Option<PathBuf> {
+    use image::{imageops::FilterType, ImageReader};
+    let key = thumb_key(preview)?;
+    std::fs::create_dir_all(cache).ok()?;
+    let made = (|| {
+        let (w, h) = ImageReader::open(preview).ok()?.with_guessed_format().ok()?.into_dimensions().ok()?;
+        if w.min(h) <= THUMB_SIDE * 5 / 4 { return None; }
+        let img = ImageReader::open(preview).ok()?.with_guessed_format().ok()?.decode().ok()?;
+        let k = THUMB_SIDE as f64 / w.min(h) as f64;
+        let small = img.resize_exact(((w as f64 * k).round() as u32).max(1), ((h as f64 * k).round() as u32).max(1), FilterType::Triangle);
+        let clear = small.color().has_alpha() && small.to_rgba8().pixels().any(|p| p[3] < 255);
+        let ext = if clear { "png" } else { "jpg" };
+        let out = cache.join(format!("{key}.{ext}"));
+        // written next to it first, so the webview never reads half a file
+        let tmp = cache.join(format!("{key}.{ext}.part"));
+        let wrote = if clear {
+            small.save_with_format(&tmp, image::ImageFormat::Png).is_ok()
+        } else {
+            std::fs::File::create(&tmp).ok().is_some_and(|f| {
+                let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::BufWriter::new(f), 82);
+                enc.encode_image(&small.to_rgb8()).is_ok()
+            })
+        };
+        if !wrote || std::fs::rename(&tmp, &out).is_err() { let _ = std::fs::remove_file(&tmp); return None; }
+        Some(out)
+    })();
+    if made.is_none() { let _ = std::fs::write(cache.join(format!("{key}.none")), b""); }
+    made
+}
+
+/// Pictures waiting for a thumbnail, and whether a thread is working through them.
+static PENDING: std::sync::Mutex<(Vec<(PathBuf, String)>, bool)> = std::sync::Mutex::new((Vec::new(), false));
+
+/// Make these pictures' thumbnails on a background thread, one at a time. The next scan picks them up.
+pub fn make_thumbs_later(cache: &Path, previews: Vec<String>) {
+    if previews.is_empty() { return; }
+    let Ok(mut q) = PENDING.lock() else { return };
+    for p in previews {
+        if !q.0.iter().any(|(_, x)| *x == p) { q.0.push((cache.to_path_buf(), p)); }
+    }
+    if q.1 { return; }
+    q.1 = true;
+    drop(q);
+    let spawned = std::thread::Builder::new().name("thumbs".into()).spawn(|| loop {
+        let next = match PENDING.lock() {
+            Ok(mut q) => match q.0.pop() { Some(x) => x, None => { q.1 = false; return; } },
+            Err(_) => return,
+        };
+        if find_thumb(&next.0, &next.1) == Thumb::ToMake { let _ = make_thumb(&next.0, &next.1); }
+    });
+    if spawned.is_err() { if let Ok(mut q) = PENDING.lock() { q.1 = false; } }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thumbnails_shrink_big_pictures_only() {
+        let dir = std::env::temp_dir().join(format!("gachamod-test-thumbs-{}-{}", std::process::id(), crate::library::new_id()));
+        let cache = dir.join("cache");
+        std::fs::create_dir_all(&dir).unwrap();
+        let big = dir.join("preview.png");
+        image::RgbImage::from_pixel(1200, 800, image::Rgb([200, 40, 40])).save(&big).unwrap();
+        let small = dir.join("small.png");
+        image::RgbImage::from_pixel(300, 200, image::Rgb([0, 0, 0])).save(&small).unwrap();
+        let (big, small) = (big.to_string_lossy().into_owned(), small.to_string_lossy().into_owned());
+
+        assert_eq!(find_thumb(&cache, &big), Thumb::ToMake);
+        let t = thumb_now(&cache, &big).unwrap();
+        assert!(t.to_string_lossy().ends_with(".jpg"));
+        assert_eq!(image::image_dimensions(&t).unwrap(), (600, 400));
+        assert_eq!(find_thumb(&cache, &big), Thumb::Ready(t));
+
+        assert_eq!(thumb_now(&cache, &small), None);
+        assert_eq!(find_thumb(&cache, &small), Thumb::NotNeeded);
+        assert_eq!(find_thumb(&cache, "https://example.com/a.png"), Thumb::NotNeeded);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn texture_names() {

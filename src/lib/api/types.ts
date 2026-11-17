@@ -26,6 +26,8 @@ export interface GameState {
   gameDir: string | null;
   importerDir: string | null;
   modsDir: string | null;
+  /** `modsDir` is saved but isn't on disk: moved, deleted, or on a drive that isn't plugged in. */
+  modsMissing?: boolean;
   viaXxmi: boolean;
   importerVersion: string | null;
   importerLatest: string | null;
@@ -67,6 +69,9 @@ export interface ModEntry {
   fileCount: number;
   iniCount: number;
   preview: string | null;
+  /** A small copy of a local `preview` for cards and lists, or null when the full one should show. The drawer and
+   *  the lightbox use `preview`. */
+  thumb?: string | null;
   tags: string[];
   notes: string | null;
   favorite: boolean;
@@ -143,6 +148,7 @@ export interface ProfilePatch { name?: string; icon?: string; color?: string; ba
 export const EVENTS = {
   libraryChanged: "library-changed",
   queue: "queue",
+  queueProgress: "queue-progress",
   variantsNeeded: "variants-needed",
   gameState: "game-state",
   deepLink: "deep-link",
