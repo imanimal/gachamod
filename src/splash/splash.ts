@@ -1,7 +1,7 @@
 // The opening screen: a solid colour with a one-line tip (splash/tips.ts) while the app renders and reads its games
 // behind it, then an intro reveals the app (a TV turning on for New Eridu, one file per theme in splash/intros). By
 // default it's the intro of the theme in use, which comes from the game's own theme unless another is picked;
-// Settings, Appearance can pick any intro or turn it off ("gm.intro"). index.html paints the colour before any script
+// Settings, General can pick any intro or turn it off ("gm.intro"). index.html paints the colour before any script
 // runs (html[data-splash]); App calls splashReady() once the games are read. A click, Escape, Enter, Space or a
 // controller button skips it; the Konami code's keys don't, so the code can be tried right there. With Animations
 // off the tip still shows and the screen just fades. Owner: SHELL area.

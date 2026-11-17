@@ -12,7 +12,7 @@ const settings = (section: string) => () => go({ view: "settings", section });
 
 /** The first match wins, so the narrower message comes first. */
 const PLACES: Array<[RegExp, ToastAction]> = [
-  [/signed out of GameBanana|Sign in again in Settings/i, { label: t("Account settings"), run: settings("account") }],
+  [/signed out of GameBanana|Sign in again in Settings/i, { label: t("GameBanana settings"), run: settings("account") }],
   [/IMM manages this mod|No Reload Mod Manager (manages|picks)|Tools, Sharing/i, { label: t("Move mods"), run: () => go({ view: "tools", section: "others" }) }],
   [/XXMI Launcher isn't installed|XXMI Launcher's exe is missing/i, { label: t("XXMI Launcher settings"), run: settings("xxmi") }],
   [/Open XXMI Launcher (once|and)|Set it in XXMI Launcher|launch in XXMI Launcher|Only XXMI Launcher can/i,

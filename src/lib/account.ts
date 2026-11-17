@@ -81,7 +81,7 @@ async function followRemote(id: number, on: boolean): Promise<void> {
 
 // ── content settings ──
 
-/** "Mods for adults" follows the content settings on the member's GameBanana account (Settings, Mods for adults). */
+/** "Mods for adults" follows the content settings on the member's GameBanana account (Settings, GameBanana, Mods for adults). */
 export const matchGbAdultPref = pref<boolean>("gb.matchAdult", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 /** What GameBanana's settings gave last time, so a change made in the app stays until the one there changes. */
 const gbAdultSeenPref = pref<string>("gb.adultSeen", "", (r) => r, (v) => v);

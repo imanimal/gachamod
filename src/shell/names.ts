@@ -34,16 +34,17 @@ export function viewLabel(view: View, game?: GameId | null): string {
 /** Settings' and Tools' pages and panels by route section, with the names settings/settingsSearch.ts and
  *  tools/toolsSearch.ts give them. Where a page and a panel share an id, the page's name wins. */
 const SECTIONS: Record<string, string> = {
+  general: t("General"), gamebanana: "GameBanana",
   games: t("Games"), "game-start": t("Run as administrator"), xxmi: "XXMI Launcher", migoto: t("Mod maker switches"),
   mods: t("Mods"), adult: t("Mods for adults"), "mod-folders": t("Mods folders"), installing: t("Downloads and installing"),
   automatic: t("Mod update checks and rescans"), "broken-mods": t("Mods a game update broke"), storage: t("Trash and removed mods"),
   creators: t("Creators"), hotkeys: t("Hotkeys"),
   appearance: t("Appearance"), layout: t("Layout, text size and animations"), themes: t("Custom themes"), graphics: t("Hardware acceleration and rendering log"),
-  fun: t("Fun"), account: t("Account"), integrations: t("1-click installs and .gachamod files"), ai: t("AI helper"),
-  feedback: t("Feedback"), privacy: t("Usage counts and crash reports"), logs: t("Log files"),
-  about: t("About"), updates: t("gachamod updates"), transfer: t("Back up or move your settings"), repair: t("Repair, reset or uninstall"),
+  fun: t("Fun"), account: t("GameBanana account"), integrations: t("1-click installs and .gachamod files"), ai: t("AI helper"),
+  feedback: t("Feedback and privacy"), privacy: t("Usage counts and crash reports"), logs: t("Log files"),
+  about: t("About and updates"), updates: t("gachamod updates"), transfer: t("Back up or move your settings"), repair: t("Repair, reset or uninstall"),
   launch: t("Launch"), problems: t("Problems"), fixes: t("Fixes"), conflicts: t("Conflicts"), "key-clashes": t("Key clashes"),
-  ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Sharing"), imm: t("Mods from Integrated Mod Manager"),
+  ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Sharing"), others: t("Mods from other managers"),
   makers: t("Mod makers"), hash: t("Find a hash"),
   history: t("History"), dev: t("Dev tools"), extensions: t("Extensions"),
 };

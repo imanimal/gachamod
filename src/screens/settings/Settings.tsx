@@ -21,7 +21,7 @@ import "./settings.css";
 import { AccountSection } from "./AccountSection";
 import { HotkeysSection } from "./HotkeysSection";
 import { TransferSection, UpdateRow } from "./SettingsTransfer";
-import { AppearanceSection, CustomThemesSection, GraphicsSection, LayoutSection } from "./Appearance";
+import { AppearanceSection, CustomThemesSection, GeneralSection, GraphicsSection, LayoutSection } from "./Appearance";
 import { AdultSection, AutomaticSection, BrokenModsSection, CreatorsSection, InstallingSection, ModsSection, StorageSection } from "./Sections";
 import { AiSection } from "./AiSection";
 import { LaunchSections } from "./Launch";
@@ -40,6 +40,7 @@ export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releas
 
 // Settings' panels for the search at the top of Settings and Tools (menuSearch.ts), by the ids in settingsSearch.ts
 registerPanels("settings", {
+  general: GeneralSection,
   games: GamesSection, xxmi: XxmiSection,
   launch: LaunchSections, migoto: LaunchSections, "game-start": GameStartSection,
   mods: ModsSection, adult: AdultSection, "mod-folders": ModFoldersSection, installing: InstallingSection,
@@ -60,14 +61,16 @@ export function Settings() {
       <PageHeader title={t("Settings")} icon="settings" />
       <Paged name="settings" label={t("Settings pages")} pages={PAGES} fallback={sectionOf}>
         {{
+          general: <><GeneralSection /><GraphicsSection /></>,
+          appearance: <><AppearanceSection /><LayoutSection /><CustomThemesSection /></>,
+          hotkeys: <HotkeysSection />,
+          fun: <FunSection />,
           games: <><GamesSection /><XxmiSection /></>,
           launch: <><LaunchSections /><GameStartSection /></>,
-          mods: <><ModsSection /><AdultSection /><ModFoldersSection /><InstallingSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
-          creators: <CreatorsSection />,
-          hotkeys: <HotkeysSection />,
-          appearance: <><AppearanceSection /><LayoutSection /><CustomThemesSection /><GraphicsSection /></>,
-          fun: <FunSection />,
-          account: <><AccountSection /><IntegrationsSection /><AiSection /></>,
+          mods: <><ModsSection /><ModFoldersSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
+          downloads: <InstallingSection />,
+          gamebanana: <><AccountSection /><IntegrationsSection /><CreatorsSection /><AdultSection /></>,
+          ai: <AiSection />,
           extensions: <ExtensionsSection />,
           feedback: <><FeedbackSection /><PrivacySection /><LogsSection /></>,
           about: <><AboutSection /><UpdatesSection /><TransferSection /><RepairSection /></>,

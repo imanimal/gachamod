@@ -911,7 +911,7 @@ UI:
   - Sets "onboarded" = "1". A first setup turns on the first-start hints for that session (`shell/hints.ts`): Browse
     looks faintly selected until opened, the first Browse card's Install button and the drawer's Install button get
     a faint outline until the first install, and Downloads looks faintly selected while a download runs until
-    opened. Settings, Appearance, First-start hints turns them off ("hints.on"). There is no tour.
+    opened. Settings, General, First-start hints turns them off ("hints.on"). There is no tour.
 - Every window's WebView2 starts with `CalculateNativeWinOcclusion` disabled (`browser_flags` in
   `src-tauri/src/lib.rs`): with more than one monitor, WebView2 could decide the window was covered and stop drawing
   it, so it stayed black until the mouse moved over it.
@@ -920,12 +920,12 @@ UI:
   frame for 2 s after focus, size or screen changes; `render.rs` asks for the same on the window's own focus, screen
   and scale events. A frame is a change nobody can see: a corner pixel, and for those 2 s a sheet over the window,
   both black at under 2%.
-- Hardware acceleration (Settings, Appearance; "app.gpu", default on). Off adds `--disable-gpu
+- Hardware acceleration (Settings, General; "app.gpu", default on). Off adds `--disable-gpu
   --disable-gpu-compositing`, from the next start (the toast has Restart). `src-tauri/src/lib.rs` reads it before it
   makes the main window ("create": false in tauri.conf.json), and the menu over the game uses the same flags, since
   WebView2 won't start a second window in the same folder with other flags. Starting `gachamod.exe --disable-gpu`
   saves it off first; a copy already running saves it and restarts.
-- Rendering log ("render.log", default on; Settings, Feedback, and under Hardware acceleration in
+- Rendering log ("render.log", default on; Settings, Feedback and privacy, and under Hardware acceleration in
   Appearance). `gacha-core render_log.rs` keeps the files in `<data folder>/logs/rendering`, `src-tauri render.rs`
   feeds it and `lib/renderWatch.ts` reports from the page. It logs window focus, moves, size and scale, screens
   changing, sleep gaps, WebView2 processes exiting (`ProcessFailed`), the page's frames stopping or slowing, long
@@ -958,7 +958,7 @@ UI:
   says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
   (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
-- Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback,
+- Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and privacy,
   privacy and logs, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
   what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
   the game's setup go to PostHog as one `game check` event. docs/testing.md is the tester's side.
@@ -1027,13 +1027,17 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 ### Settings
 
 - `Settings.tsx` (view "settings"): pages listed on the left in groups (`Paged.tsx`, shared with Tools). A page
-  holds the panels that belong together, so the list stays short. Page ids, with their panel ids: Games and mods has
-  "games" (games, xxmi), "launch" (launch, migoto, game-start), "mods" (mods, adult, mod-folders, installing, automatic, broken-mods, storage),
-  "creators" and "hotkeys"; Look has "appearance" (appearance, layout, themes, graphics) and "fun"; App has "account"
-  (account, integrations, ai), "extensions", "feedback" (feedback, privacy, logs) and "about" (about, updates,
-  transfer, repair). The pages are `PAGES` and the panels `SECTIONS` in `settingsSearch.ts`.
-- Page names are a word or two: Games, Launch, Mods, Creators, Hotkeys, Appearance, Fun, Account, Extensions,
-  Feedback, About. Each page's hover tip lists everything on it, and its `keywords` keep the older long names
+  holds the panels that belong together, so the list stays short. The groups follow the usual desktop order (the
+  app in general, what it manages, the services it connects to, then feedback and the version), and no page is a
+  single tiny panel that belongs with another. Page ids, with their panel ids: General has "general" (general,
+  graphics), "appearance" (appearance, layout, themes), "hotkeys" and "fun"; Games and mods has "games" (games,
+  xxmi), "launch" (launch, migoto, game-start), "mods" (mods, mod-folders, automatic, broken-mods, storage) and
+  "downloads" (installing); Online has "gamebanana" (account, integrations, creators, adult), "ai" and "extensions";
+  App has "feedback" (feedback, privacy, logs) and "about" (about, updates, transfer, repair). The pages are `PAGES`
+  and the panels `SECTIONS` in `settingsSearch.ts`. Old page ids that are now panels ("account", "creators") still
+  route, to the page that holds them.
+- Page names are a word or two: General, Appearance, Hotkeys, Fun, Games, Launch, Mods, Downloads, GameBanana, AI
+  helper, Extensions, Feedback and privacy, About and updates. Each page's hover tip lists everything on it, and its `keywords` keep the older long names
   ("Mods and downloads", "About and updates") so the search still finds them. A panel holds one kind of setting under
   a heading that names it: "Downloads and installing", "Mod update checks and rescans", "Mods a game update broke",
   "Trash and removed mods", "Hardware acceleration and rendering log", "gachamod updates", "Repair, reset or
@@ -1130,7 +1134,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - The Konami code (arrows, B, A; keyboard or controller) reveals a hidden theme, Clay ("fun.hiddenTheme"), and
   offers to use it. Hidden themes (`ThemeInfo.hidden`) stay out of Appearance until found. On the keyboard, B and A
   that continue the code don't start a search.
-- Opening screen (`src/splash`, Settings, Appearance, "Opening screen", localStorage "gm.intro": missing for the
+- Opening screen (`src/splash`, Settings, General, "Opening screen", localStorage "gm.intro": missing for the
   theme's own, an intro id, or "0" for off): a solid screen with one tip (`splash/tips.ts`: an icon over a line, the
   Konami tip one start in twenty) while the app renders behind it, then an intro reveals the app
   (`splash/intros/<id>.ts`). By default it's the intro of the theme in use (a custom theme's base), so it follows the

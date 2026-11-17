@@ -1,5 +1,5 @@
 // Settings > Appearance: Theme and colours (theme per game, accent, light or dark), Layout, text size and animations,
-// Custom themes, and Hardware acceleration and rendering log.
+// and Custom themes. Settings > General: Language and startup, and Hardware acceleration and rendering log.
 // Owner: SETTINGS/AI area. Applying themes is lib/theme.ts (THEMES area); saving custom ones is ./customThemes.ts.
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { currentGame, go, useGame, useGames } from "../../lib/store";
@@ -98,7 +98,26 @@ export function AppearanceSection() {
   );
 }
 
-/** Spacing, the sidebar, corners and buttons, then text size, animations and the first-start hints. */
+/** The language, the opening screen and the first-start hints (Settings > General). */
+export function GeneralSection() {
+  return (
+    <Panel title={t("Language and startup")} icon="web" id="general">
+      <div className="set-rows">
+        <SetRow id="set-lang" label={t("Language")} hint={t("Changing it reloads the window")}>
+          <LanguagePicker />
+        </SetRow>
+        <SetRow id="set-intro" label={t("Opening screen")} hint={t("An intro with a one-line tip while gachamod starts. Theme's own plays the one that goes with the theme in use. A click or Escape skips it")}>
+          <IntroPicker />
+        </SetRow>
+        <SetRow id="set-hints" label={t("First-start hints")} hint={t("Right after setup, Browse, Install and Downloads look faintly selected until you've used them once")}>
+          <HintsSwitch />
+        </SetRow>
+      </div>
+    </Panel>
+  );
+}
+
+/** The Mods layout, spacing, the sidebar, corners and buttons, then text size and animations. */
 export function LayoutSection() {
   const theme = useTheme();
   const [size, setSize] = useState(getTextSize());
@@ -115,9 +134,6 @@ export function LayoutSection() {
         <FormatPicker />
       </div>
       <div className="set-rows">
-        <SetRow id="set-lang" label={t("Language")} hint={t("Changing it reloads the window")}>
-          <LanguagePicker />
-        </SetRow>
         <LayoutRows />
         <SetRow id="set-text-size" label={t("Text size")} hint={t("Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets")}>
           <Select value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }}
@@ -125,12 +141,6 @@ export function LayoutSection() {
         </SetRow>
         <SetRow id="set-motion" label={t("Animations")} hint={t("Off keeps every change instant")}>
           <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
-        </SetRow>
-        <SetRow id="set-intro" label={t("Opening screen")} hint={t("An intro with a one-line tip while gachamod starts. Theme's own plays the one that goes with the theme in use. A click or Escape skips it")}>
-          <IntroPicker />
-        </SetRow>
-        <SetRow id="set-hints" label={t("First-start hints")} hint={t("Right after setup, Browse, Install and Downloads look faintly selected until you've used them once")}>
-          <HintsSwitch />
         </SetRow>
       </div>
     </Panel>

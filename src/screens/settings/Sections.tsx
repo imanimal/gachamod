@@ -1,5 +1,6 @@
-// The panels of Settings, Mods (turning mods on, mods for adults, downloads and installing, mod update
-// checks and rescans, mods a game update broke, the trash) and Creators. Owner: SETTINGS/AI area.
+// The panels of Settings, Mods (turning mods on, mod update checks and rescans, mods a game update broke, the
+// trash), Settings, Downloads, and the Creators and Mods for adults panels of Settings, GameBanana.
+// Owner: SETTINGS/AI area.
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
 import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";

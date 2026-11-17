@@ -50,7 +50,7 @@ pub fn allowed(db: &Db, game: &str) -> bool {
 fn drawn_menu_allowed(db: &Db, game: &str) -> Result<()> {
     if allowed(db, game) { return Ok(()); }
     let name = crate::games::def(game).map_or("this game", |g| g.name);
-    Err(Error::Invalid(format!("The menu the game draws is a tester option in {name}. Turn on Tester options in Settings, Feedback to try it")))
+    Err(Error::Invalid(format!("The menu the game draws is a tester option in {name}. Turn on Tester options in Settings, Feedback and privacy to try it")))
 }
 
 /// The folder under Mods that holds live.ini. The library scan skips it.

@@ -179,7 +179,7 @@ function CreatorMods({ id, game, name, onName }: { id: number; game: GameState; 
               <div className="cards gb-grid" aria-hidden="true">{Array.from({ length: 8 }, (_, i) => <CardSkeleton key={i} />)}</div>
             </Waiting>
           )
-          : here && !mine.length ? <p className="muted">{hiddenHere ? <>{tn(hiddenHere, "{n} mod for adults is hidden.", "{n} mods for adults are hidden.")} <Button size="sm" variant="ghost" icon="eye" title={t("Settings, Mods")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button></> : t("No mods for {game} yet.", { game: gameShort(game) })}</p>
+          : here && !mine.length ? <p className="muted">{hiddenHere ? <>{tn(hiddenHere, "{n} mod for adults is hidden.", "{n} mods for adults are hidden.")} <Button size="sm" variant="ghost" icon="eye" title={t("Settings, GameBanana")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button></> : t("No mods for {game} yet.", { game: gameShort(game) })}</p>
           : (
             <div className="cards gb-grid" onKeyDown={(e) => moveInGrid(e, e.currentTarget, ".gb-card")}>
               {mine.map((m) => <ModCard key={m.id} game={game.id} mod={m} lib={lib} nsfw={nsfw} />)}

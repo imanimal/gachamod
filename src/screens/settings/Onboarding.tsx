@@ -224,7 +224,7 @@ export function SetupPage({ looking, error, retry }: { looking: boolean; error?:
       </p>
       <p className="hint setup-more">
         {tx("gachamod sends its developer anonymous usage counts and crash reports. {link} any time.", {
-          link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "privacy" })} title={t("Opens Settings, Feedback")}>{t("Turn them off")}</button>,
+          link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "privacy" })} title={t("Opens Settings, Feedback and privacy")}>{t("Turn them off")}</button>,
         })}
       </p>
     </div>

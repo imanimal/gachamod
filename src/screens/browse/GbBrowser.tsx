@@ -426,7 +426,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
               {!showHidden && [...pages.pinned, ...pages.items].some((c) => hidden.includes(c.id)) && (
                 <Button icon="eye" title={t("Show the mods you picked Not interested on. Their menu has Show in Browse again")} onClick={() => setShowHidden(true)}>{t("Show mods you hid")}</Button>
               )}
-              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title={t("Settings, Mods")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button>}
+              {nsfw === "hide" && filteredOut > 0 && <Button icon="eye" title={t("Settings, GameBanana")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button>}
             </> : undefined}>{emptyText}</Empty>
         ) : waiting && !items.length && !pinned.length ? (
           <Waiting what={t("Asking GameBanana for mods")}>

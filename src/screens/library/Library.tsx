@@ -349,7 +349,7 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
           <Empty icon="search" title={t("Nothing matches")}
             actions={<>
               {filtersOn && <Button onClick={clearFilters}>{t("Clear filters")}</Button>}
-              {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title={t("Settings, Mods")}>{t("Mods for adults")}</Button>}
+              {nsfw === "hide" && mods.some((m) => m.nsfw) && <Button icon="eye" onClick={() => go({ view: "settings", section: "set-nsfw" })} title={t("Settings, GameBanana")}>{t("Mods for adults")}</Button>}
               {search.trim() && <Button variant="ghost" icon="search" onClick={() => openPalette(search.trim())} title={t("Search pages, settings, GameBanana and the rest (Ctrl+K)")}>{t("Search everywhere")}</Button>}
             </>}>
             {nsfw === "hide" && mods.some((m) => m.nsfw) ? t("Mods for adults are hidden.") : t("Try another search or filter.")}

@@ -388,7 +388,7 @@ export const BACKEND: string[] = [
   "Windows couldn't start {name} (code {code})",
 
   // live.rs (the skin menu and switching skins in game)
-  "The menu the game draws is a tester option in {name}. Turn on Tester options in Settings, Feedback to try it",
+  "The menu the game draws is a tester option in {name}. Turn on Tester options in Settings, Feedback and privacy to try it",
   "{key} is a keyboard key. Set it as the key that opens the menu. This row takes a controller's buttons",
   "{key} already opens the menu. Pick another key",
   "{key} already moves up. Pick another key",

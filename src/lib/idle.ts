@@ -1,7 +1,7 @@
 // html[data-idle] while nobody is looking at the window: it lost focus, it's hidden or minimized, or a game is
 // running. Each game theme's endless decoration (the drifting sky, the turning rings, small orbits beside the
 // content) stops under it, so the window draws no frames behind a game. A new looping decoration needs its own
-// pause rule next to the theme's others. html[data-gpu="off"] marks a run without hardware acceleration (Settings, Appearance, read
+// pause rule next to the theme's others. html[data-gpu="off"] marks a run without hardware acceleration (Settings, General, read
 // once since it counts from the next start): the backdrop stays still and nothing blurs. main.tsx installs it.
 // Owner: THEME area.
 import { games, settings } from "./api";

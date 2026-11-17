@@ -104,7 +104,7 @@ const allowed = (game: string) => drawnMenuOpen(game) || demoDb.settings.get("ui
 function drawnMenuAllowed(game: string) {
   if (allowed(game)) return;
   const name = demoDb.games.find((g) => g.id === game)?.name ?? "this game";
-  fail(`The menu the game draws is a tester option in ${name}. Turn on Tester options in Settings, Feedback to try it`);
+  fail(`The menu the game draws is a tester option in ${name}. Turn on Tester options in Settings, Feedback and privacy to try it`);
 }
 
 export function registerIngameDemo() {

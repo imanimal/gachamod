@@ -2,7 +2,7 @@
 // up, in that first session: Browse in the sidebar looks faintly selected until it's opened, the first card's
 // Install button shows with a faint outline until the first install, and Downloads looks faintly selected while a
 // download runs until it's opened. Each is gone for good once done. Nothing is blocked and nothing pops up.
-// Settings, Appearance turns them off ("hints.on"). Owner: SHELL area.
+// Settings, General turns them off ("hints.on"). Owner: SHELL area.
 import { useSyncExternalStore } from "react";
 import { jsonPref, pref } from "../lib/prefs";
 

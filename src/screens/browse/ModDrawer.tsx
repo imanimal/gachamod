@@ -480,7 +480,7 @@ function ToolFiles({ tool, game, older, setOlder }: { tool: GbMod; game: GameSta
   );
 }
 
-/** Like on GameBanana, shown while signed in (Settings, Account). */
+/** Like on GameBanana, shown while signed in (Settings, GameBanana). */
 function LikeButton({ id, name }: { id: number; name: string }) {
   const acc = useAccount();
   const liked = useLiked(id);

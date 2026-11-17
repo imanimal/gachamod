@@ -7,7 +7,7 @@ import { call, inTauri } from "./tauri";
 import { currentRoute } from "./store";
 import { installRedraw } from "./redraw";
 
-/** Setting "render.log" (Settings, Feedback, and Appearance). */
+/** Setting "render.log" (Settings, Feedback and privacy, and General). */
 export const renderLogPref = pref<boolean>("render.log", true, (r) => (r === "0" ? false : r === "1" ? true : undefined), (v) => (v ? "1" : "0"));
 
 interface PageEvent { text: string; incident?: string; title?: string }
