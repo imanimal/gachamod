@@ -19,7 +19,7 @@ export interface Look {
   source?: string;
 }
 
-const LAYOUT = ["density", "corners", "buttons"];
+const LAYOUT = ["density", "buttons"];
 
 function systemScheme(): Scheme {
   try { return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; } catch { return "dark"; }

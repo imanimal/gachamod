@@ -3,8 +3,8 @@
 // default it's the intro of the theme in use, which comes from the game's own theme unless another is picked;
 // Settings, General can pick any intro or turn it off ("gm.intro"). index.html paints the colour before any script
 // runs (html[data-splash]); App calls splashReady() once the games are read. A click, Escape, Enter, Space or a
-// controller button skips it; the Konami code's keys don't, so the code can be tried right there. With Animations
-// off the tip still shows and the screen just fades. Owner: SHELL area.
+// controller button skips it; the Konami code's keys don't, so the code can be tried right there. With Interface
+// animations off the tip still shows and the screen just fades. Owner: SHELL area.
 import "./splash.css";
 import { konamiBusy } from "../lib/fun";
 import { pickTip, tipNodes } from "./tips";
@@ -72,7 +72,7 @@ const whenReady = () => (appReady ? Promise.resolve() : new Promise<void>((res) 
 
 const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 const frame = () => new Promise<void>((res) => requestAnimationFrame(() => res()));
-const reduced = () => document.documentElement.dataset.motion === "reduced" || matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reduced = () => document.documentElement.dataset.motion === "reduced";
 
 let showing = false;
 

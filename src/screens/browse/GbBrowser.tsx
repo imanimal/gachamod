@@ -15,6 +15,7 @@ import { Icon } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
 import { CharRow, charsOpenAtStart } from "./CharRow";
+import { usePull } from "./Pull";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { moveInGrid } from "../library/gridNav";
 import { nsfwTip } from "./menus";
@@ -167,6 +168,8 @@ function usePages(q: Query | null, shown: (c: GbCard) => boolean, want: number) 
 
 function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProps & { gs: GameState }) {
   const game = gs.id;
+  // the Fun pull button takes Surprise me's place while it's on
+  const pull = usePull(gs);
   // a fresh visit starts without the last one's character, category and search; a quick return keeps them, and the
   // full browser puts back how far it was scrolled
   const full = !embedded && !fixedChar;
@@ -349,6 +352,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
   const surpriseMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     openMenu({ x: e.clientX, y: e.clientY }, [
+      pull.on && { label: pull.word, icon: "gem", onClick: pull.run },
       { label: t("Surprise me"), icon: "dice", onClick: surprise },
       { label: t("Show all picks for you"), icon: "sparkle", onClick: () => set({ sort: "foryou" }) },
       aiShown("extra", aiShow) && { label: t("Ask your chatbot for ideas"), icon: "ai", onClick: () => { void ideasTask(game).then(askAi); } },
@@ -386,8 +390,11 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
           onClick={(e) => setMenu(menu?.kind === "filters" ? null : { el: e.currentTarget, kind: "filters" })}>
           {savedNow ? savedNow.name : t("Filters")}{hidden_n > 0 && !savedNow && <span className="chip-n">{hidden_n}</span>}
         </Button>
-        <IconButton className="gbb-surprise" icon="dice" label={t("Surprise me: open a mod you don't have that suits your library (right-click for more)")}
-          onClick={surprise} onContextMenu={surpriseMenu} />
+        {pull.on
+          ? <Button className="gbb-surprise" variant="secondary" icon="gem" busy={pull.busy} title={t("{tip} (right-click for more)", { tip: pull.tip })}
+            onClick={pull.run} onContextMenu={surpriseMenu}>{pull.word}</Button>
+          : <IconButton className="gbb-surprise" icon="dice" label={t("Surprise me: open a mod you don't have that suits your library (right-click for more)")}
+            onClick={surprise} onContextMenu={surpriseMenu} />}
         {embedded && <IconButton className="gbb-expand" icon="expand" label={t("Open the full browser (keeps these filters)")} onClick={expand} />}
       </div>
 

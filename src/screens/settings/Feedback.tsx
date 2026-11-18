@@ -11,6 +11,7 @@ import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type Feed
 import { currentGame, currentRoute } from "../../lib/store";
 import { SetRow } from "./parts";
 import { setTester, useTester } from "../ingame/data";
+import { consolePref } from "../../dev/console/setting";
 import { t, tn } from "../../lib/i18n";
 
 // ── the form ──
@@ -141,8 +142,18 @@ export function LogsSection() {
             onClick={() => { if (st?.logsDir) shell.openPath(st.logsDir).catch((e) => toast(errorText(e), true)); }}>{t("Open logs folder")}</Button>
         </SetRow>
         <RenderLogRow id="set-render-log" />
+        <ConsoleRow />
       </div>
     </Panel>
+  );
+}
+
+function ConsoleRow() {
+  const on = consolePref.use();
+  return (
+    <SetRow id="set-console" label={t("Developer console")} hint={t("The ` key (left of 1) opens a panel with everything gachamod logs as it happens, and a line for commands")}>
+      <Toggle checked={on} onChange={(v) => void consolePref.set(v, v ? t("Turned on the developer console") : t("Turned off the developer console"))} />
+    </SetRow>
   );
 }
 

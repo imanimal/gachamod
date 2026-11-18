@@ -1,4 +1,4 @@
-// Settings > Fun extras: chill mode, the pull button, seasonal touches, the year card and (while animal has it on) mod
+// Settings > Fun extras: chill mode, the pull button (in Surprise me's place), seasonal touches, the year card and (while animal has it on) mod
 // of the day. Everything here is off until turned on, except the mod of the day button. Owner: SETTINGS/AI area.
 import { useEffect, useState } from "react";
 import { library, type ModEntry } from "../../lib/api";
@@ -35,13 +35,13 @@ export function FunSection() {
         </SetRow>
         <SetRow id="set-pull" label={t("{pull} button", { pull: word })}
           hint={pull && pulls
-            ? t("A button in Browse that opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every {pity}th pull without a 5 star is one ({pulls} so far)", { pity: PULL_PITY, pulls })
-            : t("A button in Browse that opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every {pity}th pull without a 5 star is one", { pity: PULL_PITY })}>
+            ? t("Takes the place of Surprise me in Browse and on Home. It opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every {pity}th pull without a 5 star is one ({pulls} so far)", { pity: PULL_PITY, pulls })
+            : t("Takes the place of Surprise me in Browse and on Home. It opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every {pity}th pull without a 5 star is one", { pity: PULL_PITY })}>
           <Toggle checked={pull} onChange={(v) => void pullPref.set(v, v ? t("Turned on the {pull} button", { pull: word }) : t("Turned off the {pull} button", { pull: word }))} />
         </SetRow>
-        <SetRow id="set-seasonal" label={t("Seasonal touches")} hint={t("By the date: bats and pumpkins the week before Halloween, snow from 20 December, hearts on Valentine's Day. Not while Animations is off")}>
+        <SetRow id="set-seasonal" label={t("Seasonal touches")} hint={t("By the date: bats and pumpkins the week before Halloween, snow from 20 December, hearts on Valentine's Day. Not while Theme background motion is off")}>
           <span className="set-btns">
-            <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-motion" })} title={t("Opens Animations in Appearance")}>{t("Animations")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-motion-bg" })} title={t("Opens Theme background motion in Appearance")}>{t("Background motion")}</Button>
             <Select<SeasonPick> value={season} onChange={(v) => void seasonPref.set(v, t("Seasonal touches: {pick}", { pick: v === "off" || v === "date" ? SEASONS.find((s) => s.value === v)!.label.toLowerCase() : SEASONS.find((s) => s.value === v)!.label }))} options={SEASONS} />
           </span>
         </SetRow>

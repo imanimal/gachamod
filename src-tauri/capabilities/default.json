@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window (core APIs, the custom title bar's window keys, file dialogs) and the skin menu shown over a game.",
+  "description": "The main window (core APIs, the custom title bar's window keys, zoom, file dialogs) and the skin menu shown over a game.",
   "windows": ["main", "overlay"],
   "permissions": [
     "core:default",
@@ -10,6 +10,7 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-set-focus",
+    "core:webview:allow-set-webview-zoom",
     "dialog:allow-open",
     "dialog:allow-save"
   ]

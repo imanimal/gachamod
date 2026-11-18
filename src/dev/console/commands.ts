@@ -1,5 +1,6 @@
 // The console's commands. Typed ("managers zzz") or run by the buttons on the Flows tab, which show their command in
-// a tip so it can be typed next time. Commands marked demo set up dummy data and only work in the browser demo.
+// a tip so it can be typed next time. Commands marked demo set up dummy data and only work in the browser demo; in the
+// installed app they say so instead of running.
 import { inTauri, demoEmit } from "../../lib/tauri";
 import { currentGame, allGames, go, setGame, type View } from "../../lib/store";
 import { LANGS, lang, setLangChoice, tb, type Lang } from "../../lib/i18n";
@@ -36,10 +37,8 @@ function game(id?: string): string | null {
   return currentGame()?.id ?? null;
 }
 
-async function demoOnly(): Promise<typeof import("../../lib/demo/scenario") | null> {
-  if (inTauri()) { print("That one sets up dummy data, so it only works in the browser demo (npm run dev).", "warn"); return null; }
-  return import("../../lib/demo/scenario");
-}
+/** The demo's dummy data switches. Only demo commands use it, and exec() keeps those out of the installed app. */
+const demoScenario = () => import("../../lib/demo/scenario");
 
 export const COMMANDS: Command[] = [
   { name: "help", args: "[command]", help: "List the commands, or explain one", complete: () => COMMANDS.map((c) => c.name),
@@ -88,7 +87,7 @@ export const COMMANDS: Command[] = [
   { name: "scenario", args: "[name] [on|off]", demo: true, help: "What the demo pretends is on this PC; no name lists them",
     complete: (i) => (i === 0 ? [...SCENARIO_KEYS] : ["on", "off"]),
     run: async ([name, v]) => {
-      const s = await demoOnly(); if (!s) return;
+      const s = await demoScenario();
       if (!name) { print(Object.entries(s.scenario()).map(([k, x]) => `${k.padEnd(13)} ${x ? "on" : "off"}`).join("\n")); return; }
       if (!(SCENARIO_KEYS as readonly string[]).includes(name)) { print(`Scenarios: ${SCENARIO_KEYS.join(", ")}`, "warn"); return; }
       const key = name as (typeof SCENARIO_KEYS)[number];
@@ -96,20 +95,22 @@ export const COMMANDS: Command[] = [
       print(`${key} ${s.scenario()[key] ? "on" : "off"}. Open the page again to see it`);
     } },
   { name: "reset", demo: true, help: "Put back every manager the demo moved mods out of, so the moves can run again",
-    run: async () => { const s = await demoOnly(); if (!s) return; s.resetMoves(); print("Every manager has its mods again"); } },
-  { name: "managers", args: "[game]", help: "Open Tools > Sharing, Mods from other managers (zzz and gi have the most)", complete: () => gameIds(),
-    run: ([id]) => { if (id && !game(id)) return; go({ view: "tools", section: "others" }); } },
+    run: async () => { (await demoScenario()).resetMoves(); print("Every manager has its mods again"); } },
+  { name: "managers", args: "[game]", help: "Open Tools > Sharing, Mods from other managers (zzz and gi have the most in the demo)", complete: () => gameIds(),
+    run: ([id]) => {
+      if (id && !game(id)) return;
+      go({ view: "tools", section: "others" });
+      if (inTauri()) print("Opened Tools > Sharing. It lists the managers really on this PC; the dummy ones are only in the browser demo (npm run dev)", "warn");
+    } },
   { name: "firststart", args: "[fresh]", demo: true, help: "Start over as a first start; fresh also takes the mod loaders away (setup page)",
     complete: () => ["fresh"],
-    run: async ([f]) => {
-      if (!(await demoOnly())) return;
+    run: ([f]) => {
       const url = new URL(location.href);
       if (f === "fresh") url.searchParams.set("fresh", ""); else url.searchParams.delete("fresh");
       location.href = url.toString();
     } },
   { name: "merged", args: "[game]", demo: true, help: "Open a merged mod (three outfits in one) to try its names and Split", complete: () => gameIds(),
     run: async ([id]) => {
-      if (!(await demoOnly())) return;
       const g = game(id); if (!g) return;
       const { demoMergedMods } = await import("../../lib/demo/modtools");
       const m = demoMergedMods(g)[0];
@@ -119,7 +120,6 @@ export const COMMANDS: Command[] = [
     } },
   { name: "addmod", demo: true, help: "Pretend a mod was copied into the Mods folder in Explorer (watching folders)",
     run: async () => {
-      if (!(await demoOnly())) return;
       const g = game(); if (!g) return;
       const { demoDb, demoId, demoNow } = await import("../../lib/demo/db");
       const list = demoDb.mods.get(g) ?? [];
@@ -131,7 +131,6 @@ export const COMMANDS: Command[] = [
     } },
   { name: "delmod", demo: true, help: "Pretend the newest mod was deleted in Explorer (watching folders)",
     run: async () => {
-      if (!(await demoOnly())) return;
       const g = game(); if (!g) return;
       const { demoDb } = await import("../../lib/demo/db");
       const list = demoDb.mods.get(g) ?? [];
@@ -193,6 +192,7 @@ export async function exec(line: string) {
   const [name, ...args] = words(text);
   const c = COMMANDS.find((x) => x.name === name);
   if (!c) { print(`Unknown command "${name}". Type help`, "warn"); return; }
+  if (c.demo && inTauri()) { print(`${c.name} sets up dummy data, so it only works in the browser demo (npm run dev)`, "warn"); return; }
   try { await c.run(args); } catch (e) { print(show(e), "error"); }
 }
 

@@ -1075,8 +1075,12 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   the last change; leaving the page sends an edit that is still waiting. They show the game picked in the sidebar,
   with a game picker when more than one game shows. Any setting XXMI Launcher owns (the backend's lock message says
   "in XXMI Launcher" or "Only XXMI Launcher") shows an "Open XXMI Launcher" button next to it. "Start with" is hidden
-  for community games. The 3DMigoto log, the shader cache and finding a hash stay in Tools › Mod makers, and each side
-  has a button to the other (View log, Log settings).
+  for community games. The 3DMigoto log, the shader cache and finding a hash stay in Tools › Mod makers, which also
+  shows a copy of Mod maker switches (`MigotoSection`, route { view: "tools", section: "migoto" }); copies hear each
+  other's saves, so they agree. View log on the Launch page opens Tools; Log settings in Tools goes to its copy.
+- The developer console (`src/dev/console`) opens on the backquote key in the app and the demo. Developer console
+  under Settings, Feedback and privacy, Log files ("ui.console", default on) turns the key off. Commands that set up
+  dummy data say they only work in the browser demo when run in the app.
 - `lib/places.ts` gives a message that names a setting or a place a button that opens it. Toasts without a button
   of their own get it by their words, backend messages included ("has no Mods folder yet" gets "Mods folders",
   "IMM manages this mod" gets "Move from IMM"). `placeFor(text)` gives the same button to a note drawn in a page
@@ -1088,7 +1092,14 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - Appearance: theme per game with previews, light or dark for every theme at once ("Game's own" keeps each game's
   look: Teyvat and Talos-II light, the rest dark; or all dark, all light, follow the system; pref "gm.schemeMode"),
   with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); Mods layout (four drawn
-  previews), layout (density, sidebar side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
+  previews), layout (density, sidebar side, nav style, buttons), text size, zoom, animations and first-start hints ("Layout, text size and animations");
+  themes keep their designed corners (the old Corners option is gone, and a saved "corners" is ignored). Zoom
+  (`lib/zoom.ts`, "gm.zoom") scales the whole window with the webview's zoom (CSS zoom on <html> in the browser demo):
+  Ctrl+= and Ctrl+- step it, Ctrl+0 resets, the level shows in the corner for a moment, and the Zoom row has minus,
+  reset and plus buttons. Text size stays separate. Animations are three switches: Interface animations
+  ("gm.motion", html[data-motion]), Smooth scrolling ("gm.motion.scroll", html[data-motion-scroll]) and Theme
+  background motion ("gm.motion.bg", html[data-motion-bg]: game themes' moving backgrounds and seasonal touches).
+  The first start copies Windows' Animation effects into all three; after that only the switches count.
   hardware acceleration with a copy of the rendering log row ("Hardware acceleration and rendering log"). Custom
   themes: list, apply, delete with Undo, import/export as JSON, an editor with a stylesheet box and the list of parts
   it can style, and "Make one with your chatbot" (AI task "theme"). Applying is lib/theme.ts (THEMES).
@@ -1122,12 +1133,13 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
     its case (mod, character, creator and profile names, descriptions, comments, tags, paths, fields); a line that
     mixes both stays as written. Toasts and tips are lowercased whole.
   - Pull button ("fun.pull", `screens/browse/Pull.tsx`), named for the game (Wish, Warp, Signal Search, Convene,
-    Headhunt): a star button in Browse's header that opens a random mod after a short flash in its star colour.
+    Headhunt): while it's on it takes Surprise me's place (a gem button with the word in Browse's bar, an icon in
+    Home's quick actions; Surprise me stays in its right-click menu) and opens a random mod after a short flash in its star colour.
     3 star: a page of the newest. 4 star: pages 2 to 4 of the most liked. 5 star: the 50 most liked, one pull in
     sixteen, and every 10th pull without one ("fun.pulls" counts). Hidden mods, blocked creators and, when hidden,
     mods for adults stay out.
   - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx`): off, by the date (bats and pumpkins from 24 October,
-    snowflakes from 20 December, hearts on 14 February), or one season all year. Hidden when Animations is off.
+    snowflakes from 20 December, hearts on 14 February), or one season all year. Hidden when Theme background motion is off.
   - Your year in mods: a dialog with mods installed this year, the character with the most mods, the creator of
     the most of them and hours played (`lib/playtime.ts` counts from game start to close, "stats.played").
   - Mod of the day (`lib/motd.ts`): see Browse.
@@ -1141,7 +1153,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   game through the theme's "Game's own": New Eridu, Teyvat, Astral Express, Solaris and Talos-II have their own, the
   rest the plain fade. index.html paints its colour before any script runs. It waits for
   App's `splashReady()` and the first screen's loading, at most 5 s, and an intro gets at most 4 s. A click, Escape,
-  Enter, Space or a controller button skips it; the Konami code's keys don't. Animations off: the tip, then a fade.
+  Enter, Space or a controller button skips it; the Konami code's keys don't. Interface animations off: the tip, then a fade.
   "Play it" in Settings replays it. In dev, `?intro=<game>` picks one and `&hold=1` keeps the tip up.
 
 ### Tools
@@ -1280,4 +1292,4 @@ so push that copy to the public repo when the docs change.
 - Game switcher in the sidebar: the shown games' icons on one row; when they don't fit, the last slot is "+N",
   which opens the switch menu.
 - Wheel scrolling (`lib/smoothScroll.ts`): each notch of a mouse wheel glides over about 250 ms instead of jumping.
-  Touchpads and anything that handles the wheel itself are left alone; off when Animations is off.
+  Touchpads and anything that handles the wheel itself are left alone; off when Smooth scrolling is off.
