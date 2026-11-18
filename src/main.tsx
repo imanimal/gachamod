@@ -48,7 +48,7 @@ async function boot() {
     return;
   }
   // dev builds and the browser demo: the console on ~ (src/dev/console)
-  if (import.meta.env.DEV || !inTauri()) void import("./dev/console/Console").then((c) => c.mountConsole()).catch(() => {});
+  void import("./dev/console/Console").then((c) => c.mountConsole()).catch(() => {});
   const splash = startSplash();
   installTelemetry("main");
   installRenderWatch("main");
