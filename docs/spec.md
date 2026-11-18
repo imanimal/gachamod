@@ -1148,7 +1148,8 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
 (Problems: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" (In-game menu, from
-INGAME: ingame, "keylist"), "packs" (Sharing: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The pages and
+INGAME: ingame, "keylist"), "packs" (Sharing: packs, "imm"), "disk" (Storage: "disk", "disk-big", "disk-dupes") and
+"makers" (Mod makers: "dev", "hash"). The pages and
 panels with their search words are in `toolsSearch.ts`. The panel ids still work as routes. A panel that renders
 nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
 switches are in Settings › Launch (see Settings), and the search above the page list finds them from Tools too.
@@ -1176,6 +1177,46 @@ question. For Medal the note also has "Change Medal's key": Medal gets the free 
 writes one value in Medal's database, only while Medal is closed, after a copy of the database
 (`medal-<user id>.db.gachamod.bak` next to it). No other app's settings are written. The setting `otherKeys.ask` =
 `0` turns the toasts off.
+
+### Storage
+
+Tools › Storage (`screens/tools/Storage.tsx`, `crates/gacha-core/src/storage.rs`, `lib/api/storage.ts`) shows where
+disk space goes. `storage_measure(false)` reads mod sizes from the library at once; `storage_measure(true)` then walks
+the rest on a blocking thread, sending `storage-progress {step, game}` so the wait names what it reads ("Comparing ZZZ
+mods that look alike"). Skip calls `storage_cancel`, and the report comes back with what it has (`complete` false).
+The report stays for the session; "Measure again" redoes it, and mod changes from anywhere (`onPublish`) keep its mods
+current.
+
+What it counts, per game: mods on and off (from the scan), the trash (`<data>/trash/<game>`), kept archives and
+unfinished downloads (`<data>/downloads/<game>`), backups of mod files (by their manifest's game), fix tools, the
+loader folder's ShaderCache, FrameAnalysis dumps, d3d11_log.txt and the rest of it without Mods (left out when the
+loader sits in the game folder), and mods another manager keeps outside Mods (`migrate::detect`). Shared by all
+games: the database, thumbnails, other caches, logs, unpacked downloads, extensions, removed mods' pictures, settings
+and database backups, anything else in the data folder, and XXMI Launcher without the importer and Mods folders.
+
+- Panel "disk": the total, a game picker, and a breakdown by category (rows open to their items, each with Show in
+  Explorer and its cleanup), by game (a row picks that game) or by character (a row opens Mods on that character).
+- Panel "disk-big": the biggest mods, all or only the ones that are off, with open, Show in Explorer and Move to trash
+  (`removeMods`, which asks first only when the trash keeps no files and the mod has no GameBanana link).
+- Panel "disk-dupes": mods installed twice. "same": the files match byte for byte, leaving out dot files (the sidecar)
+  and `preview.*` pictures; candidates are grouped by file names and sizes first, and only those are hashed.
+  "download": the same GameBanana file and variant installed twice with files that differ now. IMM's folders and
+  links to other managers' folders are left out. The copy that stays is the newest of those that are on, else the
+  newest. "Keep newest" sends the others to the trash as "replaced" (`storage_remove_copies`), so they wait at least
+  10 minutes even when "trash.days" is 0 and Undo puts them back. "Keep one of each" does every "same" group.
+- Suggestions show only after a full measure and only past a size: kept archives over 500 MB (Move to Recycle Bin,
+  and a button to the archive setting while archives are kept), trash past "trash.days" over 50 MB (Delete now, as
+  the setting says), a shader cache over 1 GB, frame dumps over 200 MB, a 3DMigoto log over 100 MB (Log settings),
+  another manager's mods over 500 MB (Move them in). Each hides with its x and comes back only once its size has
+  doubled (localStorage "gm.storage.tips").
+- Archives go to the Recycle Bin (`storage_recycle_archives`), never the ones a download in the queue uses, .part
+  files, or files written in the last two minutes. The shader cache and frame dumps use the `dev_` commands.
+- Settings, Mods, Trash and removed mods has a "View storage" button here, and the trash rows here open Mods, Trash
+  and the trash setting.
+
+Left out on purpose: "unused for a long time" (the library doesn't record when a mod was last on, and a guess from
+the install date would be wrong), deleting backups (they are what Undo restores), cleaning unpacked downloads (an
+install may be using them), and emptying the whole trash from here (Mods, Trash does that with each mod in view).
 
 ### The AI helper
 

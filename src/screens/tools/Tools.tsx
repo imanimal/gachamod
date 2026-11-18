@@ -19,6 +19,7 @@ import { registerPanels } from "../settings/menuSearch";
 import { MOVE_KEYWORDS, TOOL_PAGES, toolsPageOf, toolsWhere } from "./toolsSearch";
 import { ConflictsPanel, HashLookupPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
 import { MovePanel } from "../modtools/MovePanel";
+import { BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel } from "./Storage";
 import { setToolsPage, useToolsCounts } from "../modtools/toolsBadge";
 import { t, tn } from "../../lib/i18n";
 import { gameName, gameShort } from "../../lib/games";
@@ -91,6 +92,7 @@ function ToolsPages({ game }: { game: GameState }) {
           conflicts: <><ConflictsPanel /><KeyClashesPanel /></>,
           ingame: <><InGamePanel game={game.id} /><KeyListPanel game={game.id} /></>,
           packs: <><PacksPanel /><MovePanel /></>,
+          disk: <StoragePage />,
           makers: <><DevSection game={game} /><HashLookupPanel /></>,
         }}
       </Paged>
@@ -189,6 +191,9 @@ registerPanels("tools", {
   keylist: forGame((g) => <KeyListPanel game={g.id} />),
   packs: PacksPanel,
   others: MovePanel,
+  disk: StoragePanel,
+  "disk-big": BiggestModsPanel,
+  "disk-dupes": DuplicatesPanel,
   dev: forGame((g) => <DevSection game={g} />),
   hash: HashLookupPanel,
 });

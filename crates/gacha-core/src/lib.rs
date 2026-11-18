@@ -44,6 +44,7 @@ pub mod render_log;
 pub mod reset;
 pub mod settings_file;
 pub mod steam;
+pub mod storage;
 pub mod telemetry;
 pub mod watch;
 pub mod xxmi;

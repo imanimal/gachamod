@@ -234,6 +234,9 @@ export function StorageSection() {
             <Toggle checked={days > 0} onChange={(v) => void choose(v ? 14 : 0)} />
           </span>
         </SetRow>
+        <SetRow label={t("Disk space")} hint={t("What the mods, the trash, downloads and backups take, and what can go")}>
+          <Button size="sm" icon="box" onClick={() => go({ view: "tools", section: "disk" })} title={t("Opens Tools > Storage")}>{t("View storage")}</Button>
+        </SetRow>
       </div>
       {ask && (
         <Confirm title={t("Delete files now?")} yes={t("Delete files")} danger onClose={() => setAsk(null)} onYes={() => save(ask.days)}>
