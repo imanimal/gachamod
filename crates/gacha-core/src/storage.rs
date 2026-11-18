@@ -28,7 +28,7 @@ pub struct Item {
     /// What it is. A game's: "mods-on", "mods-off", "trash", "archives", "parts" (unfinished downloads), "backups",
     /// "fixers", "shader-cache", "frame-dumps", "log", "loader" (the rest of the loader folder), "others" (another
     /// manager's mods outside Mods). gachamod's data: "database", "thumbs", "cache", "logs", "staging",
-    /// "extensions", "archive" (removed mods' pictures), "backups", "trash", "fixers", "other", and "xxmi".
+    /// "extensions", "archive" (removed mods' pictures), "backups", "fixers", "other", and "xxmi".
     pub key: String,
     /// The group it counts toward (`category_of`).
     pub category: String,
@@ -280,10 +280,15 @@ fn data_items(data: &Path, stop: Stop) -> DataUse {
                 push(list, item("parts", parts, Some(&dir)));
             },
             "trash" => for (n, dir) in child_dirs(&p) {
-                let mut it = item("trash", walk(&dir, &no_skip, stop), Some(&dir));
+                let u = walk(&dir, &no_skip, stop);
                 match known_game(&n) {
-                    Some(game) => { it.count = child_dirs(&dir).len() as u32; push(out.games.entry(game).or_default(), it); }
-                    None => push(&mut out.app, it),
+                    Some(game) => {
+                        let mut it = item("trash", u, Some(&dir));
+                        it.count = child_dirs(&dir).len() as u32;
+                        push(out.games.entry(game).or_default(), it);
+                    }
+                    // removed extensions count with the extensions; anything else is just other files
+                    None => push(&mut out.app, item(if n.eq_ignore_ascii_case("extensions") { "extensions" } else { "other" }, u, Some(&dir))),
                 }
             },
             "backups" => for b in std::fs::read_dir(&p).into_iter().flatten().flatten() {
@@ -442,10 +447,33 @@ fn group(game: &str, kind: &str, members: &[&ModEntry]) -> DupGroup {
     }
 }
 
+/// Ids of mods whose folder holds another mod's folder or sits inside one. Trashing either would take the other
+/// along, so they're never offered as copies.
+fn nested(mods: &[&ModEntry]) -> HashSet<String> {
+    // the separator sorts first, so a folder's subfolders follow it directly ("a", "a\b", then "a b")
+    let mut keys: Vec<(String, &str)> = mods.iter().map(|m| (path_key(Path::new(&m.path)).replace('\\', "\u{1}"), m.id.as_str())).collect();
+    keys.sort();
+    let mut out = HashSet::new();
+    let mut stack: Vec<(String, &str)> = Vec::new();
+    for (k, id) in keys {
+        while stack.last().is_some_and(|(top, _)| !k.starts_with(&format!("{top}\u{1}"))) { stack.pop(); }
+        if !stack.is_empty() {
+            out.insert(id.to_string());
+            out.extend(stack.iter().map(|(_, i)| i.to_string()));
+        }
+        stack.push((k, id));
+    }
+    out
+}
+
 /// Mods of one game installed more than once. Copies with the same files come first ("same"); then the same
 /// GameBanana file (and the same variant of it) installed twice with files that differ ("download").
 fn duplicates(game: &str, mods: &[ModEntry], variant: &dyn Fn(&ModEntry) -> Option<String>, stop: Stop) -> Vec<DupGroup> {
     let mods: Vec<&ModEntry> = mods.iter().filter(|m| movable(m)).collect();
+    let inner = nested(&mods);
+    let mods: Vec<&ModEntry> = mods.into_iter().filter(|m| !inner.contains(&m.id)).collect();
+    // a sub-mod comes from the same download as its parent, so the same file id says nothing about them
+    let family: HashSet<&str> = mods.iter().filter_map(|m| m.parent.as_deref()).collect();
     // same names and sizes first (cheap), then the bytes of only those
     let mut shapes: HashMap<Vec<(String, u64)>, Vec<(usize, Vec<(String, u64, PathBuf)>)>> = HashMap::new();
     for (i, m) in mods.iter().enumerate() {
@@ -477,7 +505,7 @@ fn duplicates(game: &str, mods: &[ModEntry], variant: &dyn Fn(&ModEntry) -> Opti
     }
     let mut downloads: HashMap<(u64, u64, Option<String>), Vec<usize>> = HashMap::new();
     for (i, m) in mods.iter().enumerate() {
-        if grouped.contains(&i) { continue; }
+        if grouped.contains(&i) || m.parent.is_some() || family.contains(m.id.as_str()) { continue; }
         let Some(src) = &m.source else { continue };
         let Some(file) = src.file_id else { continue };
         downloads.entry((src.mod_id, file, variant(m))).or_default().push(i);

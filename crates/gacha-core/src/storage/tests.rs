@@ -53,7 +53,8 @@ fn the_data_folder_is_sorted_by_game_and_kind() {
     assert_eq!(key(&out.app, "cache").unwrap().bytes, 40, "the thumbnails aren't counted twice");
     assert_eq!(key(&out.app, "logs").unwrap().bytes, 12);
     assert_eq!(key(&out.app, "other").unwrap().bytes, 3);
-    assert_eq!(key(&out.app, "trash").unwrap().bytes, 8, "an extension's trash is the app's");
+    assert_eq!(key(&out.app, "extensions").unwrap().bytes, 8, "removed extensions count with the extensions");
+    assert!(key(&out.app, "trash").is_none());
     let app_backups = key(&out.app, "backups").unwrap();
     assert!(app_backups.bytes >= 100 && app_backups.count == 1);
 
@@ -85,7 +86,7 @@ fn the_loader_folder_leaves_out_mods_and_never_counts_the_game() {
     assert_eq!(key(&v, "log").unwrap().bytes, 50);
     assert_eq!(key(&v, "loader").unwrap().bytes, 1010, "Mods, the cache, dumps and log are counted on their own");
 
-    // a community loader in the game's own folder: only its cache, dumps and log
+    // a community loader inside the game folder: only its cache, dumps and log
     let v = loader_items(&imp, Some(&mods), Some(&imp), Stop::Never);
     assert!(key(&v, "loader").is_none());
     assert!(key(&v, "shader-cache").is_some());
@@ -144,6 +145,30 @@ fn the_same_download_twice_counts_only_for_the_same_file_and_variant() {
     assert_eq!(found[0].kind, "download");
     assert_eq!(found[0].keep, "b", "the newest stays when none is on");
     assert_eq!(found[0].remove, vec!["a".to_string()]);
+}
+
+#[test]
+fn nested_mods_and_sub_mods_are_never_offered_as_copies() {
+    let d = temp("nested");
+    let mk = |rel: &str| { let m = d.path().join(rel); fs::create_dir_all(&m).unwrap(); fs::write(m.join("mod.ini"), "same").unwrap(); m };
+    // a mod folder holding another mod: the inner one has the same files as a third mod beside them
+    let outer = mk("Outer");
+    let inner = mk("Outer/Inner");
+    let beside = mk("Outer copy");
+    let mods = vec![entry("zzz", "o", &outer, true, 1, 8), entry("zzz", "i", &inner, true, 2, 4), entry("zzz", "b", &beside, true, 3, 4)];
+    let ids: HashSet<String> = nested(&mods.iter().collect::<Vec<_>>());
+    assert_eq!(ids, HashSet::from(["o".to_string(), "i".to_string()]), "a folder named like another plus more isn't nested");
+    assert!(duplicates("zzz", &mods, &|_| None, Stop::Never).is_empty());
+
+    // a sub-mod from the same download as its parent isn't a second copy of it
+    let src = Some(ModSource { site: "gamebanana".into(), mod_id: 5, file_id: Some(9), ..Default::default() });
+    let mut p = entry("zzz", "p", &mk("Skin"), true, 1, 10);
+    let mut s = entry("zzz", "s", &mk("Skin hair"), true, 2, 3);
+    fs::write(Path::new(&s.path).join("mod.ini"), "other").unwrap();
+    p.source = src.clone();
+    s.source = src;
+    s.parent = Some("p".into());
+    assert!(duplicates("zzz", &[p, s], &|_| None, Stop::Never).is_empty());
 }
 
 #[test]

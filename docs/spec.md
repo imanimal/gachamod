@@ -1200,8 +1200,9 @@ and database backups, anything else in the data folder, and XXMI Launcher withou
   (`removeMods`, which asks first only when the trash keeps no files and the mod has no GameBanana link).
 - Panel "disk-dupes": mods installed twice. "same": the files match byte for byte, leaving out dot files (the sidecar)
   and `preview.*` pictures; candidates are grouped by file names and sizes first, and only those are hashed.
-  "download": the same GameBanana file and variant installed twice with files that differ now. IMM's folders and
-  links to other managers' folders are left out. The copy that stays is the newest of those that are on, else the
+  "download": the same GameBanana file and variant installed twice with files that differ now (sub-mods and their
+  parents never count). IMM's folders, links to other managers' folders and mod folders inside another mod's folder
+  are left out. The copy that stays is the newest of those that are on, else the
   newest. "Keep newest" sends the others to the trash as "replaced" (`storage_remove_copies`), so they wait at least
   10 minutes even when "trash.days" is 0 and Undo puts them back. "Keep one of each" does every "same" group.
 - Suggestions show only after a full measure and only past a size: kept archives over 500 MB (Move to Recycle Bin,

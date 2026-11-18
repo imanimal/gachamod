@@ -32,19 +32,30 @@ const scopeSubs = new Set<() => void>();
 const setScope = (s: GameId | "all") => { scope = s; scopeSubs.forEach((f) => f()); };
 const useScope = () => useSyncExternalStore((f) => { scopeSubs.add(f); return () => scopeSubs.delete(f); }, () => scope);
 
+let skipped = false;
+
 /** Read the library's sizes at once, then measure everything else. One measure runs at a time. */
 async function measure() {
   if (state.measuring) return;
+  skipped = false;
   setState({ measuring: true, step: null });
   const off = held(storage.onProgress((step) => setState({ step })));
   try {
     if (!state.report) setState({ report: await storage.measure(false) });
-    setState({ report: await storage.measure(true) });
+    // Skip pressed while the library was read: the full pass doesn't start
+    if (!skipped) setState({ report: await storage.measure(true) });
   } catch (e) { toast(errorText(e), true); }
   finally { off(); setState({ measuring: false, step: null }); }
 }
 
-const skip = () => { storage.cancel().catch(() => {}); };
+const skip = () => { skipped = true; storage.cancel().catch(() => {}); };
+
+/** The report, measured the first time any of the page's panels shows (search results draw them one at a time). */
+function useReport() {
+  const s = useStorage();
+  useEffect(() => { if (!state.report && !state.measuring) void measure(); }, []);
+  return s;
+}
 
 const fromEntry = (m: ModEntry): StorageMod => ({ id: m.id, game: m.game, name: m.name, character: m.character, enabled: m.enabled || !!m.standby, bytes: m.sizeBytes,
   files: m.fileCount, path: m.path, installedAt: m.installedAt, thumb: m.thumb ?? null });
@@ -58,8 +69,8 @@ onPublish((game, change) => patchReport((r) => {
     if (i >= 0) mods[i] = fromEntry(e); else mods.push(fromEntry(e));
   }
   mods.sort((a, b) => b.bytes - a.bytes);
-  const duplicates = r.duplicates.filter((d) => d.game !== game || ![d.keep, ...d.remove].some((id) => gone.has(id)));
-  return { ...r, mods, duplicates };
+  // groups stay: the panel shows only copies still in the list, so a copy put back with Undo shows again
+  return { ...r, mods };
 }));
 
 /** The report's items with each game's "mods-on" and "mods-off" worked out from the mods as they are now. */
@@ -190,7 +201,7 @@ async function clearCache(game: GameId) {
 async function clearDumps(game: GameId) {
   try {
     const b = await dev.clearFrameDumps(game);
-    toast(t("Moved {size} of frame dumps to the Recycle Bin", { size: formatBytes(b) }));
+    toast(b ? t("Moved {size} of frame dumps to the Recycle Bin", { size: formatBytes(b) }) : t("There are no frame dumps to move"));
     dropItem(game, "frame-dumps");
   } catch (e) { toast(errorText(e), true); }
 }
@@ -198,7 +209,9 @@ async function clearDumps(game: GameId) {
 async function purgeOverdue() {
   try {
     const n = await library.trashPurge(null);
-    toast(n ? tn(n, "Deleted the files of {n} removed mod. Mods, Trash keeps its record", "Deleted the files of {n} removed mods. Mods, Trash keeps their records") : t("Nothing in the trash was past its time"));
+    if (n) toast(tn(n, "Deleted the files of {n} removed mod. Mods, Trash keeps its record", "Deleted the files of {n} removed mods. Mods, Trash keeps their records"), false,
+      { label: t("View trash"), run: () => go({ view: "library", tab: "archive" }) });
+    else toast(t("Nothing in the trash was past its time"));
     patchReport((r) => ({ ...r, trashOverdue: 0 }));
   } catch (e) { toast(errorText(e), true); }
 }
@@ -350,7 +363,7 @@ function ItemActions({ game, item }: { game: GameId | null; item: StorageItem })
   const running = !!game && !!allGames().find((g) => g.id === game)?.running;
   switch (item.key) {
     case "trash": return <>
-      {game && <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "library", tab: "archive" })} title={t("Opens Mods > Trash")}>{t("Open Trash")}</Button>}
+      {game && <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "library", tab: "archive" })} title={t("Opens Mods > Trash")}>{t("View trash")}</Button>}
       <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "storage" })} title={t("Opens Settings, Mods: Trash and removed mods")}>{t("Trash settings")}</Button>
     </>;
     case "archives": return <Button size="sm" variant="ghost" onClick={() => void recycleArchives(game)} title={t("Moves the kept archives to the Recycle Bin. Downloads in progress keep theirs")}>{t("Move to Recycle Bin")}</Button>;
@@ -386,14 +399,13 @@ function ItemRow({ game, item, showGame }: { game: GameId | null; item: StorageI
 }
 
 export function StoragePanel() {
-  const { report, measuring, step } = useStorage();
+  const { report, measuring, step } = useReport();
   const sc = useScope();
   const games = useGames();
   const [view, setViewState] = useState<View>(lastView);
   const setView = (v: View) => { lastView = v; setViewState(v); };
   const [open, setOpen] = useState<StorageCategory | null>(null);
   const [allChars, setAllChars] = useState(false);
-  useEffect(() => { if (!state.report && !state.measuring) void measure(); }, []);
 
   const live = useMemo(() => (report ? liveGames(report) : []), [report]);
   const inScope = sc === "all" ? live : live.filter((g) => g.game === sc);
@@ -412,8 +424,9 @@ export function StoragePanel() {
     const by = new Map<string, { game: GameId; name: string | null; bytes: number; mods: number }>();
     for (const m of report?.mods ?? []) {
       if (sc !== "all" && m.game !== sc) continue;
-      const k = `${m.game}\u0000${m.character ?? ""}`;
-      const c = by.get(k) ?? { game: m.game, name: m.character, bytes: 0, mods: 0 };
+      const name = m.character?.trim() || null;
+      const k = `${m.game}\u0000${name ?? ""}`;
+      const c = by.get(k) ?? { game: m.game, name, bytes: 0, mods: 0 };
       c.bytes += m.bytes; c.mods++;
       by.set(k, c);
     }
@@ -509,12 +522,18 @@ export function StoragePanel() {
 
 // ── the biggest mods ──
 
+/** A panel shown before the first measure is back, so one drawn alone in search results isn't blank. */
+function Measuring({ title, icon, id }: { title: string; icon: "sort" | "layers"; id: string }) {
+  const { step } = useStorage();
+  return <Panel title={title} icon={icon} id={id}><Waiting what={stepText(step)}><Button size="sm" onClick={skip} title={t("Stop measuring and show what's measured so far")}>{t("Skip")}</Button></Waiting></Panel>;
+}
+
 export function BiggestModsPanel() {
-  const { report } = useStorage();
+  const { report } = useReport();
   const sc = useScope();
   const [which, setWhich] = useState<"all" | "off">("all");
   const [shown, setShown] = useState(10);
-  if (!report) return null;
+  if (!report) return <Measuring title={t("Biggest mods")} icon="sort" id="disk-big" />;
   const list = report.mods.filter((m) => (sc === "all" || m.game === sc) && (which === "all" || !m.enabled));
   return (
     <Panel title={t("Biggest mods")} icon="sort" id="disk-big"
@@ -552,10 +571,10 @@ export function BiggestModsPanel() {
 // ── mods installed twice ──
 
 export function DuplicatesPanel() {
-  const { report, measuring } = useStorage();
+  const { report, measuring } = useReport();
   const sc = useScope();
   const [busy, setBusy] = useState<string | null>(null);
-  if (!report) return null;
+  if (!report) return <Measuring title={t("Mods installed twice")} icon="layers" id="disk-dupes" />;
   const mods = new Map(report.mods.map((m) => [m.id, m]));
   const groups = report.duplicates.filter((d) => (sc === "all" || d.game === sc) && mods.has(d.keep) && d.remove.some((id) => mods.has(id)))
     .map((d) => ({ ...d, remove: d.remove.filter((id) => mods.has(id)) }));
