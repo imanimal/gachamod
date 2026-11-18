@@ -116,6 +116,17 @@ pub fn choose(db: &Db, game: &str, mod_id: &str, listed: Option<bool>) -> Result
     of_mod(&m, live.contains_key(&m.id), &all, settings(db, game).own).ok_or_else(|| Error::Invalid(format!("{} has no keys", m.name)))
 }
 
+/// Several picks at once (mod id, then as in `choose`), with one rewrite of live.ini instead of one per mod.
+pub fn choose_many(db: &Db, game: &str, picks_in: &[(String, Option<bool>)]) -> Result<()> {
+    let mut all = picks(db, game);
+    for (id, listed) in picks_in {
+        match listed { Some(v) => { all.insert(id.clone(), *v); } None => { all.remove(id); } }
+    }
+    db.set_setting_json(&picks_key(game), &all)?;
+    crate::live::menu_sync(db, game);
+    Ok(())
+}
+
 /// A mod's keys changed (a rebind, a key turned off, an undo): the pictures of the key list the game draws follow.
 pub fn keys_changed(db: &Db, game: &str) {
     if settings(db, game).on { crate::live::menu_sync(db, game); }

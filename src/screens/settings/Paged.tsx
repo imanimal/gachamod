@@ -329,7 +329,7 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
       <div className="pg-side">
         <div ref={field} className="pg-search" onKeyDown={fieldKey}>
           <SearchField value={query} onChange={setQuery} placeholder={t("Search")}
-            title={t("Search settings and tools. Finds any setting or tool, in Settings and Tools alike (Ctrl+F or /). Esc clears it")}
+            title={t("Search settings and tools (Ctrl+F or /). Esc clears it")}
             onDown={() => found.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus()} />
         </div>
         <nav ref={nav} className="pg-nav" aria-label={label} onKeyDown={navKey}>

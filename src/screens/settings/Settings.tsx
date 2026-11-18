@@ -234,7 +234,7 @@ function GameRow({ game }: { game: GameState }) {
           <span className="row">
             <Button size="sm" variant="ghost" icon="trash" busy={removing} disabled={setup.running}
               onClick={() => { setRemoving(true); void uninstallLoaders([game.id]).finally(() => setRemoving(false)); }}
-              title={t("Moves {game}'s mod loader to the Recycle Bin. Its Mods folder and saved mod settings stay, and Install again brings it back", { game: gameShort(game) })}>{t("Uninstall mod loader")}</Button>
+              title={t("Moves {game}'s mod loader to the Recycle Bin. The Mods folder and saved mod settings stay, and Install again brings it back", { game: gameShort(game) })}>{t("Uninstall mod loader")}</Button>
           </span>
         )}
         {!game.xxmi && !game.importerDir && meta.loader && (

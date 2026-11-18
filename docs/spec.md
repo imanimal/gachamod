@@ -1085,9 +1085,9 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   ("recycle bin" finds Keep removed mods' files), plus "Open XXMI Launcher" and the AI jobs (only while AI shows).
 - Games: XXMI games, then community games (no XXMI support) with one plain line on what differs: they need their own
   3DMigoto loader (a link to it), and games without a GameBanana character category say so once.
-- Appearance: theme per game with previews, light or dark for every theme at once ("Game's own" keeps each game's
+- Appearance: theme per game with previews, light or dark for every theme at once ("Match the game" keeps each game's
   look: Teyvat and Talos-II light, the rest dark; or all dark, all light, follow the system; pref "gm.schemeMode"),
-  with a per-theme choice under "Game's own", and accent (the "Theme and colours" panel); Mods layout (four drawn
+  with a per-theme choice under "Match the game", and accent (the "Theme and colours" panel); Mods layout (four drawn
   previews), layout (density, sidebar side, nav style, corners), text size, animations and first-start hints ("Layout, text size and animations");
   hardware acceleration with a copy of the rendering log row ("Hardware acceleration and rendering log"). Custom
   themes: list, apply, delete with Undo, import/export as JSON, an editor with a stylesheet box and the list of parts
@@ -1138,7 +1138,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   theme's own, an intro id, or "0" for off): a solid screen with one tip (`splash/tips.ts`: an icon over a line, the
   Konami tip one start in twenty) while the app renders behind it, then an intro reveals the app
   (`splash/intros/<id>.ts`). By default it's the intro of the theme in use (a custom theme's base), so it follows the
-  game through the theme's "Game's own": New Eridu, Teyvat, Astral Express, Solaris and Talos-II have their own, the
+  game through the theme's "Match the game": New Eridu, Teyvat, Astral Express, Solaris and Talos-II have their own, the
   rest the plain fade. index.html paints its colour before any script runs. It waits for
   App's `splashReady()` and the first screen's loading, at most 5 s, and an intro gets at most 4 s. A click, Escape,
   Enter, Space or a controller button skips it; the Konami code's keys don't. Animations off: the tip, then a fade.

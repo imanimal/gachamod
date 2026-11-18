@@ -167,7 +167,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
       footer={<>
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
           title={trashDaysPref.get() > 0
-            ? tn(trashDaysPref.get(), "Its files stay on your PC for {n} day. A short record stays in Mods, Trash so you can download it again", "Its files stay on your PC for {n} days. A short record stays in Mods, Trash so you can download it again")
+            ? tn(trashDaysPref.get(), "The files stay on your PC for {n} day. A short record stays in Mods, Trash so you can download it again", "The files stay on your PC for {n} days. A short record stays in Mods, Trash so you can download it again")
             : t("The files are deleted right away. A short record stays in Mods, Trash so you can download it again")}>{t("Move to trash")}</Button>
         <span className="grow" />
         <Button variant="ghost" onClick={onClose}>{t("Close")}</Button>
@@ -274,7 +274,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
                   title={t("Looks on GameBanana for a newer file of this mod and downloads it")}>{t("Update")}</Button>
                 <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
-                  title={t("Open the mod's GameBanana page. Its author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
+                  title={t("Open the mod's GameBanana page. The author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
               </>)}
               {(health.tried || health.needsAuthor) && !mod.source && (
                 <Button size="sm" icon="search" onClick={() => go({ view: "browse", search: mod.name })}
@@ -284,7 +284,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
               <Button size="sm" variant="ghost" icon="bell-off" onClick={() => void holdMods(game, [mod], "update")}
                 title={t("Stops this warning until you install a newer version from its author. If that one is still broken, it warns again")}>{t("Wait for an update")}</Button>
               <Button size="sm" variant="ghost" icon="hide" onClick={() => void holdMods(game, [mod], "ignore")}
-                title={t("Stops every warning about this mod: the red marks, the Problems filter and Tools. Its conflicts are ignored too")}>{t("Ignore problems")}</Button>
+                title={t("Stops every warning about this mod: the red marks, the Problems filter and Tools. Conflicts with it are ignored too")}>{t("Ignore problems")}</Button>
             </span>
           </div>
         </div>
@@ -303,7 +303,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}
                   title={t("Looks on GameBanana for a newer file of this mod and downloads it")}>{t("Update")}</Button>
                 <Button size="sm" variant="ghost" icon="link" onClick={() => openOnGb(mod)}
-                  title={t("Open the mod's GameBanana page. Its author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
+                  title={t("Open the mod's GameBanana page. The author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
               </>)}
               <Button size="sm" variant="ghost" icon="eye" onClick={() => void releaseMods(game, [mod])}
                 title={hold.kind === "update" ? t("Stop waiting and show the warning again now") : t("Warn about its problems again")}>{t("Show problems again")}</Button>

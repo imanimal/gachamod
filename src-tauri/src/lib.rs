@@ -323,6 +323,7 @@ pub fn run() {
             commands::ingame::keylist_get,
             commands::ingame::keylist_set,
             commands::ingame::keylist_choose,
+            commands::ingame::keylist_choose_many,
             commands::ingame::app_restart_admin,
             commands::otherkeys::otherkeys_clashes,
             commands::otherkeys::otherkeys_ask,

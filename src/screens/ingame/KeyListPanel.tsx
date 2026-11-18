@@ -57,7 +57,7 @@ export function KeyListPanel({ game }: { game: GameId }) {
   };
   /** Set several mods' picks at once, then read the list again. */
   const pickAll = async (picks: Array<[string, boolean | null]>) => {
-    await Promise.all(picks.map(([id, v]) => keyList.choose(game, id, v)));
+    if (picks.length) await keyList.chooseMany(game, picks);
     await kl.reload();
   };
   /** Leave out every mod with a key menu: automatic leaves them out once `own` is off, and mods listed by hand go back
@@ -72,7 +72,7 @@ export function KeyListPanel({ game }: { game: GameId }) {
       if (before.own) kl.settle(await keyList.set(game, settings));
       await pickAll(picked.map((id) => [id, v]));
     };
-    setBusy("bulk");
+    setBusy("menus");
     try {
       await run(next, null);
       record({ label: t("Left out mods with a key menu"), undo: () => run(before, true), redo: () => run(next, null) });
@@ -83,7 +83,7 @@ export function KeyListPanel({ game }: { game: GameId }) {
     if (!list) return;
     const was = list.mods.filter((m) => m.listed).map((m): [string, boolean | null] => [m.modId, m.choice]);
     const off = was.map(([id]): [string, boolean | null] => [id, false]);
-    setBusy("bulk");
+    setBusy("all");
     try {
       await pickAll(off);
       record({ label: tn(off.length, "Left {n} mod out of the key list", "Left {n} mods out of the key list"), undo: () => pickAll(was), redo: () => pickAll(off) });
@@ -142,8 +142,8 @@ export function KeyListPanel({ game }: { game: GameId }) {
           <div className="kl-h">
             <h3>{t("Mods with keys")}</h3>
             {list.mods.length > 0 && <>
-              <Button size="sm" variant="ghost" icon="hide" disabled={!menusListed || !!busy} busy={busy === "bulk"} onClick={() => void leaveOutMenus()} title={MENUS_TIP}>{t("Leave out mods with menus")}</Button>
-              <Button size="sm" variant="ghost" icon="x" disabled={!anyListed || !!busy} onClick={() => void leaveOutAll()} title={ALL_TIP}>{t("Leave out all")}</Button>
+              <Button size="sm" variant="ghost" icon="hide" disabled={!menusListed || !!busy} busy={busy === "menus"} onClick={() => void leaveOutMenus()} title={MENUS_TIP}>{t("Leave out mods with menus")}</Button>
+              <Button size="sm" variant="ghost" icon="x" disabled={!anyListed || !!busy} busy={busy === "all"} onClick={() => void leaveOutAll()} title={ALL_TIP}>{t("Leave out all")}</Button>
               <SearchField value={q} onChange={setQ} placeholder={t("Search")} title={t("Find a mod, character or key")} />
             </>}
           </div>

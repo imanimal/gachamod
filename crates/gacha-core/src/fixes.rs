@@ -505,14 +505,14 @@ pub fn fix(shared: &crate::db::Shared, game: &str, ids: &[String]) -> Result<Fix
         let Some(m) = mods.iter().find(|m| m.id == *id) else { continue };
         let skip = |reason: String| ModSkip { mod_id: m.id.clone(), name: m.name.clone(), reason };
         let dir = Path::new(&m.path);
-        if !dir.is_dir() { out.skipped.push(skip("Its folder isn't there any more".into())); continue; }
+        if !dir.is_dir() { out.skipped.push(skip("The mod's folder isn't there any more".into())); continue; }
         let c = check_dir(idx, dir, m.character.as_deref(), &mut who);
         if let Some((why, _)) = c.needs.first() { out.skipped.push(skip(why.clone())); continue; }
         if c.swaps.is_empty() { continue; }
         match fix_dir(&*lock()?, game, m, &c) {
             Ok(Some(backup)) => { any_on |= m.loaded(); out.changed.push(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }); }
             // its hashes sit where a swap doesn't reach (a ShaderOverride section, a quoted value)
-            Ok(None) => out.skipped.push(skip("Its outdated hashes are written in a way gachamod can't change".into())),
+            Ok(None) => out.skipped.push(skip("The mod's outdated hashes are written in a way gachamod can't change".into())),
             Err(e) => out.skipped.push(skip(e.to_string())),
         }
     }

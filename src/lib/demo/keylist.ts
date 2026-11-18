@@ -71,5 +71,12 @@ export function registerKeylistDemo() {
       if (!m) fail("That mod has no keys any more");
       return m;
     },
+    keylist_choose_many: async ({ game, picks }) => {
+      await demoWait(140);
+      for (const [modId, listed] of picks as Array<[string, boolean | null]>) {
+        const k = `${String(game)}|${modId}`;
+        if (listed === null) choices.delete(k); else choices.set(k, listed);
+      }
+    },
   });
 }

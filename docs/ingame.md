@@ -759,7 +759,7 @@ words), when every variable such a section sets does (`$showinfo`), or when the 
 (`ToggleGuide.dds`). The key that shows the mod's help is kept when found (`helpKey`).
 
 Tools, Key list in game marks those mods "Has menu". Above the list, "Leave out mods with menus" turns `own` off and
-puts mods listed by hand back to automatic, and "Leave out all" picks every listed mod out one by one. Both have Undo,
+puts mods listed by hand back to automatic, and "Leave out all" leaves out every listed mod, in one call (`keylist_choose_many`). Both have Undo,
 and each mod's right-click menu has them too.
 
 Until 2026-11-16 mods with their own help were left out by default, and the check was much wider: any variable with

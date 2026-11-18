@@ -154,7 +154,7 @@ function Merged({ mod, info, running }: { mod: ModEntry; info: MergedInfo; runni
   const why = running ? t("Close the game first. Mods can't move while it has them open") : info.blocked ? tb(info.blocked) : null;
   return (
     <Panel title={t("Merged mod")} icon="layers" className="mi-panel mi-merged">
-      <p className="hint">{tn(n, "Made from {n} mod with the merge script. Its key switches between them:", "Made from {n} mods with the merge script. Its key switches between them:")} {info.variants.map((v) => v.name).join(", ")}</p>
+      <p className="hint">{tn(n, "Made from {n} mod with the merge script. A key switches between them:", "Made from {n} mods with the merge script. A key switches between them:")} {info.variants.map((v) => v.name).join(", ")}</p>
       <div className="row">
         <Button icon="layers" busy={busy} disabled={!!why} onClick={() => void split()}
           title={why ?? t("Each one becomes a separate mod with a card. The one showing now stays on. Undo puts the merged mod back")}>

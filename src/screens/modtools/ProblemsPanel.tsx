@@ -113,7 +113,7 @@ function ModRow({ game, m, shown, busy, run }: {
         {!m.enabled && <Badge tone="muted" title={t("This mod is off, so its problems don't count on Tools")}>{t("Off")}</Badge>}
         {download && (m.source
           ? <Button size="sm" variant={broken ? undefined : "ghost"} icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}
-              title={t("Download this mod from GameBanana again, which can bring back a missing file. Its settings stay")}
+              title={t("Download this mod from GameBanana again, which can bring back a missing file. The mod's settings stay")}
               onClick={() => void run(`dl${m.modId}`, () => downloadAgain(game, m))}>{t("Download again")}</Button>
           : <Button size="sm" variant="ghost" icon="search" title={t("This mod isn't linked to GameBanana. Search for it there by name")}
               onClick={() => findOnline(m)}>{t("Find on GameBanana")}</Button>)}

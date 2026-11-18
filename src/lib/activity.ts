@@ -168,6 +168,7 @@ const PREFIX: Array<[string, Desc]> = [
   ["keys_", [t("Reading mod keys"), HOLD.disk]],
   ["keylist_set", [t("Saving the key list settings"), HOLD.disk]],
   ["keylist_choose", [t("Saving which mods the key list shows"), HOLD.db]],
+  ["keylist_choose_many", [t("Saving which mods the key list shows"), HOLD.db]],
   ["keylist_", [t("Reading mod keys"), HOLD.disk]],
   ["otherkeys_move", [t("Changing gachamod's key"), HOLD.disk]],
   ["otherkeys_change", [t("Changing the other app's key"), t("This writes one value in the other app's settings, after a copy of them. The app still closing, or an antivirus scan, can hold it.")]],

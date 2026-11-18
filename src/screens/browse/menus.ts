@@ -58,7 +58,7 @@ export function gbModItems(game: Parameters<typeof libIndexNow>[0], card: GbCard
     foreign || !inst?.[0] ? null : on
       ? { label: t("Turn off"), icon: "power", onClick: () => void setOn(game, inst.filter((m) => m.enabled), false) }
       : { label: t("Turn on"), icon: "power", onClick: () => void setOn(game, [inst[0]!], true) },
-    foreign ? null : upd ? { label: t("Update"), icon: "update", title: t("Download the newest file. Its options, tags and on/off state stay"), onClick: () => void installLatest(game, card.id, card.name, upd.id) }
+    foreign ? null : upd ? { label: t("Update"), icon: "update", title: t("Download the newest file. Options, tags and on/off state stay"), onClick: () => void installLatest(game, card.id, card.name, upd.id) }
       : inst?.[0] ? null
       : arch ? { label: t("Reinstall"), icon: "install", title: t("Download it again. Your settings for it come back"), onClick: () => void installLatest(game, card.id, card.name, undefined, true) }
       : { label: t("Install latest"), icon: "install", title: t("Download and install the newest file"), onClick: () => void installLatest(game, card.id, card.name) },

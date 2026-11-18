@@ -1362,7 +1362,7 @@ pub fn after_install(shared: &crate::db::Shared, game: &str, installed: &[ModEnt
     }
     match done.as_slice() {
         [] => {}
-        [_] if installed.len() == 1 => notes.push("Its toggles work only while its character is on screen".into()),
+        [_] if installed.len() == 1 => notes.push("The mod's toggles work only while its character is on screen".into()),
         [one] => notes.push(format!("Toggles of {one} work only while its character is on screen")),
         _ => notes.push(format!("Toggles of {} work only while their characters are on screen", crate::ini::oxford(&done, 8))),
     }

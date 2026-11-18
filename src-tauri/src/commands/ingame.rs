@@ -114,6 +114,17 @@ pub async fn keylist_choose(app: tauri::AppHandle, st: State<'_, AppState>, game
     }).await
 }
 
+/// Several picks at once, each `[mod id, listed]` as in keylist_choose.
+#[tauri::command]
+pub async fn keylist_choose_many(app: tauri::AppHandle, st: State<'_, AppState>, game: String, picks: Vec<(String, Option<bool>)>) -> Result<()> {
+    let db = st.db.clone();
+    blocking(move || {
+        keylist::choose_many(&*lock(&db)?, &game, &picks)?;
+        menu_key(&app);
+        Ok(())
+    }).await
+}
+
 /// Pick what a character shows. While the game runs the pick is sent to it (the database isn't held meanwhile).
 #[tauri::command]
 pub async fn live_pick(st: State<'_, AppState>, game: String, group: u32, slot: u32) -> Result<Picked> {

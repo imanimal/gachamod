@@ -305,7 +305,7 @@ fn entry(data_dir: &Path, id: &str, st: Option<&State>) -> Installed {
     let dir = dir_of(data_dir, id, st);
     let (manifest, problem) = match read_manifest(&dir) {
         Ok(m) if m.id == id => (Some(m), None),
-        Ok(m) => (None, Some(format!("Its folder is \"{id}\" but the package says \"{}\"", m.id))),
+        Ok(m) => (None, Some(format!("The folder is \"{id}\" but the package says \"{}\"", m.id))),
         Err(e) => (None, Some(e.to_string())),
     };
     let icon = manifest.as_ref().and_then(|m| m.icon.as_ref()).and_then(|i| safe_relative(i)).map(|r| dir.join(r).to_string_lossy().into_owned());

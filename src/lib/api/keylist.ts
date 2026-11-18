@@ -39,4 +39,6 @@ export const keyList = {
   set: (game: GameId, settings: KeyListSettings) => call<KeyListSettings>("keylist_set", { game, settings }),
   /** Show (true) or leave out (false) one mod, or go back to automatic (null). */
   choose: (game: GameId, modId: string, listed: boolean | null) => call<ModKeyList>("keylist_choose", { game, modId, listed }),
+  /** Several picks at once, each [mod id, listed] as in `choose`. The game reloads once for all of them. */
+  chooseMany: (game: GameId, picks: Array<[string, boolean | null]>) => call<void>("keylist_choose_many", { game, picks }),
 };

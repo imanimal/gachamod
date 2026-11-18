@@ -11,6 +11,7 @@ import { currentGame, go } from "../../lib/store";
 import { openXxmi } from "./parts";
 import { openFeedback, openGameCheck } from "../../lib/feedback";
 import { english, t } from "../../lib/i18n";
+import { MOVE_KEYWORDS } from "../tools/toolsSearch";
 
 // Labels show in the user's language, and the search still finds them by their English names: shown() keeps each
 // label's English (english() has it right after t()), and the commands carry it in their keywords.
@@ -66,7 +67,7 @@ export const SECTIONS: SectionInfo[] = [
   { id: "launch", page: "launch", label: shown(t("Launch options")), icon: "play", keywords: "launch start arguments args window mode borderless fullscreen priority commands before after exe xxmi fps limit hdr graphics reshade close when the game starts" },
   { id: "migoto", page: "launch", label: shown(t("Mod maker switches")), icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers" },
   { id: "game-start", page: "launch", label: shown(t("Run as administrator")), icon: "shield", keywords: "admin administrator elevated uac keys" },
-  { id: "others", page: "mods", label: shown(t("Mods from other managers")), icon: "swap", keywords: "import move switch from another mod manager other managers migrate transfer bring in take over imm nrmm jasm xxmm presets" },
+  { id: "others", page: "mods", label: shown(t("Mods from other managers")), icon: "swap", keywords: `${MOVE_KEYWORDS} another bring in transfer` },
   { id: "mods", page: "mods", label: shown(t("Turning mods on and reloading the game")), icon: "mods", keywords: "new mods enable one skin shuffle reload f10" },
   { id: "mod-folders", page: "mods", label: shown(t("Mods folders")), icon: "folder", keywords: "mods folder path location directory where mods live detect find change pick set mod folder" },
   { id: "automatic", page: "mods", label: shown(t("Mod update checks and rescans")), icon: "refresh", keywords: "auto automatic background checks turn off disable mod updates rescan scan watch" },

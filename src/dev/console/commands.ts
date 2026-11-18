@@ -115,7 +115,7 @@ export const COMMANDS: Command[] = [
       const m = demoMergedMods(g)[0];
       if (!m) { print(`No merged mod in ${g}`, "warn"); return; }
       go({ view: "library", modId: m.id });
-      print(`Opened ${m.name}. Its Options show the outfits by name; Split is in the Merged mod section`);
+      print(`Opened ${m.name}. Options shows the outfits by name; Split is in the Merged mod section`);
     } },
   { name: "addmod", demo: true, help: "Pretend a mod was copied into the Mods folder in Explorer (watching folders)",
     run: async () => {

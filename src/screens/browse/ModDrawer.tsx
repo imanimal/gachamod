@@ -139,7 +139,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
   const foot = !newest ? null
     : queued?.state === "needsChoice" ? { icon: "layers" as const, label: t("Pick parts"), tip: t("This download has several parts. Pick the ones to install"), run: () => openVariantPicker(queued.id) }
     : queued ? { icon: "downloads" as const, label: t("Show in Downloads"), tip: queueLabel(queued), run: () => go("downloads") }
-    : upd ? { icon: "update" as const, label: t("Update"), tip: t("Replace {old} with {file}. Its options, tags and on/off state stay", { old: upd.name, file: newest.name }), run: () => install(newest, upd.id) }
+    : upd ? { icon: "update" as const, label: t("Update"), tip: t("Replace {old} with {file}. Options, tags and on/off state stay", { old: upd.name, file: newest.name }), run: () => install(newest, upd.id) }
     : installed.length ? { icon: "mods" as const, label: t("Show in Mods"), tip: openInMods, run: () => showInMods() }
     : archived ? { icon: "install" as const, label: t("Reinstall"), tip: t("Download {file} again. Your settings for it come back", { file: newest.name }), run: () => install(newest) }
     : { icon: "install" as const, label: t("Install"), tip: t("Download {file} and add it to Mods", { file: newest.name }), run: () => install(newest) };
@@ -306,7 +306,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             { label: t("Move to trash"), icon: "trash", danger: true, hint: t("Remove it from Mods. It stays in the trash, with Undo in the toast"), onClick: () => { const m = menu; setMenu(null); if (target) void trashMods(target.id, [m.same!]); } },
           ] : [
             { label: t("Install alongside"), icon: "plus", hint: t("Add this file as a separate mod and keep {name}", { name: menu.base.name }), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
-            { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Install this file in its place. Its options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
+            { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Install this file in its place. Options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
           ]} />
         </Popover>
       )}
@@ -401,7 +401,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
       action = (
         <div className="row">
           <Button variant={f === newest && isNewer ? "primary" : "secondary"} icon={isNewer ? "update" : "swap"}
-            title={isNewer ? t("Replace {name} with this file. Its options, tags and on/off state stay", { name: base.name }) : t("Install this file in place of {name}. Its options, tags and on/off state stay", { name: base.name })}
+            title={isNewer ? t("Replace {name} with this file. Options, tags and on/off state stay", { name: base.name }) : t("Install this file in place of {name}. Options, tags and on/off state stay", { name: base.name })}
             onClick={() => onInstall(f, base.id)}>{isNewer ? t("Update") : t("Use this file")}</Button>
           <IconButton icon="more" label={t("Install alongside, or replace the installed copy")} onClick={(e) => onMenu(e.currentTarget, f, base)} />
         </div>

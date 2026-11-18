@@ -274,7 +274,7 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
         const first = stuck.slice(0, 3).join(", ");
         const names = stuck.length > 3 ? t("{names} and {n} more", { names: first, n: stuck.length - 3 }) : first;
         toast(stuck.length === 1
-          ? t("Couldn't bring back {names}. Its files were deleted and it has no GameBanana link", { names })
+          ? t("Couldn't bring back {names}. The files were deleted and there's no GameBanana link", { names })
           : t("Couldn't bring back {names}. Their files were deleted and they have no GameBanana link", { names }), true);
       }
       gone = back;

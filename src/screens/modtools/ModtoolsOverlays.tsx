@@ -357,7 +357,7 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
         <div className="pack-body stack">
           <p className="pack-what">{summary}</p>
           {pack.games.filter((g) => !g.ready).map((g) => (
-            <p key={g.game} className="hint pack-skip"><Icon name="warn" /> {g.note ? tb(g.note) : t("{game} isn't set up here.", { game: gameName(g) })} {tn(g.mods, "Its {n} mod stays out.", "Its {n} mods stay out.")}</p>
+            <p key={g.game} className="hint pack-skip"><Icon name="warn" /> {g.note ? tb(g.note) : t("{game} isn't set up here.", { game: gameName(g) })} {tn(g.mods, "{n} mod stays out.", "{n} mods stay out.")}</p>
           ))}
           <ul className="pack-mods" aria-label={t("Mods in the file")}>
             {pack.mods.map((m, i) => (

@@ -283,7 +283,7 @@ export function KeyClashesPanel() {
           </button>
           {gatedOpen && (
             <>
-              <p className="hint">{t("If a mod's toggles stop working in game, take the check out of that mod. Its ini goes back to the copy gachamod kept from before.")}</p>
+              <p className="hint">{t("If a mod's toggles stop working in game, take the check out of that mod. The mod's ini goes back to the copy gachamod kept from before.")}</p>
               <ul className="kc-gated-list">
                 {gated.list.map((g) => (
                   <li key={g.modId} className="kc-mod">

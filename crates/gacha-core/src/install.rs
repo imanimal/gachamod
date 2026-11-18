@@ -559,9 +559,9 @@ fn place_first(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
             fs::write(home.join(crate::model::SIDECAR_FILE), serde_json::to_string(&Sidecar::default())?)?;
             let loader: Vec<String> = left.iter().map(|f| name_of(f)).filter(|n| LOADER_FILES.iter().any(|l| n.eq_ignore_ascii_case(l))).collect();
             unsure = Some(if loader.is_empty() {
-                "gachamod didn't know where these files go, so it put them in Mods as they came. The mod may not work until they're moved. Its GameBanana page says where".to_string()
+                "gachamod didn't know where these files go, so it put them in Mods as they came. The mod may not work until they're moved. The mod's GameBanana page says where".to_string()
             } else {
-                format!("It has {}, which replaces part of the mod loader. gachamod doesn't swap loader files, so it put everything in Mods as it came. Its GameBanana page says what to do", loader.join(", "))
+                format!("It has {}, which replaces part of the mod loader. gachamod doesn't swap loader files, so it put everything in Mods as it came. The mod's GameBanana page says what to do", loader.join(", "))
             });
         }
     }
@@ -635,7 +635,8 @@ fn add_fixed(db: &crate::db::Shared, game: &str, name: &str, place: &FixedPlace,
         if is_shader_name(&f) { f[..16].to_string() } else { f }
     }).collect();
     let what = if count.len() == 1 { format!("1 {}", place.one) } else { format!("{} {}", count.len(), place.many) };
-    let note = if todo.is_empty() { format!("Its {what} were already in the {} folder", place.folder) }
+    let note = if todo.is_empty() && count.len() == 1 { format!("The {} was already in the {} folder", place.one, place.folder) }
+        else if todo.is_empty() { format!("The {what} were already in the {} folder", place.folder) }
         else { format!("Added {what} to the {} folder. Restart the game to load them", place.folder) };
     Ok((note, dir.to_string_lossy().into_owned()))
 }
@@ -826,7 +827,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     let all = find_roots(staging)?;
     let nested = read_nested(staging);
     if all.is_empty() {
-        let mut msg = "Nothing inside goes in the Mods folder (it has no .ini file). Its GameBanana page says where the files go".to_string();
+        let mut msg = "Nothing inside goes in the Mods folder (it has no .ini file). The mod's GameBanana page says where the files go".to_string();
         if !nested.broken.is_empty() { msg = format!("No mod found inside. Couldn't open {}", nested.broken.join(", ")); }
         return Err(Error::Invalid(msg));
     }

@@ -89,7 +89,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
         void load();
       } else if (e.source) {
         const item = await queueLatest(game, e.source.modId);
-        if (item) toast(t("Downloading {mod}. Its settings come back when it installs", { mod: e.name }), false, { label: t("Downloads"), run: () => go("downloads") });
+        if (item) toast(t("Downloading {mod}. The settings come back when it installs", { mod: e.name }), false, { label: t("Downloads"), run: () => go("downloads") });
         else toast(t("{mod} has no files left on GameBanana", { mod: e.name }), true);
       } else {
         toast(t("The mod's files are gone and it didn't come from GameBanana, so there's nothing to download"), true);

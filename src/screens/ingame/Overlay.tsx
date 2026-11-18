@@ -682,7 +682,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
           {m.character && <><Portrait game={game} name={m.character} size={22} /><span>{m.character}</span></>}
           {showing ? <Badge tone="ok" icon="check">{t("Showing")}</Badge> : m.enabled ? <Badge tone="ok">{t("On")}</Badge> : <Badge>{t("Off")}</Badge>}
           {m.updateAvailable && (m.source?.modId
-            ? <Badge tone="accent" icon="update" title={t("GameBanana has a newer file. Click to update. Its options, tags and on/off state stay")}
+            ? <Badge tone="accent" icon="update" title={t("GameBanana has a newer file. Click to update. Options, tags and on/off state stay")}
                 onClick={() => void installLatest(game, m.source!.modId, m.name, m.id)}>{t("Update")}</Badge>
             : <Badge tone="accent">{t("Update")}</Badge>)}
           {m.hasKeys && <Badge title={t("It has keys that change parts of it while you play. Click to see them")} onClick={onKeys}>{t("Toggles")}</Badge>}

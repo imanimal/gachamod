@@ -98,7 +98,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
         )}
         {held === "update" && !(mod.updateAvailable && mod.source) && (
           <Badge tone="muted" icon="bell-off" onClick={() => openDetails(mod)}
-            title={t("A game update broke it, and you're waiting for its author to post an update. Its warnings show again once you install a newer version. Click for details")}>{t("Waiting for update")}</Badge>
+            title={t("A game update broke it, and you're waiting for its author to post an update. The warnings show again once you install a newer version. Click for details")}>{t("Waiting for update")}</Badge>
         )}
         {mod.updateAvailable && mod.source && (
           <button type="button" className="badge t-accent mod-card-update" aria-busy={updating} disabled={updating}

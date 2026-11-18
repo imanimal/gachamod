@@ -119,7 +119,7 @@ export function AllSwitches({ mods, all, from }: { mods: ModEntry[]; all: Map<st
 /** One switch for a row that installed one mod. */
 export function ModSwitch({ mod, all }: { mod: ModEntry; all: Map<string, ModEntry> }) {
   return <Toggle size="sm" checked={mod.enabled} onChange={(v) => void setMods([mod], v, all)} label={mod.enabled ? t("On") : t("Off")}
-    title={mod.enabled ? t("Turn {name} off", { name: mod.name }) : t("Turn {name} on. Its character's other skin turns off as usual", { name: mod.name })} />;
+    title={mod.enabled ? t("Turn {name} off", { name: mod.name }) : t("Turn {name} on. The character's other skin turns off as usual", { name: mod.name })} />;
 }
 
 /** The button that shows or hides a row's mods: "3 of 18 on". */
@@ -144,7 +144,7 @@ export function InstalledList({ mods, all, gone }: { mods: ModEntry[]; all: Map<
         {mods.map((m) => (
           <li key={m.id}>
             <Toggle size="sm" checked={m.enabled} onChange={(v) => void setMods([m], v, all)}
-              title={m.enabled ? t("Turn {name} off", { name: m.name }) : t("Turn {name} on. Its character's other skin turns off as usual", { name: m.name })} />
+              title={m.enabled ? t("Turn {name} off", { name: m.name }) : t("Turn {name} on. The character's other skin turns off as usual", { name: m.name })} />
             <button type="button" className="dl-installed-name" title={t("Open {name} in Mods", { name: m.name })} onClick={() => go({ view: "library", modId: m.id })}>{m.name}</button>
             {m.character && <span className="dl-c">{m.character}</span>}
           </li>
@@ -171,7 +171,7 @@ export function BatchHead({ items, all, onClear, onRetry }: { items: QueueItem[]
       <span className="dl-batch-act">
         {failed > 0 && onRetry && <Button size="sm" icon="refresh" onClick={onRetry} title={tn(failed, "Try the {n} failed download in this batch again", "Try the {n} failed downloads in this batch again")}>{t("Retry failed")}</Button>}
         {mods.length > 1 && <AllSwitches mods={mods} all={all} from="batch" />}
-        <IconButton icon="x" size="sm" label={t("Clear this batch from the list. Its mods stay installed")} onClick={onClear} />
+        <IconButton icon="x" size="sm" label={t("Clear this batch from the list. The mods stay installed")} onClick={onClear} />
       </span>
     </div>
   );
