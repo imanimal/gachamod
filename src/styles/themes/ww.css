@@ -45,3 +45,8 @@
 [data-theme="ww"][data-accent="glacio"] { --gold: #6fd0f2; --gold-hi: #b5e9fb; --gold-line: #9cc3d2; --gold-dk: #1f6f8c; }
 [data-theme="ww"][data-accent="havoc"] { --gold: #e26aa5; --gold-hi: #f6b6d4; --gold-line: #cfa2b8; --gold-dk: #94285c; }
 [data-theme="ww"][data-accent="aero"] { --gold: #5fe0b0; --gold-hi: #b3f3da; --gold-line: #9ccdb9; --gold-dk: #1c7a58; }
+/* any colour from the picker (lib/theme.ts sets --accent-pick and a darker shade that reads on white) */
+[data-theme="ww"][data-accent^="#"] {
+  --gold: var(--accent-pick); --gold-hi: color-mix(in srgb, var(--accent-pick) 55%, #fff); --gold-line: color-mix(in srgb, var(--accent-pick) 45%, #b8ad9e);
+  --gold-dk: var(--accent-pick-dk);
+}

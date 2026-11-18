@@ -55,6 +55,7 @@
   .nv:hover:not(:disabled) .i { color: #fff; }
   .nv.on, .nv.on:hover:not(:disabled) { background: var(--acc); color: #111; font-weight: 600; animation: efWipe var(--dur-slow) var(--ease-out); }
   .nv.on::before { display: none; }
+  &[data-nav="grid"] .nv.on::after { display: none; }
   .nv.on::after { content: ""; position: absolute; right: -5px; top: 50%; width: 0; height: 0; border: 5px solid transparent; border-left-color: var(--acc); transform: translateY(-50%); }
   .nv.on .i, .nv.on .nv-t::before { color: #111; }
   .nv-b { border-radius: 2px; background: #f4f4f4; color: #111; font-weight: 700; }

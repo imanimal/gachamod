@@ -28,9 +28,11 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-importer { display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--t-small); }
 .set-xxmi-missing { display: flex; flex-direction: column; gap: var(--s-3); }
 .set-rows { display: flex; flex-direction: column; }
-.set-row { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--line); }
+.set-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--line); }
 .set-row:last-child { border-bottom: 0; }
-.set-row > span:first-child { flex: 1; display: flex; flex-direction: column; }
+/* a switch keeps its full width; when the row is too narrow for both, it moves under the label instead of squeezing */
+.set-row > span:first-child { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; }
+.set-row > .seg { flex: none; }
 .set-inline { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 .set-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--s-3); margin: var(--s-2) 0 var(--s-4); }
 .theme-card { padding: var(--s-2); gap: var(--s-2); }
@@ -66,7 +68,14 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .setup-more { margin: 0; }
 /* a short window scrolls the body; its cards never squash and cut off their buttons */
 
-.set-accents { display: flex; gap: var(--s-2); align-items: center; }
+/* a picked swatch's ring reaches up to 5px past it (New Eridu) and the next one's up to 4px, so the gap keeps them
+   apart. The row's own padding holds the ring, so the swatches line up with the controls in the other rows */
+.set-accents { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: calc(var(--s-2) + 7px); }
+.swatch-pick-w { position: relative; display: inline-flex; flex: none; }
+.swatch-pick-w input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.swatch-pick { display: grid; place-items: center; }
+.swatch-pick:not(.on) { background: var(--surface-2); color: var(--text-2); }
+.swatch-pick .i { width: 1.05rem; height: 1.05rem; }
 .set-import ul { margin: var(--s-2) 0; padding-left: 1.2rem; display: grid; gap: var(--s-1); }
 .set-import ul.mono { font-size: var(--t-small); word-break: break-all; }
 .set-update { margin-bottom: var(--s-4); }
@@ -85,7 +94,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .ctheme-line > .field-l { min-width: 8.5rem; margin: 0; }
 .ctheme-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: var(--s-2) var(--s-5); }
 .ctheme-colors { display: flex; flex-wrap: wrap; gap: var(--s-2); }
-.ctheme-color { display: inline-flex; align-items: center; gap: .15rem; padding: .2rem .25rem .2rem .3rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--t-small); }
+.ctheme-color { display: inline-flex; align-items: center; gap: var(--s-1); padding: .2rem .25rem .2rem .3rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--t-small); }
 .ctheme-color.set { box-shadow: inset 0 0 0 1px var(--accent); }
 .ctheme-color label { display: inline-flex; align-items: center; gap: var(--s-2); padding-right: .35rem; cursor: pointer; }
 .ctheme-color input[type="color"] { width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; cursor: pointer; }
@@ -144,6 +153,8 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
    a miniature drawn with boxes in the theme's colours; the accent marks what is picked in it */
 .set-format { display: flex; flex-direction: column; gap: var(--s-1); padding-bottom: var(--s-4); border-bottom: 1px solid var(--line); }
 .set-format .fmt-picker { margin-top: var(--s-2); }
+/* themes that draw rows as boxes would put the first one right on the divider */
+.set-format + .set-rows { margin-top: var(--s-3); }
 .fmt-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); }
 .fmt-card { gap: 0; }
 .fmt-card-t { display: flex; flex-direction: column; gap: .1rem; padding: var(--s-2) var(--s-3) var(--s-3); }

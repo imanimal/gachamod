@@ -42,13 +42,31 @@ export function setThemePicks(picks: Record<string, string>, current: GameState 
   applyGameTheme(current);
 }
 
-/** The accent picked for a theme that offers several (its first one when nothing is picked). */
+/** A colour picked with the colour picker instead of one of a theme's accents ("#3fa7d6"). */
+export const isAccentHex = (v: string) => /^#[0-9a-f]{6}$/i.test(v);
+
+/** The accent picked for a theme that offers several: one of its accent ids, or a "#rrggbb" colour (its first
+    accent when nothing is picked). */
 export function accentPick(themeId: string): string {
   const list = THEMES.find((th) => th.id === themeId)?.accents ?? [];
   const pick = read(K.accent(themeId));
+  if (pick && list.length > 1 && isAccentHex(pick)) return pick.toLowerCase();
   return list.find((a) => a.id === pick)?.id ?? list[0]?.id ?? "";
 }
-export function setAccentPick(themeId: string, accentId: string, game: GameState | null) { write(K.accent(themeId), accentId); applyGameTheme(game); }
+/** Pick an accent id, or any "#rrggbb" colour. */
+export function setAccentPick(themeId: string, accent: string, game: GameState | null) { write(K.accent(themeId), accent); applyGameTheme(game); }
+
+/** Put a theme's accent pick on <html>: data-accent is the accent id or the colour itself (themes match a colour
+    with [data-accent^="#"]), and a colour sets --accent-pick plus text that reads on it and a darker shade. */
+const PICK_VARS = ["--accent-pick", "--accent-pick-on", "--accent-pick-dk"] as const;
+function applyAccent(r: HTMLElement, themeId: string): Record<string, string> {
+  const pick = accentPick(themeId);
+  r.dataset.accent = pick;
+  if (!isAccentHex(pick)) { for (const k of PICK_VARS) r.style.removeProperty(k); return {}; }
+  const vars = { "--accent-pick": pick, "--accent-pick-on": onColor(pick), "--accent-pick-dk": darkShade(pick) };
+  for (const [k, v] of Object.entries(vars)) r.style.setProperty(k, v);
+  return vars;
+}
 
 const systemScheme = (): Scheme => (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
 
@@ -108,12 +126,13 @@ export function applyGameTheme(game: GameState | null) {
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;
   r.dataset.game = game?.id ?? "";
-  r.dataset.accent = accentPick(info.id);
+  const pickVars = applyAccent(r, info.id);
   // every theme dark or light (not each its game's own): themes whose own look mixes the two go all one way
   if (!custom && schemeMode() !== "game") r.dataset.full = ""; else delete r.dataset.full;
   const accent = rgb(game?.accent ?? "") ? game!.accent : BRAND_ACCENT;
-  const vars = { "--game-accent": accent, "--game-on-accent": onColor(accent), "--game-accent-dk": darkShade(accent) };
-  for (const [k, v] of Object.entries(vars)) r.style.setProperty(k, v);
+  const gameVars = { "--game-accent": accent, "--game-on-accent": onColor(accent), "--game-accent-dk": darkShade(accent) };
+  for (const [k, v] of Object.entries(gameVars)) r.style.setProperty(k, v);
+  const vars: Record<string, string> = { ...gameVars, ...pickVars };
   const motion = read(K.motion) !== "0";
   r.dataset.motion = motion ? "full" : "reduced";
   const css = injectCustom(custom);
@@ -539,7 +558,7 @@ export function applyCustomTheme(input: CustomTheme | null): string[] {
   const r = document.documentElement;
   r.dataset.theme = info.id;
   r.dataset.scheme = scheme;
-  r.dataset.accent = accentPick(info.id);
+  applyAccent(r, info.id);
   injectCustom(theme);
   state = { ...state, id: info.id, scheme, choice: theme.scheme, custom: theme.id };
   emit();

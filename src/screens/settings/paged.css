@@ -2,7 +2,7 @@
    on the right that slides like a scroll when it changes, or the search's results in its place. Colours are theme
    tokens only. Owner: SETTINGS/AI area. */
 .view > .page.pg-screen { height: 100%; min-height: 0; padding-bottom: 0; }
-.pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 15.5rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--s-5); }
+.pg { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 17rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: var(--s-5); }
 
 .pg-side { min-height: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 .pg-search .search { width: 100%; min-width: 0; }
@@ -16,6 +16,10 @@
 .pg-nav-i > span { min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
 .pg-nav-i:hover { background: var(--hover); color: var(--text); }
 .pg-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
+/* the list scrolls and clips at its sides, so the focus ring sits inside the item */
+.pg-nav-i:focus-visible, html.kbd .pg-nav-i:focus { outline-offset: -2px; }
+html.pad .pg-nav-i:focus { outline-offset: -3px; }
+html.pad .pg-nav-i:focus:not(.on) { box-shadow: none; }
 
 /* The pages sit on top of each other. The stage reaches a little past the content on each side, so focus rings and
    theme frames near the edge aren't cut off. */
@@ -57,7 +61,12 @@
 .pg-results .pg-from:not(:first-child) { margin-top: var(--s-3); }
 .pg-results .pg-from:is(:last-child, :has(+ .pg-from)) { display: none; }
 .pg-results .sub-h { margin: var(--s-6) 0 var(--s-1); font-size: .95rem; }
-.pg-hit { border-radius: var(--radius-sm); background: var(--accent-soft); box-shadow: 0 0 0 .3rem var(--accent-soft); }
+/* the light sits behind the row's text and stays inside its own row, 2px clear of the next one, so lit rows side by
+   side never overlap. It reaches a little past a plain row's text; a theme whose rows are boxes keeps it inside the
+   box (--hit-x: 3px, with --hit-r a corner that follows the box's) */
+.pg-hit { position: relative; isolation: isolate; }
+.pg-hit::after { content: ""; position: absolute; inset: 2px var(--hit-x, calc(-1 * var(--s-2))); z-index: -1; border-radius: var(--hit-r, var(--radius-sm));
+  background: var(--accent-soft); pointer-events: none; }
 
 /* a narrow window: the list runs across the top */
 @container view (max-width: 46rem) {
@@ -68,6 +77,4 @@
   .pg-group { display: none; }
   .pg-nav-i { flex: none; }
   .pg-nav-i > span { white-space: nowrap; }
-  /* the row scrolls and clips, so the focus ring sits inside the item */
-  .pg-nav-i:focus-visible, html.kbd .pg-nav-i:focus { outline-offset: -2px; }
 }

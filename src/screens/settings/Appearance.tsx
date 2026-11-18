@@ -7,7 +7,7 @@ import { extName, extensionsNow, removeExtension, shareTheme } from "../../lib/e
 import { record } from "../../lib/history";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import {
-  THEMES, THEME_TOKENS, accentPick, applyCustomTheme, currentLayout, customThemesPref, darkShade, onColor, ownSchemeChoice, setAccentPick, setLayout, setMotion,
+  THEMES, THEME_TOKENS, accentPick, applyCustomTheme, isAccentHex, currentLayout, customThemesPref, darkShade, onColor, ownSchemeChoice, setAccentPick, setLayout, setMotion,
   setScheme, setSchemeMode, setThemePick, setThemePicks, subscribeTheme, themeAttrs, themePick, useTheme, validateCustomTheme,
   type CustomTheme, type LayoutPrefs, type Scheme, type SchemeChoice, type SchemeMode,
 } from "../../lib/theme";
@@ -15,6 +15,7 @@ import { anatomyText } from "../../lib/theme-anatomy";
 import { SIZES, getTextSize, setTextSize } from "../../lib/zoom";
 import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle } from "../../ui/kit";
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
 import { FormatPicker } from "./FormatPicker";
@@ -74,6 +75,8 @@ export function AppearanceSection() {
                 <button key={a.id} type="button" role="radio" aria-checked={accent === a.id} className={`swatch${accent === a.id ? " on" : ""}`} title={a.name} aria-label={a.name}
                   style={{ "--c": a.color } as CSSProperties} onClick={() => { setAccentPick(theme.id, a.id, currentGame()); setAccent(a.id); }} />
               ))}
+              <AccentPicker value={isAccentHex(accent) ? accent : null} fallback={accents.find((a) => a.id === accent)?.color ?? accents[0]!.color}
+                onPick={(hex) => { setAccentPick(theme.id, hex, currentGame()); setAccent(hex); }} />
             </span>
           </SetRow>
         )}
@@ -95,6 +98,27 @@ export function AppearanceSection() {
         )}
       </div>
     </Panel>
+  );
+}
+
+/** The last accent swatch: any colour, from the system colour picker. `value` is the colour picked with it, if that
+    is the accent in use; the picker opens on `fallback` otherwise. */
+function AccentPicker({ value, fallback, onPick }: { value: string | null; fallback: string; onPick: (hex: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const open = () => {
+    const el = input.current;
+    if (!el) return;
+    try { el.showPicker(); } catch { el.click(); }
+  };
+  // the input sits under the swatch, rendered but unseen, so the system picker opens next to it
+  return (
+    <span className="swatch-pick-w">
+      <button type="button" role="radio" aria-checked={!!value} className={`swatch swatch-pick${value ? " on" : ""}`} title={t("Pick any colour")} aria-label={t("Pick any colour")}
+        style={value ? { "--c": value, color: onColor(value) } as CSSProperties : undefined} onClick={open}>
+        <Icon name="palette" />
+      </button>
+      <input ref={input} type="color" tabIndex={-1} aria-hidden="true" value={value ?? fallback} onChange={(e) => onPick(e.target.value.toLowerCase())} />
+    </span>
   );
 }
 

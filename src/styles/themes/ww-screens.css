@@ -122,7 +122,8 @@
 
   /* ── settings and tools: rows like the game's Settings, ink bars with the control on the right ── */
   .set-rows, .tools-dev { gap: 4px; }
-  .set-row, .tools-dev-row { padding: .55rem .5rem .55rem .9rem; border-bottom: 0; border-radius: 3px; background: rgb(0 0 0 / .42); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .05); }
+  .set-row, .tools-dev-row { padding: .55rem .5rem .55rem .9rem; border-bottom: 0; border-radius: 3px; background: rgb(0 0 0 / .42); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .05);
+    --hit-x: 3px; --hit-r: 2px; }
   .set-row:last-child, .tools-dev-row:last-child { border-bottom: 0; }
   .set-row > span:first-child { font-weight: 700; }
   .set-game { border-bottom: 1px solid var(--line); }

@@ -113,6 +113,10 @@
   .seg-o.on:first-child { clip-path: polygon(0 0, 100% 0, calc(100% - .55rem) 100%, 0 100%); border-radius: 999px 0 0 999px; }
   .seg-o.on:last-child { clip-path: polygon(.55rem 0, 100% 0, 100% 100%, 0 100%); border-radius: 0 999px 999px 0; }
   .seg-o.on .i { color: #0a0a0a; }
+  /* the slanted block's clip-path would cut its own focus ring, so the whole capsule takes it */
+  .seg:has(> .seg-o.on:focus-visible), &.kbd .seg:has(> .seg-o.on:focus) { outline: 2px solid var(--ring); outline-offset: 2px; }
+  &.pad .seg:has(> .seg-o.on:focus) { outline-width: 3px; outline-offset: 3px; }
+  .seg-o.on:focus-visible, &.kbd .seg-o.on:focus { outline: none; }
   .seg-sm .seg-o { height: 1.55rem; }
 
   /* ── tabs: real folder tabs; the open one is yellow and stands taller ── */
@@ -324,3 +328,8 @@
 [data-theme="zzz"][data-accent="cyan"] { --acc: #35d3ff; --acc-hi: #82e6ff; --acc-lo: #12b4e6; --acc-dk: #0b5f7c; }
 [data-theme="zzz"][data-accent="pink"] { --acc: #ff6aa9; --acc-hi: #ff9cc6; --acc-lo: #f23d88; --acc-dk: #8c1c4b; }
 [data-theme="zzz"][data-accent="yellow"] { --acc: #ffd21a; --acc-hi: #ffe45c; --acc-lo: #f0ae00; --acc-dk: #8a6f00; --yellow: #ff9a2e; --yellow-lo: #f26a0a; }
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+[data-theme="zzz"][data-accent^="#"] {
+  --acc: var(--accent-pick); --acc-hi: color-mix(in srgb, var(--accent-pick) 72%, #fff); --acc-lo: color-mix(in srgb, var(--accent-pick) 86%, #000);
+  --acc-dk: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
+}

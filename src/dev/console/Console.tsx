@@ -93,7 +93,13 @@ function Console() {
   view.filter = filter; view.level = level; view.calls = calls; view.tab = tab;
   view.set = (p) => { if (p.filter !== undefined) setFilter(p.filter); if (p.level) setLevel(p.level); if (p.calls !== undefined) setCalls(p.calls); if (p.tab) setTab(p.tab); };
 
+  // ~ opens and closes it. The key goes no further (its keyup neither), and closing puts focus back where it was
+  // before opening, without a focus ring, so it never lands on some other button
+  const openRef = useRef(open);
+  openRef.current = open;
+  const before = useRef<HTMLElement | null>(null);
   useEffect(() => {
+    let ours = false;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Backquote" || e.ctrlKey || e.altKey || e.metaKey) return;
       const t = e.target as HTMLElement | null;
@@ -101,12 +107,31 @@ function Console() {
       if (typing && t !== input.current) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      setOpen((o) => !o);
+      ours = true;
+      if (e.repeat) return;
+      if (!openRef.current) {
+        const a = document.activeElement;
+        before.current = a instanceof HTMLElement && a !== document.body && !a.closest("#gm-console") ? a : null;
+      }
+      setOpen(!openRef.current);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== "Backquote" || !ours) return;
+      ours = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onUp, true);
+    return () => { window.removeEventListener("keydown", onKey, true); window.removeEventListener("keyup", onUp, true); };
   }, []);
-  useEffect(() => { if (open) requestAnimationFrame(() => input.current?.focus()); }, [open]);
+  useEffect(() => {
+    if (open) { requestAnimationFrame(() => input.current?.focus()); return; }
+    const back = before.current;
+    before.current = null;
+    const a = document.activeElement;
+    if (back?.isConnected && (!a || a === document.body)) back.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+  }, [open]);
 
   const shown = useMemo(() => {
     const f = filter.toLowerCase();

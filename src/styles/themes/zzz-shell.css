@@ -105,7 +105,8 @@
   .nv.on .nv-b.t-run { background: #0a0a0a; }
   /* grid tiles: rounded squares, their corners following the well's (13px less the 4px gap) */
   &[data-nav="grid"] .nv { padding: 0 .75rem; }
-  &[data-nav="grid"] .nv::before { border-radius: 9px; background: var(--well-hi); }
+  &[data-nav="grid"] .nv::before { border-radius: 9px; }
+  &[data-nav="grid"] .nv:not(.on)::before { background: var(--well-hi); }
   /* profiles */
   .side-hk { border-radius: 50%; color: var(--text-3); }
   .side-hk:hover { background: var(--well); color: var(--acc-ink); }
