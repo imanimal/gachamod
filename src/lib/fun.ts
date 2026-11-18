@@ -1,6 +1,7 @@
 // The extras in Settings, Fun extras, all off until turned on: chill mode (the app's own words in lower case; names,
 // descriptions and anything people wrote stay as written), the pull button (in Surprise me's place) and seasonal touches. Also
 // the Konami code (keyboard or controller), which reveals a hidden theme. Owner: SETTINGS/AI area.
+import { useSyncExternalStore } from "react";
 import { pref } from "./prefs";
 import { t } from "./i18n";
 
@@ -28,24 +29,45 @@ export const pullWord = (game: string | null | undefined) => PULL_WORD[game ?? "
 
 // ── seasonal touches (ui/Seasonal.tsx) ──
 
-export type Season = "snow" | "hearts" | "halloween";
+export type Season = "winter" | "halloween" | "valentine" | "lunar";
+export const SEASONS: Season[] = ["winter", "halloween", "valentine", "lunar"];
 /** Off, by the calendar, or one season all year. */
 export type SeasonPick = "off" | "date" | Season;
-const PICKS: SeasonPick[] = ["off", "date", "snow", "hearts", "halloween"];
-// "1" and "0" are from when this was an on/off switch
+// "1" and "0" are from when this was an on/off switch, "snow" and "hearts" from the first season names
+const OLD: Record<string, SeasonPick> = { "1": "date", "0": "off", snow: "winter", hearts: "valentine" };
 export const seasonPref = pref<SeasonPick>("fun.seasonal", "off",
-  (r) => (r === "1" ? "date" : r === "0" ? "off" : (PICKS as string[]).includes(r) ? r as SeasonPick : undefined), (v) => v);
+  (r) => OLD[r] ?? (r === "off" || r === "date" || (SEASONS as string[]).includes(r) ? r as SeasonPick : undefined), (v) => v);
 
-/** The season the calendar says: Halloween from 24 October, snow from 20 December, hearts on Valentine's Day. */
+/** Lunar New Year's day, as [month, day] by year. */
+const LUNAR: Record<number, [number, number]> = {
+  2026: [2, 17], 2027: [2, 6], 2028: [1, 26], 2029: [2, 13], 2030: [2, 3], 2031: [1, 23],
+  2032: [2, 11], 2033: [1, 31], 2034: [2, 19], 2035: [2, 8], 2036: [1, 28],
+};
+const DAY = 86_400_000;
+
+/** The season the calendar says: Halloween from 24 October, winter from 20 December to 2 January, Valentine's Day on
+ *  14 February, Lunar New Year for its first 15 days (to the Lantern Festival). */
 export function season(d = new Date()): Season | null {
   const m = d.getMonth() + 1, day = d.getDate();
   if (m === 10 && day >= 24) return "halloween";
-  if (m === 12 && day >= 20) return "snow";
-  if (m === 2 && day === 14) return "hearts";
+  if ((m === 12 && day >= 20) || (m === 1 && day <= 2)) return "winter";
+  if (m === 2 && day === 14) return "valentine";
+  const ny = LUNAR[d.getFullYear()];
+  if (ny) {
+    // rounded, so a clock change in between doesn't add or drop a day
+    const since = Math.round((new Date(d.getFullYear(), m - 1, day).getTime() - new Date(d.getFullYear(), ny[0] - 1, ny[1]).getTime()) / DAY);
+    if (since >= 0 && since < 15) return "lunar";
+  }
   return null;
 }
 /** What shows now for a pick. */
 export const seasonNow = (pick: SeasonPick): Season | null => (pick === "off" ? null : pick === "date" ? season() : pick);
+
+// A season the dev console shows for this run only ("season halloween"), over the setting. null: the setting decides.
+let preview: Season | "off" | null = null;
+const previewSubs = new Set<() => void>();
+export function previewSeason(s: Season | "off" | null) { preview = s; for (const f of previewSubs) f(); }
+export const useSeasonPreview = () => useSyncExternalStore((f) => { previewSubs.add(f); return () => { previewSubs.delete(f); }; }, () => preview);
 
 // ── Konami code ──
 

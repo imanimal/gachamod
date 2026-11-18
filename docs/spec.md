@@ -1140,8 +1140,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
     3 star: a page of the newest. 4 star: pages 2 to 4 of the most liked. 5 star: the 50 most liked, one pull in
     sixteen, and every 10th pull without one ("fun.pulls" counts). Hidden mods, blocked creators and, when hidden,
     mods for adults stay out.
-  - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx`): off, by the date (bats and pumpkins from 24 October,
-    snowflakes from 20 December, hearts on 14 February), or one season all year. Hidden when Theme background motion is off.
+  - Seasonal touches ("fun.seasonal", `ui/Seasonal.tsx` sets html[data-season], `styles/fun.css` draws it): off, by
+    the date (Halloween from 24 October, winter from 20 December to 2 January, Valentine's Day on 14 February, Lunar
+    New Year for 15 days), or one season all year. A pattern along the line under the title bar and a small shape on
+    the logo, drawn in each theme's style, behind the title bar's controls. Game themes run a light along it three
+    times; it pauses while idle and stays still with Theme background motion or Interface animations off. Console: `season <name|off|setting>`.
   - Your year in mods: a dialog with mods installed this year, the character with the most mods, the creator of
     the most of them and hours played (`lib/playtime.ts` counts from game start to close, "stats.played").
   - Mod of the day (`lib/motd.ts`): see Browse.

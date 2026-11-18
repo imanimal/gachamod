@@ -1,21 +1,28 @@
-// Seasonal touches (Settings, Fun extras; off by default): drifting behind every window, a few snowflakes in late
-// December, hearts on Valentine's Day, bats and pumpkins the week before Halloween. "By the date" shows nothing the
-// rest of the year; picking one season shows it all year. Nothing shows with Theme background motion off (Settings, Appearance). Owner: SETTINGS/AI area.
-import { useMemo, type CSSProperties } from "react";
-import { seasonNow, seasonPref } from "../lib/fun";
-
-const SIZE: Record<string, [number, number]> = { snow: [4, 6], hearts: [9, 6], halloween: [22, 12] };
+// Seasonal touches (Settings, Fun extras; off by default). This only sets html[data-season]; styles/fun.css draws
+// the season in two quiet places, in the theme's style: along the line under the title bar and as a small mark on
+// the logo. Both sit behind the title bar's controls and ignore the pointer. "By the date" checks the calendar again
+// whenever the window comes back, so a window left open overnight changes on its own. Owner: SETTINGS/AI area.
+import { useEffect, useState } from "react";
+import { seasonNow, seasonPref, useSeasonPreview } from "../lib/fun";
 
 export function Seasonal() {
-  const kind = seasonNow(seasonPref.use());
-  const bits = useMemo(() => Array.from({ length: kind === "halloween" ? 16 : 22 }, (_, i) => {
-    const r = (n: number) => ((Math.sin(i * 12.9898 + n * 78.233) * 43758.5453) % 1 + 1) % 1;
-    const [base, spread] = SIZE[kind ?? "snow"]!;
-    return {
-      "--x": `${(r(1) * 100).toFixed(1)}%`, "--s": `${base + r(2) * spread}px`, "--o": (0.35 + r(3) * 0.5).toFixed(2),
-      "--d": `${14 + r(4) * 14}s`, "--w": `${-r(5) * 28}s`, "--sway": `${(r(6) - 0.5) * 80}px`, "--flap": `${0.2 + r(7) * 0.14}s`,
-    } as CSSProperties;
-  }), [kind]);
-  if (!kind) return null;
-  return <div className={`season season-${kind}`} aria-hidden="true">{bits.map((s, i) => <i key={i} style={s} />)}</div>;
+  const pick = seasonPref.use();
+  const preview = useSeasonPreview();
+  const [, setDay] = useState(() => new Date().toDateString());
+
+  useEffect(() => {
+    if (pick !== "date") return;
+    const check = () => { if (document.visibilityState === "visible") setDay(new Date().toDateString()); };
+    window.addEventListener("focus", check);
+    document.addEventListener("visibilitychange", check);
+    return () => { window.removeEventListener("focus", check); document.removeEventListener("visibilitychange", check); };
+  }, [pick]);
+
+  const kind = preview === "off" ? null : preview ?? seasonNow(pick);
+  useEffect(() => {
+    const r = document.documentElement;
+    if (kind) r.dataset.season = kind; else delete r.dataset.season;
+    return () => { delete r.dataset.season; };
+  }, [kind]);
+  return null;
 }

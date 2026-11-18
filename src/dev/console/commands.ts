@@ -151,6 +151,15 @@ export const COMMANDS: Command[] = [
       setModsFormat(f as ModsFormat);
       go("library");
     } },
+  { name: "season", args: "<winter|halloween|valentine|lunar|off|setting>", help: "Show a season's touches until restart, whatever Fun says; setting goes back to it",
+    complete: () => ["winter", "halloween", "valentine", "lunar", "off", "setting"],
+    run: async ([s]) => {
+      const { SEASONS, previewSeason } = await import("../../lib/fun");
+      if (s === "setting") { previewSeason(null); print("Seasonal touches follow Settings, Fun again"); return; }
+      if (s !== "off" && !SEASONS.includes(s as never)) { print("Seasons: winter, halloween, valentine, lunar, off, setting", "warn"); return; }
+      previewSeason(s as Parameters<typeof previewSeason>[0]);
+      print(s === "off" ? "Seasonal touches hidden until restart" : `Showing ${s} until restart`);
+    } },
   { name: "toast", args: "<text>", help: "Show a toast, translated like a backend message", run: (a) => { toast(a.join(" ") || "Hello from the console"); } },
   { name: "error", args: "<text>", help: "Show an error toast; places it names get their button", run: (a) => { toast(a.join(" ") || "Something went wrong", true); } },
   { name: "msg", args: "<english>", help: "Which backend pattern a message matches, and how it reads in the current language",
