@@ -1,11 +1,11 @@
-// Settings > Fun extras: chill mode, the pull button, seasonal touches, the year card and (while animal has it on) mod
+// Settings > Fun extras: chill mode, the pull button, seasonal touches (ui/Seasonal.tsx), the year card and (while animal has it on) mod
 // of the day. Everything here is off until turned on, except the mod of the day button. Owner: SETTINGS/AI area.
 import { useEffect, useState } from "react";
 import { library, type ModEntry } from "../../lib/api";
 import { chillPref, PULL_PITY, pullPref, pullsSince, pullWord, seasonPref, type SeasonPick } from "../../lib/fun";
 import { motdPref, useMotdOn } from "../../lib/motd";
 import { playedIn } from "../../lib/playtime";
-import { go, useGame, useGames } from "../../lib/store";
+import { useGame, useGames } from "../../lib/store";
 import { Button, Dialog, Panel, Segmented, Select, Toggle, Waiting } from "../../ui/kit";
 import { SetRow } from "./parts";
 import { lang, t, tn } from "../../lib/i18n";
@@ -13,7 +13,8 @@ import { gameName, gameShort } from "../../lib/games";
 
 const SEASONS: Array<{ value: SeasonPick; label: string }> = [
   { value: "off", label: t("Off") }, { value: "date", label: t("By the date") },
-  { value: "halloween", label: t("Halloween") }, { value: "snow", label: t("Snow") }, { value: "hearts", label: t("Hearts") },
+  { value: "winter", label: t("Winter") }, { value: "halloween", label: t("Halloween") },
+  { value: "valentine", label: t("Valentine's Day") }, { value: "lunar", label: t("Lunar New Year") },
 ];
 
 export function FunSection() {
@@ -39,11 +40,11 @@ export function FunSection() {
             : t("A button in Browse that opens a random mod: 3 star for a recent one, 4 star for a well liked one, 5 star for one of the most liked. Every {pity}th pull without a 5 star is one", { pity: PULL_PITY })}>
           <Toggle checked={pull} onChange={(v) => void pullPref.set(v, v ? t("Turned on the {pull} button", { pull: word }) : t("Turned off the {pull} button", { pull: word }))} />
         </SetRow>
-        <SetRow id="set-seasonal" label={t("Seasonal touches")} hint={t("By the date: bats and pumpkins the week before Halloween, snow from 20 December, hearts on Valentine's Day. Not while Animations is off")}>
-          <span className="set-btns">
-            <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-motion" })} title={t("Opens Animations in Appearance")}>{t("Animations")}</Button>
-            <Select<SeasonPick> value={season} onChange={(v) => void seasonPref.set(v, t("Seasonal touches: {pick}", { pick: v === "off" || v === "date" ? SEASONS.find((s) => s.value === v)!.label.toLowerCase() : SEASONS.find((s) => s.value === v)!.label }))} options={SEASONS} />
-          </span>
+        <SetRow id="set-seasonal" label={t("Seasonal touches")} hint={t("A small pattern on the line under the title bar and on the logo, in the theme's style. By the date: winter from 20 December to 2 January, Halloween from 24 October, Valentine's Day on 14 February, Lunar New Year for two weeks")}>
+          <Select<SeasonPick> value={season} onChange={(v) => {
+            const label = SEASONS.find((s) => s.value === v)!.label;
+            void seasonPref.set(v, t("Seasonal touches: {pick}", { pick: v === "off" || v === "date" ? label.toLowerCase() : label }));
+          }} options={SEASONS} />
         </SetRow>
         {motdOn && (
           <SetRow id="set-motd" label={t("Mod of the day")} hint={t("A mod picked by animal, behind the gift button at the top of Browse")}>

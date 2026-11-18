@@ -39,37 +39,6 @@
 }
 :root[data-chill] ::placeholder { text-transform: lowercase; }
 
-/* ── seasonal touches (ui/Seasonal.tsx): a few flakes or hearts drifting down, behind every window ── */
-
-.season { position: fixed; inset: 0; z-index: 4; overflow: hidden; pointer-events: none; }
-.season i { position: absolute; top: -2rem; left: var(--x); width: var(--s); height: var(--s); opacity: var(--o);
-  animation: seasonFall var(--d) linear var(--w) infinite; }
-.season-snow i { border-radius: 50%; background: #fff; box-shadow: 0 0 4px rgb(255 255 255 / .6); }
-.season-hearts i { background: #ff5d8f; -webkit-mask: var(--heart) center / contain no-repeat; mask: var(--heart) center / contain no-repeat;
-  --heart: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 21s-8-5.3-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.7-8 11-8 11z'/%3E%3C/svg%3E"); }
-[data-scheme="light"] .season-snow i { background: #b9c6d6; box-shadow: none; }
-@keyframes seasonFall {
-  from { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(var(--sway), 52vh) rotate(90deg); }
-  to { transform: translate(0, 106vh) rotate(180deg); }
-}
-/* Halloween: bats flap their way up, every third one is a pumpkin falling */
-.season-halloween i { width: var(--s); height: calc(var(--s) * .5); animation-name: seasonRise; }
-.season-halloween i::before { content: ""; position: absolute; inset: 0; background: #9d7ae6;
-  -webkit-mask: var(--bat) center / contain no-repeat; mask: var(--bat) center / contain no-repeat;
-  --bat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 16'%3E%3Cpath d='M16 4.2 14.6 2l-.5 3.2C11 2.2 6 1.2 0 3c3 1 4 3 4 5 2-1.5 4-1 5 1 1-1.5 3-1.5 4 .5l3 2.5 3-2.5c1-2 3-2 4-.5 1-2 3-2.5 5-1 0-2 1-4 4-5-6-1.8-11-.8-14.1 2.2L17.4 2z'/%3E%3C/svg%3E");
-  animation: seasonFlap var(--flap) ease-in-out infinite alternate; }
-.season-halloween i:nth-child(3n) { height: calc(var(--s) * .6); width: calc(var(--s) * .6); animation-name: seasonFall; }
-.season-halloween i:nth-child(3n)::before { background: #f08a2c; animation: none;
-  --bat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12.6 6.3c-.1-1.9.4-3.4 1.9-4.3l.8 1c-1 .7-1.4 1.8-1.3 3.3zM12 6.6c2.2-1.3 5.2-1.3 7.2.3 2.6 2 2.9 6.6 1.3 10-1.3 2.9-3.6 4.4-6 4.4-1 0-1.8-.3-2.5-.7-.7.4-1.5.7-2.5.7-2.4 0-4.7-1.5-6-4.4-1.6-3.4-1.3-8 1.3-10 2-1.6 5-1.6 7.2-.3z'/%3E%3C/svg%3E"); }
-[data-scheme="light"] .season-halloween i::before { background: #5b3f8f; }
-[data-scheme="light"] .season-halloween i:nth-child(3n)::before { background: #e07a1c; }
-@keyframes seasonRise {
-  from { transform: translate(0, 106vh); }
-  50% { transform: translate(var(--sway), 52vh); }
-  to { transform: translate(0, -2rem); }
-}
-@keyframes seasonFlap { to { transform: scaleY(.5); } }
 /* ── the pull button (screens/browse/Pull.tsx): a short flash in the star colour before the mod opens ── */
 
 .pull-flash { position: fixed; inset: 0; z-index: 2147482000; display: grid; place-items: center; pointer-events: none;
@@ -83,5 +52,102 @@
 @keyframes pullFlash { 0% { opacity: 0; } 12%, 72% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes pullStars { 0% { opacity: 0; transform: scale(.6); } 24% { opacity: 1; transform: scale(1.06); } 38% { transform: scale(1); } 74% { opacity: 1; } 100% { opacity: 0; transform: scale(1.02); } }
 
-html:is([data-motion="reduced"], [data-motion="0"]) .season { display: none; }
-@media (prefers-reduced-motion: reduce) { .season { display: none; } }
+/* ── seasonal touches (ui/Seasonal.tsx sets html[data-season]: winter, halloween, valentine or lunar) ──
+
+   Two quiet places: the line under the title bar and the logo. The title bar parts sit at z-index -1 inside its
+   stacking context, so they draw over its background, under every control in it and never past its edges:
+     .titlebar::after   the line along the bottom of the title bar, restyled for the season
+     .titlebar::before  a row of small season shapes resting on that line
+     .brand-mark::after a small season shape on the logo's corner
+   Each theme draws the line in its style: Default and Clay a single coloured hairline, New Eridu hazard tape,
+   Teyvat a double gold rule with gold diamonds, Astral Express a ticket perforation under a few stars, Solaris a
+   faint horizon with shapes scattered like a constellation, Talos-II signal segments with ruler ticks. Game themes
+   send a light along the shapes three times after the season starts; it waits while the window is idle and never
+   runs with Animations off or reduced motion. Default and Clay stay still and flat. */
+
+@property --ss-x { syntax: "<percentage>"; inherits: false; initial-value: -20%; }
+
+/* palette: --ss-r the line, --ss-m the shapes, --ss-t1 / --ss-t2 a tape or signal pair, --ss-shape the shape */
+:root[data-season="winter"] { --ss-r: #8fc0ec; --ss-m: #dcefff; --ss-t1: #dcefff; --ss-t2: #24313f;
+  --ss-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23000' stroke-width='1.3' stroke-linecap='round'%3E%3Cpath d='M6 1v10M1.67 3.5l8.66 5M1.67 8.5l8.66-5'/%3E%3C/svg%3E"); }
+:root[data-season="halloween"] { --ss-r: #9a76e8; --ss-m: #ffa040; --ss-t1: #ff7a1c; --ss-t2: #0b0b0b;
+  --ss-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cmask id='c'%3E%3Crect width='12' height='12' fill='%23fff'/%3E%3Ccircle cx='8.4' cy='4.2' r='4.2'/%3E%3C/mask%3E%3Ccircle cx='6' cy='6' r='5' mask='url(%23c)'/%3E%3C/svg%3E"); }
+:root[data-season="valentine"] { --ss-r: #ff7aa2; --ss-m: #ff9ab8; --ss-t1: #ff6aa9; --ss-t2: #1c0f15;
+  --ss-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='3 4 18 18'%3E%3Cpath d='M12 21s-8-5.3-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.7-8 11-8 11z'/%3E%3C/svg%3E"); }
+:root[data-season="lunar"] { --ss-r: #e9b949; --ss-m: #f0544a; --ss-t1: #e5483d; --ss-t2: #f2c14e;
+  --ss-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5.6h3v1.2h-3zM4.5 9.2h3v1.1h-3zM5.6 10.3h.8V12h-.8z'/%3E%3Cellipse cx='6' cy='5.8' rx='4.4' ry='3.6'/%3E%3C/svg%3E"); }
+/* a light title bar (Talos-II keeps a charcoal one unless the whole window is light) */
+:root[data-season="winter"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #5b8fc2; --ss-m: #3f7bb6; }
+:root[data-season="halloween"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #6a48b8; --ss-m: #d9650f; }
+:root[data-season="valentine"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #d6466f; --ss-m: #c93a63; }
+:root[data-season="lunar"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #b07e1f; --ss-m: #c4302a; }
+
+/* Default (and any theme below that doesn't redraw it): a hairline in the season's colour, a shape every 160px */
+:root[data-season] .titlebar::before,
+:root[data-season] .titlebar::after { content: ""; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none; }
+:root[data-season] .titlebar::after { bottom: 0; height: 1px; background: var(--ss-r); }
+:root[data-season] .titlebar::before { --ss-gap: 160px; bottom: 3px; height: 6px; opacity: .75; background: var(--ss-m);
+  -webkit-mask: var(--ss-shape) 0 0 / var(--ss-gap) 100% repeat-x; mask: var(--ss-shape) 0 0 / var(--ss-gap) 100% repeat-x; }
+:root[data-season] .brand-mark { position: relative; }
+:root[data-season] .brand-mark::after { content: ""; position: absolute; top: -3px; right: -4px; width: 9px; height: 9px; pointer-events: none;
+  background: var(--ss-m); -webkit-mask: var(--ss-shape) center / contain no-repeat; mask: var(--ss-shape) center / contain no-repeat; }
+
+/* Clay: the same, quieter and warmer */
+:root[data-season][data-theme="clay"] .titlebar::after { background: color-mix(in srgb, var(--ss-r) 65%, var(--text-3)); }
+:root[data-season][data-theme="clay"] .titlebar::before { --ss-gap: 200px; opacity: .6; background: color-mix(in srgb, var(--ss-m) 75%, var(--text-3)); }
+
+/* game themes: the light that passes along the shapes */
+:root[data-season]:is([data-theme="gi"], [data-theme="hsr"], [data-theme="ww"], [data-theme="ef"]) .titlebar::before {
+  opacity: 1; animation: ssSweep 14s linear 2s 3;
+  background: linear-gradient(90deg, transparent calc(var(--ss-x) - 7%), rgb(255 255 255 / .9) var(--ss-x), transparent calc(var(--ss-x) + 7%)), var(--ss-m); }
+@keyframes ssSweep { 0% { --ss-x: -20%; } 30%, 100% { --ss-x: 120%; } }
+
+/* New Eridu: hazard tape in the season's pair, the light runs along the tape */
+:root[data-season][data-theme="zzz"] .titlebar::after { height: 3px; animation: ssSweep 14s linear 2s 3;
+  background: linear-gradient(90deg, transparent calc(var(--ss-x) - 6%), rgb(255 255 255 / .8) var(--ss-x), transparent calc(var(--ss-x) + 6%)),
+    repeating-linear-gradient(-45deg, var(--ss-t1) 0 4px, var(--ss-t2) 4px 8px); }
+:root[data-season][data-theme="zzz"] .titlebar::before { --ss-gap: 220px; bottom: 5px; opacity: .9; }
+
+/* Teyvat: a double gold rule, gold diamonds and season shapes taking turns along it */
+:root[data-season][data-theme="gi"] { --ss-gold: #d3bc8e;
+  --ss-leaf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 1 9 5 5 9 1 5z' fill='%23d3bc8e'/%3E%3C/svg%3E"); }
+:root[data-season][data-theme="gi"][data-scheme="light"] { --ss-gold: #b39a62;
+  --ss-leaf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 1 9 5 5 9 1 5z' fill='%23b39a62'/%3E%3C/svg%3E"); }
+:root[data-season][data-theme="gi"] .titlebar::after { height: 8px;
+  background: var(--ss-leaf) 60px 0 / 120px 5px repeat-x,
+    linear-gradient(var(--ss-gold), var(--ss-gold)) 0 100% / 100% 1px no-repeat,
+    linear-gradient(color-mix(in srgb, var(--ss-gold) 45%, transparent), color-mix(in srgb, var(--ss-gold) 45%, transparent)) 0 calc(100% - 2px) / 100% 1px no-repeat; }
+:root[data-season][data-theme="gi"] .titlebar::before { --ss-gap: 120px; bottom: 3px; height: 7px; }
+
+/* Astral Express: a ticket's perforation along the bottom, a few stars above it */
+:root[data-season][data-theme="hsr"] { --ss-pale: rgb(224 190 120 / .7); --ss-star: rgb(255 255 255 / .55); }
+:root[data-season][data-theme="hsr"][data-scheme="light"] { --ss-pale: rgb(150 115 50 / .7); --ss-star: rgb(40 50 80 / .35); }
+:root[data-season][data-theme="hsr"] .titlebar::after { height: 8px;
+  background: radial-gradient(circle, var(--ss-pale) 0 .8px, transparent 1.2px) 0 100% / 6px 3px repeat-x,
+    radial-gradient(circle, var(--ss-star) 0 .6px, transparent 1px) 7px 0 / 37px 3px repeat-x,
+    radial-gradient(circle, var(--ss-star) 0 .5px, transparent .9px) 21px 3px / 53px 3px repeat-x; }
+:root[data-season][data-theme="hsr"] .titlebar::before { --ss-gap: 144px; bottom: 3px; }
+
+/* Solaris: a faint horizon, shapes of two sizes scattered above it */
+:root[data-season][data-theme="ww"] { --ss-sky: rgb(235 230 226 / .35); }
+:root[data-season][data-theme="ww"][data-scheme="light"] { --ss-sky: rgb(22 24 27 / .25); }
+:root[data-season][data-theme="ww"] .titlebar::after { background: linear-gradient(90deg, transparent, var(--ss-sky) 12% 88%, transparent); }
+:root[data-season][data-theme="ww"] .titlebar::before { bottom: 2px; height: 9px;
+  -webkit-mask: var(--ss-shape) 30px 0 / 170px 6px repeat-x, var(--ss-shape) 101px 100% / 110px 4px repeat-x;
+  mask: var(--ss-shape) 30px 0 / 170px 6px repeat-x, var(--ss-shape) 101px 100% / 110px 4px repeat-x; }
+
+/* Talos-II: signal segments in the season's colour with ruler ticks over them, a shape between every fifth tick */
+:root[data-season][data-theme="ef"] { --ss-tick: rgb(255 255 255 / .28); }
+:root[data-full][data-season][data-theme="ef"][data-scheme="light"] { --ss-tick: rgb(0 0 0 / .25); }
+:root[data-season][data-theme="ef"] .titlebar::after { height: 6px;
+  background: repeating-linear-gradient(90deg, var(--ss-t1) 0 14px, transparent 14px 20px) 0 100% / 100% 2px no-repeat,
+    repeating-linear-gradient(90deg, var(--ss-tick) 0 1px, transparent 1px 40px) 0 0 / 100% 4px no-repeat; }
+:root[data-season][data-theme="ef"] .titlebar::before { --ss-gap: 200px; bottom: 2px;
+  -webkit-mask-position: -80px 0; mask-position: -80px 0; }
+
+/* the light waits while nobody is looking and never runs with Animations off or reduced motion (:root:root outweighs
+   the theme rules above) */
+:root:root[data-season][data-idle] .titlebar::before, :root:root[data-season][data-idle] .titlebar::after { animation-play-state: paused; }
+:root:root[data-season]:is([data-motion="reduced"], [data-motion="0"], [data-motion="off"]) .titlebar::before,
+:root:root[data-season]:is([data-motion="reduced"], [data-motion="0"], [data-motion="off"]) .titlebar::after { animation: none; }
+@media (prefers-reduced-motion: reduce) { :root:root[data-season] .titlebar::before, :root:root[data-season] .titlebar::after { animation: none; } }
