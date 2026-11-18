@@ -152,12 +152,12 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
                 ? t("The mod's files are still on your PC until {date}. Put back restores them as they were", { date: new Date(e.filesUntil * 1000).toLocaleDateString() })
                 : t("The mod's files are still on your PC. Put back restores them as they were");
             return (
-              <div key={e.key} className={`tile archive-card${e.nsfw && nsfw === "blur" ? " blur" : ""}`} tabIndex={0} data-pad-x
+              <div key={e.key} className="tile archive-card" tabIndex={0} data-pad-x
                 title={files ? t("{mod}. {kept}. Enter puts it back, arrow keys move between mods", { mod: e.name, kept }) : t("{mod}. {kept}. Enter downloads it again, arrow keys move between mods", { mod: e.name, kept })}
                 onKeyDown={(k) => { if (k.key === "Enter" && k.target === k.currentTarget && (files || e.source)) { k.preventDefault(); void reinstall(e); } }}
                 onContextMenu={menuHandler(() => menu(e))}>
                 <div className="tile-img">
-                  <Preview className="archive-img" src={e.preview} icon="archive" alt={e.name} />
+                  <Preview className="archive-img" src={e.preview} icon="archive" alt={e.name} blur={e.nsfw && nsfw === "blur"} />
                   <span className="tile-tr">
                     <span className={`badge ${files ? "t-ok" : "t-muted"}`} title={kept}>
                       <Icon name={files ? "folder" : "archive"} />{files ? t("Files on PC") : t("Record only")}

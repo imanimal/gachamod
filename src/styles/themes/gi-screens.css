@@ -32,7 +32,7 @@
   .mod-card-update { cursor: pointer; }
   .mod-card.is-row { border-radius: 3px; background: var(--weave), var(--paper); }
   .mod-card.is-row .mod-card-img { border-radius: 3px 3px 1rem 3px; width: 4.6rem; }
-  .mod-card.is-row:not(.is-off) { box-shadow: inset 4px 0 0 var(--lime), 0 1px 3px rgb(8 12 22 / .3); }
+  .mod-card.is-row:not(.is-off):not(.sel) { box-shadow: inset 4px 0 0 var(--lime), 0 1px 3px rgb(8 12 22 / .3); }
   .mod-card.is-row:hover { box-shadow: var(--cursor-ring); }
   .mod-card.is-row .mod-card-more { background: var(--band); box-shadow: none; }
   .mod-img-none { color: rgb(255 255 255 / .55); }

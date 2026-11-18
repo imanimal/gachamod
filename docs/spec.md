@@ -185,12 +185,14 @@ Mods layout, on the setup page and on a first-start card, `screens/settings/Form
 set it. Every layout has the same features, keys and controller moves:
 - Cards ("cards", default): the chip row over the grid, details in a drawer. Closest to SkinSelectImpact.
 - Character list ("chars"): the same chips as a list down the left (with "All mods"), the mods beside it; a character's
-  page puts its strip of the others there. Like JASM and ARG Mod Manager.
+  page puts its strip of the others there. A field over the list narrows it as you type (`library/SideSearch.tsx`;
+  a plain text field, so "/" and Ctrl+F stay with the page's search). Like JASM and ARG Mod Manager.
 - Three panes ("panes"): the list, the mods, and the details docked on the right (kit `Drawer docked`), with a hint
   while no mod is picked. Picking another mod replaces the route instead of pushing one. Like Integrated Mod Manager
   and XX Mod Manager.
-- Compact list ("rows"): every grid as dense rows, switch first, name, character and size in columns. The grid/list
-  switch on Mods hides (the per-game choice is kept).
+- Compact list ("rows"): every grid as rows of one height, switch first, then picture, name, character, size, each kind
+  of badge and the "..." key in columns shared by every row (a CSS subgrid). The grid/list switch on Mods hides (the
+  per-game choice is kept).
 The first start picks the layout resembling a manager found on this PC (Integrated Mod Manager's folders: Three panes;
 JASM's files: Character list; XX Mod Manager's: Three panes) unless one was picked already, and says so.
 

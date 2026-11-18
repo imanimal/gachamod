@@ -3,7 +3,7 @@
 // then types and characters. Then the shared mod grid with selection and its bulk bar. Only sort and layout are kept;
 // the filters reset when the page is left, so Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
 // a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { errorText, library, settings, type GameState, type ModEntry } from "../../lib/api";
 import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/setup";
 import { checkUpdates } from "../../lib/gamebanana";
@@ -26,12 +26,13 @@ import { useMods, type ModsError } from "./data";
 import { LIB_KINDS, libKind, type LibKind } from "./kinds";
 import { ModDrawerHost } from "./ModDrawer";
 import { ModGrid } from "./ModGrid";
+import { SideSearch, matcher, upToField, useNarrow } from "./SideSearch";
 import { getUpdates } from "./menus";
 import { moveInGrid } from "./gridNav";
 import { useModsFormat } from "../../lib/theme";
 import "./library.css";
 import { t, tn } from "../../lib/i18n";
-import { gameName, gameShort } from "../../lib/games";
+import { charNoun, gameName, gameShort } from "../../lib/games";
 
 type Show = "all" | "on" | "off";
 type Flag = "updates" | "favourites" | "problems";
@@ -167,9 +168,11 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   // ── what is shown ──
 
   const icons = useMemo(() => new Map((roster ?? []).map((c) => [c.name.toLowerCase(), c.icon])), [roster]);
+  // the filters count only the mods they can show: mods for adults are left out while they are hidden
+  const visible = useMemo(() => (nsfw === "hide" ? mods.filter((m) => !m.nsfw) : mods), [mods, nsfw]);
   const charRow = useMemo(() => {
     const counts = new Map<string, { name: string; n: number }>();
-    for (const m of mods) {
+    for (const m of visible) {
       if (!m.character) continue;
       const k = m.character.toLowerCase();
       const c = counts.get(k) ?? { name: m.character, n: 0 };
@@ -177,10 +180,10 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
       counts.set(k, c);
     }
     return [...counts.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
-  }, [mods]);
+  }, [visible]);
   usePortraitBatch(gid, charRow.map((c) => c.name));
   // mods without a character by type, and how many of each type there are
-  const kinds = useMemo(() => new Map(mods.filter((m) => !m.character).map((m) => [m.id, libKind(m)])), [mods]);
+  const kinds = useMemo(() => new Map(visible.filter((m) => !m.character).map((m) => [m.id, libKind(m)])), [visible]);
   const kindRow = useMemo(() => LIB_KINDS.map((k) => ({ ...k, n: [...kinds.values()].filter((v) => v === k.value).length })).filter((k) => k.n > 0), [kinds]);
 
   const holds = useHolds(gid);
@@ -189,10 +192,11 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   const isProblem = useCallback((m: ModEntry) => holdOn(holds, m)?.kind !== "ignore"
     && (m.conflicts > 0 || m.iniCount === 0 || health.get(m.id)?.status === "broken" || health.get(m.id)?.status === "unfixable"), [health, holds]);
   const counts = useMemo(() => ({
-    all: mods.length, on: mods.filter((m) => m.enabled).length, off: mods.filter((m) => !m.enabled).length,
-    updates: mods.filter((m) => m.updateAvailable).length, favourites: mods.filter((m) => m.favorite).length,
-    problems: mods.filter(isProblem).length,
-  }), [mods, isProblem]);
+    all: visible.length, on: visible.filter((m) => m.enabled).length, off: visible.filter((m) => !m.enabled).length,
+    updates: visible.filter((m) => m.updateAvailable).length, favourites: visible.filter((m) => m.favorite).length,
+    problems: visible.filter(isProblem).length,
+  }), [visible, isProblem]);
+  const onTotal = useMemo(() => mods.filter((m) => m.enabled).length, [mods]);
 
   const shown = useMemo(() => {
     const words = dSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -236,7 +240,7 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   const [updating, setUpdating] = useState(false);
   const updateAll = async () => {
     setUpdating(true);
-    try { await getUpdates(gid, mods.filter((m) => m.updateAvailable)); } finally { setUpdating(false); }
+    try { await getUpdates(gid, visible.filter((m) => m.updateAvailable)); } finally { setUpdating(false); }
   };
   const clearFilters = () => { setSearch(""); setShow("all"); setFlag(null); setCharacter(null); };
 
@@ -269,28 +273,33 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
     </Empty>
   );
 
-  // the flag, type and character chips: a row under the header, or the list down the left (side)
+  // the flag, type and character chips: a row under the header, or the list down the left (side), which the field over
+  // it narrows to the names typed
+  const sideRef = useRef<HTMLDivElement>(null);
+  const narrow = useNarrow(sideRef, side);
+  const [find, setFind] = useState("");
+  const fits = side && !narrow ? matcher(find) : null;
   const chipCount = flagChips.length + kindRow.length + charRow.length;
   const chipDeps = [flagChips.length, kindRow.length, charRow.length, character, kind, flag];
-  const chips = (
+  const chipsOf = (fl: typeof flagChips, kr: typeof kindRow, cr: typeof charRow) => (
     <>
-        {flagChips.map((f) => (
+        {fl.map((f) => (
           <Chip key={f.id} className="char-chip flag-chip" icon={f.icon} count={counts[f.id]} on={flag === f.id}
             title={flag === f.id ? t("{tip}. Click again for every mod", { tip: f.title }) : f.title}
             onClick={() => setFlag(flag === f.id ? null : f.id)}>{f.label}</Chip>
         ))}
-        {flag === "updates" && counts.updates > 0 && (
+        {flag === "updates" && counts.updates > 0 && fl.some((f) => f.id === "updates") && (
           <Button size="sm" icon="downloads" className="lib-update-all" busy={updating} onClick={() => void updateAll()}
             title={t("Download the newest version of every mod with an update")}>{t("Update all ({n})", { n: counts.updates })}</Button>
         )}
-        {flagChips.length > 0 && kindRow.length + charRow.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
-        {kindRow.map((k) => (
+        {fl.length > 0 && kr.length + cr.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
+        {kr.map((k) => (
           <Chip key={k.value} className="char-chip kind-chip" icon={k.icon} count={k.n} on={kind === k.value}
             title={kind === k.value ? t("{tip}. Click again for every mod", { tip: k.title }) : k.title}
             onClick={() => setKind(kind === k.value ? null : k.value)}>{k.label}</Chip>
         ))}
-        {kindRow.length > 0 && charRow.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
-        {charRow.map((c) => (
+        {kr.length > 0 && cr.length > 0 && <span className="library-chars-sep" aria-hidden="true" />}
+        {cr.map((c) => (
           <Chip key={c.name} className="char-chip" img={portraitNow(gid, c.name, icons.get(c.name.toLowerCase()) ?? null)} icon="user" count={c.n}
             on={character?.toLowerCase() === c.name.toLowerCase()} title={t("Only {name}'s mods. Right-click for more", { name: c.name })}
             onClick={() => setCharacter(character?.toLowerCase() === c.name.toLowerCase() ? null : c.name)}
@@ -300,11 +309,15 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
         ))}
     </>
   );
+  const sideFlags = fits ? flagChips.filter((f) => fits(f.label)) : flagChips;
+  const sideKinds = fits ? kindRow.filter((k) => fits(k.label)) : kindRow;
+  const sideChars = fits ? charRow.filter((c) => fits(c.name)) : charRow;
+  const sideCount = sideFlags.length + sideKinds.length + sideChars.length;
 
   return (
     <>
       <PageHeader title={t("Mods")} icon="mods"
-        sub={failed ? undefined : loaded ? tn(mods.length, "{n} mod, {on} on, {size}", "{n} mods, {on} on, {size}", { on: counts.on, size: formatBytes(size) }) : t("Reading the Mods folder")}
+        sub={failed ? undefined : loaded ? tn(mods.length, "{n} mod, {on} on, {size}", "{n} mods, {on} on, {size}", { on: onTotal, size: formatBytes(size) }) : t("Reading the Mods folder")}
         actions={<>
           <LibTabs tab="installed" />
           <SearchField value={search} onChange={setSearch} placeholder={t("Search mods")} className="library-search"
@@ -325,15 +338,16 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
           <IconButton icon="dice" label={t("Shuffle outfits: one random mod on for each character with two or more. Undo puts them back. Right-click to shuffle at each Play")}
             onClick={() => void shuffleOutfits(gid).catch((e) => toast(errorText(e), true))} onContextMenu={menuHandler(shuffleMenu)} />
         </>}>
-        {!side && chipCount > 0 && <CharRow count={chipCount} deps={chipDeps}>{chips}</CharRow>}
+        {!side && chipCount > 0 && <CharRow count={chipCount} deps={chipDeps}>{chipsOf(flagChips, kindRow, charRow)}</CharRow>}
       </PageHeader>
 
       {side && (
-        <LibSide deps={chipDeps}>
+        <LibSide sideRef={sideRef} deps={[...chipDeps, find]} find={narrow || !chipCount ? null : find} onFind={setFind} noun={charNoun(gid).toLowerCase()}>
           <Chip className="char-chip all-chip" icon="mods" count={counts.all} on={!flag && !character && !kind}
             title={t("Every mod, with no type, character or filter picked")} onClick={() => { setFlag(null); setCharacter(null); }}>{t("All mods")}</Chip>
-          {chipCount > 0 && <span className="library-chars-sep" aria-hidden="true" />}
-          {chips}
+          {sideCount > 0 && <span className="library-chars-sep" aria-hidden="true" />}
+          {chipsOf(sideFlags, sideKinds, sideChars)}
+          {fits && !sideCount && chipCount > 0 && <p className="hint lib-side-none">{t("Nothing matches")}</p>}
         </LibSide>
       )}
       <Body side={side}>{failed ? failure : <ModGrid game={gid} mods={shown} all={mods} setMods={setMods} view={prefs.view} loading={!loaded} icons={icons}
@@ -364,16 +378,24 @@ function Body({ side, children }: { side: boolean; children: ReactNode }) {
   return side ? <div className="lib-main">{children}</div> : <>{children}</>;
 }
 
-/** The types and characters as a list down the left (the Character list and Three panes layouts). Up and down move
- *  in it, and it is one Tab stop like the row of chips. */
-function LibSide({ deps, children }: { deps: unknown[]; children: ReactNode }) {
+/** The types and characters as a list down the left (the Character list and Three panes layouts), with a field over
+ *  it that narrows it (`find`, null where the window is too narrow for it). Up and down move in the list, and it is one
+ *  Tab stop like the row of chips. */
+function LibSide({ sideRef, deps, find, onFind, noun, children }: {
+  sideRef: RefObject<HTMLDivElement | null>; deps: unknown[]; find: string | null; onFind: (v: string) => void; noun: string; children: ReactNode;
+}) {
   const ref = useRef<HTMLElement>(null);
+  const field = useRef<HTMLInputElement>(null);
   useRovingTab(ref, ".chip");
   useEffect(() => { ref.current?.querySelector<HTMLElement>(".chip.on")?.scrollIntoView({ block: "nearest" }); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <nav ref={ref} className="lib-side" aria-label={t("Types and characters")} onKeyDown={(e) => moveInGrid(e, ref.current, ".chip")}>
-      {children}
-    </nav>
+    <div ref={sideRef} className="lib-side">
+      {find !== null && <SideSearch ref={field} value={find} onChange={onFind} list={ref} selector=".chip" pinned=".all-chip" placeholder={t("Search {noun}", { noun })} />}
+      <nav ref={ref} className="lib-side-list" aria-label={t("Types and characters")}
+        onKeyDown={(e) => { if (!upToField(e, ref.current, ".chip", field.current)) moveInGrid(e, ref.current, ".chip"); }}>
+        {children}
+      </nav>
+    </div>
   );
 }
 
