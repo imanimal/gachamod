@@ -2,8 +2,8 @@
 // and two tabs: Installed (their mods, in the shared mod grid) and Online (GameBanana, only this character). The
 // route holds it: { view: "characters", character, tab?: "online", modId? }. Back returns to the roster where it was
 // scrolled. O marks the character as owned or not. Owner: LIBRARY area.
-import { reveal, rowKeys, useSideScroll } from "../browse/sideScroll";
-import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from "react";
+import { reveal, rowKeys, useRovingTab, useSideScroll } from "../browse/sideScroll";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { errorText, type GameId, type ModEntry } from "../../lib/api";
 import { characterTabs, useExtensions } from "../../lib/extensions";
 import { charNoun } from "../../lib/games";
@@ -18,6 +18,7 @@ import { ExtensionFrame, NeedsNote } from "../extensions/ExtensionFrame";
 import { changeStates } from "../library/data";
 import { ModGrid } from "../library/ModGrid";
 import { moveInGrid } from "../library/gridNav";
+import { SideSearch, matcher, upToField, useNarrow } from "../library/SideSearch";
 import { useModsFormat } from "../../lib/theme";
 import { toggleOwned } from "./owned";
 import type { RosterChar } from "./roster";
@@ -86,12 +87,22 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
   // the strip scrolls sideways with the mouse wheel, like the other rows of chips
   const [stripAll, toggleStripAll] = useRowOpen("character.strip");
   const stripEdges = useSideScroll(stripRef, [strip.length, stripAll]);
+  // one Tab stop, like the other rows of chips: the arrow keys move in it
+  useRovingTab(stripRef, ".pchip");
+
+  // as a list down the left, a field over it narrows it to the names typed (not where the window keeps only pictures)
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const narrow = useNarrow(wrapRef, side && strip.length > 1);
+  const [find, setFind] = useState("");
+  const fits = side && !narrow ? matcher(find) : null;
+  const listed = fits ? strip.filter((x) => fits(x.name)) : strip;
 
   // keep the current one in view in the strip
   useEffect(() => {
     const row = stripRef.current, on = row?.querySelector<HTMLElement>(".pchip.on");
     if (row && on) { if (side) on.scrollIntoView({ block: "nearest" }); else reveal(row, on, "center"); }
-  }, [name, strip.length, side]);
+  }, [name, strip.length, side, listed.length]);
 
   const defaultOutfit = async () => {
     try { await changeStates(game, t("{name} is back in the default outfit", { name }), [], on.map((m) => m.id), mods); }
@@ -143,9 +154,11 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
       </header>
 
       {strip.length > 1 && (
-        <div className={`char-strip-wrap${stripAll ? " is-all" : ""}`}>
-        <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many} onKeyDown={(e) => (side ? moveInGrid(e, stripRef.current, ".pchip") : rowKeys(e, ".pchip"))}>
-          {strip.map((x) => (
+        <div ref={wrapRef} className={`char-strip-wrap${stripAll ? " is-all" : ""}`}>
+        {side && !narrow && <SideSearch ref={field} value={find} onChange={setFind} list={stripRef} selector=".pchip" placeholder={t("Search {noun}", { noun: many.toLowerCase() })} />}
+        <div ref={stripRef} className={`pchips char-strip${stripAll ? " is-all" : ""}`} role="list" aria-label={many}
+          onKeyDown={(e) => { if (!side) rowKeys(e, ".pchip"); else if (!upToField(e, stripRef.current, ".pchip", field.current)) moveInGrid(e, stripRef.current, ".pchip"); }}>
+          {listed.map((x) => (
             <div key={x.name} role="listitem" className="char-strip-item">
             <button type="button" className={`pchip${same(x.name, name) ? " on" : ""}`} title={x.name}
               aria-current={same(x.name, name) ? "page" : undefined} onClick={() => hop(x)}
@@ -156,6 +169,7 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
             </button>
             </div>
           ))}
+          {fits && !listed.length && <p className="hint lib-side-none">{t("Nothing matches")}</p>}
         </div>
         {!side && <ShowAll open={stripAll} onToggle={toggleStripAll} fits={!stripEdges.left && !stripEdges.right} label={t("Show every {noun} ({n})", { noun: one.toLowerCase(), n: strip.length })} />}
         </div>

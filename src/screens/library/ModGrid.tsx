@@ -288,8 +288,8 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
   if (loading) {
     return (
       <Waiting what={t("Reading your mods")}>
-        <div className="mod-grid is-loading">
-          {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
+        <div className={`mod-grid is-loading${view === "list" ? " is-list" : ""}${dense ? " is-dense" : ""}`}>
+          {Array.from({ length: view === "list" ? 10 : 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
         </div>
       </Waiting>
     );

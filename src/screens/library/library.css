@@ -29,6 +29,10 @@
 .mod-grid { --card-min: 11.2rem; }
 .mod-grid.is-loading { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.2rem, 1fr)); gap: var(--s-4); }
 .mod-card-skel { height: 12.5rem; border-radius: var(--radius); }
+/* while a list reads, its placeholders are rows */
+.mod-grid.is-loading.is-list { display: flex; flex-direction: column; gap: var(--s-1); }
+.mod-grid.is-loading.is-list .mod-card-skel { height: 3.6rem; border-radius: var(--radius-sm); }
+.mod-grid.is-loading.is-dense .mod-card-skel { height: calc(2.5rem * var(--d, 1)); }
 .mod-grid.is-list { display: flex; flex-direction: column; gap: var(--s-1); }
 :where(:root:not([data-theme]), [data-theme="default"]) .mod-grid.is-list { gap: 0; }
 
@@ -73,7 +77,7 @@
 .mod-card.is-row .mod-card-img { width: 4.6rem; aspect-ratio: 16 / 10; border-radius: var(--radius-sm); flex: none; }
 .mod-card.is-row .mod-card-body { padding: 0; flex: 1; }
 /* badges wrap onto a second line instead of squeezing the name */
-.mod-card.is-row .mod-card-badges { position: relative; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 50%; }
+.mod-card.is-row .mod-card-badges { position: relative; inset: auto; flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 50%; }
 .mod-card.is-row .mod-card-foot { position: relative; display: flex; align-items: center; gap: var(--s-2); flex: none; padding-right: var(--s-2); }
 .mod-card.is-row .mod-card-foot .toggle, .mod-card.is-row .mod-card-more { position: static; opacity: 1; }
 
@@ -176,28 +180,32 @@
 .page.has-side > .lib-main { grid-area: main; }
 .page.has-side > .mod-pane { grid-area: pane; }
 /* 4px of room inside each scrolling pane for focus rings and card shadows */
-.lib-side, .lib-main { min-height: 0; overflow: hidden auto; padding: 4px; margin: -4px; }
+.lib-side-list, .lib-main { min-height: 0; overflow: hidden auto; padding: 4px; margin: -4px; }
 .lib-main > .mod-grid-wrap { min-height: 100%; }
 
-/* the list of types and characters: the same chips as the row, one per line */
-.lib-side { display: flex; flex-direction: column; gap: 2px; }
-.lib-side .chip { flex: none; width: 100%; height: auto; min-height: calc(2.2rem * var(--d, 1)); justify-content: flex-start; }
+/* the list of types and characters: a field that narrows it (SideSearch.tsx), then the same chips as the row, one per
+   line, spaced like the other lists down the left */
+.lib-side { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; min-height: 0; }
+.lib-side-list { flex: 1; display: flex; flex-direction: column; gap: var(--s-1); scrollbar-width: thin; }
+.lib-side .lib-side-search, .page.has-side .char-strip-wrap .lib-side-search { flex: none; width: 100%; min-width: 0; }
+.lib-side-none { padding: var(--s-2) var(--s-3); }
+.lib-side .chip { flex: none; width: 100%; height: auto; min-height: calc(2.2rem * var(--d, 1)); padding: var(--s-2) var(--s-3); justify-content: flex-start; }
 .lib-side .chip-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-.lib-side .library-chars-sep { flex: none; align-self: stretch; width: auto; height: 1px; margin: var(--s-1) var(--s-2); }
-.lib-side .lib-update-all { align-self: flex-start; margin: 2px 0 var(--s-1) var(--s-2); }
+.lib-side .library-chars-sep { flex: none; align-self: stretch; width: auto; height: 1px; margin: var(--s-1) var(--s-3); }
+.lib-side .lib-update-all { align-self: flex-start; margin: 0 0 var(--s-1) var(--s-3); }
 /* Default draws it as a plain list: rows without a frame, the picked one in the accent's soft fill */
 :where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip { border-radius: var(--radius-sm); background: none; box-shadow: none; }
 :where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip:hover { background: var(--hover); }
 :where(:root:not([data-theme]), [data-theme="default"]) .lib-side .chip.on { background: var(--accent-soft); color: var(--text); }
 
 /* a character's page: the strip of the others becomes the list down the left */
-.page.has-side > .char-strip-wrap { display: flex; flex-direction: column; align-items: stretch; min-height: 0; margin: 0; }
-.page.has-side .char-strip, .page.has-side .char-strip[data-side-scroll] { flex: 1; min-height: 0; flex-direction: column; flex-wrap: nowrap; gap: 2px;
+.page.has-side > .char-strip-wrap { display: flex; flex-direction: column; align-items: stretch; gap: var(--s-3); min-width: 0; min-height: 0; margin: 0; }
+.page.has-side .char-strip, .page.has-side .char-strip[data-side-scroll] { flex: 1; min-height: 0; flex-direction: column; flex-wrap: nowrap; gap: var(--s-1);
   overflow: hidden auto; padding: 4px; margin: -4px; scrollbar-width: thin; }
 .page.has-side .char-strip-item { display: block; }
-.page.has-side .char-strip .pchip { flex-direction: row; width: 100%; gap: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius-sm); font-size: var(--t-small); text-align: left; }
+.page.has-side .char-strip .pchip { flex-direction: row; width: 100%; gap: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--radius-sm); font-size: var(--t-small); text-align: left; }
 .page.has-side .char-strip .pchip-img { width: 2.2rem; height: 2.2rem; flex: none; }
-.page.has-side .char-strip .pchip-t { flex: 1; }
+.page.has-side .char-strip .pchip-t { flex: 1; min-width: 0; }
 .page.has-side .char-strip .pchip-n { position: static; flex: none; }
 .page.has-side .char-strip .pchip:hover { background: var(--hover); }
 .page.has-side .char-strip .pchip.on { background: var(--accent-soft); color: var(--text); }
@@ -217,6 +225,7 @@
 @container view (max-width: 62rem) {
   .page.has-side { grid-template-columns: 3.6rem minmax(0, 1fr); }
   .page.has-side.has-pane { grid-template-columns: 3.6rem minmax(0, 1fr) minmax(18rem, 40%); }
+  .page.has-side .lib-side-search { display: none; }
   .lib-side .chip { justify-content: center; padding-inline: 0; }
   .lib-side .chip-t, .lib-side .chip-n, .page.has-side .char-strip .pchip-t, .page.has-side .char-strip .pchip-n { display: none; }
   .lib-side .chip-img { margin: 0; }
@@ -225,17 +234,44 @@
   .page.has-side .char-strip .pchip { justify-content: center; padding-inline: 0; }
 }
 
-/* Compact list: one dense line per mod, its switch first, then the name, character and size in columns */
-.mod-grid.is-dense .mod-card.is-row { gap: var(--s-2); contain-intrinsic-size: auto 2.4rem; }
-.mod-grid.is-dense .mod-card.is-row .mod-card-hit { padding: 2px 0; }
-.mod-grid.is-dense .mod-card.is-row .mod-card-img { width: 2.6rem; }
-.mod-grid.is-dense .mod-card.is-row .mod-card-body { flex-direction: row; align-items: baseline; gap: var(--s-3); }
-.mod-grid.is-dense .mod-card-name { flex: 1 1 0; min-width: 6rem; }
-.mod-grid.is-dense .mod-card-char { flex: 0 1 11rem; }
-.mod-grid.is-dense .mod-card-meta { flex: 0 1 9rem; text-align: right; }
-.mod-grid.is-dense .mod-card.is-row .mod-card-foot { display: contents; }
-.mod-grid.is-dense .mod-card.is-row .mod-card-foot .toggle { order: -1; position: relative; margin-left: var(--s-2); }
-.mod-grid.is-dense .mod-card.is-row .mod-card-more { position: relative; margin-right: var(--s-1); }
+/* Compact list: one line per mod in columns that line up from row to row. The list is a grid and each row a subgrid
+   of it, so the switch, picture, name, character, size, each kind of badge (ModCard's mb-* classes) and the "..." key
+   keep one column each; a column that no row uses takes no room. The body and the foot hand their parts to the row.
+   Every part names its column and row 1, and the offsets the cards use are reset, so a theme's card rules can't move
+   them. Rows have one height and no content-visibility, which would cut them off the shared columns */
+.mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: minmax(0, 10rem); --dense-size: auto;
+  display: grid; column-gap: 0; align-content: start;
+  grid-template-columns: [sw] auto [pic] auto [name] minmax(5rem, 1fr) [char] var(--dense-char) [size] var(--dense-size)
+    [b-start hp] auto [fav] auto [upd] auto [cf] auto [ini] auto [parts] auto [sub] auto [keys] auto [live] auto [b-end more] auto; }
+.mod-grid.is-dense .mod-card.is-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: 100%; align-items: center;
+  gap: 0; height: calc(2.5rem * var(--d, 1)); content-visibility: visible; contain-intrinsic-size: none; }
+.mod-grid.is-dense .mod-card.is-row :is(.mod-card-body, .mod-card-foot) { display: contents; }
+.mod-grid.is-dense .mod-card.is-row :is(.mod-card-hit, .mod-card-name, .mod-card-char, .mod-card-meta, .mod-card-badges, .toggle, .mod-card-more) { grid-row: 1; min-width: 0; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-foot .toggle { grid-column: sw; position: relative; inset: auto; margin: 0 var(--s-1) 0 var(--s-3); }
+.mod-grid.is-dense .mod-card.is-row .mod-card-hit { grid-column: pic; align-self: center; width: auto; padding: 0; margin-left: var(--s-2); }
+.mod-grid.is-dense .mod-card.is-row .mod-card-img { width: calc(2.6rem * var(--d, 1)); height: calc(1.625rem * var(--d, 1)); aspect-ratio: auto; align-self: auto; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-name { grid-column: name; margin-left: var(--s-3); }
+.mod-grid.is-dense .mod-card.is-row .mod-card-char { grid-column: char; margin-left: var(--s-3); }
+.mod-grid.is-dense .mod-card.is-row .mod-card-meta { grid-column: size; margin-left: var(--s-3); text-align: right; font-variant-numeric: tabular-nums; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-badges { grid-column: b-start / b-end; display: grid; grid-template-columns: subgrid; align-items: center;
+  position: relative; inset: auto; max-width: none; margin: 0; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-badges > * { grid-row: 1; justify-self: start; margin-left: var(--s-1); }
+.mod-grid.is-dense .mod-card-badges > .mb-hp { grid-column: hp; }
+.mod-grid.is-dense .mod-card-badges > .mb-fav { grid-column: fav; }
+.mod-grid.is-dense .mod-card-badges > .mb-upd { grid-column: upd; }
+.mod-grid.is-dense .mod-card-badges > .mb-cf { grid-column: cf; }
+.mod-grid.is-dense .mod-card-badges > .mb-ini { grid-column: ini; }
+.mod-grid.is-dense .mod-card-badges > .mb-parts { grid-column: parts; }
+.mod-grid.is-dense .mod-card-badges > .mb-sub { grid-column: sub; }
+.mod-grid.is-dense .mod-card-badges > .mb-keys { grid-column: keys; }
+.mod-grid.is-dense .mod-card-badges > .mb-live { grid-column: live; }
+.mod-grid.is-dense .mod-card.is-row .mod-card-more { grid-column: more; position: relative; inset: auto; opacity: 1; height: calc(1.6rem * var(--d, 1)); margin: 0 var(--s-2); }
+/* a narrow view drops the size, then the character */
 @container view (max-width: 48rem) {
-  .mod-grid.is-dense .mod-card-meta { display: none; }
+  .mod-grid.is-list.is-dense:not(.is-loading) { --dense-size: 0px; }
+  .mod-grid.is-dense .mod-card.is-row .mod-card-meta { display: none; }
+}
+@container view (max-width: 36rem) {
+  .mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: 0px; }
+  .mod-grid.is-dense .mod-card.is-row .mod-card-char { display: none; }
 }
