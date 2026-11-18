@@ -26,7 +26,7 @@ html.pad .pg-nav-i:focus:not(.on) { box-shadow: none; }
 .pg-stage { --pg-t: 460ms; --pg-ease: cubic-bezier(.3, .75, .2, 1);
   position: relative; min-height: 0; overflow: clip; margin: -.5rem -.6rem 0; }
 .pg-page { position: absolute; inset: 0; display: flex; flex-direction: column; padding: .5rem .6rem var(--s-6); overflow: hidden auto;
-  scrollbar-gutter: stable; scroll-behavior: smooth; visibility: hidden; }
+  scrollbar-gutter: stable; scroll-behavior: smooth; scroll-padding-block: .5rem; visibility: hidden; }
 .pg-page.on, .pg-page.out { visibility: visible; }
 .pg-page.out { pointer-events: none; }
 /* a long line of settings is hard to follow across a wide window, so the column stops at 60rem */

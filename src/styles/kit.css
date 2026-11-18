@@ -42,8 +42,9 @@
 .btn .i { width: 1.1em; height: 1.1em; }
 .btn-t { overflow: hidden; text-overflow: ellipsis; }
 /* text cut with an ellipsis keeps room for a leaning (italic) last letter and, inside a button's line-height of 1,
-   for descenders: the padding sits inside the clip and the negative margin gives the width back */
-:is(.btn-t, .seg-o > span, .nv-t, .menu-t, .tile-t, .list-row-t, .pchip-t) { padding-inline-end: .16em; margin-inline-end: -.16em; }
+   for descenders and tall marks (a slash or an apostrophe in Teyvat's font): the padding sits inside the clip and the
+   negative margin gives the room back */
+:is(.btn-t, .seg-o > span, .nv-t, .menu-t, .tile-t, .list-row-t, .pchip-t) { padding-block: .12em; margin-block: -.12em; padding-inline-end: .16em; margin-inline-end: -.16em; }
 .btn-t, .seg-o > span { line-height: 1.35; }
 .btn-ir { margin-right: -.2rem; opacity: .75; }
 .ibtn { width: calc(2.3rem * var(--d, 1)); height: calc(2.3rem * var(--d, 1)); }

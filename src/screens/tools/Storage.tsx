@@ -320,7 +320,7 @@ function tipsFor(r: StorageReport): Tip[] {
     for (const o of g.items.filter((i) => i.key === "others" && i.bytes >= 500 * MB)) {
       out.push({ id: `others:${g.game}:${o.name ?? ""}`, bytes: o.bytes,
         text: t("{manager} still keeps {size} of {game} mods outside the Mods folder. gachamod doesn't list them.", { manager: o.name ?? t("Another mod manager"), size: formatBytes(o.bytes), game: name }),
-        action: { label: t("Move them in"), title: t("Opens Tools, Sharing: Mods from other managers"), run: () => goIn(g.game, { view: "tools", section: "others" }) } });
+        action: { label: t("Move them in"), title: t("Opens Tools, Share and import: Mods from other managers"), run: () => goIn(g.game, { view: "tools", section: "others" }) } });
     }
   }
   return out;
@@ -371,7 +371,7 @@ function ItemActions({ game, item }: { game: GameId | null; item: StorageItem })
     case "shader-cache": return game ? <Button size="sm" variant="ghost" disabled={running} onClick={() => void clearCache(game)} title={running ? t("Close the game first") : t("Deletes the shader cache. The game rebuilds it on the next start")}>{t("Clear")}</Button> : null;
     case "frame-dumps": return game ? <Button size="sm" variant="ghost" onClick={() => void clearDumps(game)} title={t("Moves the FrameAnalysis folders to the Recycle Bin")}>{t("Move to Recycle Bin")}</Button> : null;
     case "log": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "settings", section: "migoto" })} title={t("Opens Settings, Mod maker switches, where the log level is")}>{t("Log settings")}</Button> : null;
-    case "others": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "tools", section: "others" })} title={t("Opens Tools, Sharing: Mods from other managers")}>{t("Move them in")}</Button> : null;
+    case "others": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "tools", section: "others" })} title={t("Opens Tools, Share and import: Mods from other managers")}>{t("Move them in")}</Button> : null;
     default: return null;
   }
 }

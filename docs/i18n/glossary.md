@@ -110,7 +110,8 @@ that sends people to a page uses the page's name exactly as translated here.
 | Problems (Tools) | 问题 | Problemas | Problemas | Проблемы |
 | Conflicts (Tools) | 冲突 | Conflictos | Conflitos | Конфликты |
 | In-game menu (Tools) | 游戏内菜单 | Menú en el juego | Menu no jogo | Внутриигровое меню |
-| Sharing (Tools) | 分享 | Compartir | Compartilhar | Обмен |
+| Share and import (Tools, was Sharing) | 分享和导入 | Compartir e importar | Compartilhar e importar | Обмен и импорт |
+| Storage (Tools) | 存储 | Almacenamiento | Armazenamento | Хранилище |
 | Mod makers (Tools) | Mod 制作者 | Creadores de mods | Criadores de mods | Авторам модов |
 | Switch skins in game (panel) | 游戏内切换皮肤 | Cambiar skins en el juego | Trocar skins no jogo | Смена скинов в игре |
 | Key list in game (panel) | 游戏内按键列表 | Lista de teclas en el juego | Lista de teclas no jogo | Список клавиш в игре |
@@ -134,6 +135,7 @@ A setting, button or menu entry named in another line uses that label's translat
 | --- | --- | --- | --- | --- |
 | Over the game / Inside the game | 覆盖在游戏上 / 游戏内绘制 | Sobre el juego / Dentro del juego | Por cima do jogo / Dentro do jogo | Поверх игры / Внутри игры |
 | Menu keys / Keys (tab) | 菜单按键 / 按键 | Teclas del menú / Teclas | Teclas do menu / Teclas | Клавиши меню / Клавиши |
+| Has menu (key list badge: the mod shows its own key menu in game) | 有菜单 | Tiene menú | Tem menu | Есть меню |
 | exclusive fullscreen / borderless / windowed | 独占全屏 / 无边框 / 窗口模式 | pantalla completa exclusiva / sin bordes / ventana | tela cheia exclusiva / sem bordas / em janela | эксклюзивный полноэкранный режим / без рамки / оконный режим |
 | D-pad | 十字键 | cruceta | direcional | крестовина |
 

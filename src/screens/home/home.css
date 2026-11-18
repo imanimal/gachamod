@@ -84,13 +84,15 @@
 .home-pchip-skel { width: 10rem; height: 2.3rem; border-radius: 999px; }
 
 /* sideways rows */
-.home-row { display: flex; gap: var(--s-3); overflow-x: auto; scrollbar-width: none; padding: var(--s-1) 5px var(--s-2); margin-inline: calc(.2rem - 5px); }
+.home-row { display: flex; gap: var(--s-3); overflow-x: auto; scrollbar-width: none; padding: var(--s-1) 5px var(--s-2); margin-inline: calc(.2rem - 5px); scroll-padding-inline: 5px; }
 .home-row::-webkit-scrollbar { display: none; }
 .home-tile { position: relative; display: flex; flex-direction: column; flex: none; width: 11.5rem; gap: .1rem; padding-bottom: var(--s-2); text-align: left;
   border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; color: inherit; }
 button.home-tile:hover, .home-tile-main:hover { background: var(--surface-2); }
 .home-tile.off { opacity: .6; }
 .home-tile-main { display: flex; flex-direction: column; gap: .1rem; text-align: left; color: inherit; min-width: 0; }
+/* the tile clips at its edges, so the focus ring sits inside the part that fills it */
+.home-tile-main:focus-visible, html.kbd .home-tile-main:focus { outline-offset: -2px; }
 .home-tile-img { display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; background: var(--surface-2); color: var(--text-3); margin-bottom: var(--s-1); }
 .home-tile-img img { width: 100%; height: 100%; object-fit: cover; }
 .home-tile-img.nsfw-blur img { filter: blur(14px); transform: scale(1.1); }

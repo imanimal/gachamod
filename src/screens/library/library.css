@@ -155,7 +155,9 @@
 .mod-drawer-drop { position: absolute; inset: 0; display: grid; place-items: center; border-radius: var(--radius); background: var(--scrim); color: var(--text); font-weight: 600; pointer-events: none; }
 
 /* a long name wraps to a second line on a card before it is cut */
-.mod-card:not(.is-row) .mod-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+/* the top padding sits inside the clip so tall marks (an apostrophe in Teyvat's font) keep their tops */
+.mod-card:not(.is-row) .mod-card-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow-wrap: anywhere; line-height: 1.25;
+  padding-top: .12em; margin-top: -.12em; }
 
 /* the 3D view in a mod's details: taller than the picture, since characters stand */
 .mod-viewer-wrap { display: flex; flex-direction: column; gap: var(--s-2); }
@@ -180,13 +182,13 @@
 .page.has-side > .lib-main { grid-area: main; }
 .page.has-side > .mod-pane { grid-area: pane; }
 /* 4px of room inside each scrolling pane for focus rings and card shadows */
-.lib-side-list, .lib-main { min-height: 0; overflow: hidden auto; padding: 4px; margin: -4px; }
+.lib-side-list, .lib-main { min-height: 0; overflow: hidden auto; padding: 4px; margin: -4px; scroll-padding-block: 4px; }
 .lib-main > .mod-grid-wrap { min-height: 100%; }
 
 /* the list of types and characters: a field that narrows it (SideSearch.tsx), then the same chips as the row, one per
    line, spaced like the other lists down the left */
 .lib-side { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; min-height: 0; }
-.lib-side-list { flex: 1; display: flex; flex-direction: column; gap: var(--s-1); scrollbar-width: thin; }
+.lib-side-list { flex: 1; display: flex; flex-direction: column; gap: var(--s-2); scrollbar-width: thin; }
 .lib-side .lib-side-search, .page.has-side .char-strip-wrap .lib-side-search { flex: none; width: 100%; min-width: 0; }
 .lib-side-none { padding: var(--s-2) var(--s-3); }
 .lib-side .chip { flex: none; width: 100%; height: auto; min-height: calc(2.2rem * var(--d, 1)); padding: var(--s-2) var(--s-3); justify-content: flex-start; }
@@ -200,7 +202,7 @@
 
 /* a character's page: the strip of the others becomes the list down the left */
 .page.has-side > .char-strip-wrap { display: flex; flex-direction: column; align-items: stretch; gap: var(--s-3); min-width: 0; min-height: 0; margin: 0; }
-.page.has-side .char-strip, .page.has-side .char-strip[data-side-scroll] { flex: 1; min-height: 0; flex-direction: column; flex-wrap: nowrap; gap: var(--s-1);
+.page.has-side .char-strip, .page.has-side .char-strip[data-side-scroll] { flex: 1; min-height: 0; flex-direction: column; flex-wrap: nowrap; gap: var(--s-2);
   overflow: hidden auto; padding: 4px; margin: -4px; scrollbar-width: thin; }
 .page.has-side .char-strip-item { display: block; }
 .page.has-side .char-strip .pchip { flex-direction: row; width: 100%; gap: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--radius-sm); font-size: var(--t-small); text-align: left; }
@@ -266,12 +268,12 @@
 .mod-grid.is-dense .mod-card-badges > .mb-keys { grid-column: keys; }
 .mod-grid.is-dense .mod-card-badges > .mb-live { grid-column: live; }
 .mod-grid.is-dense .mod-card.is-row .mod-card-more { grid-column: more; position: relative; inset: auto; opacity: 1; height: calc(1.6rem * var(--d, 1)); margin: 0 var(--s-2); }
-/* a narrow view drops the size, then the character */
-@container view (max-width: 48rem) {
+/* a narrow view drops the size, then the character, so the name keeps room next to the badges */
+@container view (max-width: 70rem) {
   .mod-grid.is-list.is-dense:not(.is-loading) { --dense-size: 0px; }
   .mod-grid.is-dense .mod-card.is-row .mod-card-meta { display: none; }
 }
-@container view (max-width: 36rem) {
+@container view (max-width: 52rem) {
   .mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: 0px; }
   .mod-grid.is-dense .mod-card.is-row .mod-card-char { display: none; }
 }

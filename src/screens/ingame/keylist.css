@@ -17,7 +17,7 @@
 .kl-thumb { display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
 .kl-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .kl-name { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
-.kl-name .tp-link, .kl-link { align-self: flex-start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left;
+.kl-name .tp-link, .kl-link { align-self: flex-start; max-width: 100%; padding: .12em 0; margin: -.12em 0; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .kl-link:hover { text-decoration: underline; }
 .kl-name .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
