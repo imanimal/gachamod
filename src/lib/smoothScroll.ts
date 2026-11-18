@@ -1,7 +1,7 @@
 // Smooth wheel scrolling. A notched mouse wheel jumps a whole step at once (WebView2 doesn't animate it), which is
 // hard to follow in a grid of pictures, so each notch here glides the same distance over a short ease instead.
 // Touchpads already scroll smoothly and are left alone, and so is anything that handles the wheel itself (it calls
-// preventDefault first). Off when Animations is off (html[data-motion]) or the system asks for less motion. Owner: skeleton.
+// preventDefault first). Off with Smooth scrolling off in Settings, Appearance (html[data-motion-scroll]). Owner: skeleton.
 
 interface Run { target: number; last: number; raf: number; t: number }
 const runs = new WeakMap<Element, { x?: Run; y?: Run }>();
@@ -9,10 +9,7 @@ const runs = new WeakMap<Element, { x?: Run; y?: Run }>();
 /** About 250 ms to settle: each 60 Hz frame closes this share of what's left. */
 const EASE = 0.24;
 
-const reduced = () => {
-  const m = document.documentElement.dataset.motion;
-  return m === "reduced" || m === "0" || matchMedia("(prefers-reduced-motion: reduce)").matches;
-};
+const reduced = () => document.documentElement.dataset.motionScroll === "off";
 
 /** A mouse wheel notch rather than a touchpad: Chromium reports notches as multiples of 120 in wheelDelta. */
 function isNotch(e: WheelEvent): boolean {

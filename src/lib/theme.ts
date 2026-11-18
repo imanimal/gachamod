@@ -15,12 +15,19 @@ import { BRAND_ACCENT, darkShade, onColor, rgb, THEMES, type Scheme, type Scheme
 export { BRAND_ACCENT, darkShade, onColor, THEMES } from "./theme-info";
 export type { AccentInfo, Scheme, SchemeChoice, ThemeInfo } from "./theme-info";
 
-const K = { mode: "gm.schemeMode", scheme: "gm.scheme", schemeOf: (t: string) => `gm.scheme.${t}`, motion: "gm.motion", paint: "gm.paint", layout: "gm.layout", perGame: (g: string) => `gm.theme.${g}`, accent: (t: string) => `gm.accent.${t}` };
+const K = {
+  mode: "gm.schemeMode", scheme: "gm.scheme", schemeOf: (t: string) => `gm.scheme.${t}`, paint: "gm.paint", layout: "gm.layout",
+  motion: "gm.motion", motionScroll: "gm.motion.scroll", motionBg: "gm.motion.bg", perGame: (g: string) => `gm.theme.${g}`, accent: (t: string) => `gm.accent.${t}`,
+};
 const read = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string | null) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
 
-export interface ThemeState { id: string; scheme: Scheme; choice: SchemeChoice; mode: SchemeMode; accent: string; motion: boolean; custom: string | null }
-let state: ThemeState = { id: "default", scheme: "dark", choice: "dark", mode: "game", accent: BRAND_ACCENT, motion: true, custom: null };
+/** The three animation switches in Settings, Appearance. `ui`: transitions, page turns, popovers and the rest of the
+ *  interface (html[data-motion] full or reduced). `scroll`: smooth wheel and jump scrolling (html[data-motion-scroll]).
+ *  `bg`: the moving backgrounds and ambient effects game themes draw, and seasonal touches (html[data-motion-bg]). */
+export interface MotionPrefs { ui: boolean; scroll: boolean; bg: boolean }
+export interface ThemeState { id: string; scheme: Scheme; choice: SchemeChoice; mode: SchemeMode; accent: string; motion: MotionPrefs; custom: string | null }
+let state: ThemeState = { id: "default", scheme: "dark", choice: "dark", mode: "game", accent: BRAND_ACCENT, motion: { ui: true, scroll: true, bg: true }, custom: null };
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 export const subscribeTheme = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -111,7 +118,24 @@ export function themeAttrs(id: string, scheme?: Scheme): { "data-theme": string;
   return { "data-theme": info.id, "data-scheme": info.schemes.includes(want) ? want : info.native };
 }
 
-/** Apply a game's theme to <html>: data-theme, data-scheme, data-game, data-motion, the accent variables, and a
+/** The animation switches. The first start takes Windows' Animation effects for all three and saves it; after that
+ *  only the switches count. A user from before the split keeps their one Animations choice for all three. */
+export function motionPick(): MotionPrefs {
+  let ui = read(K.motion);
+  if (ui !== "0" && ui !== "1") {
+    ui = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "0" : "1";
+    write(K.motion, ui);
+  }
+  const sub = (k: string) => {
+    const v = read(k);
+    if (v === "0" || v === "1") return v === "1";
+    write(k, ui);
+    return ui === "1";
+  };
+  return { ui: ui === "1", scroll: sub(K.motionScroll), bg: sub(K.motionBg) };
+}
+
+/** Apply a game's theme to <html>: data-theme, data-scheme, data-game, the data-motion attributes, the accent variables, and a
     custom theme's tokens, CSS and layout when the game uses one. */
 export function applyGameTheme(game: GameState | null) {
   lastGame = game;
@@ -133,14 +157,17 @@ export function applyGameTheme(game: GameState | null) {
   const gameVars = { "--game-accent": accent, "--game-on-accent": onColor(accent), "--game-accent-dk": darkShade(accent) };
   for (const [k, v] of Object.entries(gameVars)) r.style.setProperty(k, v);
   const vars: Record<string, string> = { ...gameVars, ...pickVars };
-  const motion = read(K.motion) !== "0";
-  r.dataset.motion = motion ? "full" : "reduced";
+  const motion = motionPick();
+  r.dataset.motion = motion.ui ? "full" : "reduced";
+  r.dataset.motionScroll = motion.scroll ? "on" : "off";
+  r.dataset.motionBg = motion.bg ? "on" : "off";
   const css = injectCustom(custom);
   // the pre-paint script in index.html reads this to colour the first frame
   write(K.paint, JSON.stringify({ game: game?.id ?? "", vars, custom: custom ? { id: custom.id, base: custom.base, scheme: custom.scheme, css, layout: custom.layout } : null }));
   const layout = Object.fromEntries(Object.entries(layoutPick()).filter(([k, v]) => LAYOUT_DEFAULTS[k as keyof LayoutPrefs] !== v));
   saveLook({
-    theme: info.id, scheme, accent: accentPick(info.id), full: !custom && schemeMode() !== "game", motion: motion ? "full" : "reduced", vars, layout,
+    theme: info.id, scheme, accent: accentPick(info.id), full: !custom && schemeMode() !== "game", motion: motion.ui ? "full" : "reduced",
+    motionScroll: motion.scroll ? "on" : "off", motionBg: motion.bg ? "on" : "off", vars, layout,
     custom: custom ? { id: custom.id, css, layout: custom.layout } : null,
     game: game ? { id: game.id, name: game.name, short: game.short, importer: game.importer, accent } : null,
   });
@@ -174,7 +201,11 @@ export function setScheme(choice: SchemeChoice, game: GameState | null) {
   } else write(K.schemeOf(pickId), choice);
   applyGameTheme(game);
 }
-export function setMotion(on: boolean, game: GameState | null) { write(K.motion, on ? "1" : "0"); applyGameTheme(game); }
+/** Turn one animation switch on or off. */
+export function setMotion(which: keyof MotionPrefs, on: boolean, game: GameState | null) {
+  write(which === "ui" ? K.motion : which === "scroll" ? K.motionScroll : K.motionBg, on ? "1" : "0");
+  applyGameTheme(game);
+}
 
 /** Follow the system's light/dark switch while the current theme's choice is "system". */
 export function watchSystemScheme(current: () => GameState | null): () => void {
@@ -189,18 +220,17 @@ export function watchSystemScheme(current: () => GameState | null): () => void {
 export type Density = "compact" | "cozy" | "roomy";
 export type SidebarSide = "left" | "right";
 export type NavStyle = "list" | "grid";
-export type Corners = "sharp" | "soft" | "round";
 /** What buttons show: an icon and their name, the icon alone (the name becomes its tip) or the name alone. */
 export type ButtonStyle = "both" | "icons" | "text";
 /** How Mods and a character's page are laid out, to feel like the mod manager someone used before:
  *  "cards" gachamod's own (filter chips over the cards, details slide in), "chars" a list of characters down the left,
  *  "panes" that list plus the picked mod's details always open on the right, "rows" one dense line per mod. */
 export type ModsFormat = "cards" | "chars" | "panes" | "rows";
-/** How the window is laid out. Missing fields mean the default (cozy, left, list, soft, both, cards). */
-export interface LayoutPrefs { density?: Density; sidebar?: SidebarSide; nav?: NavStyle; corners?: Corners; buttons?: ButtonStyle; format?: ModsFormat }
-export const LAYOUT_DEFAULTS: Required<LayoutPrefs> = { density: "cozy", sidebar: "left", nav: "list", corners: "soft", buttons: "both", format: "cards" };
+/** How the window is laid out. Missing fields mean the default (cozy, left, list, both, cards). */
+export interface LayoutPrefs { density?: Density; sidebar?: SidebarSide; nav?: NavStyle; buttons?: ButtonStyle; format?: ModsFormat }
+export const LAYOUT_DEFAULTS: Required<LayoutPrefs> = { density: "cozy", sidebar: "left", nav: "list", buttons: "both", format: "cards" };
 const LAYOUT_VALUES: Record<keyof LayoutPrefs, readonly string[]> = {
-  density: ["compact", "cozy", "roomy"], sidebar: ["left", "right"], nav: ["list", "grid"], corners: ["sharp", "soft", "round"],
+  density: ["compact", "cozy", "roomy"], sidebar: ["left", "right"], nav: ["list", "grid"],
   buttons: ["both", "icons", "text"], format: ["cards", "chars", "panes", "rows"],
 };
 /** Layout fields only the user sets: a custom theme can't carry them, so a theme never changes how Mods is laid out. */
@@ -245,7 +275,7 @@ export function setLayout(patch: LayoutPrefs, game: GameState | null) {
   applyGameTheme(game);
 }
 
-/** Set data-density, data-sidebar, data-nav, data-corners, data-buttons and data-format on <html> (null clears them,
+/** Set data-density, data-sidebar, data-nav, data-buttons and data-format on <html> (null clears them,
  *  which means the defaults). The format is always the user's own pick. */
 export function applyLayout(layout: LayoutPrefs | null) {
   const r = document.documentElement;
@@ -454,6 +484,7 @@ export function validateCustomTheme(input: unknown): { theme: CustomTheme | null
   const layout: LayoutPrefs = {};
   if (o.layout && typeof o.layout === "object") {
     for (const [k, v] of Object.entries(o.layout as Record<string, unknown>)) {
+      if (k === "corners") continue; // themes made before the Corners option was taken out
       const allowed = USER_ONLY.includes(k as keyof LayoutPrefs) ? undefined : (LAYOUT_VALUES as Record<string, readonly string[] | undefined>)[k];
       if (!allowed) problems.push(t("Layout has no \"{key}\" setting", { key: k }));
       else if (typeof v !== "string" || !allowed.includes(v)) problems.push(t("Layout {key} must be one of: {values}", { key: k, values: allowed.join(", ") }));
@@ -472,7 +503,7 @@ export function validateCustomTheme(input: unknown): { theme: CustomTheme | null
 // ── scoping a custom theme's CSS ──
 
 /** Attributes that only the root element carries, so a selector starting with one means the root. */
-const ROOT_ATTR = /^\[data-(?:theme|scheme|custom|motion|density|sidebar|nav|corners|buttons|game|accent|full)(?![\w-])/;
+const ROOT_ATTR = /^\[data-(?:theme|scheme|custom|motion-scroll|motion-bg|motion|density|sidebar|nav|buttons|game|accent|full)(?![\w-])/;
 
 /** Split a selector list at its top-level commas (not inside (), [] or quotes). */
 function splitSelectors(s: string): string[] {
@@ -493,7 +524,7 @@ function splitSelectors(s: string): string[] {
 /** One selector made to need the custom theme: `.btn` gives `:root:root[data-custom] .btn`,
     `:root[data-scheme="light"] .x` gives `:root:root[data-custom][data-scheme="light"] .x`, `[data-motion="reduced"] *`
     gives `:root:root[data-custom][data-motion="reduced"] *`. The doubled :root outweighs the base theme's rules for
-    the same part and base.css's root rules (corners, density). */
+    the same part and base.css's root rules (density). */
 function scopeSelector(sel: string): string {
   const root = /^(?:(?::root|html)(?![\w-])|&)+/.exec(sel);
   if (root) return `:root:root[data-custom]${sel.slice(root[0].length)}`;

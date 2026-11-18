@@ -131,10 +131,6 @@ html.ov-window .toasts { bottom: 3.4rem; }
 @keyframes ov-slide { from { opacity: 0; transform: translateX(8px); } }
 @keyframes ov-sheet { from { opacity: 0; transform: translateX(24px); } }
 @keyframes ov-pop { from { opacity: 0; transform: scale(.6); } }
-@media (prefers-reduced-motion: reduce) {
-  .ov, .ov-who, .ov-pane, .ov-page, .ov-cell, .ov-detail, .ov-check, .ov-kmod { animation: none; }
-  .ov-pic img { transition: none; }
-}
 @media (max-width: 640px) {
   .ov-rail { width: 4rem; }
   .ov-who-t, .ov-who-c { display: none; }

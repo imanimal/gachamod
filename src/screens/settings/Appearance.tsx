@@ -12,7 +12,7 @@ import {
   type CustomTheme, type LayoutPrefs, type Scheme, type SchemeChoice, type SchemeMode,
 } from "../../lib/theme";
 import { anatomyText } from "../../lib/theme-anatomy";
-import { SIZES, getTextSize, setTextSize } from "../../lib/zoom";
+import { SIZES, ZOOMS, getTextSize, getZoom, setTextSize, setZoom, stepZoom, zoomLabel } from "../../lib/zoom";
 import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle } from "../../ui/kit";
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon } from "../../ui/Icon";
@@ -141,9 +141,8 @@ export function GeneralSection() {
   );
 }
 
-/** The Mods layout, spacing, the sidebar, corners and buttons, then text size and animations. */
+/** The Mods layout, spacing, the sidebar and buttons, then text size, zoom and animations. */
 export function LayoutSection() {
-  const theme = useTheme();
   const [size, setSize] = useState(getTextSize());
   useEffect(() => {
     const h = (e: Event) => setSize((e as CustomEvent<number>).detail);
@@ -159,13 +158,14 @@ export function LayoutSection() {
       </div>
       <div className="set-rows">
         <LayoutRows />
-        <SetRow id="set-text-size" label={t("Text size")} hint={t("Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets")}>
+        <SetRow id="set-text-size" label={t("Text size")} hint={t("Changes only the text. Zoom makes pictures and spacing bigger too")}>
           <Select value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }}
             options={SIZES.map((s) => ({ value: String(s), label: t("{size} px", { size: s }) }))} />
         </SetRow>
-        <SetRow id="set-motion" label={t("Animations")} hint={t("Off keeps every change instant")}>
-          <Toggle checked={theme.motion} onChange={(v) => setMotion(v, currentGame())} />
+        <SetRow id="set-zoom" label={t("Zoom")} hint={t("Makes the whole window bigger or smaller. Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets")}>
+          <ZoomControl />
         </SetRow>
+        <MotionRows />
       </div>
     </Panel>
   );
@@ -231,6 +231,46 @@ function HintsSwitch() {
   return <Toggle checked={on} ariaLabel={t("First-start hints")} onChange={(v) => void hintsOnPref.set(v, v ? t("Turned first-start hints on") : t("Turned first-start hints off"))} />;
 }
 
+function ZoomControl() {
+  const [zoom, setZoomShown] = useState(getZoom);
+  useEffect(() => {
+    const h = (e: Event) => setZoomShown((e as CustomEvent<number>).detail);
+    window.addEventListener("gm-zoom", h);
+    return () => window.removeEventListener("gm-zoom", h);
+  }, []);
+  return (
+    <span className="set-btns">
+      <IconButton icon="minus" size="sm" variant="secondary" label={t("Zoom out (Ctrl+-)")} disabled={zoom <= ZOOMS[0]} onClick={() => stepZoom(-1)} />
+      <Button size="sm" variant="ghost" onClick={() => setZoom(1)} disabled={zoom === 1} title={t("Reset to 100% (Ctrl+0)")}>{zoomLabel(zoom)}</Button>
+      <IconButton icon="plus" size="sm" variant="secondary" label={t("Zoom in (Ctrl+=)")} disabled={zoom >= ZOOMS[ZOOMS.length - 1]} onClick={() => stepZoom(1)} />
+    </span>
+  );
+}
+
+// ── animations ──
+
+/** Three switches instead of one, so smooth scrolling or a theme's moving background can stay with the rest off. */
+function MotionRows() {
+  const { motion } = useTheme();
+  return (
+    <>
+      <SetRow id="set-motion" label={t("Interface animations")} hint={t("Pages, menus and windows slide and fade in. Off makes every change instant")}>
+        <Toggle checked={motion.ui} onChange={(v) => setMotion("ui", v, currentGame())} />
+      </SetRow>
+      <SetRow id="set-motion-scroll" label={t("Smooth scrolling")} hint={t("Each notch of the mouse wheel glides instead of jumping")}>
+        <Toggle checked={motion.scroll} onChange={(v) => setMotion("scroll", v, currentGame())} />
+      </SetRow>
+      <SetRow id="set-motion-bg" label={t("Theme background motion")}
+        hint={t("Moving backgrounds in game themes, like the drifting words behind New Eridu, and seasonal touches from Fun")}>
+        <span className="set-admin">
+          <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-seasonal" })} title={t("Opens Seasonal touches in Fun")}>{t("Seasonal touches")}</Button>
+          <Toggle checked={motion.bg} ariaLabel={t("Theme background motion")} onChange={(v) => setMotion("bg", v, currentGame())} />
+        </span>
+      </SetRow>
+    </>
+  );
+}
+
 // ── layout ──
 
 const NOT_SET = { value: "", label: t("Not set") };
@@ -239,7 +279,6 @@ const LAYOUT_ROWS: Array<{ key: keyof LayoutPrefs; id?: string; label: string; h
     options: [{ value: "compact", label: t("Compact") }, { value: "cozy", label: t("Cozy") }, { value: "roomy", label: t("Roomy") }] },
   { key: "sidebar", label: t("Sidebar side"), options: [{ value: "left", label: t("Left") }, { value: "right", label: t("Right") }] },
   { key: "nav", label: t("Views in the sidebar"), hint: t("Grid puts two on each row"), options: [{ value: "list", label: t("List") }, { value: "grid", label: t("Grid") }] },
-  { key: "corners", label: t("Corners"), options: [{ value: "sharp", label: t("Sharp") }, { value: "soft", label: t("Soft") }, { value: "round", label: t("Round") }] },
   { key: "buttons", label: t("Buttons"), hint: t("Icons only keeps each name as the button's tip. Buttons in dialogs and menus keep their names"),
     options: [{ value: "both", label: t("Icon and name") }, { value: "icons", label: t("Icons only") }, { value: "text", label: t("Names only") }] },
 ];

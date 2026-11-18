@@ -1,7 +1,8 @@
 // Tools, one page at a time like Settings (settings/Paged.tsx): problems and fixes after a game update, conflicts and
-// key clashes, switching skins in game, sharing or moving mods, and the mod maker tools (files and logs, finding a
-// hash). Settings are in Settings: launch options and 3DMigoto's switches are on its Launch page (settings/Launch.tsx),
-// and the search at the top of the page list finds them from here too. The pages and panels with their search words
+// key clashes, switching skins in game, sharing or moving mods, and the mod maker tools (files and logs, 3DMigoto's
+// switches, finding a hash). The switches are a copy of the panel on Settings' Launch page (settings/Launch.tsx) with
+// the same config; the rest of the launch options stay in Settings, and the search at the top of the page list finds
+// them from here too. The pages and panels with their search words
 // are in toolsSearch.ts. Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels. Every page and panel is
 // a route: go({ view: "tools", section: "fixes" }) or section: "dev".
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -19,6 +20,7 @@ import { registerPanels } from "../settings/menuSearch";
 import { MOVE_KEYWORDS, TOOL_PAGES, toolsPageOf, toolsWhere } from "./toolsSearch";
 import { ConflictsPanel, HashLookupPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
 import { MovePanel } from "../modtools/MovePanel";
+import { MigotoSection } from "../settings/Launch";
 import { setToolsPage, useToolsCounts } from "../modtools/toolsBadge";
 import { t, tn } from "../../lib/i18n";
 import { gameName, gameShort } from "../../lib/games";
@@ -91,7 +93,7 @@ function ToolsPages({ game }: { game: GameState }) {
           conflicts: <><ConflictsPanel /><KeyClashesPanel /></>,
           ingame: <><InGamePanel game={game.id} /><KeyListPanel game={game.id} /></>,
           packs: <><PacksPanel /><MovePanel /></>,
-          makers: <><DevSection game={game} /><HashLookupPanel /></>,
+          makers: <><DevSection game={game} /><MigotoSection game={game} /><HashLookupPanel /></>,
         }}
       </Paged>
     </div>
@@ -165,8 +167,8 @@ function DevSection({ game }: { game: GameState }) {
             <div className="row"><b className="grow">{t("3DMigoto log")}</b>{st?.log.bytes ? <Badge>{formatBytes(st.log.bytes)}</Badge> : null}
               <Button size="sm" variant="ghost" icon="refresh" onClick={loadLog} title={t("Read the log again")}>{t("Refresh")}</Button>
               <Button size="sm" variant="ghost" icon="external" disabled={!st?.log.bytes} onClick={() => open(st?.log.path)} title={t("Open the log file")}>{t("Open")}</Button>
-              <Button size="sm" variant="ghost" icon="sliders" onClick={() => go({ view: "settings", section: "migoto" })}
-                title={t("Opens Settings, Mod maker switches: the log level, hunting mode and the rest of 3DMigoto's switches")}>{t("Log settings")}</Button>
+              <Button size="sm" variant="ghost" icon="sliders" onClick={() => go({ view: "tools", section: "migoto" })}
+                title={t("Goes to Mod maker switches below: the log level, hunting mode and the rest of 3DMigoto's switches")}>{t("Log settings")}</Button>
             </div>
             <pre className="tools-log-text selectable">{log === null ? "…" : log || t("No log yet. Pick a log level in Log settings, then start the game.")}</pre>
           </div>
@@ -190,5 +192,6 @@ registerPanels("tools", {
   packs: PacksPanel,
   others: MovePanel,
   dev: forGame((g) => <DevSection game={g} />),
+  migoto: forGame((g) => <MigotoSection game={g} />),
   hash: HashLookupPanel,
 });

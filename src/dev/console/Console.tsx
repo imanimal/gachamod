@@ -1,12 +1,14 @@
 // The developer console: drops down from the top on ~ (the key left of 1). Output shows everything the window and
 // backend log as it happens; the line at the bottom takes commands (help lists them, Tab completes, Up and Down go
 // through earlier ones). Flows has a button for each new user flow, and in the demo the switches for its dummy data.
-// Only in dev builds and the browser demo (main.tsx mounts it). Plain English: it's a tool, not app text.
+// main.tsx mounts it in the app and the browser demo; Developer console in Settings, Feedback and privacy turns the key
+// off (./setting.ts). Plain English: it's a tool, not app text.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKey } from "react";
 import { createRoot } from "react-dom/client";
 import { inTauri } from "../../lib/tauri";
 import { COMMANDS, completions, exec, view } from "./commands";
 import { installCapture, useLines, type Line } from "./log";
+import { consolePref } from "./setting";
 import "./console.css";
 
 const HISTORY = "gm.console.history";
@@ -88,6 +90,8 @@ function Console() {
   const input = useRef<HTMLInputElement>(null);
   const stick = useRef(true);
   const [scen, scenMod] = useScenario();
+  const enabled = consolePref.use();
+  useEffect(() => { if (!enabled) setOpen(false); }, [enabled]);
 
   // commands change the view through this
   view.filter = filter; view.level = level; view.calls = calls; view.tab = tab;
@@ -105,6 +109,8 @@ function Console() {
       const t = e.target as HTMLElement | null;
       const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
       if (typing && t !== input.current) return;
+      // turned off in Settings: the key types as usual (an open console still closes)
+      if (!consolePref.get() && !input.current) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       ours = true;
@@ -198,7 +204,7 @@ function Console() {
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
   };
 
-  if (!open) return null;
+  if (!open || !enabled) return null;
   const counts = { warn: lines.filter((l) => l.level === "warn").length, error: lines.filter((l) => l.level === "error").length };
   const toggle = (id: number) => setOpenIds((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -252,7 +258,7 @@ function Console() {
               <h3>{f.title}</h3>
               <div className="gmc-btns">
                 {f.items.filter(([, cmd]) => !inTauri() || !COMMANDS.find((c) => c.name === cmd.split(" ")[0])?.demo).map(([label, cmd]) => (
-                  <button key={cmd} type="button" onClick={() => void exec(cmd)} title={`Type: ${cmd}`}>{label}</button>
+                  <button key={cmd} type="button" onClick={() => run(cmd)} title={`Type: ${cmd}`}>{label}</button>
                 ))}
               </div>
             </section>

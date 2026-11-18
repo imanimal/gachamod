@@ -1,14 +1,14 @@
 // The pull button (Settings, Fun extras; off until turned on): opens one random mod for the current game, gacha style.
+// While it's on it stands in for Surprise me, with the game's word for a pull.
 // 3 star: one of the newest mods. 4 star: one of the 200 most liked. 5 star: one of the 50 most liked. A 5 star comes
 // one pull in sixteen, and every 10th pull without one is a 5 star. Mods for adults follow Settings (hidden ones stay
 // out), and hidden mods, installed mods and blocked creators never come up. A short flash in the star colour plays first (not with
-// Animations off). Owner: BROWSE area.
+// Interface animations off). Owner: BROWSE area.
 import { useState } from "react";
 import { errorText, type GameState } from "../../lib/api";
 import { PULL_PITY, pullPref, pullsSince, pullWord } from "../../lib/fun";
 import { listMods, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { hiddenModsPref, isBlocked, nsfwPref } from "../../lib/prefs";
-import { IconButton } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { libIndexNow, openGbMod } from "./state";
 import { gameShort } from "../../lib/games";
@@ -37,7 +37,7 @@ async function draw(game: GameState, stars: Stars): Promise<GbCard | null> {
 }
 
 function flash(stars: Stars): Promise<void> {
-  if (document.documentElement.dataset.motion === "reduced" || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+  if (document.documentElement.dataset.motion === "reduced") return Promise.resolve();
   const el = document.createElement("div");
   el.className = `pull-flash pull-${stars}`;
   el.setAttribute("aria-hidden", "true");
@@ -52,12 +52,14 @@ function flash(stars: Stars): Promise<void> {
   });
 }
 
-export function PullButton({ game }: { game: GameState }) {
+/** The pull button, when it's on in Settings, Fun extras: it takes the place of Surprise me (Browse's bar, Home's
+ *  quick actions) and carries the game's word for a pull ("Signal Search", "Wish"). `on` is false while it's off. */
+export function usePull(game: GameState): { on: boolean; word: string; busy: boolean; tip: string; run: () => void } {
   const on = pullPref.use();
+  const left = PULL_PITY - pullsSince.use();
   const [busy, setBusy] = useState(false);
-  if (!on) return null;
   const word = pullWord(game.id);
-  const go = async () => {
+  const run = async () => {
     if (busy) return;
     setBusy(true);
     try {
@@ -73,10 +75,7 @@ export function PullButton({ game }: { game: GameState }) {
       toast(t("The {word} didn't go through: {error}", { word, error: errorText(e) }), true);
     } finally { setBusy(false); }
   };
-  const left = PULL_PITY - pullsSince.get();
-  return (
-    <IconButton icon="star" disabled={busy} onClick={() => void go()}
-      label={busy ? t("{word}: asking GameBanana for a mod", { word })
-        : tn(left, "{word}: open a random {game} mod. A 5 star is guaranteed in {n} pull", "{word}: open a random {game} mod. A 5 star is guaranteed in {n} pulls", { word, game: gameShort(game) })} />
-  );
+  const tip = busy ? t("{word}: asking GameBanana for a mod", { word })
+    : tn(left, "{word}: opens a random mod you might like. A 5 star is guaranteed in {n} pull", "{word}: opens a random mod you might like. A 5 star is guaranteed in {n} pulls", { word });
+  return { on, word, busy, tip, run: () => void run() };
 }

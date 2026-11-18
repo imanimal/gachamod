@@ -8,7 +8,7 @@ import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary,
 import { record, undo } from "../../lib/history";
 import { currentGame, refreshGames } from "../../lib/store";
 import { applyGameTheme } from "../../lib/theme";
-import { getTextSize, setTextSize } from "../../lib/zoom";
+import { getTextSize, getZoom, setTextSize, setZoom } from "../../lib/zoom";
 import { appUpdateModePref, type AppUpdateMode } from "./automatic";
 import { lang, sentences, t, tn } from "../../lib/i18n";
 import { gameName } from "../../lib/games";
@@ -16,7 +16,7 @@ import { gameName } from "../../lib/games";
 // ── the window's own choices (kept in localStorage, not the database) ──
 
 const isUiKey = (k: string) => k.startsWith("gm.theme.") || k.startsWith("gm.accent.") || k === "gm.scheme" || k.startsWith("gm.scheme.")
-  || k === "gm.motion" || k === "gm.layout" || k === "pm.textSize" || k === "gm.onlyGame" || k === "gm.schemeMode" || k === "gm.intro";
+  || k === "gm.motion" || k.startsWith("gm.motion.") || k === "gm.layout" || k === "pm.textSize" || k === "gm.zoom" || k === "gm.onlyGame" || k === "gm.schemeMode" || k === "gm.intro";
 
 function readUi(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -39,6 +39,8 @@ function writeUi(ui: Record<string, string>, replace: boolean) {
   applyGameTheme(currentGame());
   const px = Number(ui["pm.textSize"] ?? (replace ? 14 : getTextSize()));
   if (px && px !== getTextSize()) setTextSize(px);
+  const zoom = Number(ui["gm.zoom"] ?? (replace ? 1 : getZoom()));
+  if (zoom && zoom !== getZoom()) setZoom(zoom);
 }
 
 // ── export and import ──

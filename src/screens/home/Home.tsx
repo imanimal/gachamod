@@ -21,6 +21,7 @@ import { toast } from "../../ui/toast";
 import { checkModUpdates, openModsFolder, rescan } from "../../shell/commands";
 import { GbBrowser, AdultSwitch } from "../browse/GbBrowser";
 import { GbStrip } from "../browse/GbStrip";
+import { usePull } from "../browse/Pull";
 import { rowKeys, useSideScroll } from "../browse/sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { useMods } from "../library/data";
@@ -176,6 +177,7 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
   const [banner, setBanner] = useState<string | null>(null);
   const [bannerOk, setBannerOk] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const pull = usePull(game);
 
   useEffect(() => {
     let live = true;
@@ -222,7 +224,9 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
           <IconButton icon="update" label={t("Check for updates")} title={t("Check your mods for updates on GameBanana")} disabled={busy === "upd"} onClick={() => void job("upd", () => checkModUpdates(game))()} />
           <IconButton icon="folder" label={t("Open the Mods folder")} title={game.modsDir ? t("Open the Mods folder ({path})", { path: game.modsDir }) : t("No Mods folder yet")} disabled={!game.modsDir} onClick={() => openModsFolder(game)} />
           <IconButton icon="import" label={t("Import .gachamod")} title={t("Add mods from a .gachamod file")} onClick={() => void job("imp", importPack)()} />
-          <IconButton icon="dice" label={t("Surprise me")} title={t("Open a random mod you might like")} disabled={busy === "dice"} onClick={() => void job("dice", () => surpriseMe(game.id))()} />
+          {pull.on
+            ? <IconButton icon="gem" label={pull.word} title={pull.tip} disabled={pull.busy} onClick={pull.run} />
+            : <IconButton icon="dice" label={t("Surprise me")} title={t("Open a random mod you might like")} disabled={busy === "dice"} onClick={() => void job("dice", () => surpriseMe(game.id))()} />}
           <AdultSwitch value={nsfw} />
         </div>
       </div>

@@ -80,15 +80,15 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
       `- Fonts on hand: ${fonts ? `${fonts}, and ` : ""}Windows fonts like Segoe UI Variable, Bahnschrift, Georgia and Cascadia Mono.`,
       "- Icons are inline SVG drawn with currentColor: colour them with color, thicken them with stroke-width.",
       "- Keep every state clear: :hover, :active, :disabled, .on (picked), and a visible :focus-visible ring on anything you can press (people use the keyboard and game controllers).",
-      "- Motion is short (80 to 300 ms). Under :root[data-motion=\"reduced\"] stop every animation and transition you add.",
+      "- Motion is short (80 to 300 ms). Under :root[data-motion=\"reduced\"] stop every animation and transition you add, and stop moving backgrounds under :root[data-motion-bg=\"off\"].",
       "- Keep the layout working: don't hide or move controls, and don't change the shell's grid, sizes or positions beyond padding, borders, corners and gaps. The layout field moves the sidebar and sets density.",
       "- A few sizes are set inline (.gbadge, .avatar, .spin, icons in toasts, where menus open): change those with !important or leave them. Everything else needs no !important.",
       "- If \"scheme\" is system, style dark and light both.",
       `- At most ${CUSTOM_CSS_MAX.toLocaleString("en-US")} characters.`,
     ].join("\n"),
     `Parts of the window:\n${anatomyText()}`,
-    `Reply with a json code block, then a css code block with the whole stylesheet, and nothing after them. "scheme" is dark, light or system. "layout" may set density (compact, cozy, roomy), sidebar (left, right), nav (list, grid), corners (sharp, soft, round), buttons (both, icons, text), only what's asked. If you run out of room, end the css block after a complete rule and say so; when asked to go on, put the rest in a new css block.`,
-    "```json\n" + `{"name":"Navy and gold","base":"default","scheme":"dark","tokens":{"--bg":"#0b1222","--surface":"#121b30","--accent":"#d8b25a","--on-accent":"#1a1408"},"layout":{"corners":"sharp"}}` + "\n```",
+    `Reply with a json code block, then a css code block with the whole stylesheet, and nothing after them. "scheme" is dark, light or system. "layout" may set density (compact, cozy, roomy), sidebar (left, right), nav (list, grid), buttons (both, icons, text), only what's asked. If you run out of room, end the css block after a complete rule and say so; when asked to go on, put the rest in a new css block.`,
+    "```json\n" + `{"name":"Navy and gold","base":"default","scheme":"dark","tokens":{"--bg":"#0b1222","--surface":"#121b30","--accent":"#d8b25a","--on-accent":"#1a1408","--radius":"3px","--radius-sm":"2px"},"layout":{"density":"compact"}}` + "\n```",
     "```css\n:root { --gilt: color-mix(in srgb, var(--accent) 55%, transparent); }\n.panel { border: 1px solid var(--gilt); }\n```",
   ].join("\n\n");
 

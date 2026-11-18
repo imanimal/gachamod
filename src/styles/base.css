@@ -47,12 +47,12 @@
    --t-meta, --t-small     text sizes in em of the surrounding text: counts and timestamps (.8em), secondary lines (.88em)
    --t-title, --t-display  page titles and hero names (1.6rem), the largest headings (2rem); rem follows --fs
 
-   Layout attributes on <html> (lib/theme.ts applyLayout(), used by custom themes): data-density, data-corners here;
+   Layout attributes on <html> (lib/theme.ts applyLayout(), used by custom themes): data-density here;
    data-sidebar and data-nav in shell.css. */
 
 *, *::before, *::after { box-sizing: border-box; }
 
-/* density and corners: these beat a theme's own values (a theme sets tokens on [data-theme], one attribute) */
+/* density: these beat a theme's own values (a theme sets tokens on [data-theme], one attribute) */
 :root { --d: 1; }
 :root[data-density="compact"] { --d: .86; }
 :root[data-density="roomy"] { --d: 1.15; }
@@ -63,8 +63,6 @@
   --inset-page: var(--s-5); --inset-panel: var(--s-4); --inset-dialog: var(--s-5);
   --t-meta: .8em; --t-small: .88em; --t-title: 1.6rem; --t-display: 2rem;
 }
-:root:root[data-corners="sharp"], :root[data-corners="sharp"] [data-theme] { --radius: 3px; --radius-sm: 2px; --radius-lg: 4px; --radius-xs: 2px; }
-:root:root[data-corners="round"], :root[data-corners="round"] [data-theme] { --radius: 18px; --radius-sm: 13px; --radius-lg: 26px; --radius-xs: 7px; }
 html, body, #root { height: 100%; margin: 0; }
 html { --fs: 14px; font-size: var(--fs); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.45; overflow: hidden; user-select: none; }
@@ -97,17 +95,22 @@ html.kbd :is(input, textarea, select):focus { outline-offset: 0; }
 ::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
 
-/* reduced motion: from Settings (lib/theme.ts sets data-motion) or the system. Loading indicators keep moving. */
-html:is([data-motion="reduced"], [data-motion="0"]) *, html:is([data-motion="reduced"], [data-motion="0"]) *::before, html:is([data-motion="reduced"], [data-motion="0"]) *::after {
-  animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 1ms !important; scroll-behavior: auto !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+/* The animation switches in Settings, Appearance (lib/theme.ts sets them; the first start copies Windows' choice).
+   Interface animations off (data-motion="reduced"): transitions and one-shot animations end at once. Loading
+   indicators keep moving, and theme background motion has a separate switch, so it is left out here. */
+html:is([data-motion="reduced"], [data-motion="0"]) :not(.backdrop, .backdrop *, .glyphs, .season, .season *),
+html:is([data-motion="reduced"], [data-motion="0"]) :not(.backdrop, .backdrop *, .app, .home-hero, .side-deco, .empty-i, .char-tile-portrait, .crumb-view, .season *)::before,
+html:is([data-motion="reduced"], [data-motion="0"]) :not(.backdrop, .backdrop *, .app, .home-hero, .side-deco, .empty-i, .char-tile-portrait, .crumb-view, .season *)::after {
+  animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0s !important; transition-duration: 1ms !important;
 }
 html:is([data-motion="reduced"], [data-motion="0"]) :is(.spin, .progress.indet .progress-bar, .skel, .nv-b.t-run) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
-@media (prefers-reduced-motion: reduce) {
-  html :is(.spin, .progress.indet .progress-bar, .skel, .nv-b.t-run) { animation-duration: 1.2s !important; animation-iteration-count: infinite !important; }
-}
+/* theme background motion off: the drifting walls, stars, orbits and glyph tickers game themes draw stand still
+   (themes/*-shell.css), and seasonal touches hide (fun.css) */
+html[data-motion-bg="off"] :is(.backdrop, .backdrop *, .glyphs),
+html[data-motion-bg="off"] :is(.backdrop, .backdrop *, .app, .home-hero, .side-deco, .empty-i, .char-tile-portrait, .crumb-view)::before,
+html[data-motion-bg="off"] :is(.backdrop, .backdrop *, .app, .home-hero, .side-deco, .empty-i, .char-tile-portrait, .crumb-view)::after { animation: none !important; }
+/* smooth scrolling off: jumps land at once (lib/smoothScroll.ts reads the same attribute for the mouse wheel) */
+html[data-motion-scroll="off"] * { scroll-behavior: auto !important; }
 /* without hardware acceleration (lib/idle.ts sets html[data-gpu="off"]) nothing blurs, in any theme */
 [data-gpu="off"] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 

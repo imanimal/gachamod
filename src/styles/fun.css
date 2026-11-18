@@ -83,5 +83,4 @@
 @keyframes pullFlash { 0% { opacity: 0; } 12%, 72% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes pullStars { 0% { opacity: 0; transform: scale(.6); } 24% { opacity: 1; transform: scale(1.06); } 38% { transform: scale(1); } 74% { opacity: 1; } 100% { opacity: 0; transform: scale(1.02); } }
 
-html:is([data-motion="reduced"], [data-motion="0"]) .season { display: none; }
-@media (prefers-reduced-motion: reduce) { .season { display: none; } }
+html[data-motion-bg="off"] .season { display: none; }

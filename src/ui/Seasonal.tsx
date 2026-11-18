@@ -1,6 +1,6 @@
 // Seasonal touches (Settings, Fun extras; off by default): drifting behind every window, a few snowflakes in late
 // December, hearts on Valentine's Day, bats and pumpkins the week before Halloween. "By the date" shows nothing the
-// rest of the year; picking one season shows it all year. Nothing shows with Animations off. Owner: SETTINGS/AI area.
+// rest of the year; picking one season shows it all year. Nothing shows with Theme background motion off (Settings, Appearance). Owner: SETTINGS/AI area.
 import { useMemo, type CSSProperties } from "react";
 import { seasonNow, seasonPref } from "../lib/fun";
 

@@ -45,7 +45,13 @@
         if (!custom && (mode === "dark" || mode === "light" || mode === "system")) r.setAttribute("data-full", "");
         r.setAttribute("data-game", game);
         r.setAttribute("data-accent", g("gm.accent." + theme) || "");
-        r.setAttribute("data-motion", g("gm.motion") === "0" ? "reduced" : "full");
+        // the animation switches (lib/theme.ts motionPick): the first start follows Windows
+        var mo = g("gm.motion");
+        if (mo !== "0" && mo !== "1") mo = matchMedia("(prefers-reduced-motion: reduce)").matches ? "0" : "1";
+        var ms = g("gm.motion.scroll"), mb = g("gm.motion.bg");
+        r.setAttribute("data-motion", mo === "0" ? "reduced" : "full");
+        r.setAttribute("data-motion-scroll", (ms === "0" || ms === "1" ? ms : mo) === "0" ? "off" : "on");
+        r.setAttribute("data-motion-bg", (mb === "0" || mb === "1" ? mb : mo) === "0" ? "off" : "on");
         // the opening screen (src/splash): its colour from the first frame. The intro picked in Settings ("gm.intro":
         // "0" off, missing or "theme" the theme's own, else an intro id), else the theme's. Not in the menu over a game
         // or the kit page. ?intro=<id> shows one (for working on it)
@@ -61,7 +67,7 @@
         // the layout picked in Settings (a custom theme's own layout below wins)
         var mine = null;
         try { mine = JSON.parse(g("gm.layout") || "null"); } catch (e) { /* not set */ }
-        ["density", "sidebar", "nav", "corners", "format"].forEach(function (n) { if (mine && typeof mine[n] === "string") r.setAttribute("data-" + n, mine[n]); });
+        ["density", "sidebar", "nav", "format"].forEach(function (n) { if (mine && typeof mine[n] === "string") r.setAttribute("data-" + n, mine[n]); });
         if (custom) {
           // a custom theme: its checked CSS and layout, as lib/theme.ts last applied them
           r.setAttribute("data-custom", custom.id);

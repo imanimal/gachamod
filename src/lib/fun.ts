@@ -1,5 +1,5 @@
 // The extras in Settings, Fun extras, all off until turned on: chill mode (the app's own words in lower case; names,
-// descriptions and anything people wrote stay as written), the pull button in Browse and seasonal touches. Also
+// descriptions and anything people wrote stay as written), the pull button (in Surprise me's place) and seasonal touches. Also
 // the Konami code (keyboard or controller), which reveals a hidden theme. Owner: SETTINGS/AI area.
 import { pref } from "./prefs";
 import { t } from "./i18n";
@@ -15,7 +15,7 @@ export const hiddenThemePref = flag("fun.hiddenTheme", false);
 
 // ── the pull button (screens/browse/Pull.tsx) ──
 
-/** A button in Browse that opens a random mod, gacha style. */
+/** A button that opens a random mod, gacha style. It takes the place of Surprise me in Browse and on Home. */
 export const pullPref = flag("fun.pull", false);
 /** Pulls since the last 5 star. */
 export const pullsSince = count("fun.pulls");

@@ -26,7 +26,7 @@ export const SHORTCUTS: Array<[string, string]> = [
   [t("Shift+F10, Menu key"), t("The focused thing's right-click menu")],
   ["Escape", t("Close the top window, drawer or menu")],
   ["Ctrl+Z, Ctrl+Y", t("Undo, redo")],
-  ["Ctrl+=, Ctrl+-, Ctrl+0", t("Text size")],
+  ["Ctrl+=, Ctrl+-, Ctrl+0", t("Zoom in, zoom out, reset the zoom")],
   ["?", t("This list")],
 ];
 

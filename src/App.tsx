@@ -20,7 +20,7 @@ import { warmUp } from "./lib/warmup";
 import { MOD_SHORTCUTS, PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
 import { installGamepad } from "./lib/gamepad";
 import { installUndoKeys } from "./lib/history";
-import { applyTextSize, installZoomKeys } from "./lib/zoom";
+import { applyTextSize, applyZoom, installZoomKeys } from "./lib/zoom";
 import { Titlebar } from "./shell/Titlebar";
 import { Sidebar } from "./shell/Sidebar";
 import { CommandPalette } from "./shell/CommandPalette";
@@ -232,7 +232,8 @@ export function App() {
     const offMouse = installGlobalInput();
     const offUndo = installUndoKeys();
     applyTextSize();
-    const offZoom = installZoomKeys((px) => toast(t("Text size {px}px (Ctrl+0 resets)", { px }), "info"));
+    applyZoom();
+    const offZoom = installZoomKeys();
     return () => { offKeys(); offPad(); offMouse(); offUndo(); offZoom(); };
   }, []);
   const shownRef = useLatest(shown);

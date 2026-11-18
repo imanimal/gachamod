@@ -4,8 +4,7 @@
    Layout attributes on <html> (lib/theme.ts sets them; missing means the default in brackets):
      data-density  compact | [cozy] | roomy      spacing in the sidebar and title bar
      data-sidebar  [left] | right                which side the sidebar sits on
-     data-nav      grid | [list]                 the view buttons as rows (icon and full name) or a 2-column grid
-     data-corners  sharp | [soft] | round        corner sizes for the whole app (base.css) */
+     data-nav      grid | [list]                 the view buttons as rows (icon and full name) or a 2-column grid */
 
 .app {
   --side-w: 15.75rem; --side-rail: 4.4rem; --title-h: max(42px, 3rem); /* grows with the text size */
@@ -426,3 +425,9 @@ html.pad .side-prof-list .side-p:focus:not(.on) { box-shadow: none; }
 .act-hold { margin-top: var(--s-1); color: var(--text-2); font-size: var(--t-small); line-height: 1.4; }
 .act-row.is-long .act-s { color: var(--warn); }
 .act-none { padding: var(--s-2); color: var(--text-2); }
+
+/* the zoom level, for a moment after Ctrl+= or Ctrl+- (lib/zoom.ts) */
+.zoom-level { position: fixed; top: calc(var(--title-h, 3rem) + .6rem); left: 50%; z-index: 120; translate: -50% 0; padding: .3rem .7rem; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg), inset 0 0 0 1px var(--line); font-weight: 600; font-variant-numeric: tabular-nums;
+  pointer-events: none; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.zoom-level.on { opacity: 1; }

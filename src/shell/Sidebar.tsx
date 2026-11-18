@@ -2,7 +2,7 @@
 // view buttons, the game's profiles one click away, and Play at the bottom. Browse and Downloads carry the soft
 // first-time rings (hints.ts). Folds to an icon rail with Ctrl+B or its
 // button (remembered). When the window is short the profile list scrolls and the rest stays.
-// Layout attributes on <html> (set by lib/theme.ts): data-density, data-sidebar, data-nav, data-corners.
+// Layout attributes on <html> (set by lib/theme.ts): data-density, data-sidebar, data-nav.
 // Owner: SHELL area.
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { errorText, queue, type GameState, type Profile } from "../lib/api";

@@ -11,6 +11,9 @@ export interface Look {
   /** Every theme shown all dark or all light (the app's "all themes" choice). */
   full?: boolean;
   motion?: "full" | "reduced";
+  /** Smooth scrolling and theme background motion; a look saved before they were split follows `motion`. */
+  motionScroll?: "on" | "off";
+  motionBg?: "on" | "off";
   vars?: Record<string, string> | null;
   layout?: Record<string, string> | null;
   custom?: { id: string; css: string; layout?: Record<string, string> | null } | null;
@@ -19,7 +22,7 @@ export interface Look {
   source?: string;
 }
 
-const LAYOUT = ["density", "corners", "buttons"];
+const LAYOUT = ["density", "buttons"];
 
 function systemScheme(): Scheme {
   try { return matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"; } catch { return "dark"; }
@@ -42,6 +45,9 @@ export function applyLook(look: Look, pick?: { theme?: string; scheme?: Scheme }
   r.dataset.game = look.game?.id ?? "";
   r.dataset.accent = (own && look.accent) || info.accents?.[0]?.id || "";
   r.dataset.motion = look.motion === "reduced" ? "reduced" : "full";
+  const sub = (v: string | undefined) => (v === "on" || v === "off" ? v : look.motion === "reduced" ? "off" : "on");
+  r.dataset.motionScroll = sub(look.motionScroll);
+  r.dataset.motionBg = sub(look.motionBg);
   if (own && look.full) r.dataset.full = ""; else delete r.dataset.full;
   const accent = look.game?.accent ?? look.vars?.["--game-accent"] ?? BRAND_ACCENT;
   const vars = { "--game-accent": accent, "--game-on-accent": onColor(accent), "--game-accent-dk": darkShade(accent), ...(look.vars ?? {}) };

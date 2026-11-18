@@ -1,8 +1,9 @@
 // Settings › Launch options: how each game starts (XXMI or its exe, arguments, window, priority, commands before and
 // after, XXMI's own switches for the game) and 3DMigoto's switches for mod makers. Both panels show one config per game
 // (launch.rs), read when the page opens and again when the window gets focus, saved 400 ms after the last change with a
-// small "Saved". They show the game picked in the sidebar until another is picked here. Routes: go({ view: "settings",
-// section: "launch" }) or section: "migoto". Owner: SETTINGS/AI area.
+// small "Saved". They show the game picked in the sidebar until another is picked here. Tools › Mod makers shows a copy
+// of the switches (MigotoSection); every copy hears the others' saves, so they agree. Routes: go({ view: "settings",
+// section: "launch" }) or section: "migoto", and go({ view: "tools", section: "migoto" }). Owner: SETTINGS/AI area.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Panel, Segmented, Select, TextField, Toggle, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
@@ -105,6 +106,19 @@ function GameLaunch({ game, picker }: { game: GameState; picker: ReactNode }) {
   return <><LaunchPanel game={game} l={l} picker={picker} /><MigotoPanel l={l} picker={picker} /></>;
 }
 
+/** The mod maker switches by themselves, for Tools › Mod makers: the same panel and config, for one game. */
+export function MigotoSection({ game }: { game: GameState }) {
+  return <MigotoFor key={game.id} game={game.id} />;
+}
+function MigotoFor({ game }: { game: GameId }) {
+  const l = useLaunch(game);
+  return <MigotoPanel l={l} picker={null} inTools />;
+}
+
+/** A save, told to the other copies of the same game's config (Settings' Launch page and Tools' switches). */
+const SAVED_EVENT = "gm-launch-saved";
+type SavedDetail = { game: GameId; cfg: LaunchConfig; from: object };
+
 // ── one config, saved together, shown in two panels ──
 
 type Launch = ReturnType<typeof useLaunch>;
@@ -119,6 +133,7 @@ function useLaunch(game: GameId) {
   const latest = useRef<LaunchConfig | null>(null);
   const live = useRef(true);
   const saveNow = useRef<() => Promise<void>>(async () => undefined);
+  const self = useRef({});
   useEffect(() => {
     live.current = true;
     return () => {
@@ -140,7 +155,17 @@ function useLaunch(game: GameId) {
     // form would write the old values back on the next edit
     const back = () => { void read().catch(() => undefined); };
     window.addEventListener("focus", back);
-    return () => { on = false; window.removeEventListener("focus", back); };
+    // another copy saved: take its answer, unless an edit here is still on its way
+    const heard = (e: Event) => {
+      const d = (e as CustomEvent<SavedDetail>).detail;
+      if (!on || d.game !== game || d.from === self.current || edits.current !== settled.current) return;
+      setCfg(d.cfg); latest.current = d.cfg;
+    };
+    window.addEventListener(SAVED_EVENT, heard);
+    return () => { on = false; window.removeEventListener("focus", back); window.removeEventListener(SAVED_EVENT, heard); };
+  }, [game]);
+  const tell = useCallback((cfg: LaunchConfig) => {
+    window.dispatchEvent(new CustomEvent<SavedDetail>(SAVED_EVENT, { detail: { game, cfg, from: self.current } }));
   }, [game]);
 
   const save = useCallback(async () => {
@@ -151,6 +176,7 @@ function useLaunch(game: GameId) {
       const back = await launchConfig.set(game, c);
       // a failed save keeps this behind, so reading again on focus can't drop the edit "Try again" will send
       settled.current = Math.max(settled.current, at);
+      tell(back);
       if (!live.current) return;
       setBlocked(null);
       // a newer edit is on its way; don't overwrite it with this answer
@@ -160,7 +186,7 @@ function useLaunch(game: GameId) {
       // once the page is gone there's no form to show it in, so it's a toast
       if (live.current && errorKind(e) === "conflict") setBlocked(errorText(e)); else toast(errorText(e), true);
     }
-  }, [game]);
+  }, [game, tell]);
   saveNow.current = save;
 
   /** Unsafe Mode has its own command (launch.rs unsafe_off); only its part of the form changes. */
@@ -168,6 +194,7 @@ function useLaunch(game: GameId) {
     try {
       const back = await launchConfig.unsafeOff(game);
       if (!live.current) return;
+      tell({ ...(latest.current ?? back), dll: back.dll, locked: back.locked });
       const n = (c: LaunchConfig | null) => (c ? { ...c, dll: back.dll, locked: back.locked } : back);
       latest.current = n(latest.current);
       setCfg(n);
@@ -175,7 +202,7 @@ function useLaunch(game: GameId) {
     } catch (e) {
       toast(errorText(e), true);
     }
-  }, [game]);
+  }, [game, tell]);
 
   const update = useCallback((patch: Partial<LaunchConfig>) => {
     setCfg((c) => {
@@ -315,8 +342,8 @@ function KickFix({ name, children }: { name: string; children?: ReactNode }) {
 }
 
 /** 3DMigoto's switches for making mods: hunting mode, dumping shaders, warnings and logging. The shader cache, the log
- *  itself and looking up a hash are in Tools › Mod makers. */
-function MigotoPanel({ l, picker }: { l: Launch; picker: ReactNode }) {
+ *  itself and looking up a hash are in Tools › Mod makers, next to its copy of this panel (`inTools`). */
+function MigotoPanel({ l, picker, inTools }: { l: Launch; picker: ReactNode; inTools?: boolean }) {
   const { cfg, update } = l;
   if (l.loadError) return <Panel title={t("Mod maker switches")} icon="code" id="migoto" actions={picker}><LoadError text={l.loadError} /></Panel>;
   if (!cfg) return <Panel title={t("Mod maker switches")} icon="code" id="migoto" actions={picker}><Waiting what={t("Reading 3DMigoto's settings")} /></Panel>;
@@ -349,11 +376,13 @@ function MigotoPanel({ l, picker }: { l: Launch; picker: ReactNode }) {
             options={LOG_LEVELS.map((lv) => ({ value: lv, label: LOG_LABEL[lv] ?? lv }))} hint={t("What goes in d3d11_log.txt. Warnings logs mod errors, Info adds DirectX calls, Debug adds much more")} />
         </div>
       )}
-      <p className="hint row">
-        <span>{t("The log, the shader cache and 3DMigoto's files are in Tools.")}</span>
-        <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "dev" })}
-          title={t("Opens Tools, Mod makers, with the log, the shader cache and d3dx.ini of the game picked in the sidebar")}>{t("View log")}</Button>
-      </p>
+      {!inTools && (
+        <p className="hint row">
+          <span>{t("The log, the shader cache and 3DMigoto's files are in Tools.")}</span>
+          <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "dev" })}
+            title={t("Opens Tools, Mod makers, with the log, the shader cache and d3dx.ini of the game picked in the sidebar")}>{t("View log")}</Button>
+        </p>
+      )}
     </Panel>
   );
 }
