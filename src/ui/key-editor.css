@@ -6,6 +6,8 @@
 .ke-os .toggle { flex: 1 1 16rem; min-width: 0; }
 .ke-os-global { margin: 0 0 var(--s-2); }
 .ke-running { margin: 0 0 var(--s-2); }
+/* under the on-screen line: as far below the divider as the first toggle would be */
+.ke-os + .ke-running { margin-top: var(--s-3); }
 
 .ke-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container: ke / inline-size; }
 .ke-row { display: grid; grid-template-columns: minmax(8rem, 1fr) auto auto; align-items: center; gap: var(--s-1) var(--s-4); padding: var(--s-2) 0;
@@ -26,7 +28,7 @@
 .ke-chip .kbd { font-size: .92em; min-width: 1.7em; height: 1.65em; }
 .ke-chip-i { width: .95rem; height: .95rem; color: var(--text-3); transition: color var(--dur-fast) var(--ease); }
 .ke-chip:hover:not(:disabled), .ke-chip:focus-visible, html.kbd .ke-chip:focus { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); outline: none; }
-.ke-chip:hover:not(:disabled) .ke-chip-i, .ke-chip:focus-visible .ke-chip-i { color: var(--accent-ink); }
+.ke-chip:hover:not(:disabled) .ke-chip-i, html:is(.kbd, .pad) .ke-chip:focus-visible .ke-chip-i { color: var(--accent-ink); }
 .ke-chip:disabled .ke-chip-i { display: none; }
 .ke-chip:disabled { cursor: default; }
 .ke-chip.changed .kbd { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-ink); }
@@ -63,6 +65,7 @@
 .kc-skipped { margin: var(--s-2) 0 0; padding-left: var(--s-4); }
 @container ke (max-width: 30rem) { .kc-mod { grid-template-columns: 1fr; } .kc-acts { justify-content: flex-start; } }
 .kc-skip { margin-top: var(--s-3); }
+.kc-skip > .btn { margin-top: var(--s-2); }
 .kc-gated { margin-top: var(--s-3); }
 .kc-gated-t { display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-2); margin-left: calc(-1 * var(--s-2)); border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; }
 .kc-gated-t:hover { background: var(--hover); }

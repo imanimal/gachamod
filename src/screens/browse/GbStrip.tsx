@@ -13,6 +13,7 @@ import { rowKeys, useSideScroll } from "./sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { openWithFilters, useLibIndex } from "./state";
 import "./browse.css";
+import "./gb-inline.css";
 import { english, t, tx } from "../../lib/i18n";
 
 export interface GbStripQuery {

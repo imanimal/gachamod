@@ -79,6 +79,8 @@
 .tp-ignored { margin-top: var(--s-3); }
 .tp-ignored > summary { cursor: pointer; width: max-content; }
 .tp-ignored .tp-list { margin-top: var(--s-2); gap: var(--s-1); }
+/* folded warnings are the same cards as the list above, so the same gap apart (the hairline reset above still wins) */
+.tp-ignored .tp-problem-list { gap: var(--s-2); }
 .tp-ignored-mod { gap: var(--s-2); }
 .mi-prob { flex-wrap: wrap; }
 .mi-prob .tp-fix { margin-left: auto; }
@@ -87,3 +89,5 @@
 .tp-packs-a { flex-wrap: wrap; }
 .tp-imm-game { flex-wrap: wrap; }
 .tp-imm-name { min-width: 12rem; }
+/* the folder picker sits the list's own gap below the last manager (or the note when none was found) */
+.tp-imm-pick { margin-top: var(--s-2); }

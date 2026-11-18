@@ -14,6 +14,11 @@ http://localhost:1420) so screens can be built without Tauri.
 - The common case is one click. Nothing asks a question it can answer itself. No modal where a toast will do.
   Changes that can be undone just happen and offer Undo (`lib/history.ts` `record()`); only things that can't be
   undone ask (`Confirm` in the kit).
+- No toast confirms a control that shows its own new state: a switch, checkbox, segmented choice, menu check or
+  follow button is its own undo. Those record quietly (`record(op, true)`, a pref `.set(v, label)` without `say`), so
+  Ctrl+Z and the title bar's undo list still have them. An Undo toast is for changes that reach past the screen: an
+  item vanishes, other mods turn off, files move, something changes on GameBanana. Toast text never lists names
+  ("Hid the mod from Browse"); a record's `brief` holds those words and its `label` keeps the names for the undo list.
 - Anything unclear gets a hover tip (`title`). Icon-only buttons always have one (`IconButton` takes `label`).
 - Every action works with mouse and keyboard. Lists and grids are reachable with Tab and arrow keys; the gamepad
   helper moves focus between focusable elements, so use real `<button>`s.
@@ -774,11 +779,32 @@ days), and Settings, Fun extras gets a switch to hide it (which also stops the r
 - Creators: Follow, Favourite, Prioritize and Block (setCreatorFlag, with Undo). Prioritised creators' mods come
   first with a crown; blocked ones are hidden everywhere. "Following only" merges the followed creators' newest
   mods. A creator page is `{ view: "browse", user: <id> }` (profile, their mods for this game, then other games).
+  What a member bought or set on GameBanana comes in as plain values, never their CSS: colours as hex
+  (`styleColor`), fonts by GameBanana's name (`styleFont`), pictures only over https from *.gamebanana.com
+  (`styleImage`). The name style (`parseNameStyle`: Subject Shaper colour, hover colour, font and Stroke, Drop
+  Shadow, Glow or Drop Glow effect, plus the upic) and the hover avatar ride on every submitter record in mod lists
+  and the mod page, so cards and the drawer show them through CreatorLink. Comment posters carry only the upic and
+  the signature. `nameStyleProps` moves the colour until it reads on the theme's `--bg` (4.5:1, 3:1 for the page
+  heading), except a stroke that already reads. The profile (`Member/<id>/ProfilePage`) adds the Cooltip as the
+  profile card's look (`parseCardStyle`; the card shows the online state or the custom online/offline title, the
+  join date and the bio answers), the honorary title, the signature and the Cubeatar (`ui/Cubeatar.tsx`: the HD
+  avatar on a CSS 3D cube, standing at a three-quarter view when animations are off). `Member/Multi` refuses the
+  style fields. Pref `gb.creatorStyles` (default on, Settings, Creators) turns all of it off. The member's
+  Uberstyle (`memberUberstyle`: `Member/UiConfig` gives the sheet's address, read from images.gamebanana.com since
+  the files host redirects without CORS) is never injected: `lib/uberstyle.ts` reads its page colour, wallpaper,
+  content veil, text, link and heading colours, fonts and panel look (`uberTheme`) and writes them as the page's own
+  tokens on `.gb-creator.uber` (`uberVars`, with the theme's colours as the palette; text and links 4.5:1, headings
+  3:1, over a black or a white wallpaper), plus `color-scheme` from `uberScheme`. `screens/browse/uberstyle.css`
+  paints the background, headings and link hover. Web fonts don't load (CSP), so a font shows only when installed.
+  An Uberstyle badge on the page and the page menu open the setting; pref `gb.uberstyles` (default on) turns it off.
   The `gm-find-creator` window event `{ name, modId }` finds a member id and opens that page.
 - Any route with a numeric `modId` (Browse, Home, Downloads, character pages) opens the GameBanana drawer on top
   (`openGbMod`, closed with closeRoute(["modId"])). The drawer description keeps GameBanana's headings, colours
-  (clamped so they read in light and dark), lists, tables, spoilers (click or Enter) and centring. Images open the
-  lightbox, links to GameBanana mods and members open in the app, other links open in the browser, YouTube embeds
+  (clamped so they read in light and dark), lists, tables, spoilers (click or Enter) and centring. Inline styles
+  and the old `width`, `size`, `face` and `align` attributes keep alignment, weight, size (.8em to 2em), GameBanana's
+  fonts, plain background colours, borders and image widths (`lib/inlineStyle.ts`, drawn by `gb-inline.css`); url()
+  backgrounds and layout are dropped, and rgb() greys pasted from GameBanana's page don't count as a colour. Images
+  open the lightbox, links to GameBanana mods and members open in the app, other links open in the browser, YouTube embeds
   become a link card. A Keys section lists the hotkeys found in the description; comments load when you scroll near
   them. Adult mods get an adult switch in the drawer header.
 - Adult content: "Show" draws a small muted 18+ mark, "Blur" blurs the image and shows the red 18+ tag, "Hide"
@@ -960,6 +986,44 @@ UI:
   says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
   has the restart button (`lib/elevation.ts`). A copy that isn't an administrator hands its link or file to one that is
   (`devtools::hand_to_elevated_copy`), since Windows hides that copy from the single-instance check.
+- Desktop shortcuts (`shortcuts.rs`, `screens/settings/DesktopShortcuts.tsx`): gachamod's (`gachamod.lnk`, the exe's
+  icon) and quickstart's (`gachamod quickstart.lnk`, `quickstart.ico` next to the exe, from
+  `src-tauri/icons/quickstart.ico`), which runs `gachamod.exe gachamod://play`. The UI takes that link
+  (`screens/home/quickstart.ts`): once the games are read it plays the game gachamod last had open, as Play does
+  (`gachamod://play/zzz` plays that game) without showing gachamod's window (see Running in the background below).
+  Its icon is the last game's icon with quickstart's in the bottom right corner (`<data>/icons/quickstart-<game>-<time>.ico`,
+  made from `games::icon`; the plain `quickstart.ico` until a game's icon is known): the UI calls `shortcuts_follow`
+  on every game switch, which keeps the game in setting `quickstart.game` and writes the shortcut again only when the
+  icon or the file changed (`quickstart.iconStamp`). Each shown game can also have a quickstart of its own ("Zenless
+  Zone Zero quickstart.lnk", `gachamod://play/zzz`, the same badged icon). Settings, General, Desktop shortcuts has
+  Open gachamod with quickstart (`quickstart.open`, off) to show the window too, and After playing (Stay in the tray
+  or Quit gachamod), a second place for `app.background`. Setup asks for both and `hooks.nsh` makes quickstart's
+  (`quickstartShortcut`); Settings, General has Desktop shortcuts with Add to desktop, Recreate and Remove, which write
+  the same registry values so a repair agrees. The games' own quickstarts are Settings only; uninstall takes away the
+  ones that open that copy. No shortcut carries its own administrator flag: the exe's RUNASADMIN covers them all, so
+  the Always switch decides for all of them.
+- Running in the background (`src-tauri/src/background.rs`, `shell/CloseAsk.tsx`, Settings, General, Running in the
+  background): gachamod can run with no window, only a tray icon (click: open gachamod; menu: Open gachamod,
+  Quickstart, Quit gachamod, in the UI's language from setting `tray.labels`). The main window is destroyed then, so
+  WebView2 isn't running; the menu over the game, hotkeys, automatic reloads, downloads, play time
+  (`gacha-core playtime.rs`) and update downloads are all in the process. The tray icon is there only while there's
+  no window on screen.
+  - Closing the window (title bar, Alt+F4) goes through `background::close`: setting `app.background` "1" keeps
+    running, "0" quits. Unset, the first close asks (Keep running or Quit, saved; Esc keeps the window and asks next
+    time). If the page doesn't take up the question within 2 s, gachamod quits as before. Close gachamod when the game
+    starts (`app_close` with `ask` false) never asks and counts unset as keep running.
+  - Quickstart: a start (or a second start, or the tray's Quickstart) that only carries play links makes the main
+    window hidden so its page can run Play, then destroys it 5 s after the game is up. A second start with one while
+    the window is open leaves the window as it is. When the last game closes (and stays closed 15 s), gachamod stays
+    in the background, or quits when `app.background` is "0". Anything that needs the player shows the window: nothing
+    set up, missing folders, the Genshin kick question, a launch error or a game that didn't start (`play`'s
+    `needsYou`), the menu over the game handing over a page, a start without a play link, or no game two minutes
+    after a hidden start.
+  - A window made again (tray, shortcut, a link) is built hidden and shown once it's there. Links, files and pages
+    from the menu over the game wait in `Pending` until its page asks (`startup_opened`, after its listeners are in
+    place), then go out as events.
+  - In the background with no game and no download running, a downloaded update installs through setup's quiet
+    apply and the new version starts with `--background` (no window).
 - Check this game (`gamecheck.rs`, `screens/settings/GameCheck.tsx`, opened from the Help menu, Settings, Feedback and privacy,
   privacy and logs, and the search): five steps through switching skins while playing, each answered Yes, No or Skip, next to
   what gachamod saw by itself (the game saved a pick, gachamod opened the menu, it read a pick back). The answers and
@@ -974,7 +1038,14 @@ UI:
   without reopening gachamod. Set to "tell" (Only tell me), it checks on the same schedule, downloads nothing and
   emits `app-update-found` once per version, which toasts "gachamod X is out" with Update now. "0" never checks by
   itself. Settings, About shows the state (`app_update_status`) with Check now and Update now or
-  Restart to update. The NSIS installer runs passive (a small progress window), per user, no administrator.
+  Restart to update, and the download as the same step list gachamod setup draws (`ui/Steps.tsx`). Installing hands
+  the checked installer to gachamod setup (`hand_to_setup`): `setup.exe --apply <installer> --sig <file>
+  --apply-version <v>`, plus `--open` unless gachamod is quitting, from a `gachamod-setup-update-<pid>` folder in
+  `%TEMP%`. Setup checks the signature again, waits up to 10 s for gachamod to close, runs `/S /UPDATE /D=<dir>` with
+  its own progress window in gachamod's look (look.json), then opens the new version, or closes itself when gachamod
+  was quitting. Without a setup.exe that knows `--apply` (a plain `tauri build`, a dev build, an older setup.exe the
+  installer couldn't replace), with a zipped update, or when setup won't start, the updater runs the installer passive
+  (NSIS's progress window). Per user, no administrator.
 - `npm run release -- <version>` sets the version in tauri.conf.json, package.json, package-lock.json and Cargo.toml,
   builds the signed installer, writes latest.json, commits and pushes, and makes the GitHub release v<version>
   (scripts/release.mjs). Without --notes the notes are the commit subjects since the last release.
@@ -988,13 +1059,15 @@ UI:
   to it. Its look (`look.rs`): `--theme <id>`, else a game named in its own file name (`gachamod-setup-zzz.exe`), the
   page that linked the download or the download's address (Windows' Zone.Identifier, `?theme=` or `?game=` too), else
   the look gachamod last showed, else Default. The app writes that look to `look.json` in its data folder when the
-  theme changes (`save_look`, from `lib/theme.ts`), so repair and uninstall wear the game in use.
+  theme changes (`save_look`, from `lib/theme.ts`), so repair and uninstall show the theme of the game in use.
   - Every setup installs the same gachamod, which manages all games. A fresh install from a game's own setup (named
     by file, link or `--theme`, not by look.json) leaves `setup-game.json` in the data folder; the first start reads
     it once (`setup_game`) and turns on one-game mode for that game. `gachamod-setup.exe` leaves none.
-  - Install: one button, with Options for the folder, desktop shortcut, starting as administrator, opening when done
-    and setup's own look. The choices go to HKCU\Software\gachamod (`adminAsked`, `admin`, `desktopShortcut`), which
-    `hooks.nsh` reads instead of asking. An older install shows Update; the same or newer shows Open, Repair and
+  - Install: one button. A fresh install shows three check boxes on the card: Desktop shortcut, Quickstart shortcut
+    and Start gachamod as administrator, all on by default (an update over a copy that never chose quickstart has it
+    off). Options has them too, with the folder, opening when done and setup's own look. The choices go to
+    HKCU\Software\gachamod (`adminAsked`, `admin`, `desktopShortcut`, `quickstartShortcut`), which `hooks.nsh` reads
+    instead of asking. An older install shows Update; the same or newer shows Open, Repair and
     Uninstall. Versions compare with their beta part, so the beta.3 setup over beta.2 is an update.
   - Over an installed copy, when setup carries nothing newer (the `setup.exe` next to gachamod, or an old download),
     it asks GitHub for the newest version (`latest`, from `latest.json`, 10 second limit) and shows "Update to X" when
@@ -1008,6 +1081,14 @@ UI:
     `latest.json` installer and checks its signature with the updater key. Uninstall runs `uninstall.exe /S _?=<dir>`,
     then removes setup.exe and the empty folder; "Also delete gachamod's data" moves the data folders to the Recycle
     Bin and clears HKCU\Software\gachamod.
+  - `--apply` (an update from gachamod, above) opens straight into its steps: check the download, close gachamod,
+    update gachamod. If it fails: Try again with the same file, the plain installer, or Open gachamod (the old copy).
+    Without WebView2 it runs the installer passive, as the updater would.
+  - NSIS's own windows (the plain installer, passive updates from versions before `--apply`, PCs without WebView2)
+    carry the gachamod icon, a header image and a welcome-page sidebar: `src-tauri/windows/header.bmp` (150x57,
+    white like NSIS's header strip) and `sidebar.bmp` (164x314, the dark Default look), drawn from
+    `design/brand/icon-1024.png` with Manrope. NSIS keeps its own colours, fonts and wording; changing those means
+    replacing Tauri's whole installer template, which the updater depends on.
   - Without WebView2 the download falls back to the plain NSIS installer (which installs WebView2, and offers to
     replace an older copy itself) and `--uninstall` to NSIS's uninstaller. Windows' Modify button opens the latest
     release page, whose setup carries the newest installer.
@@ -1017,8 +1098,9 @@ UI:
   - Checked on one PC: install, repair over the same version, uninstall from the window and with `/S`, closing a
     running gachamod, the desktop shortcut choice, temp cleanup, and the theme from the file name and from look.json.
     Not checked yet: a PC without WebView2, an update from 0.1.0 through the app's updater, repair when the download
-    is older than the installed copy (the GitHub download), Update to X from `setup.exe` (also a GitHub download), and
-    a theme from the page that linked the download.
+    is older than the installed copy (the GitHub download), Update to X from `setup.exe` (also a GitHub download), a
+    theme from the page that linked the download, an update through `--apply` (Restart now, Update now and at quit;
+    it needs a release with it and a newer one after), and the header and sidebar images in a built installer.
 - Demo handlers for every SYSTEM command.
 
 ## Settings, Tools and the AI helper (SETTINGS/AI)
@@ -1034,11 +1116,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   single tiny panel that belongs with another. Page ids, with their panel ids: General has "general" (general,
   graphics), "appearance" (appearance, layout, themes), "hotkeys" and "fun"; Games and mods has "games" (games,
   xxmi), "launch" (launch, migoto, game-start), "mods" (mods, mod-folders, automatic, broken-mods, storage) and
-  "downloads" (installing); Online has "gamebanana" (account, integrations, creators, adult), "ai" and "extensions";
+  "downloads" (installing) and "disk" (Storage: disk, disk-big, disk-dupes); Online has "gamebanana" (account, integrations, creators, adult), "ai" and "extensions";
   App has "feedback" (feedback, privacy, logs) and "about" (about, updates, transfer, repair). The pages are `PAGES`
   and the panels `SECTIONS` in `settingsSearch.ts`. Old page ids that are now panels ("account", "creators") still
   route, to the page that holds them.
-- Page names are a word or two: General, Appearance, Hotkeys, Fun, Games, Launch, Mods, Downloads, GameBanana, AI
+- Page names are a word or two: General, Appearance, Hotkeys, Fun, Games, Launch, Mods, Downloads, Storage, GameBanana, AI
   helper, Extensions, Feedback and privacy, About and updates. Each page's hover tip lists everything on it, and its `keywords` keep the older long names
   ("Mods and downloads", "About and updates") so the search still finds them. A panel holds one kind of setting under
   a heading that names it: "Downloads and installing", "Mod update checks and rescans", "Mods a game update broke",
@@ -1118,8 +1200,9 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 - Trash and removed mods: `trashDaysPref` ("trash.days", 0 to 3650, default 0; 0 deletes files at once, the record stays in
   Mods, Trash). Lowering it asks first when files would go now (that can't be undone). `trashPhrase()` finishes a
   sentence about it for LIBRARY's texts ("stay on your PC for 14 days").
-- Creators: followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the
-  creator's page, an x to remove (setCreatorFlag, with Undo).
+- Creators: "Name styles from GameBanana" (`creatorStylesPref`), "Uberstyles on creator pages" (`uberstylesPref`),
+  then followed, favourite, prioritized and blocked lists from prefs `creators`, each name a link to the creator's
+  page, an x to remove (setCreatorFlag, with Undo).
 - AI helper: off / most useful (default) / everything, the chatbot, and the jobs as buttons.
 - About and updates: "About gachamod" (version, data folder, tip jar), "gachamod updates", "Back up or move your
   settings" (export and import) and "Repair, reset or uninstall", which has "Reset gachamod" (asks first). `app_reset` leaves a note in the data folder, the window clears its own
@@ -1165,7 +1248,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
 (Problems: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" (In-game menu, from
-INGAME: ingame, "keylist"), "packs" (Share and import: packs, "imm"), "disk" (Storage: "disk", "disk-big", "disk-dupes") and
+INGAME: ingame, "keylist"), "packs" (Share and import: packs, "imm") and
 "makers" (Mod makers: "dev", "hash"). The pages and
 panels with their search words are in `toolsSearch.ts`. The panel ids still work as routes. A panel that renders
 nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
@@ -1197,11 +1280,12 @@ writes one value in Medal's database, only while Medal is closed, after a copy o
 
 ### Storage
 
-Tools › Storage (`screens/tools/Storage.tsx`, `crates/gacha-core/src/storage.rs`, `lib/api/storage.ts`) shows where
+Settings › Storage (`screens/settings/Storage.tsx`, `crates/gacha-core/src/storage.rs`, `lib/api/storage.ts`) shows where
 disk space goes. `storage_measure(false)` reads mod sizes from the library at once; `storage_measure(true)` then walks
 the rest on a blocking thread, sending `storage-progress {step, game}` so the wait names what it reads ("Comparing ZZZ
 mods that look alike"). Skip calls `storage_cancel`, and the report comes back with what it has (`complete` false).
-The report stays for the session; "Measure again" redoes it, and mod changes from anywhere (`onPublish`) keep its mods
+The first measure starts when the page first shows (Settings draws every page at once, so not when Settings opens),
+or when a search draws one of its panels. The report stays for the session; "Measure again" redoes it, and mod changes from anywhere (`onPublish`) keep its mods
 current.
 
 What it counts, per game: mods on and off (from the scan), the trash (`<data>/trash/<game>`), kept archives and
@@ -1214,7 +1298,9 @@ and database backups, anything else in the data folder, and XXMI Launcher withou
 - Panel "disk": the total, a game picker, and a breakdown by category (rows open to their items, each with Show in
   Explorer and its cleanup), by game (a row picks that game) or by character (a row opens Mods on that character).
 - Panel "disk-big": the biggest mods, all or only the ones that are off, with open, Show in Explorer and Move to trash
-  (`removeMods`, which asks first only when the trash keeps no files and the mod has no GameBanana link).
+  (`removeMods`, which asks first only when the trash keeps no files and the mod has no GameBanana link). Each row's
+  picture is the library's `Preview` with the mod's `preview`, `thumb` and `nsfw` from the report, so a mod whose
+  `thumb` is null (a GameBanana URL, a GIF, a small picture, a thumbnail not made yet) still shows its picture.
 - Panel "disk-dupes": mods installed twice. "same": the files match byte for byte, leaving out dot files (the sidecar)
   and `preview.*` pictures; candidates are grouped by file names and sizes first, and only those are hashed.
   "download": the same GameBanana file and variant installed twice with files that differ now (sub-mods and their

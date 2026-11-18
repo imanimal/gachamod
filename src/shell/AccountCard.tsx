@@ -18,7 +18,7 @@ function useAccountCard() {
     ? [
         { header: u.name },
         { label: t("Your GameBanana page"), icon: "user", title: t("Your mods and uploads, in Browse"), onClick: () => go({ view: "browse", user: u.id }) },
-        { label: t("Follow who you follow there"), icon: "feed", title: t("Follows here everyone you follow on GameBanana"), onClick: () => void importFollowing() },
+        { label: t("Import GameBanana follows"), icon: "feed", title: t("Follows here everyone you follow on GameBanana"), onClick: () => void importFollowing() },
         "-",
         { label: t("Sign out"), icon: "power", title: t("Forgets the session on this PC. Your follows in gachamod stay"), onClick: () => void signOut() },
       ]

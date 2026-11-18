@@ -82,5 +82,5 @@ export function installCapture() {
     push(l.level, "backend", head ?? "", more.length ? more.join("\n") : undefined);
   })).catch(() => {});
 
-  push("info", "you", `Console ready (${inTauri() ? "app" : "browser demo"}). Type help, or press ~ to close.`);
+  push("info", "you", `Console ready (${inTauri() ? "app" : "browser demo"}). Type help, or press Shift+\` to close.`);
 }

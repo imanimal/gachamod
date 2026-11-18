@@ -20,7 +20,16 @@ export interface ToastEvent {
 export const app = {
   info: () => call<{ name: string; version: string }>("app_info"),
   /** What the app was started with (a link or a .gachamod file), once. */
-  startupOpened: () => call<Array<{ kind: "link"; url: string } | { kind: "file"; path: string }>>("startup_opened"),
+  startupOpened: () => call<Opened[]>("startup_opened"),
+  /** Bring the main window up, as after a quickstart that started gachamod hidden (src-tauri background.rs). */
+  showWindow: () => call<void>("app_show"),
+  /** Close the window as its close button does: to the background or quit, as "app.background" says. `ask` false
+   *  never asks first (Close gachamod when the game starts). */
+  close: (ask: boolean) => call<void>("app_close", { ask }),
+  /** The first close: the window asks whether to keep running. Say it's asking within two seconds (`closeAsked`),
+   *  or gachamod quits as a close did before. */
+  onCloseAsk: (cb: () => void) => listen<null>("app-close-ask", () => cb()),
+  closeAsked: () => call<void>("app_close_asked"),
   onDeepLink: (cb: (p: { url: string }) => void) => listen<{ url: string }>(EVENTS.deepLink, cb),
   onOpenFile: (cb: (p: { path: string }) => void) => listen<{ path: string }>(EVENTS.openFile, cb),
   /** `open`: the mod the toast is about (an install), so it can offer to open it. */
@@ -31,6 +40,10 @@ export const app = {
 
 /** What the menu over a game hands to the app's own window: a page to show, or a job for the AI helper. */
 export interface GoEvent { game: GameId; route?: Route | null; ai?: AiTask | null }
+
+/** What the window was opened with: a link or file from a start, or a page the menu over a game handed over while
+ *  the window was closed. */
+export type Opened = { kind: "link"; url: string } | { kind: "file"; path: string } | ({ kind: "go" } & GoEvent);
 
 /** Small string settings kept in the app's database. Keys are dotted: "ui.nsfw", "zzz.oneSkin". */
 export const settings = {

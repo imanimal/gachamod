@@ -7,7 +7,30 @@ import { t } from "../../lib/i18n";
 import { onApp } from "../../lib/store";
 import { held } from "../../lib/tauri";
 import { onKeysChanged } from "../../ui/KeyEditor";
+import { record } from "../../lib/history";
+import { toast } from "../../ui/toast";
 import "./keylist.css";
+
+/** What a change of the key list's settings did, for Undo. */
+function keyListChange(before: KeyListSettings, next: KeyListSettings): string {
+  if (before.on !== next.on) return next.on ? t("Turned the key list on") : t("Turned the key list off");
+  if (before.style !== next.style) return next.style === "window" ? t("Set the key list to show over the game") : t("Set the key list to show inside the game");
+  if (before.key !== next.key) return t("Set the key list's key to {key}", { key: next.key });
+  return next.own ? t("Listed mods with a key menu") : t("Left out mods with a key menu");
+}
+
+/** Save the key list's settings with an Undo step, without a toast: the switch, choice or key field shows the new
+ *  state. Tools > Key list in game and Settings > Hotkeys both save here; `settle` gets what the backend kept. */
+export async function saveKeyList(game: GameId, before: KeyListSettings, next: KeyListSettings, settle: (s: KeyListSettings) => void) {
+  try {
+    settle(await keyList.set(game, next));
+    record({
+      label: keyListChange(before, next),
+      undo: async () => { settle(await keyList.set(game, before)); },
+      redo: async () => { settle(await keyList.set(game, next)); },
+    }, true);
+  } catch (e) { toast(errorText(e), true); }
+}
 
 /** Mods with no character sit under this name, last. */
 export const OTHER_MODS = t("Other mods");

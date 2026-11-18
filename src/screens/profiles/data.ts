@@ -7,10 +7,11 @@ import { record } from "../../lib/history";
 import { stops, t, tb } from "../../lib/i18n";
 import { held } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
-import { publish, summarize } from "../library/data";
+import { briefNotes, publish, summarize } from "../library/data";
 import { sayF10 } from "../../lib/elevation";
+import { note as noteUsage } from "../../lib/telemetry";
 
-const subs = new Set<(game: GameId) => void>();
+const subs =new Set<(game: GameId) => void>();
 const lastLists = new Map<GameId, Profile[]>();
 /** Tell every profile list for this game to reload. */
 export function profilesChanged(game: GameId) { lastLists.delete(game); subs.forEach((f) => f(game)); }
@@ -101,12 +102,16 @@ async function switchNow(game: GameId, to: Profile, from: Profile | null): Promi
     return r;
   };
   const r = await go(to);
-  const parts = [t("Switched to {name}", { name: to.name }), r.change.changed.length ? summarize(r.change) : t("No mods needed changing")];
-  if (r.varsPending) parts.push(t("Mod options apply after you close the game"));
-  parts.push(...sayF10(r.change.notes).map(tb));
+  noteUsage("profile switched", { game });
+  // the undo list names the profile and the mods, the toast counts
+  const notes = sayF10(r.change.notes);
+  const after = r.varsPending ? [t("Mod options apply after you close the game")] : [];
+  const changed = (names: boolean) => (r.change.changed.length ? summarize(r.change, names) : t("No mods needed changing"));
+  const parts = [t("Switched to {name}", { name: to.name }), changed(true), ...after, ...notes.map(tb)];
+  const brief = [t("Switched profiles"), changed(false), ...after, ...briefNotes(notes).map(tb)];
   if (from && from.id !== to.id) {
-    record({ label: stops(parts), undo: () => go(from), redo: () => go(to) });
+    record({ label: stops(parts), brief: stops(brief), undo: () => go(from), redo: () => go(to) });
   } else {
-    toast(stops(parts, true));
+    toast(stops(brief, true));
   }
 }

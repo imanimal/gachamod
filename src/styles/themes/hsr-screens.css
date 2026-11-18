@@ -169,6 +169,7 @@
 
   /* ── settings and tools: rows are plates stacked 3 px apart ── */
   .set-rows, .set-games, .tools-dev { gap: 3px; }
+  :is(.set-rows, .set-games) + :is(.set-rows, .set-games) { margin-top: 3px; border-top: 0; }
   .set-row, .tools-dev-row, .set-game { padding: .5rem .9rem; border-bottom: 0; border-radius: var(--cut-sm); background: var(--row); --hit-x: 3px; --hit-r: var(--cut-sm); }
   .ext-src { border-radius: var(--cut-sm); }
   .set-game { padding: .65rem .9rem; }

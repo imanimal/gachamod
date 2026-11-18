@@ -1,11 +1,17 @@
 // A GameBanana member's page inside the app ({ view: "browse", user: id }): who they are, follow / favourite /
 // prioritize / block, their mods for this game (most downloaded or newest first), then their mods for other games.
 // Owner: BROWSE area.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { errorText, type GameState } from "../../lib/api";
-import { isAbort, isNotFound, listMods, memberProfile, type GbCard, type GbMember } from "../../lib/gamebanana";
-import { setCreatorFlag, useCreators, useNsfw, useHiddenMods } from "../../lib/prefs";
+import { isAbort, isNotFound, listMods, memberProfile, memberUberstyle, type GbCard, type GbMember } from "../../lib/gamebanana";
+import { setCreatorFlag, useCreatorStyles, useCreators, useNsfw, useHiddenMods, useUberstyles } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
+import { tokenHex, useTheme } from "../../lib/theme";
+import { nameStyleProps, themeBg } from "../../lib/nameStyle";
+import { uberScheme, uberTheme, uberVars } from "../../lib/uberstyle";
+import { CreatorCard } from "./CreatorCard";
+import { Cubeatar } from "../../ui/Cubeatar";
+import "./uberstyle.css";
 import { Avatar, Badge, Button, Empty, Segmented, Skeleton, Waiting, formatCount } from "../../ui/kit";
 import { menuHandler } from "../../ui/ContextMenu";
 import { creatorItems } from "./menus";
@@ -45,18 +51,60 @@ export function CreatorPage({ id, game }: { id: number; game: GameState }) {
   const ref = { id, name, avatar: member?.avatar ?? flags?.avatar ?? null };
   const flag = (k: "sub" | "fav" | "prio" | "blocked") => setCreatorFlag(ref, k, !flags?.[k]);
   const url = member?.url ?? `https://gamebanana.com/members/${id}`;
+  // their Uberstyle (the CSS they made for their GameBanana profile), read into this page's tokens and never
+  // injected. The theme around the page goes in as the palette, so every colour is checked against what's on screen.
+  const showUber = useUberstyles();
+  const theme = useTheme();
+  const [uberCss, setUberCss] = useState<{ id: number; css: string } | null>(null);
+  useEffect(() => {
+    if (!showUber) return;
+    const c = new AbortController();
+    memberUberstyle(id, c.signal).then((css) => { if (!c.signal.aborted && css) setUberCss({ id, css }); }).catch(() => {});
+    return () => c.abort();
+  }, [id, showUber]);
+  const uberRead = useMemo(() => (uberCss && uberCss.id === id ? uberTheme(uberCss.css) : null), [uberCss, id]);
+  const uber = useMemo(() => {
+    if (!showUber || !uberRead) return null;
+    const palette = { bg: tokenHex("--bg"), surface: tokenHex("--surface"), text: tokenHex("--text"), accent: tokenHex("--accent") };
+    return { vars: uberVars(uberRead, theme.scheme, palette), scheme: uberScheme(uberRead, theme.scheme, palette) };
+  }, [showUber, uberRead, theme]);
+  const openUberSetting = () => go({ view: "settings", section: "set-uberstyles" });
+
   // the menu matches the buttons: for a removed member, Follow and Prioritize only show to turn them off
-  const menu = () => creatorItems(ref, { gone });
+  const menu = () => creatorItems(ref, { gone, uber: !!uber, page: true });
+
+  // what they set on GameBanana: name style (colour moved just far enough to read here, on their Uberstyle's page
+  // when it has one), upic, hover avatar, Cubeatar, hover card style, signature. Settings, Creators turns it all off.
+  const showStyles = useCreatorStyles();
+  const style = showStyles ? member?.style ?? null : null;
+  const own = style ? nameStyleProps(style, uber?.vars["--bg"] ?? themeBg(), 3) : null;
+  const hoverAvatar = showStyles ? member?.hoverAvatar ?? null : null;
+  // a Cubeatar takes the avatar's place; if its picture doesn't load, the flat avatar comes back
+  const [cubeFailed, setCubeFailed] = useState<string | null>(null);
+  const cube = showStyles && member?.cube && member.cube.src !== cubeFailed ? member.cube : null;
 
   return (
-    <div className="page gb-creator">
+    <div className={`page gb-creator${uber ? " uber" : ""}`} style={uber ? ({ ...uber.vars, colorScheme: uber.scheme } as CSSProperties) : undefined}>
       <header className="gb-creator-h" onContextMenu={menuHandler(menu)}>
-        {known ? <Avatar src={ref.avatar} name={name} size={88} ring={!!flags?.prio} /> : <Skeleton w={88} h={88} round />}
+        {known ? cube ? (
+          <span className="gb-creator-av is-cube">
+            <Cubeatar src={cube.src} speed={cube.speed} axes={cube.axes} size={88} title={name} onError={() => setCubeFailed(cube.src)} />
+          </span>
+        ) : (
+          <span className="gb-creator-av">
+            <Avatar src={ref.avatar} name={name} size={88} ring={!!flags?.prio} />
+            {hoverAvatar && <img key={hoverAvatar} className="gb-creator-av-alt" src={hoverAvatar} alt="" onError={(e) => { e.currentTarget.hidden = true; }} />}
+          </span>
+        ) : <Skeleton w={88} h={88} round />}
         <div className="gb-creator-who">
-          {known ? <h1 className="gb-creator-name">{name}</h1> : (
+          {known ? <h1 className={`gb-creator-name${own ? ` ${own.className}` : ""}`} style={own?.style}>{name}</h1> : (
             <Waiting what={t("Asking GameBanana about this creator")}>
               <Skeleton w="12rem" h="1.6rem" />
             </Waiting>
+          )}
+          {style?.upic && (
+            <img key={style.upic} className="gb-creator-upic" src={style.upic} alt="" title={t("The picture {name} uses as their name on GameBanana", { name })}
+              onError={(e) => { e.currentTarget.hidden = true; }} />
           )}
           {member && (
             <div className="gb-creator-stats">
@@ -64,6 +112,8 @@ export function CreatorPage({ id, game }: { id: number; game: GameState }) {
               <span>{tx("{n} subscribers", { n: <strong>{formatCount(member.subs)}</strong> })}</span>
               {member.submissions !== null && <span>{tx("{n} submissions", { n: <strong>{formatCount(member.submissions)}</strong> })}</span>}
               {member.title && <Badge>{member.title}</Badge>}
+              {member.honorary && <span title={t("A title from GameBanana's staff")}><Badge tone="accent">{member.honorary}</Badge></span>}
+              {uber && <Badge icon="palette" onClick={openUberSetting} title={t("The colours and fonts here come from {name}'s Uberstyle on GameBanana. Click for the setting", { name })}>{t("Uberstyle")}</Badge>}
             </div>
           )}
           {error && <p className="hint">{error} {!gone && <button type="button" className="link-btn" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</button>}</p>}
@@ -83,6 +133,11 @@ export function CreatorPage({ id, game }: { id: number; game: GameState }) {
             <Button variant="ghost" icon="external" onClick={() => openExternal(url)}>{t("Open on GameBanana")}</Button>
           </div>
           {flags?.blocked && <p className="hint">{t("You blocked {name}. Their mods are hidden everywhere else.", { name })}</p>}
+          {member && <CreatorCard member={member} styled={showStyles} />}
+          {showStyles && member?.sig && (
+            <img key={member.sig} className="gb-sig" src={member.sig} alt="" title={t("{name}'s signature on GameBanana", { name })}
+              onError={(e) => { e.currentTarget.hidden = true; }} />
+          )}
         </div>
       </header>
 

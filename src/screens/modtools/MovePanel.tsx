@@ -150,7 +150,7 @@ export function MovePanel() {
         ))}
       </ul>
       <div className="row tp-imm-pick">
-        <span className="hint grow">{picked ? t("Also looking in {path}", { path: picked }) : t("Using SkinSelectImpact or Fairy's Secret Folder? Point gachamod at it.")}</span>
+        <span className="hint grow">{picked ? t("Also looking in {path}", { path: picked }) : t("Choose SkinSelectImpact's folder or a Fairy's Secret Folder backup.")}</span>
         <Button variant="ghost" size="sm" icon="folder" disabled={busy === "pick"} onClick={() => void choose(false)}
           title={t("SkinSelectImpact's folder, or any manager gachamod didn't find by itself")}>{t("Choose a folder")}</Button>
         <Button variant="ghost" size="sm" icon="file" disabled={busy === "pick"} onClick={() => void choose(true)}

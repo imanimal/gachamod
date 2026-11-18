@@ -38,15 +38,17 @@ function Host() {
   const title = a.total === 1 ? t("Delete {mod}?", { mod: a.lost[0]!.name }) : tn(a.total, "Delete {n} mod?", "Delete {n} mods?");
   return (
     <Confirm danger yes={t("Delete")} title={title} onYes={() => done(true)} onClose={() => done(false)}>
-      <p>
-        {a.total === 1 ? t("Removed mods' files are deleted right away, and this one has no GameBanana link to download it again, so Undo can't bring it back.")
-          : one ? t("Removed mods' files are deleted right away, and {names} has no GameBanana link to download it again, so Undo can't bring it back.", { names })
-          : t("Removed mods' files are deleted right away, and {names} have no GameBanana link to download them again, so Undo can't bring them back.", { names })}
-      </p>
-      <Button size="sm" variant="ghost" icon="settings" title={t("Settings, Trash and removed mods: keep removed files for a while so Undo and Put back work")}
-        onClick={() => { done(false); go({ view: "settings", section: "set-trash-days" }); }}>
-        {t("Trash settings")}
-      </Button>
+      <div className="lib-say">
+        <p>
+          {a.total === 1 ? t("Removed mods' files are deleted right away, and this one has no GameBanana link to download it again, so Undo can't bring it back.")
+            : one ? t("Removed mods' files are deleted right away, and {names} has no GameBanana link to download it again, so Undo can't bring it back.", { names })
+            : t("Removed mods' files are deleted right away, and {names} have no GameBanana link to download them again, so Undo can't bring them back.", { names })}
+        </p>
+        <Button size="sm" variant="ghost" icon="settings" title={t("Settings, Trash and removed mods: keep removed files for a while so Undo and Put back work")}
+          onClick={() => { done(false); go({ view: "settings", section: "set-trash-days" }); }}>
+          {t("Trash settings")}
+        </Button>
+      </div>
     </Confirm>
   );
 }

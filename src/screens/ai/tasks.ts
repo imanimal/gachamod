@@ -189,11 +189,12 @@ function applyPatches(game: GameState, patches: Array<{ mod: ModEntry; patch: Me
       return failed;
     };
     const failed = await run(patches.map((p) => ({ id: p.mod.id, patch: p.patch })));
+    // no toast: the helper's window lists every change and says Ctrl+Z undoes them
     record({
       label,
       undo: () => run(before.map((b) => ({ id: b.id, patch: b.back }))),
       redo: () => run(patches.map((p) => ({ id: p.mod.id, patch: p.patch }))),
-    });
+    }, true);
     const out = patches.map(({ mod, patch, why }) => {
       const parts = [patch.name !== undefined ? t("{name} is now \"{next}\"", { name: mod.name, next: patch.name }) : mod.name];
       if (patch.character !== undefined) parts.push(patch.character ? t("character {name}", { name: patch.character }) : t("no character"));
@@ -400,7 +401,8 @@ function readDraws(reply: unknown, game: GameState, mods: Array<{ mod: ModEntry;
           out.push(t("{name} didn't change: {error}", { name: p.mod.name, error: errorText(e) }));
         }
       }
-      if (done.length) recordBackups(tn(done.length, "Toggles of {n} mod work only while on screen", "Toggles of {n} mods work only while on screen"), done);
+      // no toast: the helper's window lists every change and says Ctrl+Z undoes them
+      if (done.length) recordBackups(tn(done.length, "Toggles of {n} mod work only while on screen", "Toggles of {n} mods work only while on screen"), done, { quiet: true });
       return out;
     } : undefined,
   };

@@ -56,6 +56,7 @@ Taimanin) keep their English names except in Chinese, where the official ones ar
 | remove (a mod, goes to trash) | 移除 | quitar | remover | удалить |
 | trash (gachamod's own) | 垃圾箱 | papelera | lixeira | корзина |
 | Recycle Bin (Windows) | 回收站 | Papelera de reciclaje | Lixeira do Windows | Корзина Windows |
+| Delete for good (skip the Recycle Bin) | 永久删除 | Eliminar para siempre | Excluir de vez | Удалить навсегда |
 | Put back / Forget (in the trash) | 恢复 / 忘记 | Restaurar / Olvidar | Restaurar / Esquecer | Вернуть / Забыть |
 | toggles (key-switched options inside a mod) | 切换项 | opciones | opções | переключатели |
 | options (a mod's saved `$var` values) | 选项 | opciones ("opciones y ajustes" when a line names both) | opções | параметры |
@@ -83,6 +84,9 @@ Taimanin) keep their English names except in Chinese, where the official ones ar
 | Mods folder | Mods 文件夹 | carpeta Mods | pasta Mods | папка Mods |
 | hotkey | 快捷键 | atajo | atalho | горячая клавиша |
 | in-game menu (skin menu over the game) | 游戏内菜单 | menú en el juego | menu no jogo | внутриигровое меню |
+| skin menu / Skin menu keys | 皮肤菜单 / 皮肤菜单按键 | menú de skins / Teclas del menú de skins | menu de skins / Teclas do menu de skins | меню скинов / Клавиши меню скинов |
+| key list / Key list key | 按键列表 / 按键列表键 | lista de teclas / Tecla de la lista de teclas | lista de teclas / Tecla da lista de teclas | список клавиш / Клавиша списка клавиш |
+| App shortcuts (gachamod's fixed keys) | 应用快捷键 | Atajos de la app | Atalhos do app | Горячие клавиши приложения |
 | mods for adults | 成人 Mod | mods para adultos | mods adultos | моды для взрослых |
 | 1-click install | 一键安装 | instalación con un clic | instalação com um clique | установка в один клик |
 | High quality (Browse filter) | 高质量 | Alta calidad | Alta qualidade | Высокое качество |
@@ -159,6 +163,8 @@ pt-BR says "Por cima do jogo", not "Sobre o jogo", because About is "Sobre".
 | English | zh-CN | es | pt-BR | ru |
 | --- | --- | --- | --- | --- |
 | Accent | 强调色 | Color de acento | Destaque | Акцент |
+| Accent colour | 强调色 | Color de acento | Cor de destaque | Цвет акцента |
+| Hue / Saturation / Lightness (colour picker) | 色相 / 饱和度 / 亮度 | Tono / Saturación / Luminosidad | Matiz / Saturação / Luminosidade | Оттенок / Насыщенность / Яркость |
 | Chill mode | 随性模式 | Modo relajado | Modo tranquilo | Расслабленный режим |
 | Seasonal touches | 节日装饰 | Detalles de temporada | Toques sazonais | Сезонные украшения |
 | pull (the random-mod button) | 抽卡 | tirada | Girar / giro | крутка |

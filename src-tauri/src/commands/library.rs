@@ -167,9 +167,10 @@ pub async fn archive_list(st: State<'_, AppState>, game: Option<String>) -> Resu
     blocking(move || library::archive_list(&*lock(&db)?, game.as_deref())).await
 }
 
-/// Forget removed mods for good ("t<trash id>" / "a<archive id>" keys).
+/// Forget removed mods for good ("t<trash id>" / "a<archive id>" keys). With `recycle`, files of mods with no
+/// GameBanana link go to the Recycle Bin instead of being deleted.
 #[tauri::command]
-pub async fn archive_forget(st: State<'_, AppState>, keys: Vec<String>) -> Result<u64> {
+pub async fn archive_forget(st: State<'_, AppState>, keys: Vec<String>, recycle: Option<bool>) -> Result<u64> {
     let db = st.db.clone();
-    blocking(move || library::archive_forget(&*lock(&db)?, &keys)).await
+    blocking(move || library::archive_forget(&*lock(&db)?, &keys, recycle.unwrap_or(false))).await
 }

@@ -19,7 +19,7 @@ const MODES = [{ value: "HOOK", label: t("Hook") }, { value: "DIRECT", label: t(
 function Step({ n, done, children }: { n: number; done: boolean; children: ReactNode }) {
   return (
     <li className={done ? "kick-step done" : "kick-step"}>
-      <span className="kick-step-n" title={done ? t("gachamod sees this step done") : undefined}>{done ? <Icon name="check" /> : n}</span>
+      <span className="kick-step-n" title={done ? t("Done") : undefined}>{done ? <Icon name="check" /> : n}</span>
       <div className="kick-step-b">{children}</div>
     </li>
   );
@@ -49,7 +49,7 @@ export function KickSteps({ dll, locked, onChange }: { dll: DllConfig; locked: R
           {gimi && <Button size="sm" variant="ghost" icon="folder" title={gimi} onClick={() => open(shell.openPath(gimi))}>{t("Open the GIMI folder")}</Button>}
         </Step>
         <Step n={4} done={dll.unsafeMode}>
-          <p>{t("Turn on Unsafe Mode in XXMI Launcher's settings, then close XXMI Launcher so gachamod sees it. XXMI signs this setting, so gachamod can't turn it on.")}</p>
+          <p>{t("Turn on Unsafe Mode in XXMI Launcher, then close it so gachamod can read the setting. XXMI signs this setting, so gachamod can't turn it on.")}</p>
           {!dll.unsafeMode && <Button size="sm" variant="ghost" title={t("Open XXMI Launcher to turn on Unsafe Mode there")} onClick={openXxmi}>{t("Open XXMI Launcher")}</Button>}
         </Step>
         <Step n={5} done={mode === "DIRECT"}>

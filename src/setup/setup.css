@@ -26,6 +26,7 @@
 .setup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 
 .setup-opts { display: grid; gap: var(--s-3); }
+.setup-picks { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); }
 .setup-row { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .setup-path { flex: 1; min-width: 0; padding: var(--s-2) var(--s-3); border-radius: var(--radius-sm); background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--line);
   font-family: var(--font-mono); font-size: var(--t-small); overflow-wrap: anywhere; }
@@ -41,14 +42,3 @@
 .setup-choice-h { display: flex; align-items: center; gap: var(--s-2); font-family: var(--font-display); font-size: 1.05rem; font-weight: 750; color: var(--text); }
 .setup-choice-h .i { color: var(--accent-ink); }
 .setup-choice-p { font-size: var(--t-small); color: var(--text-2); }
-
-.setup-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
-.setup-step { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: var(--s-3); align-items: start; color: var(--text-3); }
-.setup-step.now { color: var(--text); }
-.setup-step.ok { color: var(--text-2); }
-.setup-step-i { height: 1.45em; display: grid; place-items: center; }
-.setup-step.ok .setup-step-i { color: var(--ok); }
-.setup-step-b { display: grid; gap: var(--s-2); min-width: 0; justify-items: start; }
-.setup-step-b .progress { width: 100%; }
-.setup-step-t { font-weight: 600; overflow-wrap: anywhere; }
-.setup-dot { width: .55rem; height: .55rem; border-radius: 50%; box-shadow: inset 0 0 0 2px currentColor; }

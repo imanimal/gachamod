@@ -6,12 +6,14 @@ import { go } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { t } from "../../lib/i18n";
 
-/** Queue a mod's newest file. `replaces`: the library id it updates. */
-export async function installLatest(game: GameId, modId: number, name: string, replaces?: string, archived?: boolean) {
+/** Queue a mod's newest file. `replaces`: the library id it updates. `say`: a toast with Show, for places that don't
+ *  show the download (a Browse card and the mod page draw it themselves, so they pass false). */
+export async function installLatest(game: GameId, modId: number, replaces?: string, archived?: boolean, say = true) {
   try {
     const item = await queueLatest(game, modId, replaces);
-    if (!item) { toast(t("{name} has no file to download", { name }), true); return; }
-    const text = replaces ? t("Updating {name}", { name }) : archived ? t("Reinstalling {name}", { name }) : t("Downloading {name}", { name });
+    if (!item) { toast(t("The mod has no file to download"), true); return; }
+    if (!say) return;
+    const text = replaces ? t("Updating the mod") : archived ? t("Reinstalling the mod") : t("Downloading the mod");
     toast(text, false, { label: t("Show"), run: () => go("downloads") });
   } catch (e) { toast(errorText(e), true); }
 }
@@ -33,12 +35,13 @@ export async function withCreator(c: { id?: number | null; name: string; avatar?
   try {
     const u = await findMember(c.name, c.modId);
     if (u) run({ id: u.id, name: u.name, avatar: u.avatar ?? c.avatar ?? null });
-    else toast(t("Couldn't find {name} on GameBanana", { name: c.name }), true);
+    else toast(t("Couldn't find the creator on GameBanana"), true);
   } catch (e) { toast(errorText(e), true); }
 }
 
-export function flagCreator(c: { id?: number | null; name: string; avatar?: string | null; modId?: number | null }, flag: CreatorFlag, on: boolean) {
-  void withCreator(c, (ref) => setCreatorFlag(ref, flag, on));
+/** `say`: a toast with Undo, for menus that close and don't show the creator's state (the creator page's buttons do). */
+export function flagCreator(c: { id?: number | null; name: string; avatar?: string | null; modId?: number | null }, flag: CreatorFlag, on: boolean, say = true) {
+  void withCreator(c, (ref) => setCreatorFlag(ref, flag, on, say));
 }
 
 // The drawer reads this once when it opens, to scroll to its files ("Choose a file" in a menu).

@@ -195,7 +195,9 @@ registerMenu("character", ({ game, name }) => {
       const mod = all.find((m) => m.id === id);
       if (!mod) return;
       const offs = all.filter((m) => same(m) && !m.parent && m.enabled && m.id !== id).map((m) => m.id);
-      await changeStates(game, t("{name} wears {mod}", { name, mod: mod.name }), mod.enabled ? [] : [id], offs, all);
+      // the mod's switch shows it's on: the toast is for the outfits that went off
+      await changeStates(game, t("{name} wears {mod}", { name, mod: mod.name }), mod.enabled ? [] : [id], offs, all,
+        offs.length ? tn(offs.length, "Turned off {n} other mod for this character", "Turned off {n} other mods for this character") : null);
     } catch (e) { toast(errorText(e), true); }
   };
   const outfits = mods.filter((m) => !m.parent).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));

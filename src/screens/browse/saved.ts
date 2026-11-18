@@ -58,15 +58,16 @@ export const matching = (list: SavedFilter[], f: BrowseFilters) => list.find((s)
 export const isPlain = (f: BrowseFilters) =>
   f.sort === DEFAULTS.sort && !f.kind && !f.category && !f.character && !f.hq && !f.hideInstalled && !f.followed && !f.search.trim();
 
-/** Save the game's filters now, with Undo. Returns the saved set (the existing one when they match one already). */
-export function saveFilters(game: GameId): SavedFilter {
+/** Save the game's filters now, with Undo. Returns the saved set (the existing one when they match one already).
+ *  `say`: a toast with Undo, for a button that goes away once they're saved (the Saved list shows its new row). */
+export function saveFilters(game: GameId, say = false): SavedFilter {
   const f = { ...getFilters(game), search: getFilters(game).search.trim() };
   const list = read(game);
   const have = matching(list, f);
   if (have) return have;
   const s: SavedFilter = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: describe(f), f };
   write(game, [...list, s]);
-  record({ label: t("Saved the filters \"{name}\"", { name: s.name }), undo: async () => write(game, read(game).filter((x) => x.id !== s.id)), redo: async () => write(game, [...read(game), s]) });
+  record({ label: t("Saved the filters \"{name}\"", { name: s.name }), brief: t("Saved the filters"), undo: async () => write(game, read(game).filter((x) => x.id !== s.id)), redo: async () => write(game, [...read(game), s]) }, !say);
   return s;
 }
 
@@ -80,7 +81,8 @@ export function renameSaved(game: GameId, id: string, name: string) {
   if (!old || !n || n === old.name) return;
   const put = (v: string) => write(game, read(game).map((x) => (x.id === id ? { ...x, name: v } : x)));
   put(n);
-  record({ label: t("Renamed saved filters to \"{name}\"", { name: n }), undo: async () => put(old.name), redo: async () => put(n) });
+  // the row shows the new name
+  record({ label: t("Renamed saved filters to \"{name}\"", { name: n }), brief: t("Renamed the saved filters"), undo: async () => put(old.name), redo: async () => put(n) }, true);
 }
 
 export function removeSaved(game: GameId, id: string) {
@@ -91,6 +93,7 @@ export function removeSaved(game: GameId, id: string) {
   write(game, list.filter((x) => x.id !== id));
   record({
     label: t("Removed saved filters \"{name}\"", { name: s.name }),
+    brief: t("Removed the saved filters"),
     undo: async () => { const now = read(game); write(game, [...now.slice(0, i), s, ...now.slice(i)]); },
     redo: async () => write(game, read(game).filter((x) => x.id !== id)),
   });

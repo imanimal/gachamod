@@ -189,7 +189,7 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
           return (
             <li key={reason} className="tp-problem-item row">
               <Badge tone={r.status === "broken" ? "warn" : "bad"}
-                title={r.status === "broken" ? t("gachamod knows the new hashes. Click to swap them")
+                title={r.status === "broken" ? t("Click to swap in the new hashes")
                   : author ? (can ? t("A fixer can't redo a changed model, so the mod needs an update from its author. Click to try the fixer anyway") : t("A fixer can't redo a changed model, so the mod needs an update from its author"))
                   : t("{tool} handles this kind of change. Click to get it and run it on this mod", { tool: r.tool!.name })}
                 onClick={busy || !can ? undefined : fix}>
@@ -243,7 +243,7 @@ function NewFixers({ game }: { game: GameId }) {
   const since = seen[game] ?? Math.floor(Date.now() / 1000) - 30 * 86_400;
   const fresh = tools.filter((x) => x.added > since);
   if (!fresh.length) return null;
-  const dismiss = () => void seenPref.set({ ...seen, [game]: Math.max(...tools.map((x) => x.added)) }, t("Dismissed the new fixers"));
+  const dismiss = () => void seenPref.set({ ...seen, [game]: Math.max(...tools.map((x) => x.added)) }, t("Dismissed the new fixers"), true);
   return (
     <div className="fx-new" role="status">
       <div className="row">

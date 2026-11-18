@@ -295,8 +295,8 @@ function MenuStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   }
   return <>
     <p>{tx("In the game, press {key}.", { key: <kbd className="kbd">{setup.menuKey}</kbd> })}</p>
-    {heard ? <Seen ok>{heard === "window" ? t("gachamod heard the key and opened its menu over the game.") : t("gachamod heard the key and opened the menu the game draws, since the game runs in exclusive fullscreen.")}</Seen>
-      : <Seen ok={false}>{setup.menuStyle === "game" ? t("The game takes this key itself, so gachamod doesn't see it.") : t("gachamod hasn't heard the key yet.")}</Seen>}
+    {heard ? <Seen ok>{heard === "window" ? t("The key worked: gachamod opened its menu over the game.") : t("The key worked: gachamod opened the menu the game draws, since the game runs in exclusive fullscreen.")}</Seen>
+      : <Seen ok={false}>{setup.menuStyle === "game" ? t("The game takes this key itself, so gachamod doesn't see it.") : t("Waiting for the key press.")}</Seen>}
     <Ask question={t("What opened?")} onAnswer={(v) => answer("menu_opened", v, { menu_heard: heard ?? "none" })} answers={[
       ["window", t("gachamod's menu over the game"), t("A window with previews and search on top of the game")],
       ["drawn", t("A menu drawn in the game"), t("A plainer list the game draws itself")],

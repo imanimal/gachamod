@@ -1,4 +1,4 @@
-// Tools › Storage: where disk space goes and the cleanups it offers (src-tauri commands/storage.rs, gacha-core
+// Settings › Storage: where disk space goes and the cleanups it offers (src-tauri commands/storage.rs, gacha-core
 // storage.rs). Owner: SYSTEM area.
 import { call, listen } from "../tauri";
 import type { GameId, ModChange } from "./types";
@@ -30,7 +30,10 @@ export interface StorageMod {
   files: number;
   path: string;
   installedAt: number;
+  /** The mod's picture, a local path or a URL (ModEntry.preview). `thumb` is its small copy when there is one. */
+  preview: string | null;
   thumb: string | null;
+  nsfw: boolean;
 }
 
 export interface StorageCharacter { game: GameId; name: string | null; bytes: number; mods: number; enabled: number }

@@ -16,9 +16,10 @@
   background: var(--bg-2); border: 1px solid var(--line); font-family: var(--font-mono); font-size: var(--t-meta); white-space: pre-wrap; word-break: break-word; }
 .ai-err { margin: 0; padding: var(--s-2) var(--s-3); border-radius: var(--radius-sm); color: var(--text);
   background: color-mix(in srgb, var(--bad) 14%, transparent); }
-.ai-preview { padding-top: var(--s-1); border-top: 1px solid var(--line); }
+div.ai-err { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-2); }
+.ai-preview { padding-top: var(--s-4); border-top: 1px solid var(--line); }
 .ai-text p { margin: 0 0 var(--s-2); }
-.ai-rows { display: flex; flex-direction: column; gap: var(--s-1); max-height: 22rem; overflow: auto; }
+.ai-rows { display: flex; flex-direction: column; max-height: 22rem; overflow: auto; }
 .ai-row { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
 .ai-row:last-child { border-bottom: 0; }
 .ai-line { display: flex; align-items: baseline; gap: var(--s-2); flex-wrap: wrap; font-size: var(--t-small); }

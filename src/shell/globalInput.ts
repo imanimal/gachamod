@@ -83,7 +83,18 @@ export function installGlobalInput(): () => void {
     if (e.button === 3) back(); else forward();
   };
   const aux = (e: MouseEvent) => { if (e.button === 3 || e.button === 4) e.preventDefault(); };
+  // Nothing in the app is dragged, so pressing a picture or link and moving stays a plain press. A browser drag stops
+  // mouse events until it ends: the row it started on keeps its hover look while the pointer is elsewhere, and if it
+  // ends outside the window, until the pointer comes back. Selected text and fields still drag.
+  const noDrag = (e: DragEvent) => {
+    const el = e.target instanceof Element ? e.target : null;
+    if (!el) return;
+    if (el.closest("input, textarea, [contenteditable='true'], [contenteditable='']")) return;
+    if (el.tagName !== "IMG" && el.closest(".selectable") && window.getSelection()?.toString()) return;
+    e.preventDefault();
+  };
 
+  window.addEventListener("dragstart", noDrag, true);
   window.addEventListener("contextmenu", ctx);
   window.addEventListener("mousedown", down, true);
   window.addEventListener("mouseup", up, true);
@@ -93,5 +104,6 @@ export function installGlobalInput(): () => void {
     window.removeEventListener("mousedown", down, true);
     window.removeEventListener("mouseup", up, true);
     window.removeEventListener("auxclick", aux, true);
+    window.removeEventListener("dragstart", noDrag, true);
   };
 }

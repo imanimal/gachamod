@@ -42,7 +42,15 @@
     ],
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
-      "nsis": { "installMode": "currentUser", "installerHooks": "./windows/hooks.nsh" }
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "windows/header.bmp",
+        "uninstallerHeaderImage": "windows/header.bmp",
+        "sidebarImage": "windows/sidebar.bmp"
+      }
     }
   },
   "plugins": {

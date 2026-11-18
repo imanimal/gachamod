@@ -11,6 +11,7 @@ import { applyCustomTheme, customThemesPref, setThemePick, themePick, validateCu
 import { toast } from "../ui/toast";
 import { gameName } from "./games";
 import { t } from "./i18n";
+import { note as noteUsage } from "./telemetry";
 
 function store<T>(initial: T) {
   let value = initial;
@@ -144,31 +145,35 @@ async function after(id: string | null) {
 
 // ── changes, each with Undo ──
 
-/** For a theme package that's on: "Use for <game>", which picks its first theme for the game on screen. */
+/** For a theme package that's on: "Use for this game", which picks its first theme for the game on screen. */
 function useThemeAction(id: string) {
   const e = installed.get()?.find((x) => x.id === id);
   const game = currentGame();
   const theme = customThemesPref.get().find((th) => th.pkg === id);
   if (!e?.enabled || !e.manifest?.themes.length || !game || !theme || themePick(game.id) === theme.id) return undefined;
   return {
-    label: t("Use for {game}", { game: gameName(game) }),
+    label: t("Use for this game"),
     run: () => {
       const before = themePick(game.id);
       setThemePick(game, theme.id);
-      record({ label: t("Used the theme {theme} for {game}", { theme: theme.name, game: gameName(game) }), undo: async () => setThemePick(game, before), redo: async () => setThemePick(game, theme.id) });
+      record({ label: t("Used the theme {theme} for {game}", { theme: theme.name, game: gameName(game) }), brief: t("Used the theme for this game"), undo: async () => setThemePick(game, before), redo: async () => setThemePick(game, theme.id) });
     },
   };
 }
 
+const isTheme = (e: Pick<InstalledExt, "kind">) => e.kind === "theme";
+
 /** Record an install or update: Undo puts back what was there before (or removes it), Redo installs it again. A theme
- *  package's toast also offers to use it. */
-function recordInstall(r: ExtInstallResult, label: string) {
+ *  package's toast also offers to use it. `brief` is the toast's words, without the name. `quiet` records it without a
+ *  toast, for "Update all", which sums them up in one. */
+function recordInstall(r: ExtInstallResult, label: string, brief: string, quiet = false) {
   const id = r.extension.id;
   let back = r.replaced;
   let fwd: string | null = null;
-  const use = useThemeAction(id);
+  const use = quiet ? undefined : useThemeAction(id);
   const entry = record({
     label,
+    brief,
     undo: async () => {
       if (back) fwd = (await api.restore(back)).replaced;
       else fwd = await api.remove(id);
@@ -178,19 +183,24 @@ function recordInstall(r: ExtInstallResult, label: string) {
       if (fwd) back = (await api.restore(fwd)).replaced;
       await after(id);
     },
-  }, !!use);
-  if (use) toast(t("{label}.", { label }), false, use, { label: t("Undo"), run: () => void undo(entry) });
+  }, quiet || !!use);
+  if (use) toast(t("{label}.", { label: brief }), false, use, { label: t("Undo"), run: () => void undo(entry) });
 }
 
-export async function installListed(p: Listed): Promise<boolean> {
+/** Install or update a listed package. `quiet` leaves out the toast (each one is still on the undo list). */
+export async function installListed(p: Listed, quiet = false): Promise<boolean> {
   const had = installed.get()?.find((e) => e.id === p.id);
   try {
     const r = await api.install(p.source, p);
+    noteUsage("extension installed", { kind: p.kind, update: !!had?.manifest });
     await after(p.id);
-    const verb = had?.manifest
-      ? (compareVersions(p.version, had.manifest.version) > 0 ? t("Updated {name} to {version}", { name: p.name, version: p.version }) : t("Reinstalled {name}", { name: p.name }))
-      : t("Installed {name}", { name: p.name });
-    recordInstall(r, verb);
+    const theme = isTheme(p);
+    const [verb, brief] = had?.manifest
+      ? (compareVersions(p.version, had.manifest.version) > 0
+        ? [t("Updated {name} to {version}", { name: p.name, version: p.version }), theme ? t("Updated the theme") : t("Updated the extension")]
+        : [t("Reinstalled {name}", { name: p.name }), theme ? t("Reinstalled the theme") : t("Reinstalled the extension")])
+      : [t("Installed {name}", { name: p.name }), theme ? t("Installed the theme") : t("Installed the extension")];
+    recordInstall(r, verb, brief, quiet);
     return true;
   } catch (e) { toast(errorText(e), true); return false; }
 }
@@ -203,7 +213,7 @@ export async function installFromDisk(folder = false) {
   try {
     const r = await api.installFile(picked);
     await after(r.extension.id);
-    recordInstall(r, t("Installed {name}", { name: extName(r.extension) }));
+    recordInstall(r, t("Installed {name}", { name: extName(r.extension) }), isTheme(r.extension) ? t("Installed the theme") : t("Installed the extension"));
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -214,7 +224,7 @@ export async function linkFolder() {
   try {
     const e = await api.linkFolder(picked);
     await after(e.id);
-    record({ label: t("Linked {name}", { name: extName(e) }), undo: async () => { await api.remove(e.id); await after(e.id); }, redo: async () => { await api.linkFolder(picked); await after(e.id); } });
+    record({ label: t("Linked {name}", { name: extName(e) }), brief: t("Linked the folder"), undo: async () => { await api.remove(e.id); await after(e.id); }, redo: async () => { await api.linkFolder(picked); await after(e.id); } });
   } catch (err) { toast(errorText(err), true); }
 }
 
@@ -224,6 +234,7 @@ export async function removeExtension(e: InstalledExt) {
     await after(e.id);
     record({
       label: e.linked ? t("Unlinked {name}", { name: extName(e) }) : t("Removed {name}", { name: extName(e) }),
+      brief: e.linked ? t("Unlinked the folder") : isTheme(e) ? t("Removed the theme") : t("Removed the extension"),
       undo: async () => {
         if (key) key = (await api.restore(key)).replaced ?? null;
         else await api.linkFolder(e.dir);
@@ -235,11 +246,17 @@ export async function removeExtension(e: InstalledExt) {
   } catch (err) { toast(errorText(err), true); }
 }
 
-export async function setExtensionEnabled(e: InstalledExt, on: boolean) {
+/** Turn a package on or off. Quiet by default, for the switch that shows it; `say` toasts it with Undo, for a button
+ *  whose page goes away with it (an extension's own page or frame). */
+export async function setExtensionEnabled(e: InstalledExt, on: boolean, say = false) {
   const set = async (v: boolean) => { await api.setEnabled(e.id, v); await after(e.id); };
   try {
     await set(on);
-    record({ label: on ? t("Turned on {name}", { name: extName(e) }) : t("Turned off {name}", { name: extName(e) }), undo: () => set(!on), redo: () => set(on) });
+    record({
+      label: on ? t("Turned on {name}", { name: extName(e) }) : t("Turned off {name}", { name: extName(e) }),
+      brief: on ? t("Turned on the extension") : t("Turned off the extension"),
+      undo: () => set(!on), redo: () => set(on),
+    }, !say);
   } catch (err) { toast(errorText(err), true); }
 }
 
@@ -251,7 +268,7 @@ export function submitUrl(repos: ExtRepo[] | null): string {
 }
 
 function shared(p: Packed, repos: ExtRepo[] | null) {
-  toast(t("Saved {name} {version}. Attach the zip on the page that just opened", { name: p.name, version: p.version }), false, { label: t("Show file"), run: () => { void shell.revealPath(p.path); } });
+  toast(t("Saved the package. Attach the zip on the page that just opened"), false, { label: t("Show file"), run: () => { void shell.revealPath(p.path); } });
   void shell.openUrl(submitUrl(repos)).catch(() => {});
 }
 

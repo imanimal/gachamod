@@ -1,0 +1,13 @@
+/* uberstyle.css: a creator page wearing the member's Uberstyle. CreatorPage sets uberVars() (lib/uberstyle.ts) as the
+   inline style of .gb-creator, adds .uber, and sets color-scheme from uberScheme(). The tokens it overrides (--bg,
+   --surface, --text, --accent-ink, --font...) need nothing here, since every rule on the page already reads them.
+   These rules paint what tokens alone can't: the page background, section headings and link hover.
+
+   --uber-bg          the page: a plain colour, or the member's picture under a veil of their colour, over the colour
+                      behind it. Always set when the Uberstyle has a page colour, picture, content colour or panels.
+   --uber-heading     section heading colour (3:1 on the page), when the member set one
+   --uber-link-hover  link hover colour (4.5:1), when the member set one */
+
+.gb-creator.uber { background: var(--uber-bg, var(--bg)); color: var(--text); font-family: var(--font); }
+.gb-creator.uber :is(.sub-h, .gb-creator-name) { color: var(--uber-heading, var(--text)); font-family: var(--font-display); }
+.gb-creator.uber :is(a, .link-btn):hover { color: var(--uber-link-hover, var(--accent-ink)); }

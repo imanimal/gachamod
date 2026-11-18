@@ -8,6 +8,8 @@ export function registerReportDemo() {
   const on = (k: string) => demoDb.settings.get(k) !== "0";
   const state = () => ({ usage: on("telemetry.usage"), crashes: on("telemetry.crashes"), configured: true, logsDir: "%APPDATA%\\app.gachamod.desktop\\logs" });
   let always = false;
+  const links = { app: true, quickstart: false, games: [] as string[] };
+  const linkState = () => ({ ...links, games: [...links.games] });
   registerDemo({
     report_state: state,
     report_set: ({ usage, crashes }) => {
@@ -33,6 +35,16 @@ export function registerReportDemo() {
     },
     admin_state: () => ({ elevated: false, always }),
     admin_set_always: ({ on: v }) => { always = !!v; return { elevated: false, always }; },
+    shortcuts_state: () => linkState(),
+    shortcuts_create: async ({ kind }) => { await demoWait(300); links[kind as "app" | "quickstart"] = true; return linkState(); },
+    shortcuts_remove: ({ kind }) => { links[kind as "app" | "quickstart"] = false; return linkState(); },
+    shortcuts_create_game: async ({ game }) => {
+      await demoWait(300);
+      if (!links.games.includes(String(game))) links.games.push(String(game));
+      return linkState();
+    },
+    shortcuts_remove_game: ({ game }) => { links.games = links.games.filter((g) => g !== game); return linkState(); },
+    shortcuts_follow: () => undefined,
     game_check_setup: async ({ game }) => {
       const g = demoDb.games.find((x) => x.id === game);
       if (!g) throw { kind: "invalid", message: `gachamod doesn't know the game ${String(game)}` };

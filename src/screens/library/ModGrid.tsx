@@ -10,7 +10,7 @@ import { useModHealth } from "../../lib/fixes";
 import { holdOn, settleHolds, useHolds } from "../../lib/holds";
 import { usePortraitBatch, usePortraitsVersion, portraitNow } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
-import { useTrashDays } from "../settings/automatic";
+import { useTrashDays, useUnsourced } from "../settings/automatic";
 import { menuFor, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Button, IconButton, Skeleton, Waiting, behindLayer } from "../../ui/kit";
 import { toast } from "../../ui/toast";
@@ -62,6 +62,7 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
   const holds = useHolds(game);
   const aiShow = useAiShow();
   const trashDays = useTrashDays();
+  const unsourced = useUnsourced();
   usePortraitsVersion();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
@@ -288,7 +289,7 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
   if (loading) {
     return (
       <Waiting what={t("Reading your mods")}>
-        <div className={`mod-grid is-loading${view === "list" ? " is-list" : ""}${dense ? " is-dense" : ""}`}>
+        <div className={`mod-grid is-loading${view === "list" ? " is-list" : " cards"}${dense ? " is-dense" : ""}`}>
           {Array.from({ length: view === "list" ? 10 : 8 }, (_, i) => <Skeleton key={i} className="mod-card-skel" />)}
         </div>
       </Waiting>
@@ -344,7 +345,7 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
           ])} />
           {trashDays > 0
             ? <Button size="sm" variant="danger" icon="trash" title={t("Move to trash (Delete). Undo puts them back")} onClick={() => void trash(picked)}>{t("Trash")}</Button>
-            : <Button size="sm" variant="danger" icon="trash" title={t("Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest are asked about first")} onClick={() => void trash(picked)}>{t("Delete")}</Button>}
+            : <Button size="sm" variant="danger" icon="trash" title={unsourced === "delete" ? t("Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest are asked about first") : t("Delete their files (Delete). Undo downloads the ones from GameBanana again; the rest go to the Recycle Bin")} onClick={() => void trash(picked)}>{t("Delete")}</Button>}
           <IconButton size="sm" icon="x" label={t("Clear the selection (Esc)")} onClick={() => setSelected(new Set())} />
         </div>
       )}

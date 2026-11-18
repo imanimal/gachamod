@@ -293,7 +293,7 @@ function OtherManagers({ game }: { game: GameId }) {
       <span>{tn(f.fillable, "{n} mod has a name, {noun} or link saved by {who}.", "{n} mods have a name, {noun} or link saved by {who}.", { noun: charNoun(game, true).toLowerCase(), who })}</span>
       <Button size="sm" busy={busy} title={t("Reads their files and fills in what each mod is missing. Their files stay as they are")}
         onClick={() => { setBusy(true); void importForeign(game, () => emitApp({ type: "library-refresh", game })).finally(() => setBusy(false)); }}>
-        {t("Bring them in")}
+        {t("Import mods")}
       </Button>
       <IconButton icon="x" size="sm" label={t("Not now")} onClick={() => dismissForeign(game)} />
     </div>

@@ -94,7 +94,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
         )}
         {mod.favorite && (
           <button type="button" className="mod-card-fav mb-fav" title={t("Favourite. Click to take it out of your favourites")}
-            onClick={() => void setFavourite(game, [mod], false)}><Icon name="star" /></button>
+            onClick={() => void setFavourite(game, [mod], false, t("Removed the mod from favourites"))}><Icon name="star" /></button>
         )}
         {held === "update" && !(mod.updateAvailable && mod.source) && (
           <Badge tone="muted" icon="bell-off" className="mb-upd" onClick={() => openDetails(mod)}
@@ -117,7 +117,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
         {live && !waiting && <Badge tone="muted" icon="swap" className="mb-live" onClick={() => openDetails(mod, "ingame")}
           title={t("Turning it on switches {name}'s skin in game at once, without {key}. Click for its in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Live")}</Badge>}
         {live && waiting && <Badge tone="warn" icon="swap" className="mb-live" onClick={() => openDetails(mod, "ingame")}
-          title={t("gachamod couldn't key this pick into the game, so {name} wears it after the game reloads its mods ({key}). Click for its in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Next reload")}</Badge>}
+          title={t("gachamod couldn't switch {name}'s skin in game, so it changes after the game reloads its mods ({key}). Click for its in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Next reload")}</Badge>}
       </span>
       <span className="mod-card-foot">
         <Toggle size="sm" checked={mod.enabled} onChange={(v, shift) => onToggle(mod, v, shift)} ariaLabel={mod.name}

@@ -40,3 +40,11 @@ export const fixesAutoUpdatePref = flag("fixes.autoUpdate", true);
 export const trashDaysPref = pref<number>("trash.days", 0,
   (r) => { const n = Number.parseInt(r, 10); return Number.isFinite(n) ? Math.max(0, Math.min(3650, n)) : undefined; }, (v) => String(v));
 export const useTrashDays = () => trashDaysPref.use();
+
+/** Deleting the files of a removed mod with no GameBanana link (backend setting "trash.unsourced"): "ask" asks each
+ *  time in Mods, Trash, "recycle" moves them to the Recycle Bin, "delete" deletes them for good. When files leave the
+ *  trash by themselves (trash.days), only "delete" deletes them; "ask" and "recycle" use the Recycle Bin. */
+export type UnsourcedMode = "ask" | "recycle" | "delete";
+export const unsourcedPref = pref<UnsourcedMode>("trash.unsourced", "ask",
+  (r) => (r === "ask" || r === "recycle" || r === "delete" ? r : undefined), (v) => v);
+export const useUnsourced = () => unsourcedPref.use();

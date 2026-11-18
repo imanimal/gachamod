@@ -16,6 +16,7 @@
   .home-tile { gap: 0; padding-bottom: 0; background: var(--tile-strip); }
   .home-tile-name { padding: .4rem .55rem 0; }
   .home-tile .hint { padding: 0 .55rem .45rem; }
+  .home-tile-btn { margin-bottom: .45rem; }
   .mod-card-name, .home-tile-name, .gb-card-t { font-weight: 700; color: var(--cream); }
   .mod-card-char, .home-tile .hint, .gb-card-c { color: var(--gold-line); font-weight: 700; }
   .mod-card-meta { color: var(--text-3); font-weight: 700; }
@@ -122,6 +123,7 @@
 
   /* ── settings and tools: rows like the game's Settings, ink bars with the control on the right ── */
   .set-rows, .tools-dev { gap: 4px; }
+  .set-rows + :is(.set-rows, .set-games) { margin-top: 4px; border-top: 0; }
   .set-row, .tools-dev-row { padding: .55rem .5rem .55rem .9rem; border-bottom: 0; border-radius: 3px; background: rgb(0 0 0 / .42); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .05);
     --hit-x: 3px; --hit-r: 2px; }
   .set-row:last-child, .tools-dev-row:last-child { border-bottom: 0; }

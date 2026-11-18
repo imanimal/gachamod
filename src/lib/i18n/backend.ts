@@ -608,6 +608,10 @@ export const BACKEND: string[] = [
   "A look is an object",
   "gachamod setup isn't next to gachamod. Run the installer again to get it.",
 
+  // src-setup: jobs.rs (gachamod setup installing an update gachamod handed over)
+  "Waiting for gachamod to close",
+  "The update came without its signature, so it wasn't used.",
+
   // src-tauri: hotkeys.rs (toasts end with a ".")
   "{combo} is used by another app, so it can't switch profiles. Pick another key",
   "{combo} is used by another app, so it can't open the skin menu. Pick another key",

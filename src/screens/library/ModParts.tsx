@@ -32,7 +32,8 @@ export function ModParts({ game, mod }: { game: GameId; mod: ModEntry }) {
     setBusy(true);
     try {
       await flip(p.name, on);
-      record({ label: on ? t("Turned on {part} in {mod}", { part: p.name, mod: mod.name }) : t("Turned off {part} in {mod}", { part: p.name, mod: mod.name }), undo: () => flip(p.name, !on), redo: () => flip(p.name, on) });
+      // the part's switch shows it: Ctrl+Z still undoes it
+      record({ label: on ? t("Turned on {part} in {mod}", { part: p.name, mod: mod.name }) : t("Turned off {part} in {mod}", { part: p.name, mod: mod.name }), undo: () => flip(p.name, !on), redo: () => flip(p.name, on) }, true);
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };

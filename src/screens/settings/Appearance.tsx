@@ -7,8 +7,8 @@ import { extName, extensionsNow, removeExtension, shareTheme } from "../../lib/e
 import { record } from "../../lib/history";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import {
-  THEMES, THEME_TOKENS, accentPick, applyCustomTheme, isAccentHex, currentLayout, customThemesPref, darkShade, onColor, ownSchemeChoice, setAccentPick, setLayout, setMotion,
-  setScheme, setSchemeMode, setThemePick, setThemePicks, subscribeTheme, themeAttrs, themePick, useTheme, validateCustomTheme,
+  THEMES, THEME_TOKENS, accentPick, applyCustomTheme, contrastOf, isAccentHex, currentLayout, customThemesPref, onColor, ownSchemeChoice, readableOn, setAccentPick, setLayout, setMotion,
+  setScheme, setSchemeMode, setThemePick, setThemePicks, subscribeTheme, themeAttrs, themePick, tokenHex, useTheme, validateCustomTheme,
   type CustomTheme, type LayoutPrefs, type Scheme, type SchemeChoice, type SchemeMode,
 } from "../../lib/theme";
 import { anatomyText } from "../../lib/theme-anatomy";
@@ -16,6 +16,7 @@ import { SIZES, ZOOMS, getTextSize, getZoom, setTextSize, setZoom, stepZoom, zoo
 import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle } from "../../ui/kit";
 import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon } from "../../ui/Icon";
+import { ColorPicker } from "../../ui/ColorPicker";
 import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
 import { FormatPicker } from "./FormatPicker";
@@ -101,23 +102,19 @@ export function AppearanceSection() {
   );
 }
 
-/** The last accent swatch: any colour, from the system colour picker. `value` is the colour picked with it, if that
+/** The last accent swatch: any colour, from the app's colour picker. `value` is the colour picked with it, if that
     is the accent in use; the picker opens on `fallback` otherwise. */
 function AccentPicker({ value, fallback, onPick }: { value: string | null; fallback: string; onPick: (hex: string) => void }) {
-  const input = useRef<HTMLInputElement>(null);
-  const open = () => {
-    const el = input.current;
-    if (!el) return;
-    try { el.showPicker(); } catch { el.click(); }
-  };
-  // the input sits under the swatch, rendered but unseen, so the system picker opens next to it
+  const btn = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
   return (
     <span className="swatch-pick-w">
-      <button type="button" role="radio" aria-checked={!!value} className={`swatch swatch-pick${value ? " on" : ""}`} title={t("Pick any colour")} aria-label={t("Pick any colour")}
-        style={value ? { "--c": value, color: onColor(value) } as CSSProperties : undefined} onClick={open}>
+      <button ref={btn} type="button" role="radio" aria-checked={!!value} aria-expanded={open} className={`swatch swatch-pick${value ? " on" : ""}`}
+        title={t("Pick any colour, black and white too")} aria-label={t("Pick any colour")}
+        style={value ? { "--c": value, color: onColor(value) } as CSSProperties : undefined} onClick={() => setOpen((o) => !o)}>
         <Icon name="palette" />
       </button>
-      <input ref={input} type="color" tabIndex={-1} aria-hidden="true" value={value ?? fallback} onChange={(e) => onPick(e.target.value.toLowerCase())} />
+      {open && <ColorPicker anchor={btn.current} value={value ?? fallback} label={t("Accent colour")} onPick={onPick} onClose={() => setOpen(false)} />}
     </span>
   );
 }
@@ -219,10 +216,10 @@ function IntroPicker() {
     { value: "off", label: t("Off") },
   ];
   return (
-    <>
+    <span className="set-btns">
       <Button size="sm" variant="ghost" icon="play" onClick={replaySplash} disabled={pick === "off"} title={t("Play the opening screen now")}>{t("Play it")}</Button>
       <Select value={pick} options={options} onChange={(v) => { setIntroPick(v); setPick(v); }} />
-    </>
+    </span>
   );
 }
 
@@ -339,7 +336,7 @@ export function CustomThemesSection() {
     const before = Object.fromEntries(games.map((g) => [g.id, themePick(g.id)]));
     const after = Object.fromEntries(games.map((g) => [g.id, th.id]));
     setThemePicks(after, currentGame());
-    record({ label: t("Used the theme {theme} for every game", { theme: th.name }), undo: async () => setThemePicks(before, currentGame()), redo: async () => setThemePicks(after, currentGame()) });
+    record({ label: t("Used the theme {theme} for every game", { theme: th.name }), brief: t("Used the theme for every game"), undo: async () => setThemePicks(before, currentGame()), redo: async () => setThemePicks(after, currentGame()) });
   };
   // a package's themes come back from the package each start, so editing one edits a copy and deleting removes the package
   const pkgOf = (th: CustomTheme) => (th.pkg ? extensionsNow().find((e) => e.id === th.pkg) ?? null : null);
@@ -400,7 +397,7 @@ export function CustomThemesSection() {
           <div className="ctheme-row">
             <Button icon="plus" onClick={startNew} title={t("Starts from the theme you're using now")}>{t("New theme")}</Button>
             <Button variant="ghost" icon="import" onClick={(e) => importMenu(e.currentTarget)} title={t("From a file, or text someone shared")}>{t("Import")}</Button>
-            <Button variant="ghost" icon="puzzle" onClick={() => go({ view: "extensions", section: "themes" })} title={t("Themes other people made, one click to install")}>{t("Get more themes")}</Button>
+            <Button variant="ghost" icon="puzzle" onClick={() => go({ view: "extensions", section: "themes" })} title={t("Install themes other people made")}>{t("Get more themes")}</Button>
             {aiShown("useful", aiShow) && <Button variant="ghost" icon="ai" onClick={() => askAi({ kind: "theme", game: game?.id })} title={t("Describe a look and your chatbot writes the theme")}>{t("Describe it to your chatbot")}</Button>}
           </div>
         )}
@@ -416,7 +413,11 @@ export function CustomThemesSection() {
  *  tip on the button that puts the base theme's colour back. */
 const COLORS: Array<{ token: string; label: string; tip: string; reset: (base: string) => string; derive: (hex: string, scheme: Scheme) => Record<string, string> }> = [
   { token: "--accent", label: t("Accent"), tip: t("Picked items, primary buttons, toggles"), reset: (base) => t("Use {theme}'s accent", { theme: base }),
-    derive: (h, s) => ({ "--accent": h, "--on-accent": onColor(h), "--accent-soft": `color-mix(in srgb, ${h} 18%, transparent)`, "--accent-ink": s === "light" ? darkShade(h) : h, "--ring": h }) },
+    derive: (h, s) => {
+      // text and focus rings in the accent use a shade that reads on the panels, so any accent works, black too
+      const panel = tokenHex("--surface"), ink = readableOn(h, rgbOk(panel) ? panel : s === "light" ? "#f4f4f2" : "#1c1d22");
+      return { "--accent": h, "--on-accent": onColor(h), "--accent-soft": `color-mix(in srgb, ${h} 18%, transparent)`, "--accent-ink": ink, "--ring": readableOn(h, panel, 3) };
+    } },
   { token: "--bg", label: t("Background"), tip: t("The window behind everything"), reset: (base) => t("Use {theme}'s background", { theme: base }),
     derive: (h) => ({ "--bg": h, "--bg-2": `color-mix(in srgb, ${h} 86%, #000)` }) },
   { token: "--surface", label: t("Panels"), tip: t("Panels, cards and lists"), reset: (base) => t("Use {theme}'s panels", { theme: base }),
@@ -425,20 +426,25 @@ const COLORS: Array<{ token: string; label: string; tip: string; reset: (base: s
     derive: (h) => ({ "--text": h, "--text-2": `color-mix(in srgb, ${h} 78%, var(--surface))`, "--text-3": `color-mix(in srgb, ${h} 62%, var(--surface))` }) },
 ];
 
-/** A token's colour on screen now as #rrggbb, for a colour picker. */
-function hexOf(token: string): string {
-  const el = document.createElement("span");
-  el.style.color = `var(${token})`;
-  document.body.appendChild(el);
-  const c = getComputedStyle(el).color;
-  el.remove();
-  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
-  const rgb = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(c);
-  if (rgb) return `#${to(+rgb[1]!)}${to(+rgb[2]!)}${to(+rgb[3]!)}`;
-  const srgb = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(c);
-  if (srgb) return `#${to(+srgb[1]! * 255)}${to(+srgb[2]! * 255)}${to(+srgb[3]! * 255)}`;
-  return "#808080";
+/** tokenHex's answer when it couldn't read the colour. */
+const rgbOk = (hex: string) => hex !== "#808080";
+
+/** One of the editor's colours: a chip that opens the colour picker. */
+function EditorColor({ value, label, onPick }: { value: string; label: string; onPick: (hex: string) => void }) {
+  const btn = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button ref={btn} type="button" className="ctheme-chip" aria-expanded={open} onClick={() => setOpen((o) => !o)} title={t("Pick the colour for {what}", { what: label })}>
+        <span className="ctheme-dot" style={{ background: value }} /><span>{label}</span>
+      </button>
+      {open && <ColorPicker anchor={btn.current} value={value} label={label} onPick={onPick} onClose={() => setOpen(false)} />}
+    </>
+  );
 }
+
+/** Text on the panels below this is hard to read (WCAG AA for normal text). */
+const READABLE = 4.5;
 
 const editable = (th: CustomTheme) => themeText(th);
 
@@ -447,6 +453,8 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
   const live = useTheme();
   const [draft, setDraft] = useState<CustomTheme>(start);
   const [problems, setProblems] = useState<string[]>([]);
+  // how well the text reads on the panels with the draft applied
+  const [textRead, setTextRead] = useState(21);
   const [text, setText] = useState(() => editable(start));
   const [textErr, setTextErr] = useState<string | null>(null);
   const textId = useId();
@@ -454,7 +462,7 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
 
   // the whole app shows the draft while editing; closing the editor puts the game's theme back
   useEffect(() => {
-    const h = window.setTimeout(() => setProblems(applyCustomTheme(draft)), 100);
+    const h = window.setTimeout(() => { setProblems(applyCustomTheme(draft)); setTextRead(contrastOf(tokenHex("--text"), tokenHex("--surface"))); }, 100);
     if (!typing.current) setText(editable(draft));
     return () => window.clearTimeout(h);
   }, [draft]);
@@ -504,16 +512,23 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
         <div className="ctheme-colors">
           {COLORS.map((c) => {
             const set = !!draft.tokens[c.token];
-            const val = /^#[0-9a-f]{6}$/i.test(draft.tokens[c.token] ?? "") ? draft.tokens[c.token]! : hexOf(c.token);
+            const val = /^#[0-9a-f]{6}$/i.test(draft.tokens[c.token] ?? "") ? draft.tokens[c.token]! : tokenHex(c.token);
             return (
               <span key={c.token} className={`ctheme-color${set ? " set" : ""}`} title={c.tip}>
-                <label><input type="color" value={val} onChange={(e) => setTokens(c.derive(e.target.value, live.scheme))} aria-label={c.label} /><span>{c.label}</span></label>
+                <EditorColor value={val} label={c.label} onPick={(h) => setTokens(c.derive(h, live.scheme))} />
                 {set && <IconButton icon="x" size="sm" label={c.reset(baseName(draft.base))} onClick={() => setTokens({}, Object.keys(c.derive("#000000", live.scheme)))} />}
               </span>
             );
           })}
         </div>
       </div>
+      {textRead < READABLE && (
+        <p className="hint ctheme-read" role="status">
+          {t("Text is hard to read on these panels ({ratio} to 1, 4.5 reads well).", { ratio: textRead.toFixed(1) })}{" "}
+          <Button size="sm" variant="ghost" title={t("Moves the text colour just far enough from the panels to read well")}
+            onClick={() => setTokens(COLORS.find((c) => c.token === "--text")!.derive(readableOn(tokenHex("--text"), tokenHex("--surface")), live.scheme))}>{t("Fix the text colour")}</Button>
+        </p>
+      )}
       <div className="ctheme-layout">
         {LAYOUT_ROWS.map((r) => (
           <div key={r.key} className="ctheme-line">

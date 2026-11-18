@@ -151,7 +151,7 @@ export function LogsSection() {
 function ConsoleRow() {
   const on = consolePref.use();
   return (
-    <SetRow id="set-console" label={t("Developer console")} hint={t("The ` key (left of 1) opens a panel with everything gachamod logs as it happens, and a line for commands")}>
+    <SetRow id="set-console" label={t("Developer console")} hint={t("Shift+` (the key left of 1) opens a panel with everything gachamod logs as it happens, and a line for commands. Useful when tracking down a problem")}>
       <Toggle checked={on} onChange={(v) => void consolePref.set(v, v ? t("Turned on the developer console") : t("Turned off the developer console"))} />
     </SetRow>
   );
@@ -206,10 +206,8 @@ function useAdmin(): AdminState | null {
 export function AdminRow({ id }: { id?: string }) {
   const st = useAdmin();
   const always = (on: boolean) => {
-    admin.setAlways(on).then((s) => {
-      setAdmin(s);
-      if (on && !s.elevated) toast(t("gachamod starts as administrator from now on"), false, { label: t("Restart now"), run: restartAsAdmin });
-    }).catch((e) => toast(errorText(e), true));
+    // the row's own Restart as administrator button is right beside the switch, so no toast offers it again
+    admin.setAlways(on).then(setAdmin).catch((e) => toast(errorText(e), true));
   };
   if (!st) return null;
   return (

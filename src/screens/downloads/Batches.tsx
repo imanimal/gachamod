@@ -84,13 +84,8 @@ export async function setMods(mods: ModEntry[], on: boolean, all: Map<string, Mo
   const game = mods[0]?.game;
   if (!game) return;
   const ids = mods.filter((m) => m.enabled !== on).map((m) => m.id);
-  if (!ids.length) {
-    const name = mods[0]!.name;
-    toast(mods.length === 1
-      ? on ? t("{name} is on already", { name }) : t("{name} is off already", { name })
-      : on ? t("They're all on already") : t("They're all off already"));
-    return;
-  }
+  // nothing to change: the switches show it, and Turn all on or off is greyed out then
+  if (!ids.length) return;
   try { await toggleMods(game, ids, on, [...all.values()].filter((m) => m.game === game)); }
   catch (e) { toast(errorText(e), true); }
 }

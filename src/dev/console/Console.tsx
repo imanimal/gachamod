@@ -1,8 +1,8 @@
-// The developer console: drops down from the top on ~ (the key left of 1). Output shows everything the window and
+// The developer console: drops down from the top on Shift+` (~, the key left of 1). Output shows everything the window and
 // backend log as it happens; the line at the bottom takes commands (help lists them, Tab completes, Up and Down go
 // through earlier ones). Flows has a button for each new user flow, and in the demo the switches for its dummy data.
 // main.tsx mounts it in the app and the browser demo; Developer console in Settings, Feedback and privacy turns the key
-// off (./setting.ts). Plain English: it's a tool, not app text.
+// on or off (./setting.ts: on at first in dev builds and the demo, off in releases). Plain English: it's a tool, not app text.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKey } from "react";
 import { createRoot } from "react-dom/client";
 import { inTauri } from "../../lib/tauri";
@@ -97,15 +97,15 @@ function Console() {
   view.filter = filter; view.level = level; view.calls = calls; view.tab = tab;
   view.set = (p) => { if (p.filter !== undefined) setFilter(p.filter); if (p.level) setLevel(p.level); if (p.calls !== undefined) setCalls(p.calls); if (p.tab) setTab(p.tab); };
 
-  // ~ opens and closes it. The key goes no further (its keyup neither), and closing puts focus back where it was
-  // before opening, without a focus ring, so it never lands on some other button
+  // Shift+` (~) opens and closes it, so a stray ` never does. The key goes no further (its keyup neither), and closing
+  // puts focus back where it was before opening, without a focus ring, so it never lands on some other button
   const openRef = useRef(open);
   openRef.current = open;
   const before = useRef<HTMLElement | null>(null);
   useEffect(() => {
     let ours = false;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Backquote" || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.code !== "Backquote" || !e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
       const t = e.target as HTMLElement | null;
       const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
       if (typing && t !== input.current) return;
@@ -194,14 +194,21 @@ function Console() {
     }
   };
 
-  const drag = (e: React.PointerEvent) => {
-    const start = e.clientY, h0 = height;
-    const move = (ev: PointerEvent) => setHeight(Math.max(20, Math.min(92, h0 + ((ev.clientY - start) / window.innerHeight) * 100)));
-    const up = () => {
-      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+  // the grip holds the pointer until the press ends, however it ends (let go anywhere, cancelled, or the button found
+  // up on the next move after the window lost focus)
+  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const grip = e.currentTarget, start = e.clientY, h0 = height;
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      if (!(ev.buttons & 1)) { grip.releasePointerCapture(ev.pointerId); return; }
+      setHeight(Math.max(20, Math.min(92, h0 + ((ev.clientY - start) / window.innerHeight) * 100)));
+    };
+    const end = () => {
+      grip.removeEventListener("pointermove", move); grip.removeEventListener("lostpointercapture", end);
       setHeight((h) => { try { localStorage.setItem(HEIGHT, String(Math.round(h))); } catch { /* fine */ } return h; });
     };
-    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+    grip.addEventListener("pointermove", move); grip.addEventListener("lostpointercapture", end);
   };
 
   if (!open || !enabled) return null;
@@ -232,7 +239,7 @@ function Console() {
         </>}
         <span className="gmc-grow" />
         <span className="gmc-mode">{inTauri() ? "app" : "demo"}</span>
-        <button type="button" onClick={() => setOpen(false)} title="Close (~ or Esc)">Close</button>
+        <button type="button" onClick={() => setOpen(false)} title="Close (Shift+` or Esc)">Close</button>
       </div>
 
       {tab === "output" ? (

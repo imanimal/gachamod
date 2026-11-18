@@ -1603,7 +1603,7 @@ hash = {hash}
         // forgetting drops the kept values and profile places
         library::remove(&d, &data, "zzz", std::slice::from_ref(&id), "removed").unwrap();
         let key = library::archive_list(&d, None).unwrap()[0].key.clone();
-        assert_eq!(library::archive_forget(&d, &[key]).unwrap(), 1);
+        assert_eq!(library::archive_forget(&d, &[key], false).unwrap(), 1);
         assert!(library::archive_list(&d, None).unwrap().is_empty());
         assert!(!profiles::snapshot(&d, beach.id).unwrap().mods.iter().any(|m| m.mod_id == id));
     }

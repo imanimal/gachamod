@@ -1,6 +1,7 @@
 // The global search (Ctrl+K): every page, action, setting, character, mod, profile, game and creator in one list.
 // Areas add what they own with registerCommands. Matching forgives: words in any order, prefixes ("prof" finds
-// Profiles), letters skipped ("rscn" finds Rescan), one typo in words of 4+ letters ("charcters"), and each command
+// Profiles), letters skipped ("rscn" finds Rescan), one typo in words of 4+ letters ("charcters"), filler around the
+// name ("how do I turn off the intro" finds the opening screen), and each command
 // carries the other names people use for it in `keywords` ("nsfw 18+ adult lewd" for the adult content switch).
 // Owner: skeleton.
 import type { MenuEntry } from "../ui/ContextMenu";
@@ -91,6 +92,14 @@ function wordScore(q: string, targets: string[], joined: string): number {
   return best;
 }
 
+/** Words around the name of a thing rather than in it: "turn off the intro", "how do I change the language". One that
+ *  matches nothing is passed over, as is the start of one still being typed ("disab"), when another word matched. */
+const FILLER = new Set(("a an the my me i im to of for in on off it its is are am be this that how do does can cant " +
+  "where what which why want wanna need please turn turning switch enable enabled disable disabled activate deactivate " +
+  "stop change changing set setting settings adjust edit toggle use using make get go find open show hide remove no " +
+  "not dont don t without way option options there").split(" "));
+const isFiller = (q: string, last: boolean) => FILLER.has(q) || (last && [...FILLER].some((f) => f.length > q.length && f.startsWith(q)));
+
 /** A match score for a command (0 = no match). */
 export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords" | "priority" | "where">): number {
   const qs = words(query);
@@ -99,14 +108,21 @@ export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords
   const en = lang === "en" ? "" : `${english(c.title)} ${c.where ? english(c.where) : ""}`;
   const title = words(c.title), kw = words(`${c.keywords ?? ""} ${c.where ?? ""} ${en}`);
   const joinedTitle = title.join(" ");
-  let total = 0;
-  for (const q of qs) {
+  let total = 0, skipped = false, named = false;
+  for (const [i, q] of qs.entries()) {
     const inTitle = wordScore(q, title, joinedTitle);
     const inKw = wordScore(q, kw, "") * 0.8;
     const s = Math.max(inTitle, inKw);
-    if (!s) return 0;
+    if (!s) {
+      if (!isFiller(q, i === qs.length - 1)) return 0;
+      skipped = true;
+      continue;
+    }
+    if (!FILLER.has(q)) named = true;
     total += s;
   }
+  // "turn off" on its own names nothing, but "open" or "settings" typed alone still match as words
+  if (skipped && !named) return 0;
   const fq = fold(query);
   if (fold(c.title).startsWith(fq)) total += 6;
   else if (fold(c.title).includes(fq)) total += 3;

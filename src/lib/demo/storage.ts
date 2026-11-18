@@ -1,4 +1,4 @@
-// Demo handlers for Tools › Storage (lib/api/storage.ts): sizes from the demo library plus believable numbers for the
+// Demo handlers for Settings › Storage (lib/api/storage.ts): sizes from the demo library plus believable numbers for the
 // folders around it. Owner: SYSTEM area.
 import type { ModChange, ModEntry, StorageCategory, StorageDuplicate, StorageGame, StorageItem, StorageMod, StorageReport, StorageStep } from "../api";
 import { call, demoEmit, registerDemo } from "../tauri";
@@ -57,7 +57,7 @@ async function report(full: boolean): Promise<StorageReport> {
   ].filter((i) => i.bytes > 0).sort((a, b) => b.bytes - a.bytes) : [];
 
   const out: StorageMod[] = mods.map((m) => ({ id: m.id, game: m.game, name: m.name, character: m.character, enabled: m.enabled, bytes: m.sizeBytes, files: m.fileCount,
-    path: m.path, installedAt: m.installedAt, thumb: m.thumb ?? null })).sort((a, b) => b.bytes - a.bytes);
+    path: m.path, installedAt: m.installedAt, preview: m.preview, thumb: m.thumb ?? null, nsfw: m.nsfw })).sort((a, b) => b.bytes - a.bytes);
   const chars = new Map<string, { game: string; name: string | null; bytes: number; mods: number; enabled: number }>();
   for (const m of mods) {
     const k = `${m.game}\u0000${m.character ?? ""}`;

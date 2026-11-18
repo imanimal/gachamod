@@ -66,7 +66,7 @@
   .side-nav { gap: 3px; padding-left: .55rem; position: relative; }
   .side-nav::before { content: ""; position: absolute; left: 0; top: .2rem; bottom: .2rem; width: 1px; background: linear-gradient(180deg, transparent, var(--line-2) 12%, var(--line-2) 88%, transparent); }
   .nv { padding: 0 .7rem; gap: .7rem; border-radius: 3px; color: var(--text-2); font-weight: 700; }
-  .nv .i { color: var(--text-3); stroke-width: 1.9; }
+  .nv .i { color: var(--text-3); stroke-width: 1.5; }
   .nv:hover:not(:disabled) { background: rgb(255 255 255 / .07); color: var(--cream); }
   .nv:hover:not(:disabled) .i { color: var(--cream); }
   .nv.on, .nv.on:hover:not(:disabled) { background: var(--compass) right -.700rem center / auto 230% no-repeat, #f4f4f2; color: #101113; box-shadow: 0 3px 12px rgb(0 0 0 / .35); animation: wwPick var(--dur) var(--ease-out); transform-origin: left; }
@@ -114,7 +114,7 @@
   .page-h-row { align-items: center; gap: .8rem; }
   .page-h-t { display: flex; align-items: baseline; gap: .9rem; flex-wrap: wrap; min-width: 10rem; }
   .page-h h1 { font-size: 1.42rem; font-weight: 700; letter-spacing: -.01em; gap: .6rem; line-height: 1.1; color: var(--cream); align-self: center; }
-  .page-h h1 .i { width: 1.9rem; height: 1.9rem; padding: .44rem; border-radius: 0; color: var(--cream); stroke-width: 1.9; box-shadow: none;
+  .page-h h1 .i { width: 1.9rem; height: 1.9rem; padding: .44rem; border-radius: 0; color: var(--cream); stroke-width: 1.5; box-shadow: none;
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40' fill='none' stroke='%23ceb99c'%3E%3Cpath d='M20 1 39 20 20 39 1 20Z'/%3E%3Cpath d='M20 5.500 34.500 20 20 34.500 5.500 20Z' stroke-opacity='.4'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
   .page-h-sub { margin: 0; color: var(--text-3); font-weight: 700; font-size: .88em; }
   .page-h-a { gap: .45rem; }

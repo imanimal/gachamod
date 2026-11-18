@@ -148,7 +148,11 @@ function Merged({ mod, info, running }: { mod: ModEntry; info: MergedInfo; runni
       emitApp({ type: "library-refresh", game: mod.game });
       let backup = r.backup;
       const flip = async () => { backup = await backups.restore(backup.id); emitApp({ type: "library-refresh", game: mod.game }); };
-      record({ label: tn(r.mods.length, "Split {name} into {n} mod", "Split {name} into {n} mods", { name: mod.name }), undo: flip, redo: flip });
+      record({
+        label: tn(r.mods.length, "Split {name} into {n} mod", "Split {name} into {n} mods", { name: mod.name }),
+        brief: tn(r.mods.length, "Split the mod into {n} mod", "Split the mod into {n} mods"),
+        undo: flip, redo: flip,
+      });
     } catch (e) { toast(errorText(e), true); } finally { setBusy(false); }
   };
   const why = running ? t("Close the game first. Mods can't move while it has them open") : info.blocked ? tb(info.blocked) : null;

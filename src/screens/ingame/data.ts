@@ -127,6 +127,9 @@ function skippedNote(c: LiveChange) {
     : t("{name} can't be switched in game: {reason}", p), true);
 }
 
+/** The toast after mods joined live switching: how many, not which. */
+const madeLive = (n: number) => tn(n, "Made {n} mod switch in game. It starts after the game reloads once", "Made {n} mods switch in game. It starts after the game reloads once");
+
 /** Make mods live (normally all of one character's). One Undo step takes them out again. */
 export async function makeLive(game: GameId, ids: string[], who: string) {
   try {
@@ -136,6 +139,7 @@ export async function makeLive(game: GameId, ids: string[], who: string) {
     if (!c.changed.length) return;
     record({
       label: t("Made {name} switch in game. It starts after the game reloads once", { name: who }),
+      brief: madeLive(c.changed.length),
       undo: async () => { await live.remove(game, c.changed); after(game); },
       redo: async () => { await live.add(game, c.changed); after(game); },
     });
@@ -150,6 +154,7 @@ export async function stopLive(game: GameId, ids: string[], who: string) {
     if (!c.changed.length) return;
     record({
       label: t("Stopped switching {name} in game", { name: who }),
+      brief: tn(c.changed.length, "Stopped switching {n} mod in game", "Stopped switching {n} mods in game"),
       undo: async () => { await live.add(game, c.changed); after(game); },
       redo: async () => { await live.remove(game, c.changed); after(game); },
     });
@@ -163,18 +168,22 @@ export async function setAll(game: GameId, on: boolean) {
     const c = await live.setAll(game, on);
     after(game);
     skippedNote(c);
+    // the switch shows the new state; the toast is for the mods it changed, when it changed any
+    const n = c.changed.length;
     record({
       label: on ? t("Turned on switching skins in game. It starts after the game reloads once")
         : t("Turned off switching skins in game. Each character keeps the skin it showed"),
+      brief: on ? madeLive(n) : tn(n, "Stopped switching {n} mod in game. Each character keeps the skin it showed", "Stopped switching {n} mods in game. Each character keeps the skin it showed"),
       undo: async () => { await live.setAll(game, !on); after(game); },
       redo: async () => { await live.setAll(game, on); after(game); },
-    });
+    }, !n);
   } catch (e) { toast(errorText(e), true); }
 }
 
 /** Change how the skin menu opens while playing. Undo puts the old way back. `label`: what the Undo step says, when
- *  the caller knows better (which key changed). */
-export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSettings, label?: string) {
+ *  the caller knows better (which key changed). `say`: toast it with Undo, for a change whose control goes away (a
+ *  key taken off); the switches, choices and key fields show the new state themselves. */
+export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSettings, label?: string, say = false) {
   try {
     await live.setMenu(game, menu);
     await reloadLive(game);
@@ -184,7 +193,7 @@ export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSett
         : t("Set the in-game menu to be drawn by the game with {key}", { key: menu.key })),
       undo: async () => { await live.setMenu(game, before); await reloadLive(game); },
       redo: async () => { await live.setMenu(game, menu); await reloadLive(game); },
-    });
+    }, !say);
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -192,12 +201,13 @@ export async function setMenu(game: GameId, before: MenuSettings, menu: MenuSett
  *  was made, so two quick changes both stay. */
 const menuQueue = new Map<GameId, { last: MenuSettings; chain: Promise<void> }>();
 
-/** Change part of the menu's settings, after any change still saving. `patch` can read the settings it applies to. */
-export function patchMenu(game: GameId, menu: MenuSettings, patch: Partial<MenuSettings> | ((m: MenuSettings) => Partial<MenuSettings>), label?: string): Promise<void> {
+/** Change part of the menu's settings, after any change still saving. `patch` can read the settings it applies to.
+ *  `label` and `say` as in setMenu. */
+export function patchMenu(game: GameId, menu: MenuSettings, patch: Partial<MenuSettings> | ((m: MenuSettings) => Partial<MenuSettings>), label?: string, say = false): Promise<void> {
   const q = menuQueue.get(game);
   const before = q?.last ?? menu;
   const next = { ...before, ...(typeof patch === "function" ? patch(before) : patch) };
-  const chain = (q?.chain ?? Promise.resolve()).then(() => setMenu(game, before, next, label));
+  const chain = (q?.chain ?? Promise.resolve()).then(() => setMenu(game, before, next, label, say));
   const entry = { last: next, chain };
   menuQueue.set(game, entry);
   void chain.finally(() => { if (menuQueue.get(game) === entry) menuQueue.delete(game); });
@@ -281,6 +291,15 @@ export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
       : p.send ? (fresh ? t("Switched to {what} in game. If {character} looks wrong, switch to another character and back", { what, character: g.character })
         : t("Switched to {what} in game", { what }))
       : t("Picked {what} for the next start", { what });
-    record({ label: p.note && !f10 ? t("{label}. {note}", { label, note: tb(p.note) }) : label, undo: async () => { await put(before); }, redo: async () => { await put(slot); } });
+    // the picked chip shows the pick: a toast only for what shows nowhere else, the game's note or what to expect in the
+    // running game
+    const note = p.note && !f10 ? tb(p.note) : null;
+    const tip = !p.send ? null : p.reload ? t("Turned on the skin. It shows after the game reloads")
+      : fresh ? t("Switched the skin in game. If the character looks wrong, switch to another character and back") : null;
+    record({
+      label: note ? t("{label}. {note}", { label, note }) : label,
+      brief: note ?? tip ?? undefined,
+      undo: async () => { await put(before); }, redo: async () => { await put(slot); },
+    }, !note && !tip);
   } catch (e) { toast(errorText(e), true); }
 }

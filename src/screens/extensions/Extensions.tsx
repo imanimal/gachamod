@@ -10,6 +10,7 @@ import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
 import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ICONS } from "../../ui/icons";
+import { toast } from "../../ui/toast";
 import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, Skeleton, Tabs, Waiting, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { ExtensionFrame, NeedsNote } from "./ExtensionFrame";
 import { lang, stops, t, tb, tn } from "../../lib/i18n";
@@ -40,7 +41,10 @@ function Catalog() {
   const [updatingAll, setUpdatingAll] = useState(false);
   const updateAll = async () => {
     setUpdatingAll(true);
-    try { for (const u of updates) await installListed(u); } finally { setUpdatingAll(false); }
+    // one toast for the lot; each update is still its own step on the undo list
+    let n = 0;
+    try { for (const u of updates) if (await installListed(u, true)) n++; } finally { setUpdatingAll(false); }
+    if (n) toast(tn(n, "Updated {n} package", "Updated {n} packages"));
   };
 
   const match = (name: string, author: string, desc: string, k: string) =>
@@ -137,7 +141,7 @@ export function permissionLines(p: ExtPermissions): string[] {
 function Perms({ p, kind }: { p: ExtPermissions; kind: string }) {
   const lines = permissionLines(p);
   if (!lines.length) return kind === "theme" ? null : <p className="ext-perm-none">{t("Needs no permissions")}</p>;
-  return <ul className="ext-perms" aria-label={t("What it can reach")}>{lines.map((l) => <li key={l}><Icon name="shield" size={14} />{l}</li>)}</ul>;
+  return <ul className="ext-perms" aria-label={t("Permissions")}>{lines.map((l) => <li key={l}><Icon name="shield" size={14} />{l}</li>)}</ul>;
 }
 
 function Games({ ids }: { ids: string[] }) {
@@ -264,7 +268,7 @@ function ExtensionPage({ id }: { id: string }) {
   const menu: MenuEntry[] = [
     { label: t("View in Extensions"), icon: "puzzle", onClick: () => go({ view: "extensions", tab: "installed" }) },
     e.linked && { label: t("Reload page"), icon: "refresh", onClick: () => { void reloadExtensions(); reloadPages(); } },
-    { label: t("Turn off {name}", { name: m.name }), icon: "power", onClick: () => void setExtensionEnabled(e, false) },
+    { label: t("Turn off {name}", { name: m.name }), icon: "power", onClick: () => void setExtensionEnabled(e, false, true) },
   ];
   return (
     <div className="page ext-page">

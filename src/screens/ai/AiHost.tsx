@@ -109,8 +109,9 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     const link = open && bot ? chatbotLink(bot, built.prompt) : null;
     if (link) { try { await shell.openUrl(link.url); } catch (e) { toast(errorText(e), true); } }
     const name = botInfo?.id === "other" || !botInfo ? t("your chatbot") : botInfo.name;
+    // a chatbot opened with the prompt in its box says it all by itself
     if (!copied && !link?.prefilled) toast(t("Couldn't copy the prompt. Open \"See the prompt\" and copy it from there"), true);
-    else toast(link?.prefilled ? t("Opened {name} with the prompt in the box. Send it, then copy the whole answer", { name }) : t("Prompt copied. Paste it in {name}, then copy the whole answer", { name }));
+    else if (!link?.prefilled) toast(t("Prompt copied. Paste it in {name}, then copy the whole answer", { name }));
     setSent(true);
     window.setTimeout(() => replyBox.current?.querySelector("textarea")?.focus(), 60);
   };
@@ -285,7 +286,7 @@ function AiIntro() {
     void chatbotPref.set(id);
     void aiIntroPref.set("done");
     const name = chatbotOf(id)?.name;
-    toast(name ? t("{name} it is. AI buttons open it with the prompt ready", { name }) : t("Your chatbot it is. AI buttons open it with the prompt ready"));
+    toast(name ? t("AI buttons now open {name} with the prompt ready", { name }) : t("AI buttons now open your chatbot with the prompt ready"));
   };
   return (
     <aside className="ai-intro" aria-label={t("Use your chatbot with gachamod")}>
@@ -303,7 +304,7 @@ function AiIntro() {
       <BotPicker value="" onPick={pick} />
       <div className="row ai-intro-a">
         <Button size="sm" variant="ghost" onClick={() => void aiIntroPref.set("done")} title={t("Hide this for good. Settings, AI helper has it")}>{t("No thanks")}</Button>
-        <Button size="sm" variant="ghost" onClick={() => { void aiShowPref.set("off", t("Turned the AI helper off")); void aiIntroPref.set("done"); }}
+        <Button size="sm" variant="ghost" onClick={() => { void aiShowPref.set("off", t("Turned the AI helper off"), true); void aiIntroPref.set("done"); }}
           title={t("Hides every AI button and menu item. Turn it back on in Settings")}>{t("Turn AI off")}</Button>
       </div>
     </aside>

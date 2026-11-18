@@ -16,6 +16,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { wordingProblems } from "./wording.mjs";
 
 const REPO = "imanimal/gachamod";
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -59,6 +60,20 @@ const version = bump ?? current;
 const tag = `v${version}`;
 if (run("gh", ["release", "view", tag, "-R", REPO], { ok: true }).ok) fail(`${tag} is already released. Pass a newer version: npm run release -- <version>`);
 
+// ── notes ──
+
+if (notes === null) {
+  const last = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"], { ok: true });
+  const log = run("git", ["log", "--no-merges", "--format=- %s", ...(last.ok ? [`${last.out}..HEAD`] : [])]).out;
+  notes = last.ok && log ? log : "First release.";
+}
+
+// the notes go out to everyone who downloads it: plain wording, checked before anything is built
+const offNotes = wordingProblems(notes);
+if (offNotes.length) fail(`The release notes read like a template. Reword them, or pass --notes:
+${offNotes.map((o) => `  ${o}`).join("
+")}`);
+
 // ── version bump ──
 
 function setVersion(v) {
@@ -78,14 +93,6 @@ function setVersion(v) {
 if (bump && bump !== current) {
   console.log(`Version ${current} -> ${version}`);
   setVersion(version);
-}
-
-// ── notes ──
-
-if (notes === null) {
-  const last = run("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"], { ok: true });
-  const log = run("git", ["log", "--no-merges", "--format=- %s", ...(last.ok ? [`${last.out}..HEAD`] : [])]).out;
-  notes = last.ok && log ? log : "First release.";
 }
 
 // ── build ──
@@ -133,12 +140,14 @@ const sha = run("git", ["rev-parse", "HEAD"]).out;
 const body = join(out, "notes.md");
 writeFileSync(body, `${notes}
 
-Download \`gachamod-setup.exe\` and run it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway.
+Download \`gachamod-setup.exe\` and run it. The installer isn't code-signed, so Windows may say it protected your PC. Click More info, then Run anyway.
 
-Every installer here gets the same gachamod, and it manages all your games. The \`gachamod-setup-<game>.exe\` files wear that game's theme and start with only that game in the sidebar. One-game mode in Settings, Games turns that off. \`gachamod-setup.exe\` shows every game from the start.
+The \`gachamod-setup-<game>.exe\` files install the same app. The only difference is that they start in that game's theme with only that game in the sidebar. To see your other games, turn off One-game mode in Settings, Games.
 
-Already have gachamod? It updates by itself: the new version downloads in the background and installs when you close gachamod. \`${update}\` is the file it downloads.
+If you already have gachamod, you don't need to download anything. It gets the new version in the background and installs it when you close the app. \`${update}\` is the file it downloads.
 `);
+const off = wordingProblems(readFileSync(body, "utf8"));
+if (off.length) fail(`The release notes read like a template. Reword:\n${off.map((o) => `  ${o}`).join("\n")}`);
 run("gh", ["release", "create", tag, ...setups, join(out, update), join(out, `${update}.sig`), latest,
   "-R", REPO, "--target", sha, "--title", `gachamod ${version}`, "--notes-file", body, "--latest"], { show: true });
 run("git", ["fetch", "--tags", "origin"], { ok: true });

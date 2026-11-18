@@ -72,8 +72,9 @@ function HomeFor({ game }: { game: GameState }) {
     before.current = null;
     setHomeEditing(false);
     const to = normalize(homeLayoutPref.get());
+    // Home shows the new layout: Ctrl+Z still puts the old one back
     if (from && JSON.stringify(from) !== JSON.stringify(to)) {
-      record({ label: t("Changed what Home shows"), undo: () => homeLayoutPref.set(from), redo: () => homeLayoutPref.set(to) });
+      record({ label: t("Changed what Home shows"), undo: () => homeLayoutPref.set(from), redo: () => homeLayoutPref.set(to) }, true);
     }
   }
   const put = (l: HomeLayout) => void homeLayoutPref.set(l);

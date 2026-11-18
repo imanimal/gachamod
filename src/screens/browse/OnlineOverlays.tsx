@@ -10,7 +10,7 @@ import { errorText, fileUrl, installs, queue, type Candidate, type QueueItem } f
 import { held } from "../../lib/tauri";
 import { fileIdFromLink, modPage, parseGbLink, queueModFile } from "../../lib/gamebanana";
 import { closeRoute, currentGame, emitApp, go, onApp, setBadge, setGame, useGame, useGames, useRoute } from "../../lib/store";
-import { record } from "../../lib/history";
+import { record, undo as undoStep } from "../../lib/history";
 import { registerBrowseCommands } from "./commands";
 import { registerBrowseMenus } from "./menus";
 import { ModDrawer } from "./ModDrawer";
@@ -22,9 +22,9 @@ import { pruneSeen, unseen, useSeen } from "../downloads/seen";
 import { withCreator, openCreator } from "./actions";
 import { installAllPartsPref } from "../settings/automatic";
 import "./browse.css";
+import "./gb-inline.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { notesText } from "../../lib/notes";
-import { gameShort } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
 
 registerBrowseMenus();
@@ -71,15 +71,14 @@ export function OnlineOverlays() {
 
   // a choice to make: the picker opens by itself only for the mod whose page is open; the rest get a toast with Pick,
   // and wait on the card's Pick badge and in Downloads until asked for
-  const announce = useCallback((id: number, itemGame: string, modId: number | null | undefined, name: string, parts: number) => {
+  const announce = useCallback((id: number, itemGame: string, modId: number | null | undefined, parts: number) => {
     const seen = announced.current ??= new Set();
     if (seen.has(id)) return;
     seen.add(id);
     const here = onScreen.current;
     if (modId != null && here.modId === modId && here.game === itemGame) { setPickId((cur) => cur ?? id); return; }
-    toast(name
-      ? tn(parts, "{name} has {n} part inside. Pick the ones to install", "{name} has {n} parts inside. Pick the ones to install", { name })
-      : tn(parts, "A download has {n} part inside. Pick the ones to install", "A download has {n} parts inside. Pick the ones to install"),
+    // no name in the toast: Pick opens the window that names it
+    toast(tn(parts, "A download has {n} part inside. Pick the ones to install", "A download has {n} parts inside. Pick the ones to install"),
       false, { label: t("Pick"), run: () => openVariantPicker(id) });
   }, []);
   useEffect(() => {
@@ -91,19 +90,19 @@ export function OnlineOverlays() {
       if (waiting.length === 1) {
         const i = waiting[0]!;
         announced.current.delete(i.id);
-        announce(i.id, i.req.game, i.req.gbModId, i.req.meta.name || i.req.fileName || "", i.candidates.length);
+        announce(i.id, i.req.game, i.req.gbModId, i.candidates.length);
       } else if (waiting.length > 1) {
         toast(tn(waiting.length, "{n} download waits for you to pick its parts", "{n} downloads wait for you to pick their parts"), false, { label: t("Show"), run: () => go("downloads") });
       }
       return;
     }
-    for (const i of waiting) announce(i.id, i.req.game, i.req.gbModId, i.req.meta.name || i.req.fileName || "", i.candidates.length);
+    for (const i of waiting) announce(i.id, i.req.game, i.req.gbModId, i.candidates.length);
   }, [snap, pickId, announce]);
   const snapRef = useRef(snap);
   snapRef.current = snap;
   useEffect(() => held(queue.onVariantsNeeded((p) => {
     const i = snapRef.current.items.find((x) => x.id === p.id);
-    announce(p.id, p.game, i?.req.gbModId, p.name, p.candidates.length);
+    announce(p.id, p.game, i?.req.gbModId, p.candidates.length);
   })), [announce]);
   useEffect(() => {
     const h = (e: Event) => { const id = (e as CustomEvent<number>).detail; announced.current?.add(id); setPickId(id); };
@@ -185,14 +184,14 @@ async function openLink(url: string, games: ReturnType<typeof useGames>) {
     if (!mod) { toast(t("GameBanana didn't send that mod's page"), true); return; }
     // the mod's own game, when it isn't the one on screen
     const target = mod.game ? games.find((g) => g.gamebananaId === mod.game!.id) : here;
-    if (mod.game && !target) { toast(t("{name} is a mod for {game}, which isn't set up here", { name: mod.name, game: mod.game.name }), true); return; }
+    if (mod.game && !target) { toast(t("That mod is for a game that isn't set up here"), true); return; }
     const game = target ?? here;
     if (!game) { toast(t("Set up a game first, then open the link again"), true); return; }
     if (link.fileId) {
       const file = mod.files.find((f) => f.id === link.fileId);
-      if (!file) { toast(t("That file isn't on {name}'s page anymore", { name: mod.name }), true); return; }
+      if (!file) { toast(t("That file isn't on the mod's page anymore"), true); return; }
       await queueModFile(game.id, mod, file);
-      toast(game.id !== here?.id ? t("Downloading {name} for {game}", { name: mod.name, game: gameShort(game) }) : t("Downloading {name}", { name: mod.name }),
+      toast(game.id !== here?.id ? t("Downloading the mod for another game") : t("Downloading the mod"),
         false, { label: t("Show"), run: () => go("downloads") });
       return;
     }
@@ -224,9 +223,9 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
       await queue.choose(item.id, candidates.map((c) => c.key));
       await installAllPartsPref.set(true);
       const label = t("Archives with several parts now install all of them without asking");
-      const undo = () => installAllPartsPref.set(false);
-      record({ label, undo, redo: () => installAllPartsPref.set(true) }, true);
-      toast(label, false, { label: t("Undo"), run: () => void undo() },
+      // its own toast for the Download settings button; Undo goes through the step, so the toast turns into Redo
+      const step = record({ label, undo: () => installAllPartsPref.set(false), redo: () => installAllPartsPref.set(true) }, true);
+      const id = toast(label, false, { label: t("Undo"), run: () => void undoStep(step, id) },
         { label: t("Download settings"), run: () => go({ view: "settings", section: "set-all-parts" }) });
       onClose();
     } catch (e) { toast(errorText(e), true); setBusy(false); }

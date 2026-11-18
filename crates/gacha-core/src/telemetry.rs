@@ -23,7 +23,8 @@ const ID: &str = "telemetry.id";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The names an event may have. Anything else from the window is dropped.
-const NAMES: &[&str] = &["app started", "screen", "click", "setting", "input", "used", "f10 note"];
+const NAMES: &[&str] = &["app started", "screen", "click", "setting", "input", "used", "f10 note", "game launched", "download queued",
+    "mods toggled", "profile switched", "profile made", "extension installed"];
 
 /// This build has somewhere to send to.
 pub fn configured() -> bool { !KEY.is_empty() }

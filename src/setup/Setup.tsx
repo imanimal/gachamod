@@ -1,19 +1,23 @@
 // The setup window: install, update, repair and uninstall, one card on the theme's stage. The common case is one
 // click (Install, or Uninstall); everything else sits under Options. src-setup runs NSIS behind it and reports each
-// step ("setup-step" events, src-setup/src/jobs.rs).
+// step ("setup-step" events, src-setup/src/jobs.rs). gachamod's own updates open it too (mode "apply"), straight
+// into the steps, so an update looks the same as installing. An update gachamod installs from the background is quiet:
+// the window stays hidden unless it fails, and src-setup starts gachamod again in the background and closes setup.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GameState } from "../lib/api";
 import { seconds, useElapsed } from "../lib/activity";
 import { THEMES, type Scheme } from "../lib/theme-info";
 import { Glyphs, Backdrop } from "../ui/Deco";
 import { Icon, type IconName } from "../ui/Icon";
-import { Button, Card, Checkbox, formatBytes, Progress, Segmented, Select, Spinner, Toggle } from "../ui/kit";
+import { Button, Card, Checkbox, formatBytes, Segmented, Select, Spinner, Toggle } from "../ui/kit";
+import { Steps, type StepItem } from "../ui/Steps";
 import { api, type SetupInfo, type Step } from "./api";
 import { applyLook, schemeOf } from "./look";
 import { t, tb } from "../lib/i18n";
 import { gameName, gameShort } from "../lib/games";
 
-type Job = "install" | "update" | "repair" | "uninstall";
+/** apply: an update gachamod downloaded and handed over. */
+type Job = "install" | "update" | "apply" | "repair" | "uninstall";
 type View =
   | { k: "start" }
   | { k: "uninstall" }
@@ -21,8 +25,8 @@ type View =
   | { k: "done"; job: Job; dir?: string; dataGone?: boolean; version?: string }
   | { k: "error"; job: Job; message: string };
 
-const JOB_TITLE: Record<Job, string> = { install: t("Installing gachamod"), update: t("Updating gachamod"), repair: t("Repairing gachamod"), uninstall: t("Uninstalling gachamod") };
-const JOB_FAILED: Record<Job, string> = { install: t("Couldn't install gachamod"), update: t("Couldn't update gachamod"), repair: t("Couldn't repair gachamod"), uninstall: t("Couldn't uninstall gachamod") };
+const JOB_TITLE: Record<Job, string> = { install: t("Installing gachamod"), update: t("Updating gachamod"), apply: t("Updating gachamod"), repair: t("Repairing gachamod"), uninstall: t("Uninstalling gachamod") };
+const JOB_FAILED: Record<Job, string> = { install: t("Couldn't install gachamod"), update: t("Couldn't update gachamod"), apply: t("Couldn't update gachamod"), repair: t("Couldn't repair gachamod"), uninstall: t("Couldn't uninstall gachamod") };
 const STEP_LABEL: Record<string, string> = {
   unpack: t("Unpack the installer"), download: t("Download gachamod"), verify: t("Check the download"), close: t("Close gachamod"),
   copy: t("Copy gachamod"), remove: t("Remove gachamod"), data: t("Move its data to the Recycle Bin"),
@@ -48,6 +52,10 @@ type Latest = { k: "off" } | { k: "checking" } | { k: "ok"; version: string } | 
 const carriesNewer = (info: SetupInfo) => info.payload && (!info.installed?.version || cmp(info.version, info.installed.version) > 0);
 /** An update downloads from GitHub unless the installer inside this setup is the newer one. */
 const fromGitHub = (job: Job, info: SetupInfo) => job === "update" && !carriesNewer(info);
+/** gachamod opens once the job is done: after an install or update with "Open gachamod" on, and after an update
+ * gachamod handed over unless it was closing anyway or goes back to the background (src-setup starts it there). */
+const opensAfter = (job: Job, info: SetupInfo, openAfter: boolean) =>
+  job === "apply" ? !!info.apply?.open && !info.apply.background : (job === "install" || job === "update") && openAfter;
 /** The newest version on GitHub when it's newer than the installed copy. */
 const newerOnline = (latest: Latest, info: SetupInfo) =>
   latest.k === "ok" && info.installed?.version && cmp(latest.version, info.installed.version) > 0 ? latest.version : null;
@@ -64,7 +72,8 @@ export function Setup() {
   const [open, setOpen] = useState(false);
   const [dir, setDir] = useState<string | null>(null);
   const [desktop, setDesktop] = useState(true);
-  const [admin, setAdmin] = useState(false);
+  const [quickstart, setQuickstart] = useState(true);
+  const [admin, setAdmin] = useState(true);
   const [openAfter, setOpenAfter] = useState(true);
   const [deleteData, setDeleteData] = useState(false);
   const [dataSize, setDataSize] = useState<number | null>(null);
@@ -73,10 +82,12 @@ export function Setup() {
 
   useEffect(() => {
     api.info().then((i) => {
-      setInfo(i); setDesktop(i.desktop); setAdmin(i.admin);
+      setInfo(i); setDesktop(i.desktop); setQuickstart(i.quickstart); setAdmin(i.admin);
       applyLook(i.look);
       if (i.mode === "uninstall") setView({ k: "uninstall" });
-      requestAnimationFrame(() => void api.win("show"));
+      if (i.mode === "apply") setView({ k: "work", job: "apply" });
+      // a quiet update (gachamod installing it from the background) shows the window only if it fails
+      if (!i.apply?.quiet) requestAnimationFrame(() => void api.win("show"));
     }).catch((e) => { setFailed(String(e)); void api.win("show"); });
   }, []);
 
@@ -109,24 +120,33 @@ export function Setup() {
     try {
       let out: string | undefined;
       const online = fromGitHub(job, info);
-      if (online) out = await api.update();
-      else if (job === "install" || job === "update") out = await api.install({ dir, desktop, admin });
+      if (job === "apply") out = await api.apply();
+      else if (online) out = await api.update();
+      else if (job === "install" || job === "update") out = await api.install({ dir, desktop, quickstart, admin });
       else if (job === "repair") out = await api.repair();
       else await api.uninstall(deleteData);
-      const version = job === "update" ? (online ? newerOnline(latest, info) ?? undefined : info.version) : undefined;
+      const version = job === "apply" ? info.apply?.version ?? undefined : job === "update" ? (online ? newerOnline(latest, info) ?? undefined : info.version) : undefined;
       setView({ k: "done", job, dir: out || info.installed?.dir, dataGone: job === "uninstall" && deleteData, version });
-      if ((job === "install" || job === "update") && openAfter) {
-        await api.openApp(out).catch(() => undefined);
+      if (opensAfter(job, info, openAfter)) {
+        // a quiet update has src-setup open it (main.rs apply)
+        if (!(job === "apply" && info.apply?.quiet)) await api.openApp(out).catch(() => undefined);
         setTimeout(() => void api.win("close"), 1400);
+      } else if (job === "apply") {
+        // gachamod was closed, so this window goes too once it has said so
+        setTimeout(() => void api.win("close"), 2500);
       }
     } catch (e) {
       setView({ k: "error", job, message: String(e) });
     }
-  }, [info, dir, desktop, admin, deleteData, openAfter, latest]);
+  }, [info, dir, desktop, quickstart, admin, deleteData, openAfter, latest]);
 
-  // a repair started from Windows (--repair) begins at once
+  // a repair started from Windows (--repair) and an update from gachamod (--apply) begin at once
   const started = useRef(false);
-  useEffect(() => { if (info?.mode === "repair" && !started.current) { started.current = true; void run("repair"); } }, [info, run]);
+  useEffect(() => {
+    if ((info?.mode === "repair" || info?.mode === "apply") && !started.current) { started.current = true; void run(info.mode); }
+  }, [info, run]);
+  // shown once the error is on the page, so a quiet update never fails unseen
+  useEffect(() => { if (view.k === "error" && info?.apply?.quiet) void api.win("show"); }, [view.k, info]);
   useEffect(() => { if (view.k === "uninstall" && dataSize === null) void api.dataSize().then(setDataSize).catch(() => setDataSize(0)); }, [view.k, dataSize]);
 
   const busy = view.k === "work";
@@ -141,7 +161,7 @@ export function Setup() {
 
   const game = info?.look.game;
   const deco = useMemo(() => (game ? { name: game.name, importer: game.importer, short: game.short } : null) as GameState | null, [game]);
-  const title = info?.mode === "uninstall" ? t("Uninstall gachamod") : info?.mode === "repair" ? t("Repair gachamod") : t("gachamod setup");
+  const title = info?.mode === "uninstall" ? t("Uninstall gachamod") : info?.mode === "repair" ? t("Repair gachamod") : info?.mode === "apply" ? t("Update gachamod") : t("gachamod setup");
 
   return (
     <div className="app setup-app">
@@ -168,7 +188,7 @@ export function Setup() {
         ) : view.k === "work" ? (
           <Working job={view.job} step={step} done={done} since={since} info={info} />
         ) : view.k === "done" ? (
-          <Done view={view} openAfter={openAfter} close={close} />
+          <Done view={view} opening={opensAfter(view.job, info, openAfter)} background={!!info.apply?.background} close={close} />
         ) : view.k === "error" ? (
           <Failed view={view} info={info} retry={() => void run(view.job)} close={close} />
         ) : view.k === "uninstall" ? (
@@ -176,7 +196,7 @@ export function Setup() {
             go={() => void run("uninstall")} repair={() => void run("repair")} cancel={info.mode === "uninstall" ? close : () => setView({ k: "start" })} />
         ) : info.mode === "install" ? (
           <Install info={info} latest={latest} checkLatest={checkLatest} open={open} setOpen={setOpen} go={(job) => void run(job)} uninstall={() => setView({ k: "uninstall" })}
-            dir={dir} setDir={setDir} desktop={desktop} setDesktop={setDesktop} admin={admin} setAdmin={setAdmin}
+            dir={dir} setDir={setDir} desktop={desktop} setDesktop={setDesktop} quickstart={quickstart} setQuickstart={setQuickstart} admin={admin} setAdmin={setAdmin}
             openAfter={openAfter} setOpenAfter={setOpenAfter} pick={pick} setPick={setPick} />
         ) : (
           <Maintain info={info} latest={latest} checkLatest={checkLatest} update={() => void run("update")} repair={() => void run("repair")} uninstall={() => setView({ k: "uninstall" })} />
@@ -204,9 +224,13 @@ function Hero({ title, sub, icon }: { title: string; sub?: ReactNode; icon?: Ico
   );
 }
 
+const QUICKSTART_TIP = t("A second desktop icon that starts the game you played last, with mods. Settings, General can make it again.");
+const ADMIN_TIP = t("Lets it switch skins in games that run as administrator, like Zenless Zone Zero, without you pressing F10. Windows asks for permission each time it starts.");
+
 function Install(p: {
   info: SetupInfo; latest: Latest; checkLatest: () => void; open: boolean; setOpen: (v: boolean) => void; go: (job: Job) => void; uninstall: () => void;
   dir: string | null; setDir: (v: string | null) => void; desktop: boolean; setDesktop: (v: boolean) => void;
+  quickstart: boolean; setQuickstart: (v: boolean) => void;
   admin: boolean; setAdmin: (v: boolean) => void; openAfter: boolean; setOpenAfter: (v: boolean) => void;
   pick: { theme?: string; scheme?: Scheme }; setPick: (v: { theme?: string; scheme?: Scheme }) => void;
 }) {
@@ -253,9 +277,18 @@ function Install(p: {
       {!p.open ? (
         <p className="setup-p">{!game
           ? t("Browse GameBanana, install with one click and switch skins per character in Genshin Impact, Star Rail, Zenless Zone Zero, Wuthering Waves and other 3DMigoto games.")
-          : named ? t("Browse GameBanana, install with one click and switch {game} skins per character, all from one window. It handles your other games too, and starts with only {short} in the sidebar.", { game: gameName(game), short: gameShort(game) })
-          : t("Browse GameBanana, install with one click and switch {game} skins per character, all from one window.", { game: gameName(game) })}</p>
-      ) : (
+          : named ? t("Browse GameBanana, install with one click and switch {game} skins per character. It handles your other games too, and starts with only {short} in the sidebar.", { game: gameName(game), short: gameShort(game) })
+          : t("Browse GameBanana, install with one click and switch {game} skins per character.", { game: gameName(game) })}</p>
+      ) : null}
+      {/* a fresh install asks on the card itself; Options has the same choices with more words */}
+      {!p.open && !update && (
+        <div className="setup-picks" role="group" aria-label={t("Shortcuts and administrator")}>
+          <Checkbox checked={p.desktop} onChange={p.setDesktop} label={t("Desktop shortcut")} />
+          <Checkbox checked={p.quickstart} onChange={p.setQuickstart} label={t("Quickstart shortcut")} title={QUICKSTART_TIP} />
+          <Checkbox checked={p.admin} onChange={p.setAdmin} label={t("Start gachamod as administrator")} title={ADMIN_TIP} />
+        </div>
+      )}
+      {p.open && (
         <div className="setup-opts">
           {!update && (
             <div className="setup-row">
@@ -264,11 +297,11 @@ function Install(p: {
             </div>
           )}
           <Toggle checked={p.desktop} onChange={p.setDesktop} label={t("Desktop shortcut")} />
-          <Toggle checked={p.admin} onChange={p.setAdmin} label={t("Start gachamod as administrator")}
-            hint={t("Lets it switch skins in games that run as administrator, like Zenless Zone Zero, without you pressing F10. Windows asks for permission each time it starts.")} />
+          <Toggle checked={p.quickstart} onChange={p.setQuickstart} label={t("Quickstart shortcut")} hint={QUICKSTART_TIP} />
+          <Toggle checked={p.admin} onChange={p.setAdmin} label={t("Start gachamod as administrator")} hint={ADMIN_TIP} />
           <Toggle checked={p.openAfter} onChange={p.setOpenAfter} label={update ? t("Open gachamod when it's updated") : t("Open gachamod when it's installed")} />
           <div className="setup-row setup-look" title={t("Only changes how setup looks")}>
-            <Select label={t("Setup's look")} value={themeNow} options={themes.map((th) => ({ value: th.id, label: th.name }))} onChange={(v) => p.setPick({ ...p.pick, theme: v })} />
+            <Select label={t("Theme")} value={themeNow} options={themes.map((th) => ({ value: th.id, label: th.name }))} onChange={(v) => p.setPick({ ...p.pick, theme: v })} />
             <Segmented label={t("Dark or light")} value={schemeNow} onChange={(v) => p.setPick({ ...p.pick, scheme: v })}
               options={[{ value: "dark", label: "", icon: "moon", title: t("Dark") }, { value: "light", label: "", icon: "sun", title: t("Light") }]} />
           </div>
@@ -279,7 +312,7 @@ function Install(p: {
           {fix ? t("Repair") : update ? t("Update to {version}", { version: info.version }) : t("Install")}
         </Button>
         <Button variant="ghost" icon="sliders" onClick={() => p.setOpen(!p.open)} aria-expanded={p.open}
-          title={p.open ? t("Back (Esc)") : t("Folder, shortcuts, administrator and setup's look")}>{p.open ? t("Hide options") : t("Options")}</Button>
+          title={p.open ? t("Back (Esc)") : t("Folder, shortcuts, administrator and theme")}>{p.open ? t("Hide options") : t("Options")}</Button>
       </div>
       {(!p.open || info.running) && (
         <p className="setup-note" title={where}>
@@ -388,6 +421,8 @@ function Uninstall({ info, deleteData, setDeleteData, dataSize, go, repair, canc
 function plan(job: Job, info: SetupInfo): string[] {
   const close = info.running ? ["close"] : [];
   if (job === "uninstall") return [...close, "remove"];
+  // gachamod is always closing when it hands over an update
+  if (job === "apply") return ["verify", "close", "copy"];
   if (job === "repair") {
     const own = info.payload && (!info.installed?.version || cmp(info.version, info.installed.version) >= 0);
     return [...(own ? ["unpack"] : ["download", "verify"]), ...close, "copy"];
@@ -409,32 +444,30 @@ function Working({ job, step, done, since, info }: { job: Job; step: Step | null
     }
     return out;
   }, [steps, done, step]);
-  const label = (id: string) => (id === "copy" ? (job === "repair" ? t("Put back gachamod's files") : job === "update" ? t("Update gachamod") : t("Copy gachamod")) : STEP_LABEL[id] ?? id);
+  const label = (id: string) => (id === "copy" ? (job === "repair" ? t("Put back gachamod's files") : job === "update" || job === "apply" ? t("Update gachamod") : t("Copy gachamod")) : STEP_LABEL[id] ?? id);
   return (
     <Panel>
       <Hero title={JOB_TITLE[job]} sub={job === "uninstall" ? t("Your mods stay where they are.") : t("Your mods and settings stay where they are.")} />
-      <ol className="setup-steps">
-        {list.map((id) => {
-          const now = step?.step === id;
-          const ok = done.includes(id) || step?.step === "done";
-          return (
-            <li key={id} className={`setup-step${now ? " now" : ""}${ok ? " ok" : ""}`}>
-              <span className="setup-step-i">{ok ? <Icon name="check" /> : now ? <Spinner /> : <span className="setup-dot" />}</span>
-              <span className="setup-step-b">
-                <span className="setup-step-t">{now && step ? tb(step.text) : label(id)}{now && s >= 3 ? ` (${seconds(s)})` : ""}</span>
-                {now && step && step.value !== null && <Progress value={step.value} label={tb(step.text)} />}
-                {now && step?.hold && s >= 10 && <span className="hint">{tb(step.hold)}</span>}
-                {now && id === "copy" && s >= 60 && <Button size="sm" variant="ghost" icon="x" onClick={() => void api.stop()} title={t("End the installer. Run setup again or pick Repair to finish")}>{t("Stop")}</Button>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
+      <Steps items={list.map((id): StepItem => {
+        const now = step?.step === id;
+        return {
+          id,
+          state: done.includes(id) || step?.step === "done" ? "ok" : now ? "now" : "todo",
+          label: <>{now && step ? tb(step.text) : label(id)}{now && s >= 3 ? ` (${seconds(s)})` : ""}</>,
+          value: now && step && step.value !== null ? step.value : undefined,
+          valueLabel: step ? tb(step.text) : undefined,
+          extra: now && <>
+            {step?.hold && s >= 10 && <span className="hint">{tb(step.hold)}</span>}
+            {id === "copy" && s >= 60 && <Button size="sm" variant="ghost" icon="x" onClick={() => void api.stop()} title={t("End the installer. Run setup again or pick Repair to finish")}>{t("Stop")}</Button>}
+          </>,
+        };
+      })} />
     </Panel>
   );
 }
 
-function Done({ view, openAfter, close }: { view: Extract<View, { k: "done" }>; openAfter: boolean; close: () => void }) {
+/** `background`: gachamod went back to the background with the new version, so there's nothing to open. */
+function Done({ view, opening, background, close }: { view: Extract<View, { k: "done" }>; opening: boolean; background: boolean; close: () => void }) {
   const { job } = view;
   if (job === "uninstall") {
     return (
@@ -445,12 +478,11 @@ function Done({ view, openAfter, close }: { view: Extract<View, { k: "done" }>; 
       </Panel>
     );
   }
-  const opening = (job === "install" || job === "update") && openAfter;
-  const title = job === "install" ? t("gachamod is installed") : job === "update" ? (view.version ? t("gachamod is updated to {version}", { version: view.version }) : t("gachamod is updated")) : t("gachamod is repaired");
+  const title = job === "install" ? t("gachamod is installed") : job === "update" || job === "apply" ? (view.version ? t("gachamod is updated to {version}", { version: view.version }) : t("gachamod is updated")) : t("gachamod is repaired");
   return (
     <Panel>
-      <Hero title={title} icon="check" sub={opening ? t("Opening it now.") : undefined} />
-      {!opening && (
+      <Hero title={title} icon="check" sub={opening ? t("Opening it now.") : job === "apply" && !background ? t("It opens with the new version next time.") : undefined} />
+      {!opening && job !== "apply" && (
         <div className="setup-actions">
           <Button variant="primary" size="lg" icon="play" autoFocus onClick={() => void api.openApp(view.dir).then(close)}>{t("Open gachamod")}</Button>
           <Button onClick={close}>{t("Close")}</Button>
@@ -466,10 +498,13 @@ function Failed({ view, info, retry, close }: { view: Extract<View, { k: "error"
       <Hero title={JOB_FAILED[view.job]} icon="warn" sub={tb(view.message)} />
       <div className="setup-actions">
         <Button variant="primary" icon="refresh" autoFocus onClick={retry}>{t("Try again")}</Button>
-        {info.payload && view.job !== "uninstall" && !fromGitHub(view.job, info) && (
+        {(view.job === "apply" || (info.payload && view.job !== "uninstall" && !fromGitHub(view.job, info))) && (
           <Button icon="package" onClick={() => void api.plainInstaller()} title={t("Windows' plain installer window, which asks each question itself")}>{t("Use the plain installer")}</Button>
         )}
-        {(view.job === "repair" ? !info.payload : fromGitHub(view.job, info)) && (
+        {view.job === "apply" && info.installed?.ok && (
+          <Button icon="play" onClick={() => void api.openApp(info.installed?.dir).then(close)} title={t("Open the version you have, without the update")}>{t("Open gachamod")}</Button>
+        )}
+        {view.job !== "apply" && (view.job === "repair" ? !info.payload : fromGitHub(view.job, info)) && (
           <Button icon="external" onClick={() => void api.openPage(`${info.homepage}/releases/latest`)} title={t("The latest release on GitHub")}>{t("Download the installer")}</Button>
         )}
         <Button variant="ghost" onClick={close}>{t("Close")}</Button>
@@ -484,14 +519,16 @@ const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([di
 
 /** Move focus to the nearest control in a direction (the app's controller rule, lib/gamepad.ts). */
 function moveFocus(dx: number, dy: number) {
-  const list = [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 2 && r.height > 2; });
+  // a check box's or switch's input is a hidden 1px box, so where it sits is its label's place
+  const rect = (el: HTMLElement) => (el.closest(".check, .toggle") ?? el).getBoundingClientRect();
+  const list = [...document.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => { const r = rect(el); return r.width > 2 && r.height > 2; });
   const cur = document.activeElement as HTMLElement | null;
   if (!cur || !list.includes(cur)) { (list.find((e) => e.closest(".setup-view")) ?? list[0])?.focus(); return; }
-  const a = cur.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  const a = rect(cur), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
   let best: HTMLElement | null = null, score = Infinity;
   for (const el of list) {
     if (el === cur) continue;
-    const b = el.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
+    const b = rect(el), bx = b.left + b.width / 2, by = b.top + b.height / 2;
     const along = dx ? (bx - ax) * dx : (by - ay) * dy;
     if (along <= 4) continue;
     const s = along + (dx ? Math.abs(by - ay) : Math.abs(bx - ax)) * 2.2;

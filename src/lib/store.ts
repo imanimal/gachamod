@@ -43,6 +43,11 @@ export function useGame(): GameState | null {
 }
 export const currentGame = (): GameState | null => gameList.get().find((g) => g.id === current.get()) ?? null;
 export const allGames = (): GameState[] => gameList.get();
+/** The game list once it has been read (at once when it has). */
+export function whenGames(): Promise<GameState[]> {
+  if (gameList.get().length) return Promise.resolve(gameList.get());
+  return new Promise((done) => { const off = gameList.sub(() => { if (gameList.get().length) { off(); done(gameList.get()); } }); });
+}
 /** The key that reloads mods in a game (its d3dx.ini reload_config), F10 until the list loads. */
 export const reloadKeyOf = (id: GameId | string): string => gameList.get().find((g) => g.id === id)?.reloadKey || "F10";
 

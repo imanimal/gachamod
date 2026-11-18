@@ -18,7 +18,7 @@
 .roster-owned svg { width: .95em; height: .95em; }
 
 /* quiet rows under the header: names an import didn't match, details another mod manager saved */
-.char-note { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: -.2rem 0 var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--radius);
+.char-note { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin: -.2rem 0 0; padding: var(--s-2) var(--s-3); border-radius: var(--radius);
   background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font-size: var(--t-small); }
 .char-note > span { flex: 1; min-width: 12rem; }
 .char-note-link { color: var(--accent-ink); font-weight: 700; text-decoration: underline; text-underline-offset: .2em; }
@@ -26,7 +26,7 @@
 .own-import { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-2); }
 .own-import > .btn { align-self: flex-start; }
 .own-import .hint { margin: 0; }
-.own-uid { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: var(--s-1) var(--s-2); padding-top: var(--s-1); }
+.own-uid { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: var(--s-1) var(--s-2); }
 .own-uid .hint { grid-column: 1 / -1; }
 .own-save { display: flex; justify-content: flex-end; padding-top: var(--s-2); border-top: 1px solid var(--line); }
 .own-unknown { padding: var(--s-2); }
@@ -40,7 +40,7 @@
 .char-drop svg { width: 2.2rem; height: 2.2rem; color: var(--accent-ink); }
 
 /* a character's page */
-.char-hero { position: relative; display: flex; align-items: center; gap: var(--s-6); padding: var(--s-4) var(--s-5); margin-bottom: var(--s-4); border-radius: var(--radius-lg);
+.char-hero { position: relative; display: flex; align-items: center; gap: var(--s-6); padding: var(--s-4) var(--s-5); border-radius: var(--radius-lg);
   background: var(--tex), var(--surface); box-shadow: inset 0 0 0 1px var(--line), var(--shadow); }
 .char-hero-pic { flex: none; }
 .char-hero-t { display: flex; flex-direction: column; gap: var(--s-1); flex: 1; min-width: 0; }
@@ -52,7 +52,7 @@
 .char-owned.on { color: var(--accent-ink); }
 .char-hero-nav { display: flex; gap: var(--s-1); align-self: flex-start; }
 
-.char-strip-wrap { display: flex; align-items: center; gap: var(--s-1); margin-bottom: var(--s-4); }
+.char-strip-wrap { display: flex; align-items: center; gap: var(--s-1); }
 .char-strip-wrap > .char-strip { flex: 1; min-width: 0; scrollbar-width: none; scroll-padding-inline: 2rem; }
 .char-strip::-webkit-scrollbar { display: none; }
 .char-strip-wrap.is-all { align-items: flex-start; }

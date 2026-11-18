@@ -2,7 +2,8 @@
 // About and updates page. Owner: SETTINGS/AI area. Rust: commands/app.rs, gacha-core settings_file.rs and app_update.rs.
 import { useEffect, useState } from "react";
 import { oxford } from "../../lib/notes";
-import { Button, Checkbox, Confirm, Panel, Progress, Segmented, formatBytes } from "../../ui/kit";
+import { Button, Checkbox, Confirm, Panel, Segmented, formatBytes } from "../../ui/kit";
+import { Steps, type StepItem } from "../../ui/Steps";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
 import { record, undo } from "../../lib/history";
@@ -87,11 +88,9 @@ export function TransferSection() {
       redo: async () => { const again = await settingsFile.import(path, readUi()); backup = again.backup; writeUi(again.ui, false); await refreshGamesSafe(); },
     }, true);
     const said = [t("Imported settings.")];
-    if (r.skippedPaths.length) said.push(t("Skipped what isn't on this PC: {paths}.", { paths: r.skippedPaths.join("; ") }));
-    if (r.missingMods) {
-      const mods = r.missingNames?.length ? oxford(r.missingNames) : tn(r.missingMods, "{n} mod", "{n} mods");
-      said.push(tn(r.missingMods, "Profiles name {mods}, which isn't on this PC.", "Profiles name {mods}, which aren't on this PC.", { mods }));
-    }
+    // counts only: the import window already listed the paths and mods by name
+    if (r.skippedPaths.length) said.push(tn(r.skippedPaths.length, "Skipped {n} file or folder not on this PC.", "Skipped {n} files or folders not on this PC."));
+    if (r.missingMods) said.push(tn(r.missingMods, "{n} mod in the profiles isn't on this PC.", "{n} mods in the profiles aren't on this PC."));
     const id: number = toast(sentences(said), false, { label: t("Undo import"), run: () => void undo(entry, id) });
   };
 
@@ -123,8 +122,8 @@ function ImportPlan({ plan }: { plan: ImportSummary }) {
   return (
     <div className="set-import">
       <p className="hint">{when
-        ? t("From gachamod {version}, exported {date}. A backup of your current settings is kept, and the toast after offers Undo.", { version: plan.appVersion || "?", date: when })
-        : t("From gachamod {version}. A backup of your current settings is kept, and the toast after offers Undo.", { version: plan.appVersion || "?" })}</p>
+        ? t("From gachamod {version}, exported {date}. A backup of your current settings is kept, and you can undo the import.", { version: plan.appVersion || "?", date: when })
+        : t("From gachamod {version}. A backup of your current settings is kept, and you can undo the import.", { version: plan.appVersion || "?" })}</p>
       {lines.length ? <ul>{lines.map((l) => <li key={l}>{l}</li>)}</ul> : <p>{t("Nothing changes: your settings already match the file.")}</p>}
       {plan.missingMods > 0 && <p className="hint">{tn(plan.missingMods, "The file's profiles name {mods}, which isn't on this PC. Profiles get the rest.", "The file's profiles name {mods}, which aren't on this PC. Profiles get the rest.",
         { mods: plan.missingNames?.length ? oxford(plan.missingNames, 20) : tn(plan.missingMods, "{n} mod", "{n} mods") })}</p>}
@@ -190,9 +189,18 @@ export function UpdateRow() {
   const r = state?.available ? state.release : null;
   const ready = !!state?.ready;
   const downloading = !!progress && !ready;
-  const hint = downloading ? (progress.total ? t("Downloading {done} of {total}", { done: formatBytes(progress.done), total: formatBytes(progress.total) }) : t("Downloading {done}", { done: formatBytes(progress.done) }))
+  const hint = installing ? t("gachamod closes, updates and opens again")
     : ready ? (auto ? t("It installs when you close gachamod, or restart now to get it") : t("Restart gachamod to install it"))
+    : downloading ? t("New versions download in the background and install when you close gachamod")
     : t("gachamod closes, updates and opens again");
+  // the same steps gachamod setup shows once gachamod closes, so the update reads as one thing
+  const steps: StepItem[] | null = ready || downloading || installing ? [
+    { id: "download", state: ready ? "ok" : "now",
+      label: !progress || ready ? t("Download gachamod") : progress.total ? t("Downloading {done} of {total}", { done: formatBytes(progress.done), total: formatBytes(progress.total) }) : t("Downloading {done}", { done: formatBytes(progress.done) }),
+      value: ready ? undefined : progress?.total ? progress.done / progress.total : null, valueLabel: t("Downloading the update") },
+    { id: "verify", state: ready ? "ok" : "todo", label: t("Check the download") },
+    { id: "install", state: ready && installing ? "now" : "todo", label: t("Update gachamod") },
+  ] : null;
   return (
     <div className="set-rows set-update">
       <div className="set-row" id="set-app-updates">
@@ -211,7 +219,7 @@ export function UpdateRow() {
         <div className="set-row">
           <span><b>{ready ? t("gachamod {version} is ready", { version: r.version }) : t("gachamod {version} is out", { version: r.version })}</b>
             <span className="hint">{hint}</span>
-            {downloading && <Progress value={progress.total ? progress.done / progress.total : null} label={t("Downloading the update")} />}
+            {steps && <Steps compact items={steps} />}
           </span>
           <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(r.url).catch((e) => toast(errorText(e), true))} title={t("Open the release notes on GitHub")}>{t("See what's new")}</Button>
           <Button size="sm" variant="primary" icon="install" busy={installing || downloading} onClick={() => void install()}

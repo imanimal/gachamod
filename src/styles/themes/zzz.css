@@ -15,7 +15,7 @@
   --card-hi: #2e2e2e; --card-lo: #232323; --card-off: #1b1b1b; --tab-hi: #3c3c3c; --tab-lo: #2e2e2e; --tab-text: #f1f1f1;
   --stage: #040404; --bar: #000; --bar-line: #1c1c1c; --bar-text: #cfcfcf; --page-h-bg: rgb(0 0 0 / .8); --deco: #3a3a3a;
   /* text on wells, readable accent and yellow text, embossed type */
-  --well-text: #ececec; --acc-ink: var(--acc); --yellow-ink: var(--yellow);
+  --well-text: #ececec; --acc-ink: var(--acc-text, var(--acc)); --yellow-ink: var(--yellow);
   --tshadow: 0 2px 0 #000; --tshadow-sm: 0 1.5px 0 #1b1b1b; --ghost: rgb(255 255 255 / .045);
   /* the accent: orange unless the user picks another (data-accent, set by lib/theme.ts) */
   --acc: #ff7a1c; --acc-hi: #ff9d4a; --acc-lo: #f25a06; --acc-dk: #8a3606;
@@ -33,7 +33,7 @@
   --text: #fff; --text-2: #c6c6c6; --text-3: #939393;
   --accent: var(--acc); --on-accent: #0a0a0a; --accent-soft: color-mix(in srgb, var(--acc) 16%, transparent); --accent-ink: var(--acc-ink); --accent-2: var(--yellow);
   --ok: var(--green); --warn: #ffb400; --bad: #ef675e; --info: #38c6ff; --on-bad: #0a0a0a;
-  --ring: var(--acc); --hover: rgb(255 255 255 / .09);
+  --ring: var(--acc-text, var(--acc)); --hover: rgb(255 255 255 / .09);
   --radius: 14px; --radius-sm: 10px; --radius-lg: 20px; --radius-xs: 5px; --radius-pill: 999px; --stack-gap: .7rem;
   --shadow: 0 3px 0 rgb(0 0 0 / .7); --shadow-lg: 0 4px 0 #000, 0 20px 44px rgb(0 0 0 / .65);
   --scrim: rgb(0 0 0 / .58);
@@ -59,16 +59,16 @@
   .btn { height: 2.3rem; padding: 0 1.05rem; }
   .btn-sm { height: 1.95rem; padding: 0 .8rem; }
   .btn-lg { height: 2.9rem; padding: 0 1.5rem; font-size: 1.1em; border-radius: 999px; }
-  .btn .i { stroke-width: 2.4; }
+  .btn .i { stroke-width: 1.9; }
   .btn-secondary, .ibtn.btn-secondary { color: #fff; background: var(--dots), #0c0c0c; box-shadow: 0 0 0 1.5px var(--rim), 0 3px 0 1px rgb(0 0 0 / .55); }
-  .btn-secondary:hover:not(:disabled), .ibtn.btn-secondary:hover:not(:disabled) { background: var(--dots), #0c0c0c; color: var(--acc); box-shadow: 0 0 0 2px var(--acc), 0 3px 0 1px rgb(0 0 0 / .55); }
+  .btn-secondary:hover:not(:disabled), .ibtn.btn-secondary:hover:not(:disabled) { background: var(--dots), #0c0c0c; color: var(--acc-text, var(--acc)); box-shadow: 0 0 0 2px var(--acc), 0 3px 0 1px rgb(0 0 0 / .55); }
   /* the round coloured puck that holds a button's icon */
-  .btn-secondary > .i:first-child, .btn-secondary > .spin:first-child { box-sizing: content-box; width: 1em; height: 1em; padding: .26em; margin-left: -.62rem; border-radius: 50%; background: var(--yellow); color: #0a0a0a; stroke-width: 2.6; }
+  .btn-secondary > .i:first-child, .btn-secondary > .spin:first-child { box-sizing: content-box; width: 1em; height: 1em; padding: .26em; margin-left: -.62rem; border-radius: 50%; background: var(--yellow); color: #0a0a0a; stroke-width: 2; }
   .btn-secondary.btn-sm > .i:first-child { margin-left: -.5rem; padding: .2em; }
   .btn-secondary:hover:not(:disabled) > .i:first-child { background: var(--acc); }
   .btn-primary, .ibtn.btn-primary { color: #0a0a0a; border-color: var(--ink); background: var(--dots-ink), linear-gradient(180deg, var(--acc-hi), var(--acc) 55%, var(--acc-lo)); box-shadow: 0 0 0 1.5px var(--acc-dk), 0 3px 0 1px rgb(0 0 0 / .6); }
   .btn-primary:hover:not(:disabled), .ibtn.btn-primary:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: 0 0 0 2px #fff, 0 4px 0 1px rgb(0 0 0 / .6); }
-  .btn-primary > .i:first-child { box-sizing: content-box; width: 1em; height: 1em; padding: .26em; margin-left: -.62rem; border-radius: 50%; background: #0a0a0a; color: var(--acc); stroke-width: 2.6; }
+  .btn-primary > .i:first-child { box-sizing: content-box; width: 1em; height: 1em; padding: .26em; margin-left: -.62rem; border-radius: 50%; background: #0a0a0a; color: var(--acc-text, var(--acc)); stroke-width: 2; }
   /* an icon button keeps the icon disc but not the text button's pull to the left, so the icon stays centred */
   .ibtn.btn-secondary > .i:first-child, .ibtn.btn-primary > .i:first-child, .ibtn.btn-secondary > .spin:first-child { margin-left: 0; }
   .btn-ghost { color: var(--text-2); border-color: transparent; }
@@ -79,9 +79,9 @@
   .btn:disabled, .ibtn:disabled { opacity: .4; filter: saturate(.3); }
   .ibtn { border-color: transparent; }
   .ibtn.btn-ghost { color: var(--text-2); }
-  .ibtn.btn-ghost:hover:not(:disabled) { background: #0c0c0c; color: var(--acc); box-shadow: 0 0 0 1.5px var(--rim); }
+  .ibtn.btn-ghost:hover:not(:disabled) { background: #0c0c0c; color: var(--acc-text, var(--acc)); box-shadow: 0 0 0 1.5px var(--rim); }
   .ibtn.on, .ibtn.on:hover:not(:disabled) { background: var(--acc); color: #0a0a0a; border-color: var(--ink); box-shadow: 0 0 0 1.5px var(--acc-dk); }
-  .ibtn .i { stroke-width: 2.4; }
+  .ibtn .i { stroke-width: 1.9; }
 
   /* ── toggle: a capsule track with a puck ── */
   .toggle-track { width: 2.7rem; height: 1.45rem; background: #0a0a0a; box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px var(--rim); }
@@ -98,17 +98,17 @@
 
   /* ── chips: small capsules; on = lime ── */
   .chip { height: 1.85rem; padding: 0 .75rem; font-weight: 800; font-style: italic; font-size: .9em; color: #e4e4e4; background: var(--dots), #0c0c0c; border: 2.5px solid var(--ring-g); box-shadow: 0 0 0 1.5px #4e4e4e; }
-  .chip:hover { background: var(--dots), #0c0c0c; color: var(--acc); box-shadow: 0 0 0 1.5px var(--acc); }
+  .chip:hover { background: var(--dots), #0c0c0c; color: var(--acc-text, var(--acc)); box-shadow: 0 0 0 1.5px var(--acc); }
   .chip.on { color: #0a0a0a; border-color: var(--ink); background: var(--dots-ink), linear-gradient(180deg, var(--acc-hi), var(--acc-lo)); box-shadow: 0 0 0 1.5px var(--acc-dk); }
   .chip-img { width: 1.5rem; height: 1.5rem; margin-left: -.62rem; box-shadow: 0 0 0 1.5px #4e4e4e; }
   .chip.on .chip-img { box-shadow: 0 0 0 1.5px var(--ink); }
   .chip-n { font-style: normal; font-weight: 800; background: #2c2c2c; color: #fff; padding: .12rem .42rem; margin-right: -.3rem; }
-  .chip.on .chip-n { background: #0a0a0a; color: var(--acc); }
+  .chip.on .chip-n { background: #0a0a0a; color: var(--acc-text, var(--acc)); }
 
   /* ── segmented: one capsule, the picked part is a slanted lime block ── */
   .seg { gap: 0; padding: 3px; border-radius: 999px; background: var(--dots), #0c0c0c; box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px var(--rim); }
   .seg-o { height: 1.85rem; padding: 0 1rem; border-radius: 999px; color: #d4d4d4; font-weight: 800; font-style: italic; }
-  .seg-o:hover { color: var(--acc); }
+  .seg-o:hover { color: var(--acc-text, var(--acc)); }
   .seg-o.on { color: #0a0a0a; background: var(--dots-ink), linear-gradient(180deg, var(--acc-hi), var(--acc-lo)); box-shadow: none; clip-path: polygon(.55rem 0, 100% 0, calc(100% - .55rem) 100%, 0 100%); border-radius: 0; padding: 0 1.2rem; }
   .seg-o.on:first-child { clip-path: polygon(0 0, 100% 0, calc(100% - .55rem) 100%, 0 100%); border-radius: 999px 0 0 999px; }
   .seg-o.on:last-child { clip-path: polygon(.55rem 0, 100% 0, 100% 100%, 0 100%); border-radius: 0 999px 999px 0; }
@@ -132,7 +132,7 @@
   /* ── fields: black inset capsules ── */
   .search { height: 2.3rem; border-radius: 999px; background: var(--dots), #0a0a0a; box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px var(--rim); color: var(--text-3); font-weight: 600; }
   .search:hover { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px #999; }
-  .search:focus-within { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 2px var(--acc); color: var(--acc); }
+  .search:focus-within { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 2px var(--acc); color: var(--acc-text, var(--acc)); }
   .search-k, kbd, .kbd { border-radius: 5px; background: #fff; color: #0a0a0a; font-weight: 800; box-shadow: 0 2px 0 #7a7a7a; font-style: normal; }
   .search-x { border-radius: 50%; }
   .field-l { font-weight: 800; font-style: italic; color: var(--text); font-size: .9em; }
@@ -142,14 +142,14 @@
   .field :is(input, textarea):focus, .select select:focus { box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 2px var(--acc); }
   /* the shorthand above drops the kit's room for the arrow; italic letters lean right, so a little more */
   .select select { font-weight: 800; font-style: italic; padding-right: 2.3rem; }
-  .select .i { color: #fff; stroke-width: 3; }
+  .select .i { color: #fff; stroke-width: 2.3; }
   .hint { color: var(--text-3); font-weight: 500; }
 
   /* ── panel: a grey frame holding a black well ── */
   .panel { border-radius: 16px; border: 2.5px solid var(--ink); background: var(--noise), linear-gradient(180deg, var(--frame-hi), var(--frame) 3rem); box-shadow: inset 0 1.5px 0 rgb(255 255 255 / .13), 0 3px 0 rgb(0 0 0 / .8), 0 10px 24px rgb(0 0 0 / .45); padding: 0 6px 6px; }
   .panel-h { min-height: 2.5rem; padding: .3rem .5rem .3rem .65rem; border-bottom: 0; }
   .panel-t { font-size: 1rem; font-weight: 800; font-style: italic; text-shadow: var(--tshadow-sm); gap: .5rem; }
-  .panel-t .i { color: var(--yellow-ink); stroke-width: 2.4; }
+  .panel-t .i { color: var(--yellow-ink); stroke-width: 1.9; }
   .panel-n { background: #0a0a0a; color: var(--yellow); font-style: normal; font-weight: 800; text-shadow: none; padding: .14rem .55rem; }
   .panel-b { border-radius: 10px; background: var(--dots), var(--well); box-shadow: inset 0 0 0 2px var(--ink), inset 0 4px 10px rgb(0 0 0 / .55); padding: .75rem .8rem; }
   .panel:not(:has(> .panel-h)) { padding-top: 6px; }
@@ -171,7 +171,7 @@
   .badge { height: 1.3rem; padding: 0 .5rem; border-radius: 5px; font-weight: 800; font-style: italic; font-size: .7em; letter-spacing: .03em; text-transform: uppercase; transform: skewX(-8deg);
     background: #0a0a0a; color: #e6e6e6; border: 1.5px solid var(--ink); box-shadow: 0 0 0 1px #555; }
   .badge > * { transform: skewX(8deg); }
-  .badge .i { stroke-width: 2.6; }
+  .badge .i { stroke-width: 2; }
   .badge[class*="t-"] { background: var(--tone); color: #0a0a0a; box-shadow: 0 2px 0 rgb(0 0 0 / .6); }
   .badge.t-accent { color: #0a0a0a; }
   .badge.t-bad { color: var(--on-bad); }
@@ -199,9 +199,9 @@
   .dialog { border-radius: 20px; padding: 0 7px 7px; overflow: visible; animation: zzPop var(--dur-slow) var(--ease-spring); }
   .dialog-h, .drawer-h { padding: .5rem .2rem .5rem .75rem; min-height: 3rem; border: 0; }
   .dialog-h h2, .drawer-h h2 { font-size: 1.15rem; font-weight: 800; font-style: italic; text-shadow: var(--tshadow-sm); letter-spacing: 0; }
-  .dialog-h h2 .i { box-sizing: content-box; width: 1.05em; height: 1.05em; padding: .3em; border-radius: 50%; background: var(--yellow); color: #0a0a0a; stroke-width: 2.5; }
+  .dialog-h h2 .i { box-sizing: content-box; width: 1.05em; height: 1.05em; padding: .3em; border-radius: 50%; background: var(--yellow); color: #0a0a0a; stroke-width: 2; }
   .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { width: 3.1rem; height: 2.1rem; margin-right: .35rem; border: 3px solid var(--ink); border-radius: 999px; color: #0a0a0a; background: var(--dots-ink), linear-gradient(180deg, var(--red-hi), var(--red)); box-shadow: 0 0 0 1.5px #5a5a5a, 0 3px 0 1px #000; }
-  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { stroke-width: 4; width: 1.15rem; height: 1.15rem; }
+  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { stroke-width: 3.1; width: 1.15rem; height: 1.15rem; }
   .dialog-h > .ibtn:last-child:hover:not(:disabled), .drawer-h > .ibtn:last-child:hover:not(:disabled) { background: linear-gradient(180deg, #ff7a69, var(--red-hi)); color: #0a0a0a; box-shadow: 0 0 0 2px #fff, 0 3px 0 1px #000; }
   .dialog-b, .drawer-b { border-radius: 13px; background: var(--dots), var(--well); box-shadow: inset 0 0 0 2px var(--ink), inset 0 4px 12px rgb(0 0 0 / .6); padding: .9rem 1rem 1rem; }
   .dialog-f, .drawer-f { border-top: 0; padding: .6rem .3rem .1rem; background: none; }
@@ -215,7 +215,7 @@
   .menu { gap: 2px; padding: 3px; border-radius: 9px; background: var(--dots), var(--well); box-shadow: inset 0 0 0 2px var(--ink); }
   .menu hr { border-top: 1.5px dashed var(--line); margin: .2rem .5rem; }
   .menu-i { padding: .42rem .7rem; border-radius: 7px; color: var(--well-text); font-weight: 800; font-style: italic; }
-  .menu-i .i { color: var(--text-3); stroke-width: 2.4; }
+  .menu-i .i { color: var(--text-3); stroke-width: 1.9; }
   .menu-i:hover:not(:disabled) { background: var(--dots-ink), var(--acc); color: #0a0a0a; }
   .menu-i:hover:not(:disabled) .i { color: #0a0a0a; }
   .menu-i.danger, .menu-i.danger .i { color: var(--red-hi); }
@@ -224,7 +224,7 @@
 
   /* ── toast: a black capsule with a status puck ── */
   .toast { border-radius: 1.7rem; padding: .45rem .5rem .45rem .5rem; gap: .6rem; background: var(--dots), #0c0c0c; border: 3px solid var(--ring-g); box-shadow: 0 0 0 1.5px var(--rim), 0 4px 0 1px #000, 0 14px 30px rgb(0 0 0 / .55); font-weight: 700; animation: zzToast var(--dur-slow) var(--ease-spring); }
-  .toast > .i { box-sizing: content-box; width: 1.05rem; height: 1.05rem; padding: .32rem; border-radius: 50%; background: var(--green); color: #0a0a0a; stroke-width: 2.8; }
+  .toast > .i { box-sizing: content-box; width: 1.05rem; height: 1.05rem; padding: .32rem; border-radius: 50%; background: var(--green); color: #0a0a0a; stroke-width: 2.2; }
   .toast.bad > .i { background: var(--red); color: #0a0a0a; }
   .toast-act { font-style: italic; font-weight: 800; border-radius: 999px; padding: .3rem .8rem; color: #0a0a0a; background: var(--acc); }
   .toast-act:hover { background: var(--acc-hi); }
@@ -328,8 +328,10 @@
 [data-theme="zzz"][data-accent="cyan"] { --acc: #35d3ff; --acc-hi: #82e6ff; --acc-lo: #12b4e6; --acc-dk: #0b5f7c; }
 [data-theme="zzz"][data-accent="pink"] { --acc: #ff6aa9; --acc-hi: #ff9cc6; --acc-lo: #f23d88; --acc-dk: #8c1c4b; }
 [data-theme="zzz"][data-accent="yellow"] { --acc: #ffd21a; --acc-hi: #ffe45c; --acc-lo: #f0ae00; --acc-dk: #8a6f00; --yellow: #ff9a2e; --yellow-lo: #f26a0a; }
-/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it, a darker shade and --accent-pick-hi,
+   a shade that reads as text on dark panels; --acc-text is what text in the accent uses, so black works too) */
 [data-theme="zzz"][data-accent^="#"] {
+  --acc-text: var(--accent-pick-hi);
   --acc: var(--accent-pick); --acc-hi: color-mix(in srgb, var(--accent-pick) 72%, #fff); --acc-lo: color-mix(in srgb, var(--accent-pick) 86%, #000);
   --acc-dk: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
 }

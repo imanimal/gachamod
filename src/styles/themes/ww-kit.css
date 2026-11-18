@@ -82,7 +82,7 @@
   .btn { height: 2.3rem; padding: 0 1.15rem; }
   .btn-sm { height: 1.9rem; padding: 0 .8rem; }
   .btn-lg { height: 2.9rem; padding: 0 1.7rem; font-size: 1.08em; border-radius: 3px; }
-  .btn .i { stroke-width: 2; }
+  .btn .i { stroke-width: 1.6; }
   .btn-primary, .ibtn.btn-primary { color: var(--key-fg); background: var(--key-lines) -4px 50% / auto 100% no-repeat, var(--key); box-shadow: 0 1px 0 rgb(0 0 0 / .4), 0 8px 18px -10px rgb(0 0 0 / .7); }
   .btn-primary:hover:not(:disabled), .ibtn.btn-primary:hover:not(:disabled) { filter: none; transform: none; background-color: var(--key-hi); background-position: 8px 50%; box-shadow: 0 1px 0 rgb(0 0 0 / .4), 0 8px 18px -10px rgb(0 0 0 / .7), 0 0 0 1px var(--key-hi); }
   .btn-secondary, .ibtn.btn-secondary { color: var(--key2-fg); background: var(--key2); box-shadow: inset 0 0 0 1px var(--key2-line); }
@@ -97,7 +97,7 @@
   .ibtn.btn-ghost { color: var(--text-2); }
   .ibtn.btn-ghost:hover:not(:disabled) { background: var(--hover); color: var(--text); }
   .ibtn.on, .ibtn.on:hover:not(:disabled) { color: var(--gold-ink); background: none; box-shadow: inset 0 -2px 0 var(--gold-line); }
-  .ibtn .i { stroke-width: 2; }
+  .ibtn .i { stroke-width: 1.6; }
   /* on paper every key is black, the quiet ones too; the main one carries a gold line */
   :is(.dialog-f, .dl-item, .gb-file, .trash-item) .btn-ghost { color: #fff; background: var(--key-lines) -4px 50% / auto 100% no-repeat, var(--key); }
   :is(.dialog-f, .dl-item, .gb-file, .trash-item) .btn-ghost:hover:not(:disabled) { color: #fff; background: var(--key-lines) 8px 50% / auto 100% no-repeat, var(--key-hi); }
@@ -155,7 +155,7 @@
   .field :is(input, textarea):focus, .select select:focus { box-shadow: inset 0 0 0 1px var(--well-line-hi); }
   .select select { padding-right: 2.6rem; background: linear-gradient(var(--well-line), var(--well-line)) right 2.1rem center / 1px 55% no-repeat, var(--key2); color: var(--key2-fg); }
   .select select option { background: #14161d; color: #ebe6e2; }
-  .select .i { right: .58rem; color: var(--gold-hi); stroke-width: 2.6; }
+  .select .i { right: .58rem; color: var(--gold-hi); stroke-width: 2; }
   .hint { color: var(--text-3); }
 
   /* ── panel: a section label, a hairline that ends in a diamond, then an ink sheet ── */
@@ -163,7 +163,7 @@
   .panel-h { min-height: 2rem; padding: 0 .1rem .3rem; border-bottom: 0; gap: .6rem; }
   .panel-t { font-size: 1rem; font-weight: 700; gap: .5rem; color: var(--text); }
   .panel-t::after { content: ""; flex: 1; min-width: 2rem; height: 7px; margin-left: .3rem; background: var(--dia) right center / 7px 7px no-repeat, linear-gradient(90deg, var(--line-2), var(--line)) left center / calc(100% - 9px) 1px no-repeat; }
-  .panel-t .i { color: var(--gold-ink); stroke-width: 2; }
+  .panel-t .i { color: var(--gold-ink); stroke-width: 1.6; }
   .panel-n { order: 3; background: none; color: var(--gold-ink); font-weight: 900; font-size: .86em; padding: 0 .2rem; }
   .panel-t::after { order: 2; }
   .panel-b { border-radius: 4px; background: var(--sheet); box-shadow: inset 0 0 0 1px var(--line); padding: .8rem .9rem; }
@@ -187,7 +187,7 @@
   .badge[class*="t-"] { background: var(--tile-strip); color: color-mix(in srgb, var(--tone) 55%, #fff); box-shadow: inset 0 -2px 0 var(--tone); }
   .badge.t-accent { color: var(--gold-hi); box-shadow: inset 0 -2px 0 var(--gold); }
   .badge.t-muted { background: var(--tile-strip); color: #d5d3d0; box-shadow: inset 0 -2px 0 #70747f; }
-  .badge .i { stroke-width: 2.2; }
+  .badge .i { stroke-width: 1.7; }
   .dot { border-radius: 1px; transform: rotate(45deg) scale(.82); }
 
   /* ── progress: a thin track, gold fill, a white diamond where the fill ends ── */
@@ -217,7 +217,7 @@
   .dialog-h { position: relative; padding: .78rem .7rem .7rem 1.3rem; min-height: 3.1rem; }
   .dialog-h::after { content: ""; position: absolute; left: .6rem; right: 3.300rem; bottom: 0; height: 1px; background: #2c3352; opacity: .75; }
   .dialog-h h2, .drawer-h h2 { font-size: 1.14rem; font-weight: 900; letter-spacing: -.01em; }
-  .dialog-h h2 .i { color: var(--text-2); stroke-width: 2; }
+  .dialog-h h2 .i { color: var(--text-2); stroke-width: 1.6; }
   .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { color: #7d6c45; background: none; }
   .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { display: none; }
   .dialog-h > .ibtn:last-child::before, .drawer-h > .ibtn:last-child::before { content: ""; width: 1.6rem; height: 1.6rem; background: currentColor; -webkit-mask: var(--xstar) center / contain no-repeat; mask: var(--xstar) center / contain no-repeat; transition: transform var(--dur-slow) var(--ease-out); }
@@ -245,7 +245,7 @@
   .menu { gap: 2px; }
   .menu hr { border-top: 1px solid var(--line); margin: .25rem .4rem; }
   .menu-i { padding: .45rem .75rem; border-radius: 3px; color: var(--text); font-weight: 700; }
-  .menu-i .i { color: var(--text-3); stroke-width: 2; }
+  .menu-i .i { color: var(--text-3); stroke-width: 1.6; }
   .menu-i:hover:not(:disabled) { background: var(--pick); color: var(--pick-fg); }
   .menu-i:hover:not(:disabled) .i { color: var(--pick-fg); }
   .menu-i.danger, .menu-i.danger .i { color: #ff8da2; }
@@ -256,7 +256,7 @@
   .toast { border-radius: 0; padding: .62rem .7rem .62rem 2.4rem; gap: .7rem; font-weight: 700; color: var(--cream); box-shadow: none; overflow: visible;
     background: linear-gradient(90deg, transparent, var(--gold-line) 40%) top / 100% 1px no-repeat, linear-gradient(90deg, transparent, var(--gold-line) 40%) bottom / 100% 1px no-repeat, linear-gradient(90deg, transparent, rgb(8 9 14 / .93) 2.600rem);
     animation: wwToast var(--dur-slow) var(--ease-out); }
-  .toast > .i { color: var(--ok); stroke-width: 2.6; }
+  .toast > .i { color: var(--ok); stroke-width: 2; }
   .toast.bad > .i { color: var(--bad); }
   .toast-act { border-radius: 3px; padding: .32rem .8rem; font-weight: 700; color: #16181b; background: var(--contour-ink) -4px 50% / auto 100% no-repeat, #e2e2e0; }
   .toast-act:hover { background: var(--contour-ink) 4px 50% / auto 100% no-repeat, #f6f6f4; }

@@ -4,12 +4,18 @@
 .set-ai-bots, .set-ai-jobs { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .set-game-note { margin-top: var(--s-1); }
 .set-game-fix { align-items: center; gap: var(--s-2); margin-top: var(--s-1); }
-.set-creators .sub-h { margin-top: var(--s-2); }
+/* the first list's heading starts where the panel's content does; the later ones keep the headings' room */
+.set-creators:first-child > .sub-h { margin-top: 0; }
 .set-creator-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--s-1) var(--s-3); }
 .set-creator { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-1) 0; min-width: 0; }
 .set-creator .qlink { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set-note { margin: var(--s-1) 0 var(--s-3); }
+/* a block's outer margin is for its neighbours: first or last in a panel it keeps the panel's own inset */
+.set-note:first-child { margin-top: 0; }
+.set-note:last-child { margin-bottom: 0; }
 .settings .sub-h { margin: var(--s-6) 0 var(--s-1); font-size: .95rem; }
+/* Launch options: a heading that opens a grid block (tools-extras) is already spaced by the block's margin */
+.settings .tools-extras > .sub-h { margin-top: 0; }
 .set-games { display: flex; flex-direction: column; }
 .set-game { display: flex; align-items: flex-start; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--line); }
 .set-game:last-child { border-bottom: 0; }
@@ -28,13 +34,16 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-importer { display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-1) var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--t-small); }
 .set-xxmi-missing { display: flex; flex-direction: column; gap: var(--s-3); }
 .set-rows { display: flex; flex-direction: column; }
-.set-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--line); }
+/* two lists one after the other read as one list: the same divider goes between them as between their rows (themes
+   whose rows are cards give the same gap instead) */
+:is(.set-rows, .set-games) + :is(.set-rows, .set-games) { border-top: 1px solid var(--line); }.set-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--line); }
 .set-row:last-child { border-bottom: 0; }
 /* a switch keeps its full width; when the row is too narrow for both, it moves under the label instead of squeezing */
 .set-row > span:first-child { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; }
 .set-row > .seg { flex: none; }
 .set-inline { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 .set-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--s-3); margin: var(--s-2) 0 var(--s-4); }
+.set-themes:first-child { margin-top: 0; }
 .theme-card { padding: var(--s-2); gap: var(--s-2); }
 /* a miniature window: its sizes are drawn to scale, not spacing */
 .theme-preview { display: flex; height: 5rem; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--line); }
@@ -49,9 +58,10 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-pergame-h { font-size: var(--t-small); color: var(--text-3); }
 .set-pergame-h span[title] { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .set-pergame-r { padding: var(--s-1) 0; }
-
 /* the setup page (Onboarding.tsx): the main view while no game is ready */
 .setup-page { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-4); max-width: 44rem; padding: 3rem 2.5rem; }
+/* game themes drop .page's top padding for their sticky page bar; this page has no bar, so it keeps its own */
+:root .page.setup-page { padding: 3rem 2.5rem; }
 .setup-page h1 { margin: 0; font-family: var(--font-display); font-size: var(--t-title); font-weight: 800; line-height: 1.15; }
 .setup-page > p { margin: 0; color: var(--text-2); line-height: 1.5; }
 .setup-wait { align-items: center; justify-content: center; max-width: none; min-height: 60%; }
@@ -60,9 +70,13 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .setup-go { margin-top: var(--s-2); }
 .setup-err { display: flex; flex-direction: column; gap: var(--s-2); }
 .setup-err p { color: var(--bad); }
+/* a pre keeps the browser's 1em margins: the column's gap spaces it like everything else */
+.setup-err .crash-msg, .setup-page > .crash-msg { margin: 0; }
+.set-note > .setup-err { margin-bottom: var(--s-2); }
 .setup-run { display: flex; flex-direction: column; gap: var(--s-2); width: min(100%, 30rem); }
 .setup-run .waiting { align-items: flex-start; padding: 0; }
-.setup-run.is-compact { width: 100%; }
+/* in Settings, Games it takes the note's place over the lists, with the note's space under it */
+.setup-run.is-compact { width: 100%; margin-bottom: var(--s-3); }
 .setup-note { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
 .setup-note > span { flex: 1; color: var(--text-2); }
 .setup-more { margin: 0; }
@@ -78,14 +92,16 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .swatch-pick .i { width: 1.05rem; height: 1.05rem; }
 .set-import ul { margin: var(--s-2) 0; padding-left: 1.2rem; display: grid; gap: var(--s-1); }
 .set-import ul.mono { font-size: var(--t-small); word-break: break-all; }
+.set-import > p + p { margin-top: var(--s-2); }
 .set-update { margin-bottom: var(--s-4); }
+.set-update:last-child { margin-bottom: 0; }
 .set-update .progress { margin-top: var(--s-2); }
 
 /* custom themes: cards with a menu button, and the editor under them */
 .ctheme { position: relative; display: flex; min-width: 0; }
 .ctheme > .card { flex: 1; min-width: 0; }
 .ctheme-more { position: absolute; top: .85rem; right: .85rem; background: var(--surface); box-shadow: var(--shadow); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
-.ctheme:hover .ctheme-more, .ctheme:focus-within .ctheme-more { opacity: 1; }
+.ctheme:hover .ctheme-more, html:is(.kbd, .pad) .ctheme:focus-within .ctheme-more { opacity: 1; }
 .ctheme-intro { margin: 0 0 var(--s-3); }
 .ctheme-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 .ctheme-ed { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
@@ -96,13 +112,13 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .ctheme-colors { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .ctheme-color { display: inline-flex; align-items: center; gap: var(--s-1); padding: .2rem .25rem .2rem .3rem; border-radius: var(--radius-sm); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--t-small); }
 .ctheme-color.set { box-shadow: inset 0 0 0 1px var(--accent); }
-.ctheme-color label { display: inline-flex; align-items: center; gap: var(--s-2); padding-right: .35rem; cursor: pointer; }
-.ctheme-color input[type="color"] { width: 1.5rem; height: 1.5rem; padding: 0; border: 0; border-radius: var(--radius-xs); background: none; cursor: pointer; }
-.ctheme-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
-.ctheme-color input[type="color"]::-webkit-color-swatch { border: 1px solid var(--line-2); border-radius: var(--radius-xs); }
+.ctheme-chip { display: inline-flex; align-items: center; gap: var(--s-2); padding-right: .35rem; border-radius: var(--radius-xs); }
+.ctheme-dot { width: 1.5rem; height: 1.5rem; border-radius: var(--radius-xs); box-shadow: inset 0 0 0 1px var(--line-2); }
+.ctheme-read { margin: 0; }
 .ctheme-adv summary { cursor: pointer; width: fit-content; font-weight: 650; color: var(--text-2); }
 .ctheme-adv[open] > summary { margin-bottom: var(--s-2); }
 .ctheme-adv details { margin-top: var(--s-2); }
+.ctheme-adv > .field + .field { margin-top: var(--s-3); }
 .ctheme-tokens { display: grid; gap: .1rem; margin: var(--s-2) 0 0; font-size: var(--t-small); }
 .ctheme-tokens > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: var(--s-3); }
 .ctheme-tokens dt { font-family: var(--font-mono); color: var(--text-2); }
@@ -116,6 +132,8 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 
 /* Settings > GameBanana account */
 .acct-user { gap: var(--s-2); }
+/* the rows' label column rule would stack the avatar over the name */
+.set-row > span.acct-user { flex-direction: row; align-items: center; }
 .acct-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex: none; }
 .acct-user .hint { display: block; }
 

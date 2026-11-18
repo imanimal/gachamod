@@ -3,14 +3,14 @@
 // Owner: SETTINGS/AI area.
 import { useState } from "react";
 import { errorText, library, type GameState } from "../../lib/api";
-import { pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
+import { creatorStylesPref, uberstylesPref, pref, setCreatorFlag, setNsfw, useCreators, useNsfw, type CreatorFlag, type CreatorFlags } from "../../lib/prefs";
 import { go, useGame, useGames } from "../../lib/store";
 import { Avatar, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle } from "../../ui/kit";
 import { nsfwTip } from "../browse/menus";
 import { CreatorLink } from "../../ui/Links";
 import { GameBadge } from "../../ui/GameBadge";
 import { toast } from "../../ui/toast";
-import { autoRescanPref, watchModsPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, reviewUnsurePref, trashDaysPref, useTrashDays } from "./automatic";
+import { autoRescanPref, watchModsPref, enableNewPref, fixesAutoUpdatePref, installAllPartsPref, keepArchivesPref, modUpdateCheckPref, otherServersPref, reviewUnsurePref, trashDaysPref, unsourcedPref, useTrashDays, useUnsourced, type UnsourcedMode } from "./automatic";
 import { SetRow, useSetting } from "./parts";
 import { MatchGbAdultRow } from "./AccountSection";
 import { autoMutePref, fixWarningsPref } from "../../lib/fixes";
@@ -204,8 +204,15 @@ export function BrokenModsSection() {
 
 const DAY_OPTIONS = [1, 3, 7, 14, 30, 90, 365];
 
+const UNSOURCED_OPTIONS: Array<{ value: UnsourcedMode; label: string }> = [
+  { value: "ask", label: t("Ask each time") },
+  { value: "recycle", label: t("Move to Recycle Bin") },
+  { value: "delete", label: t("Delete for good") },
+];
+
 export function StorageSection() {
   const days = useTrashDays();
+  const unsourced = useUnsourced();
   const [ask, setAsk] = useState<{ days: number; count: number } | null>(null);
   const opts = (DAY_OPTIONS.includes(days) || days === 0 ? DAY_OPTIONS : [...DAY_OPTIONS, days].sort((a, b) => a - b))
     .map((d) => ({ value: String(d), label: tn(d, "{n} day", "{n} days") }));
@@ -234,8 +241,13 @@ export function StorageSection() {
             <Toggle checked={days > 0} onChange={(v) => void choose(v ? 14 : 0)} />
           </span>
         </SetRow>
+        <SetRow id="set-trash-unsourced" label={t("Deleting a mod that isn't on GameBanana")}
+          hint={t("Mods you added yourself can't be downloaded again. The Recycle Bin keeps their files until you empty it")}
+          tip={t("Used by Delete and Empty trash in Mods, Trash. Files that leave the trash by themselves go to the Recycle Bin unless this is Delete for good")}>
+          <Select value={unsourced} onChange={(v) => void unsourcedPref.set(v)} options={UNSOURCED_OPTIONS} />
+        </SetRow>
         <SetRow label={t("Disk space")} hint={t("How much space mods, the trash, downloads and backups take")}>
-          <Button size="sm" icon="box" onClick={() => go({ view: "tools", section: "disk" })} title={t("Opens Tools > Storage")}>{t("View storage")}</Button>
+          <Button size="sm" icon="box" onClick={() => go({ view: "settings", section: "disk" })} title={t("Opens Settings > Storage")}>{t("View storage")}</Button>
         </SetRow>
       </div>
       {ask && (
@@ -262,6 +274,16 @@ export function CreatorsSection() {
   const any = LISTS.some((l) => list.some((c) => c[l.flag]));
   return (
     <Panel title={t("Creators")} icon="user" id="creators">
+      <div className="set-rows">
+        <SetRow id="set-creator-styles" label={t("Name styles from GameBanana")}
+          hint={t("Creator names on mods, comments and their pages use the colour, font and glow they set on GameBanana, with their name picture, hover avatar, Cubeatar and signature")}>
+          <Switch p={creatorStylesPref} on={t("Showing creators' name styles")} off={t("Stopped showing creators' name styles")} />
+        </SetRow>
+        <SetRow id="set-uberstyles" label={t("Uberstyles on creator pages")}
+          hint={t("A creator's page takes the colours, background and fonts of the Uberstyle they made for their GameBanana profile")}>
+          <Switch p={uberstylesPref} on={t("Showing Uberstyles")} off={t("Stopped showing Uberstyles")} />
+        </SetRow>
+      </div>
       {!any && <p className="hint">{t("Right-click a creator's name anywhere to follow, favourite, prioritize or block them.")}</p>}
       {LISTS.map((l) => {
         const people = list.filter((c) => c[l.flag]).sort((a, b) => a.name.localeCompare(b.name));
@@ -284,7 +306,7 @@ function CreatorRow({ c, flag, remove }: { c: CreatorFlags; flag: CreatorFlag; r
     <div className="set-creator">
       <Avatar src={c.avatar} name={c.name} size={28} />
       <CreatorLink id={c.id} name={c.name} className="grow" />
-      <IconButton size="sm" icon="x" label={t("{action}: {creator}", { action: remove, creator: c.name })} onClick={() => setCreatorFlag(c, flag, false)} />
+      <IconButton size="sm" icon="x" label={t("{action}: {creator}", { action: remove, creator: c.name })} onClick={() => setCreatorFlag(c, flag, false, true)} />
     </div>
   );
 }

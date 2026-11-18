@@ -1,0 +1,18 @@
+/* steps.css: the step list (ui/Steps.tsx) that gachamod setup and the app's update panel both draw, so an update
+   looks the same from the first click to the new version opening. Tokens only, so every theme carries it. */
+
+.step-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); }
+.step-item { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: var(--s-3); align-items: start; color: var(--text-3); }
+.step-item.now { color: var(--text); }
+.step-item.ok { color: var(--text-2); }
+.step-item-i { height: 1.45em; display: grid; place-items: center; }
+.step-item.ok .step-item-i { color: var(--ok); }
+.step-item-b { display: grid; gap: var(--s-2); min-width: 0; justify-items: start; }
+.step-list .step-item-b .progress { width: 100%; margin: 0; }
+.step-item-t { font-weight: 600; overflow-wrap: anywhere; }
+.step-dot { width: .55rem; height: .55rem; border-radius: 50%; box-shadow: inset 0 0 0 2px currentColor; }
+
+/* inside a settings row */
+.step-list.compact { gap: var(--s-2); margin-top: var(--s-2); font-size: var(--t-small); }
+.step-list.compact .step-item { grid-template-columns: 1.1rem minmax(0, 1fr); gap: var(--s-2); }
+.step-list.compact .step-item-b { gap: var(--s-1); }

@@ -5,13 +5,11 @@
 import { useState } from "react";
 import { fileUrl, type GameId, type LiveGroup, type LiveMod, type MenuSettings } from "../../lib/api";
 import { Badge, Button, Checkbox, IconButton, Panel, Segmented, Skeleton, Toggle } from "../../ui/kit";
-import { HotkeyField } from "../profiles/HotkeyField";
 import { KeyClashNote } from "./KeyClash";
-import { MenuKeys } from "./MenuKeys";
+import { MenuKeyFields } from "./MenuKeyFields";
 import { Icon } from "../../ui/Icon";
 import { CharLink } from "../../ui/Links";
 import { makeLive, patchMenu, pickLive, reloadLive, setAll, setTester, stopLive, useLive, useLiveError } from "./data";
-import { useSetting } from "../settings/parts";
 import "./ingame.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { go, reloadKeyOf, useGames } from "../../lib/store";
@@ -93,7 +91,7 @@ export function InGamePanel({ game }: { game: GameId }) {
 /** `drawn`: the game has the menu it draws itself (live.rs `allowed`). */
 const MENU_HINT: Record<MenuSettings["style"], (key: string, drawn: boolean) => string> = {
   window: (key, drawn) => drawn
-    ? t("Press {key} while you play and gachamod's menu opens over the game, with previews, search and every character. In exclusive fullscreen, or when gachamod can't hear the key, {key} opens the plainer menu the game draws.", { key })
+    ? t("Press {key} while you play and gachamod's menu opens over the game, with previews, search and every character. In exclusive fullscreen, or when gachamod misses the key, {key} opens the plainer menu the game draws.", { key })
     : t("Press {key} while you play and gachamod's menu opens over the game, with previews, search and every character. It needs borderless or windowed mode.", { key }),
   game: (key) => t("Press {key} while you play and the game draws a plain menu itself. Use this when you play in exclusive fullscreen. Borderless or windowed gets the better menu with Over the game.", { key }),
 };
@@ -123,15 +121,13 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
   { game: GameId; name: string; menu: MenuSettings; blocked: boolean; drawn: boolean; checked: boolean }) {
   // each change starts from the one before it, so quick changes don't put each other back
   const set = (patch: Partial<MenuSettings>) => void patchMenu(game, menu, patch);
-  // otherkeys.rs ASK: the toasts that ask when another app has the key that opens the menu
-  const [ask, setAsk] = useSetting("otherKeys.ask", "1");
   return (
     <div className="live-menu">
       {drawn && (
         <div className="live-menu-row">
           <span className="live-menu-l">{t("Menu while you play")}</span>
           <Segmented label={t("Menu while you play")} size="sm" value={menu.style} onChange={(style) => set({ style })} options={[
-            { value: "window", label: t("Over the game"), title: t("gachamod's menu on top of the game. The better choice. Needs borderless or windowed") },
+            { value: "window", label: t("Over the game"), title: t("gachamod's menu on top of the game. Better, but needs borderless or windowed") },
             { value: "game", label: t("Inside the game"), title: checked ? t("A plainer menu the game draws itself. Works in exclusive fullscreen")
               : t("A plainer menu the game draws itself. Works in exclusive fullscreen. A tester option in {game}", { game: name }) },
           ]} />
@@ -139,19 +135,12 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
             title={t("In {game} the menu the game draws is a tester option. Click to check this game and send what works", { game: name })}>{t("Tester option")}</Badge>}
         </div>
       )}
-      <div className="live-menu-row">
-        <HotkeyField label={t("Key that opens it")} value={menu.key} bareF keep reloadKey={reloadKeyOf(game)} reset="F7" onChange={(key) => { if (key && key !== menu.key) set({ key }); }} />
-        <Checkbox checked={ask !== "0"} onChange={(v) => setAsk(v ? "1" : "0")} label={t("Say when another app uses this key")}
-          title={t("When Medal, OBS, Steam or another recorder listens for the key that opens the skin menu, gachamod says so and offers a free key. The note on this page shows either way")} />
-        <Checkbox checked={menu.pad} onChange={(pad) => set({ pad })} label={t("Use a controller in the menu")}
-          title={t("Both sticks pressed in open it, the D-pad moves, A shows a skin and B closes it. Menu keys changes the buttons")} />
-      </div>
-      <MenuKeys menu={menu} onChange={(update, label) => void patchMenu(game, menu, (m) => ({ binds: update(m.binds) }), label)} />
+      <MenuKeyFields game={game} menu={menu} />
       {drawn && <Checkbox checked={menu.fastSave} onChange={(fastSave) => set({ fastSave })} label={t("Show skins picked in the game right away")}
         title={t("The game saves its values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in the game's menu shows here at once. Starts after the game reloads its mods")} />}
       <p className="hint">{MENU_HINT[menu.style](menu.key, drawn)} {blocked ? t("Press {key} in the game after a change here.", { key: reloadKeyOf(game) }) : t("The game reloads once after a change here.")}</p>
       {!drawn && (
-        <p className="hint row"><span>{t("Playing in exclusive fullscreen? Tester options add the menu the game draws.")}</span>
+        <p className="hint row"><span>{t("For exclusive fullscreen, tester options add the menu the game draws.")}</span>
           <Button size="sm" variant="ghost" icon="settings" onClick={() => void setTester(true)}
             title={t("Turns on tester options. It asks first and says what they risk")}>{t("Tester options")}</Button></p>
       )}
@@ -167,7 +156,7 @@ function LiveRow({ game, g, busy, run }: { game: GameId; g: LiveGroup; busy: str
     <div className="live-row">
       <div className="live-row-h">
         <CharLink game={game} name={g.character} portrait />
-        {g.waiting && <span className="hint" title={t("gachamod couldn't key the pick into the game, so the game shows it at its next reload")}>
+        {g.waiting && <span className="hint" title={t("gachamod couldn't send the pick to the game, so the game shows it at its next reload")}>
           {t("Shows after the game reloads its mods ({key})", { key: reloadKeyOf(game) })}</span>}
         <span className="grow" />
         <IconButton size="sm" icon="x" label={t("Stop switching {name} in game. The skin showing stays on, the others turn off", { name: g.character })}

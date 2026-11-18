@@ -14,7 +14,7 @@
     --bg-2: #1d2633; --surface: var(--paper); --surface-2: var(--band); --surface-3: var(--tan); --raised: #5d677b;
     --line: rgb(236 229 216 / .13); --line-2: rgb(236 229 216 / .26);
     --text: #ece5d8; --text-2: #c9c3b6; --text-3: #a3abbb;
-    --accent-ink: var(--acc); --accent-soft: rgb(211 188 142 / .18);
+    --accent-ink: var(--acc-text, var(--acc)); --accent-soft: rgb(211 188 142 / .18);
     --ok: var(--lime); --warn: var(--orange-lt); --bad: var(--red-lt); --info: var(--blue-lt); --on-bad: #1b2232;
     --hover: rgb(236 229 216 / .08); --img-bg: #2a3242; --ring: #fff;
     --ink: #ece5d8;

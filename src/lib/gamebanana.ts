@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 import type { GameId, ModEntry } from "./api";
 import { queue, type QueueItem, type QueueRequest } from "./api/online";
 import { currentGame } from "./store";
-import { toast } from "../ui/toast";
 import { HOLD, track } from "./activity";
 import { doneHint } from "../shell/hints";
 import { t } from "./i18n";
+import { note as noteUsage } from "./telemetry";
+import { attrStyle, inlineStyle } from "./inlineStyle";
 
 export const GB = "https://gamebanana.com/apiv11";
 
@@ -18,7 +19,15 @@ export interface GbGameInfo { id: number; name: string; icon: string | null; ban
 /** One image at the sizes GameBanana serves. Any of them may be missing; `full` always exists. */
 export interface GbImage { full: string; s100?: string; s220?: string; s530?: string; s800?: string; caption?: string; width?: number; height?: number }
 
-export interface GbUser { id: number; name: string; avatar: string | null; url: string }
+export interface GbUser {
+  id: number; name: string; avatar: string | null; url: string;
+  /** Their name style on GameBanana, when the record carries it (mod lists and pages do). */
+  style?: GbNameStyle | null;
+  /** The avatar GameBanana swaps in on hover. */
+  hoverAvatar?: string | null;
+  /** Their signature picture (comments carry it). */
+  sig?: string | null;
+}
 
 export interface GbCategoryRef { id: number; name: string; icon: string | null }
 
@@ -242,7 +251,15 @@ function parseUser(raw: unknown): GbUser | null {
   const o = obj(raw);
   const id = num(o?._idRow), name = str(o?._sName);
   if (!o || id === null || !name) return null;
-  return { id, name, avatar: https(str(o._sAvatarUrl)), url: str(o._sProfileUrl) ?? `https://gamebanana.com/members/${id}` };
+  const u: GbUser = { id, name, avatar: https(str(o._sAvatarUrl)), url: str(o._sProfileUrl) ?? `https://gamebanana.com/members/${id}` };
+  // mod lists and pages carry the submitter's name style, upic and hover avatar
+  const style = parseNameStyle(o._aSubjectShaper, o._sUpicUrl);
+  if (style) u.style = style;
+  const hover = styleImage(o._sHovatarUrl) ?? styleImage(o._sHdHovatarUrl);
+  if (hover) u.hoverAvatar = hover;
+  const sig = styleImage(o._sSigUrl);
+  if (sig) u.sig = sig;
+  return u;
 }
 
 function parseCategory(raw: unknown): GbCategoryRef | null {
@@ -799,6 +816,150 @@ export interface GbMember extends GbMemberStats {
   title: string | null;
   joined: number | null;
   submissions: number | null;
+  /** How they dressed up their name on GameBanana, or null when they didn't. */
+  style: GbNameStyle | null;
+  /** The avatar GameBanana swaps in while their avatar is hovered (HD when they have it). */
+  hoverAvatar: string | null;
+  /** Online on GameBanana right now; null when GameBanana didn't say. */
+  online: boolean | null;
+  /** Their own words for being online or offline ("Present"), whichever applies now; null for the plain words. */
+  status: string | null;
+  /** A title GameBanana's staff gave them ("End Boss"). */
+  honorary: string | null;
+  /** Their signature picture, shown under their posts on GameBanana. */
+  sig: string | null;
+  /** Their avatar on a spinning cube: turns per frame around each axis, as GameBanana draws it. */
+  cube: { src: string; speed: number; axes: [number, number, number] } | null;
+  /** How their hover card looks on GameBanana (Cooltip). */
+  card: GbCardStyle | null;
+  /** The answers on their profile ("Cat or Dog": "Cat"). */
+  about: Array<{ q: string; a: string }>;
+}
+
+/** A member's name style (GameBanana's Subject Shaper, plus their upic). Plain values only, never their CSS: colours
+ *  as #rrggbb, a font from GameBanana's own list, pictures from GameBanana's own hosts. */
+export interface GbNameStyle {
+  color: string | null;
+  hoverColor: string | null;
+  /** A CSS font list from GameBanana's choices ("'Courier New', monospace"). */
+  font: string | null;
+  /** The text effect: an outline, a drop shadow, a glow or a soft drop glow. */
+  effect: GbTextEffect | null;
+  effectColor: string | null;
+  effectHoverColor: string | null;
+  /** A picture GameBanana shows in place of their name, often an animated GIF. */
+  upic: string | null;
+}
+export type GbTextEffect = "stroke" | "shadow" | "glow" | "dropGlow";
+
+/** A member's hover card on GameBanana (Cooltip), as plain values. */
+export interface GbCardStyle {
+  font: string | null;
+  effect: GbTextEffect | null;
+  effectColor: string | null;
+  color: string | null;
+  /** #rrggbb or #rrggbbaa. */
+  background: string | null;
+  image: string | null;
+  borderWidth: number;
+  borderStyle: string | null;
+  borderColor: string | null;
+  link: string | null;
+  linkHover: string | null;
+}
+
+/** GameBanana's name and hover card fonts, as it writes them in CSS. */
+const GB_FONTS: Record<string, string> = {
+  "Arial": "'Arial', 'Helvetica', sans-serif",
+  "Arial Black": "'Arial Black', 'Gadget', sans-serif",
+  "Comic Sans": "'Comic Sans MS', cursive",
+  "Courier New": "'Courier New', monospace",
+  "Georgia": "'Georgia', serif",
+  "Impact": "'Impact', 'Charcoal', sans-serif",
+  "Lucida Console": "'Lucida Console', 'Monaco', monospace",
+  "Lucida Console Unicode": "'Lucida Sans Unicode', 'Lucida Grande', sans-serif",
+  "Book Antique": "'Palatino Linotype', 'Book Antiqua', 'Palatino', serif",
+  "Tahoma": "'Tahoma', 'Geneva', sans-serif",
+  "Times New Roman": "'Times New Roman', 'Times', serif",
+  "Trebuchet MS": "'Trebuchet MS', sans-serif",
+  "Verdana": "'Verdana', 'Geneva', sans-serif",
+  "MS Sans Serif": "'MS Sans Serif', 'Geneva', sans-serif",
+  "MS Serif": "'MS Serif', 'New York', serif",
+};
+const GB_EFFECTS: Record<string, GbTextEffect> = { "Stroke": "stroke", "Drop Shadow": "shadow", "Glow": "glow", "Drop Glow": "dropGlow" };
+const GB_BORDERS = new Set(["dotted", "dashed", "solid", "double", "groove", "ridge", "inset", "outset"]);
+
+/** A colour as #rrggbb (or #rrggbbaa with `alpha`), from #rgb, #rgba, #rrggbb or #rrggbbaa only. */
+function styleColor(v: unknown, alpha = false): string | null {
+  const s = str(v)?.trim().toLowerCase();
+  if (!s || !/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(s)) return null;
+  const full = s.length <= 5 ? `#${[...s.slice(1)].map((c) => c + c).join("")}` : s;
+  return alpha || full.length === 7 ? full : full.slice(0, 7);
+}
+/** An https picture on one of GameBanana's own hosts, normalized (quotes and spaces escaped, so it can sit inside a
+ *  CSS url("...")). */
+function styleImage(v: unknown): string | null {
+  const u = https(str(v));
+  if (!u) return null;
+  try {
+    const url = new URL(u);
+    const host = url.hostname;
+    return url.protocol === "https:" && (host === "gamebanana.com" || host.endsWith(".gamebanana.com")) ? url.href.replace(/["'\\()\s]/g, encodeURIComponent) : null;
+  } catch { return null; }
+}
+const styleFont = (v: unknown): string | null => GB_FONTS[str(v)?.trim() ?? ""] ?? null;
+const styleEffect = (v: unknown): GbTextEffect | null => GB_EFFECTS[str(v)?.trim() ?? ""] ?? null;
+
+/** A name style from a Subject Shaper record (`_sTextColor`, `_sTextHoverColor`, `_sFont`, `_sBorderStyle`,
+ *  `_sBorderColor`, `_sBorderHoverColor`) and an upic address. Null when none of it is set or usable. */
+export function parseNameStyle(shaperRaw: unknown, upicRaw?: unknown): GbNameStyle | null {
+  const s = obj(shaperRaw);
+  const style: GbNameStyle = {
+    color: styleColor(s?._sTextColor),
+    hoverColor: styleColor(s?._sTextHoverColor),
+    font: styleFont(s?._sFont),
+    effect: styleEffect(s?._sBorderStyle),
+    effectColor: styleColor(s?._sBorderColor),
+    effectHoverColor: styleColor(s?._sBorderHoverColor),
+    upic: styleImage(upicRaw),
+  };
+  return style.color || style.font || style.effect || style.upic ? style : null;
+}
+
+/** A hover card style from a Cooltip record. GameBanana gives the background picture as `_sBackgroundImageFile` under
+ *  `_sBackgroundImageBaseUrl`, or as `_sBackgroundImageUrl` written `url(...)`. Null when none of it is set. */
+export function parseCardStyle(raw: unknown): GbCardStyle | null {
+  const c = obj(raw);
+  if (!c) return null;
+  const file = str(c._sBackgroundImageFile), base = str(c._sBackgroundImageBaseUrl);
+  const inUrl = /^url\(\s*(['"]?)(https:\/\/[^'"()\s]+)\1\s*\)$/i.exec(str(c._sBackgroundImageUrl)?.trim() ?? "")?.[2];
+  const image = styleImage(file && base && /^[\w.-]+$/.test(file) ? `${base.replace(/\/+$/, "")}/${file}` : inUrl);
+  const width = num(c._sBoxBorderSize);
+  const borderStyle = str(c._sBoxBorderStyle)?.trim().toLowerCase() ?? null;
+  const card: GbCardStyle = {
+    font: styleFont(c._sFont),
+    effect: styleEffect(c._sBorderStyle),
+    effectColor: styleColor(c._sBorderColor),
+    color: styleColor(c._sTextColor),
+    background: styleColor(c._sBackgroundColor, true),
+    image,
+    borderWidth: Math.max(0, Math.min(8, Math.round(width ?? 0))),
+    borderStyle: borderStyle && GB_BORDERS.has(borderStyle) ? borderStyle : null,
+    borderColor: styleColor(c._sBoxBorderColor),
+    link: styleColor(c._sLinkColor),
+    linkHover: styleColor(c._sLinkHoverColor),
+  };
+  const bordered = card.borderWidth > 0 && !!card.borderStyle;
+  return card.font || card.effect || card.color || card.background || card.image || bordered || card.link ? card : null;
+}
+
+/** GameBanana draws a Cubeatar when it has a speed and an HD avatar (`_aCubeatar: { Speed, SpinAxes: [x, y, z] }`). */
+function parseCube(raw: unknown, hd: string | null): GbMember["cube"] {
+  const c = obj(raw);
+  const speed = num(c?.Speed);
+  const axes = arr(c?.SpinAxes).slice(0, 3).map((v) => Math.max(-1, Math.min(1, num(v) ?? 0)));
+  if (!hd || !speed || speed <= 0 || axes.length !== 3 || axes.every((v) => v === 0)) return null;
+  return { src: hd, speed: Math.min(speed, 50), axes: axes as [number, number, number] };
 }
 
 const MEMBER_KEY = "gm.gb.members";
@@ -897,10 +1058,48 @@ export async function memberProfile(id: number, signal?: AbortSignal): Promise<G
       title: str(o._sUserTitle),
       joined: num(o._tsJoinDate),
       submissions: num(core?._nCurrentSubmissions),
+      style: parseNameStyle(o._aSubjectShaper, o._sUpicUrl),
+      hoverAvatar: styleImage(o._sHdHovatarUrl) ?? styleImage(o._sHovatarUrl),
+      online: typeof o._bIsOnline === "boolean" ? o._bIsOnline : null,
+      status: (o._bIsOnline === true ? str(o._sOnlineTitle) : o._bIsOnline === false ? str(o._sOfflineTitle) : null)?.trim() || null,
+      honorary: str(o._sHonoraryTitle)?.trim() || null,
+      sig: styleImage(o._sSigUrl),
+      cube: parseCube(o._aCubeatar, styleImage(o._sHdAvatarUrl)),
+      card: parseCardStyle(o._aCooltip),
+      about: arr(o._aBio).map(obj).flatMap((b) => {
+        const q = str(b?._sTitle)?.trim(), a = str(b?._sValue)?.trim();
+        return q && a ? [{ q: q.slice(0, 80), a: a.slice(0, 200) }] : [];
+      }).slice(0, 20),
     };
     statsTable()[String(id)] = { p: m.points, s: m.subs, at: Date.now() };
     saveStats();
     return m;
+  });
+}
+
+/** The text of a member's Uberstyle (the stylesheet GameBanana puts on their profile), or null when they have none.
+ *  Member/UiConfig names it for a page path. Its address on files.gamebanana.com redirects without CORS headers, so it
+ *  is read from images.gamebanana.com, which serves the same file directly. Kept 30 minutes. */
+export async function memberUberstyle(id: number, signal?: AbortSignal): Promise<string | null> {
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return cached(`uber:${id}`, 30 * 60_000, async () => {
+    const o = obj(await getJson(`${GB}/Member/UiConfig?_sUrl=${encodeURIComponent(`/members/${id}`)}`, signal));
+    const url = styleImage(o?._sUberstyleUrl);
+    if (!url || !/\.css(?:[?#]|$)/i.test(url)) return null;
+    const direct = url.replace(/^https:\/\/files\.gamebanana\.com\//i, "https://images.gamebanana.com/");
+    for (const u of direct === url ? [url] : [direct, url]) {
+      try {
+        const quiet = AbortSignal.timeout(20_000);
+        const r = await fetch(u, { signal: signal ? AbortSignal.any([signal, quiet]) : quiet });
+        if (!r.ok) continue;
+        const text = await r.text();
+        return text.length > 200_000 ? text.slice(0, 200_000) : text;
+      } catch (e) {
+        if (signal?.aborted) throw abortError();
+        if (isAbort(e)) throw e;
+      }
+    }
+    return null;
   });
 }
 
@@ -1244,9 +1443,8 @@ export function buildRequest(game: GameId, mod: GbMod, file: GbFile, replaces?: 
 /** Queue one file of a mod for download and install. `replaces`: library id of the mod it updates. */
 export async function queueModFile(game: GameId, mod: GbMod, file: GbFile, replaces?: string): Promise<QueueItem | null> {
   const snap = await queue.add(buildRequest(game, mod, file, replaces));
+  noteUsage("download queued", { game, kind: replaces ? "update" : "new" });
   doneHint("install");
-  const waiting = snap.items.filter((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled").length;
-  if (waiting === 25) toast(t("25 mods queued. Your drive has been notified"));
   const mine = snap.items.filter((i) => i.req.game === game && i.req.fileId === file.id);
   return mine.find((i) => i.state !== "done" && i.state !== "failed" && i.state !== "cancelled") ?? mine[mine.length - 1] ?? null;
 }
@@ -1337,6 +1535,21 @@ export function gbToolId(url: string | null | undefined): number | null {
   return t && "tool" in t ? t.tool : null;
 }
 
+/** The safe part of an element's style attribute and its old width, size, face and align attributes
+ *  (lib/inlineStyle.ts). */
+function styleOf(el: Element, raw: string, tag: string) {
+  return inlineStyle(`${attrStyle(raw, (k) => el.getAttribute(k))}; ${el.getAttribute("style") ?? ""}`, tag);
+}
+
+/** rgb() greys in a style attribute are text pasted from GameBanana's own page (rgb(226, 226, 226)), not a colour
+ *  the author picked. */
+function pastedGrey(v: string | undefined): boolean {
+  const m = /^\s*rgba?\(\s*(\d{1,3})\s*,?\s*(\d{1,3})\s*,?\s*(\d{1,3})/i.exec(v ?? "");
+  if (!m) return false;
+  const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return Math.max(r, g, b) - Math.min(r, g, b) < 8;
+}
+
 /** Description HTML with everything unsafe removed and GameBanana's own markup made portable (docs/spec.md):
  *  - links keep their text and carry the address in data-href (no href); the page opens them (GameBanana mod and
  *    member links inside the app, others in the browser)
@@ -1344,7 +1557,10 @@ export function gbToolId(url: string | null | undefined): number | null {
  *    lightness that reads in the current scheme
  *  - spoilers become class "gb-spoiler" (hidden until clicked), centred blocks class "gb-center"
  *  - YouTube embeds become a link card with the video's thumbnail; other iframes are dropped
- *  - images keep only an https src (class "gb-dimg"; the page opens them in the lightbox) */
+ *  - images keep only an https src (class "gb-dimg"; the page opens them in the lightbox) and the width the author
+ *    gave them
+ *  - inline styles and old width/size/face/align attributes keep what lib/inlineStyle.ts allows (gb-* classes and
+ *    --gb* variables, drawn by screens/browse/gb-inline.css) */
 export function sanitizeHtml(html: string): string {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -1385,7 +1601,9 @@ export function sanitizeHtml(html: string): string {
         const img = doc.createElement("img");
         img.setAttribute("src", src);
         img.setAttribute("alt", el.getAttribute("alt") ?? "");
-        img.setAttribute("class", "gb-dimg");
+        const st = styleOf(el, raw, "img");
+        img.setAttribute("class", ["gb-dimg", ...st.classes].join(" "));
+        if (st.style) img.setAttribute("style", st.style);
         img.setAttribute("loading", "lazy");
         img.setAttribute("decoding", "async");
         to.appendChild(img);
@@ -1399,8 +1617,12 @@ export function sanitizeHtml(html: string): string {
       // a colour: <font color>, style="color: ...", or GameBanana's colour classes
       const styleColor = /(?:^|;)\s*color\s*:\s*([^;]+)/i.exec(el.getAttribute("style") ?? "")?.[1];
       const classColor = /\s([A-Z][a-z]+)Color\s/.exec(cls)?.[1];
-      const color = safeColor(raw === "font" ? el.getAttribute("color") : null) ?? safeColor(styleColor) ?? (classColor ? GB_COLORS[classColor.toLowerCase()] ?? null : null);
-      if (color) { classes.push("gb-fc"); clean.setAttribute("style", `--gbc: ${color}`); }
+      const color = safeColor(raw === "font" ? el.getAttribute("color") : null) ?? (pastedGrey(styleColor) ? null : safeColor(styleColor)) ?? (classColor ? GB_COLORS[classColor.toLowerCase()] ?? null : null);
+      const st = styleOf(el, raw, tag);
+      classes.push(...st.classes);
+      if (color) classes.push("gb-fc");
+      const style = [color ? `--gbc: ${color}` : "", st.style].filter(Boolean).join("; ");
+      if (style) clean.setAttribute("style", style);
       if (tag === "a") {
         const href = safeUrl(el.getAttribute("href"));
         if (href) {
@@ -1415,7 +1637,7 @@ export function sanitizeHtml(html: string): string {
         for (const k of ["colspan", "rowspan"]) { const v = el.getAttribute(k); if (v && /^\d{1,2}$/.test(v)) clean.setAttribute(k, v); }
       }
       if (tag === "ol") { const v = el.getAttribute("start"); if (v && /^\d{1,4}$/.test(v)) clean.setAttribute("start", v); }
-      if (classes.length) clean.setAttribute("class", classes.join(" "));
+      if (classes.length) clean.setAttribute("class", [...new Set(classes)].join(" "));
       copy(el, clean);
       to.appendChild(clean);
     }

@@ -44,6 +44,8 @@ pub struct InstallOpts {
     /// A folder picked under Options; empty means the usual one. An update always goes where gachamod is.
     pub dir: Option<String>,
     pub desktop: bool,
+    /// The quickstart shortcut, which starts the game gachamod last had open, with mods.
+    pub quickstart: bool,
     pub admin: bool,
 }
 
@@ -121,6 +123,7 @@ pub fn install(app: &AppHandle, payload: &Payload, temp: &Path, o: &InstallOpts)
     let _ = sys::set_pref("adminAsked", "1");
     let _ = sys::set_pref("admin", if o.admin { "1" } else { "0" });
     let _ = sys::set_pref("desktopShortcut", if o.desktop { "1" } else { "0" });
+    let _ = sys::set_pref("quickstartShortcut", if o.quickstart { "1" } else { "0" });
     if sys::running_in(&dir) { report(app, "close", "Closing gachamod", None, Some(HOLD_CLOSE)); }
     let verb = if installed.is_some() { "Updating" } else { "Copying" };
     let r = run_nsis(app, &exe, &format!("/S /D={}", dir.display()), &dir, payload.meta.app_size, verb);
@@ -153,6 +156,39 @@ pub async fn update(app: AppHandle, temp: PathBuf, dir: PathBuf) -> Result<PathB
     let size = std::fs::metadata(dir.join(sys::APP_EXE)).map(|m| m.len()).unwrap_or(0);
     let exe = download_newest(&app, &temp).await?;
     run_installer(app, exe, size, dir, "Updating").await
+}
+
+/// Install an update gachamod downloaded (`--apply`). The app's updater checked it already; it's checked again here
+/// because the file waited in %TEMP%. Then this waits for gachamod to close and runs the installer the way the
+/// updater would (/UPDATE: no questions, shortcuts left as they are), quietly, with this window showing progress (or
+/// hidden, for `--quiet`). The installer stays on failure so Try again can use it.
+pub async fn apply(app: AppHandle, exe: PathBuf, sig: Option<PathBuf>, dir: PathBuf) -> Result<PathBuf, String> {
+    report(&app, "verify", "Checking the download", None, None);
+    let (check, sig_file) = (exe.clone(), sig.clone());
+    tauri::async_runtime::spawn_blocking(move || verify_file(&check, sig_file.as_deref())).await.map_err(|e| e.to_string())??;
+    let size = std::fs::metadata(dir.join(sys::APP_EXE)).map(|m| m.len()).unwrap_or(0);
+    let admin = sys::pref("admin").as_deref() == Some("1");
+    tauri::async_runtime::spawn_blocking(move || {
+        // gachamod started this window and is quitting; give it a moment before the installer closes it
+        for _ in 0..80 {
+            if !sys::running_in(&dir) { break; }
+            report(&app, "close", "Waiting for gachamod to close", None, Some(HOLD_CLOSE));
+            std::thread::sleep(Duration::from_millis(125));
+        }
+        run_nsis(&app, &exe, &format!("/S /UPDATE /D={}", dir.display()), &dir, size, "Updating")?;
+        // the installer, its signature and the folder gachamod put them in, once it's empty
+        let _ = std::fs::remove_file(&exe);
+        if let Some(s) = &sig { let _ = std::fs::remove_file(s); }
+        if let Some(folder) = exe.parent() { let _ = std::fs::remove_dir(folder); }
+        finish(&app, &dir, admin)
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// Check an installer on disk against the update key, with its signature file.
+pub fn verify_file(exe: &Path, sig: Option<&Path>) -> Result<(), String> {
+    let bytes = std::fs::read(exe).map_err(|e| format!("Couldn't read the update in {}: {e}", exe.display()))?;
+    let sig = sig.and_then(|s| std::fs::read_to_string(s).ok()).ok_or("The update came without its signature, so it wasn't used.")?;
+    verify(&bytes, &sig)
 }
 
 /// Run an installer over the copy in `dir`, quietly, then check the result.
@@ -251,6 +287,7 @@ pub fn uninstall(app: &AppHandle, dir: &Path, delete_data: bool) -> Result<(), S
         // the uninstaller is gone: take out what the installer put in
         if sys::running_in(dir) { return Err("gachamod is open. Close it, then try again.".into()); }
         let _ = std::fs::remove_file(dir.join(sys::APP_EXE));
+        let _ = std::fs::remove_file(dir.join("quickstart.ico"));
         sys::forget_install(dir);
     }
     let _ = std::fs::remove_file(dir.join("setup.exe"));

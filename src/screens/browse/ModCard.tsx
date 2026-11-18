@@ -41,10 +41,10 @@ export const ModCard = memo(function ModCard({ game, mod, lib, nsfw, prio, noIns
   const quick = noInstall ? null
     : q?.state === "needsChoice" ? { icon: "layers" as const, label: t("Pick the parts to install (I)"), run: () => openVariantPicker(q.id) }
     : q ? { icon: "downloads" as const, label: t("Show in Downloads (I)"), run: () => go("downloads") }
-    : upd ? { icon: "update" as const, label: t("Update to the newest file (I)"), run: () => installLatest(game, mod.id, mod.name, upd.id) }
+    : upd ? { icon: "update" as const, label: t("Update to the newest file (I)"), run: () => installLatest(game, mod.id, upd.id, false, false) }
     : inst ? { icon: "mods" as const, label: t("Show in Mods (I)"), run: () => showInMods(inst[0]!.id) }
-    : arch ? { icon: "install" as const, label: t("Reinstall. Your settings for it come back (I)"), run: () => installLatest(game, mod.id, mod.name, undefined, true) }
-    : { icon: "install" as const, label: t("Install the newest file (I)"), run: () => installLatest(game, mod.id, mod.name) };
+    : arch ? { icon: "install" as const, label: t("Reinstall. Your settings for it come back (I)"), run: () => installLatest(game, mod.id, undefined, true, false) }
+    : { icon: "install" as const, label: t("Install the newest file (I)"), run: () => installLatest(game, mod.id, undefined, false, false) };
   const runQuick = async () => {
     if (!quick || busy) return;
     setBusy(true);
@@ -99,7 +99,8 @@ export const ModCard = memo(function ModCard({ game, mod, lib, nsfw, prio, noIns
           ? <CharLink game={game} name={mod.character} className="gb-card-c" tabIndex={-1} />
           : mod.category && <CategoryLink game={game} category={mod.category} className="gb-card-c is-cat" tabIndex={-1} />}
         <span className="gb-card-meta">
-          {mod.submitter && <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-card-by" tabIndex={-1} />}
+          {mod.submitter && <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-card-by" tabIndex={-1}
+            style={mod.submitter.style} hoverAvatar={mod.submitter.hoverAvatar} />}
           <span className="gb-stat" title={tn(mod.likes, "{n} like", "{n} likes")}><Icon name="heart" />{formatCount(mod.likes)}</span>
           <span className="gb-stat" title={tn(mod.views, "{n} view", "{n} views")}><Icon name="eye" />{formatCount(mod.views)}</span>
           <span className="gb-stat" title={mod.updated > mod.added + 60

@@ -110,11 +110,11 @@
   .btn { height: 2.25rem; padding: 0 1.15rem; }
   .btn-sm { height: 1.85rem; padding: 0 .85rem; }
   .btn-lg { height: 2.8rem; padding: 0 1.6rem; font-size: 1.08em; border-radius: 999px; }
-  .btn .i { stroke-width: 2.2; }
+  .btn .i { stroke-width: 1.7; }
   .btn-secondary, .ibtn.btn-secondary { color: var(--ink); background: var(--btn-bg); box-shadow: inset 0 0 0 3px var(--btn-bg), inset 0 0 0 4px var(--btn-line), 0 1px 4px rgb(0 0 0 / .28); }
   .btn-secondary:hover:not(:disabled), .ibtn.btn-secondary:hover:not(:disabled) { background: #fff; box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px #9d9da1, 0 0 0 2px rgb(255 255 255 / .35), 0 1px 4px rgb(0 0 0 / .28); }
   /* a button's icon sits in a small black disc */
-  .btn-secondary > .i:first-child, .btn-primary > .i:first-child, .btn-secondary > .spin:first-child { box-sizing: content-box; width: .82em; height: .82em; padding: .22em; margin-left: -.35rem; border-radius: 50%; background: #17171a; color: #ecd9ac; stroke-width: 2.6; }
+  .btn-secondary > .i:first-child, .btn-primary > .i:first-child, .btn-secondary > .spin:first-child { box-sizing: content-box; width: .82em; height: .82em; padding: .22em; margin-left: -.35rem; border-radius: 50%; background: #17171a; color: #ecd9ac; stroke-width: 2; }
   /* an icon button keeps the icon disc but not the text button's pull to the left, so the icon stays centred */
   .ibtn.btn-secondary > .i:first-child, .ibtn.btn-primary > .i:first-child, .ibtn.btn-secondary > .spin:first-child { margin-left: 0; }
   .btn-primary, .ibtn.btn-primary { color: var(--ink); background: linear-gradient(180deg, var(--gold-hi), var(--gold) 60%); box-shadow: inset 0 0 0 3px rgb(240 215 156 / .0), inset 0 0 0 4px rgb(120 90 30 / .0), inset 0 0 0 1px rgb(255 255 255 / .35), 0 1px 5px rgb(0 0 0 / .3); }
@@ -134,8 +134,8 @@
   .ibtn.btn-ghost { color: var(--text-2); box-shadow: none; }
   .ibtn.btn-ghost:hover:not(:disabled) { background: var(--hover); color: var(--text); box-shadow: inset 0 0 0 1px var(--ctl-line); }
   .ibtn.on, .ibtn.on:hover:not(:disabled) { background: var(--ctl-on-bg); color: var(--ctl-on-fg); box-shadow: 0 0 0 2px transparent, 0 0 0 3px var(--ctl-line); }
-  .ibtn .i { stroke-width: 2; }
-  .ibtn.btn-secondary > .i:first-child, .ibtn.btn-primary > .i:first-child { margin: 0; background: none; color: inherit; padding: 0; width: 1.15em; height: 1.15em; stroke-width: 2.2; }
+  .ibtn .i { stroke-width: 1.6; }
+  .ibtn.btn-secondary > .i:first-child, .ibtn.btn-primary > .i:first-child { margin: 0; background: none; color: inherit; padding: 0; width: 1.15em; height: 1.15em; stroke-width: 1.7; }
 
   /* ── toggle: a thin track and a white disc with a ring, like the sliders ── */
   .toggle-track { width: 2.5rem; height: 1.3rem; background: var(--track); box-shadow: inset 0 0 0 1px var(--ctl-line); }
@@ -207,7 +207,7 @@
   .panel-h { min-height: 2.3rem; padding: .2rem .3rem .35rem .15rem; border-bottom: 0; position: relative; gap: .6rem; }
   .panel-h::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 9px; color: var(--line-2); background: var(--dot-line); pointer-events: none; }
   .panel-t { font-size: 1.04rem; font-weight: 700; color: var(--text); gap: .5rem; }
-  .panel-t .i { color: var(--accent-ink); stroke-width: 2; }
+  .panel-t .i { color: var(--accent-ink); stroke-width: 1.6; }
   .panel-n { font-family: var(--font-num); font-size: .82em; background: none; color: var(--accent-ink); padding: 0 .1rem; }
   .panel-n::before { content: "/ "; color: var(--text-3); }
   .panel-b { margin-top: .4rem; padding: .7rem .8rem; border-radius: var(--cut); background: rgb(12 14 26 / .5); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
@@ -231,7 +231,7 @@
 
   /* ── badges: small cut tags ── */
   .badge { height: 1.25rem; padding: 0 .45rem; border-radius: 2px 7px 2px 2px; font-weight: 700; font-size: .72em; letter-spacing: .02em; background: rgb(10 11 18 / .72); color: #fff; box-shadow: none; }
-  .badge .i { stroke-width: 2.4; }
+  .badge .i { stroke-width: 1.9; }
   .badge[class*="t-"] { background: var(--tone-fill, var(--tone)); color: var(--ink); box-shadow: none; }
   .badge.t-accent { --tone-fill: var(--gold); color: var(--ink); }
   .badge.t-ok { --tone-fill: #61e6cd; }
@@ -268,7 +268,7 @@
   .dialog-h { position: relative; padding: .85rem 1rem .7rem 1.4rem; }
   .dialog-h::after, .drawer-h::after { content: ""; position: absolute; left: 1.4rem; right: 1.4rem; bottom: 0; height: 9px; color: var(--line-2); background: var(--dot-line); pointer-events: none; }
   .dialog-h h2, .drawer-h h2 { font-size: 1.25rem; font-weight: 700; letter-spacing: .01em; color: var(--text); }
-  .dialog-h h2 .i { box-sizing: content-box; width: 1em; height: 1em; padding: .32em; border-radius: 50%; background: #17171a; color: #ecd9ac; stroke-width: 2; }
+  .dialog-h h2 .i { box-sizing: content-box; width: 1em; height: 1em; padding: .32em; border-radius: 50%; background: #17171a; color: #ecd9ac; stroke-width: 1.6; }
   /* close: two long thin strokes, as in the top right of every menu */
   .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { width: 2.4rem; height: 2.4rem; color: var(--text); }
   .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { width: 1.7rem; height: 1.7rem; stroke-width: 1.3; }
@@ -293,7 +293,7 @@
   .menu hr { border-top: 1px solid rgb(0 0 0 / .22); margin: 3px .5rem; }
   .menu-i { padding: .5rem .8rem; border-radius: 2px; color: var(--ink); font-weight: 600; }
   .menu-i + .menu-i { box-shadow: 0 -1px 0 rgb(0 0 0 / .09); }
-  .menu-i .i { color: #55565c; stroke-width: 2; }
+  .menu-i .i { color: #55565c; stroke-width: 1.6; }
   .menu-i:hover:not(:disabled) { background: #d2d4d8; color: var(--ink); }
   .menu-i:hover:not(:disabled) .i { color: var(--ink); }
   .menu-i.danger, .menu-i.danger .i { color: #b53c32; }
@@ -326,7 +326,7 @@
   /* ── toast: a dark band; a failure is the red strip ── */
   .toasts { right: 1rem; bottom: 1rem; }
   .toast { border-radius: var(--cut); padding: .6rem .6rem .6rem .9rem; gap: .65rem; background: linear-gradient(90deg, rgb(24 25 30 / .97), rgb(34 35 42 / .95)); box-shadow: 0 10px 30px rgb(0 0 0 / .5), inset 0 0 0 1px rgb(255 255 255 / .14); font-weight: 600; color: #fff; animation: hsrToast var(--dur-slow) var(--ease-out); }
-  .toast > .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .28rem; border-radius: 50%; background: #17171a; color: var(--teal); box-shadow: 0 0 0 1px rgb(97 251 221 / .5); stroke-width: 2.4; }
+  .toast > .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .28rem; border-radius: 50%; background: #17171a; color: var(--teal); box-shadow: 0 0 0 1px rgb(97 251 221 / .5); stroke-width: 1.9; }
   .toast.bad { background: var(--red); box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
   .toast.bad > .i { color: #fff; background: rgb(0 0 0 / .3); box-shadow: none; }
   .toast-act { font-weight: 700; border-radius: 999px; padding: .32rem .85rem; color: var(--ink); background: #e2e2e2; box-shadow: inset 0 0 0 2px #e2e2e2, inset 0 0 0 3px #b9b8ba; }

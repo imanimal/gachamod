@@ -26,6 +26,8 @@
 .gbb-fchip-x:hover, .gbb-fchip-x:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 18%, transparent); }
 .gbb-fchip-x .i { width: .8em; height: .8em; }
 .gbb-note { text-align: center; padding-bottom: var(--s-3); }
+/* with no Load more above it, the note keeps the same space from the cards as the other blocks */
+.gb-sentinel + .gbb-note { margin-top: var(--s-3); }
 :is(.gbb, .gb-strip, .gb-creator, .gb-drawer) .link-btn { display: inline; color: var(--accent-ink); font-weight: 600; }
 :is(.gbb, .gb-strip, .gb-creator, .gb-drawer) .link-btn:hover { text-decoration: underline; }
 
@@ -56,7 +58,7 @@
 .gb-card-skel .gb-card-img.skel { height: auto; border-radius: 0; }
 .gb-card-skel .gb-card-b { gap: var(--s-2); }
 .gb-img-broken { display: grid; place-items: center; width: 100%; height: 100%; color: var(--text-3); }
-.gb-img-broken .i { width: 2rem; height: 2rem; }
+.gb-img-broken .i { width: 2rem; height: 2rem; --i-sw: 1.7; }
 .gb-nsfw-badge { position: absolute; top: .5rem; left: .5rem; padding: .1rem var(--s-2); border-radius: var(--radius-xs); background: var(--bad); color: var(--on-bad); font-size: .75em; font-weight: 700; }
 .gb-nsfw-badge.is-inline { position: static; }
 /* "show" mode: a small muted marker, not a red tag */
@@ -71,7 +73,7 @@
 .gb-prio .i { width: .95em; height: .95em; }
 .gb-card.is-prio { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent), var(--shadow); }
 .gb-card-quick { position: absolute; right: .5rem; bottom: .5rem; opacity: 0; transform: translateY(.25rem); transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
-.gb-card-quick.hint-ring, .gb-card:is(:hover, :focus-visible, :focus-within) .gb-card-quick, html:is(.kbd, .pad) .gb-card:focus .gb-card-quick { opacity: 1; transform: none; }
+.gb-card-quick.hint-ring, .gb-card:hover .gb-card-quick, html:is(.kbd, .pad) .gb-card:focus-within .gb-card-quick, html:is(.kbd, .pad) .gb-card:focus .gb-card-quick { opacity: 1; transform: none; }
 .gb-card-b { display: flex; flex-direction: column; gap: .15rem; padding: var(--s-2); min-width: 0; }
 .gb-card-t { font-weight: 600; line-height: 1.25; font-size: .95em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .gb-card-c { align-self: flex-start; max-width: 100%; color: var(--accent-ink); font-size: var(--t-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -83,6 +85,14 @@
 .gb-stat-btn:hover { color: var(--text); background: var(--hover); }
 .gb-stat-btn.on .i { color: var(--accent-ink); }
 .gb-stat-btn.on .i.fill path { fill: currentColor; }
+/* a mod in use for days without a like: the heart beats twice every 14 seconds, then rests */
+.gb-stat-btn.nudge .i { animation: gb-heart 14s var(--ease-out) 3s infinite; transform-origin: 50% 55%; }
+@keyframes gb-heart {
+  0%, 9%, 100% { transform: none; color: inherit; }
+  2% { transform: scale(1.25); color: var(--accent-ink); }
+  4% { transform: scale(.96); }
+  6% { transform: scale(1.15); color: var(--accent-ink); }
+}
 .gb-thank { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); }
 .gb-thank p { margin: 0; }
 .gb-thank .btn { align-self: flex-start; }
@@ -107,6 +117,25 @@
 .gb-creator-act { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .gb-creator-act .is-on { box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--accent-ink); }
 .gb-creator-sec { margin-top: var(--s-2); }
+/* the name style they set on GameBanana (Settings, Creators turns it off): their name picture, and the avatar they
+   swap in on hover, which keyboard and controller users see while focus is in the header */
+.gb-creator-upic { align-self: flex-start; width: auto; height: auto; max-width: 100%; max-height: 3rem; }
+.gb-creator-av { position: relative; flex: none; display: inline-grid; border-radius: 50%; }
+.gb-creator-av-alt { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; opacity: 0; pointer-events: none; transition: opacity var(--dur-fast) var(--ease); }
+.gb-creator-av:hover .gb-creator-av-alt, html:is(.kbd, .pad) .gb-creator-h:focus-within .gb-creator-av-alt { opacity: 1; }
+/* the profile box (CreatorCard.tsx): plain, or in their GameBanana hover card style (has-card) */
+.gb-creator-card { display: flex; flex-direction: column; gap: var(--s-2); max-width: 34rem; padding: var(--s-3) var(--s-4); border-radius: var(--radius); background: var(--surface); color: var(--text-2); }
+.gb-creator-card.has-card { color: var(--ct-c); background-color: var(--ct-bg); background-image: var(--ct-img, none); border: var(--ct-border, 0); }
+.gb-creator-card-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-4); }
+.gb-creator-status { display: inline-flex; align-items: center; gap: .45em; font-weight: 600; color: var(--text); }
+.gb-creator-status::before { content: ""; width: .55em; height: .55em; border-radius: 50%; background: var(--text-3); }
+.gb-creator-status.is-on::before { background: var(--ok); }
+.gb-creator-joined { color: var(--text-3); }
+.gb-creator-about { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s-2) var(--s-4); margin: 0; }
+.gb-creator-about dt { color: var(--text-3); font-size: var(--t-meta); }
+.gb-creator-about dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+/* a member's signature picture, under their comments and on their page, kept small */
+.gb-sig { display: block; width: auto; height: auto; max-width: 100%; max-height: 4.5rem; margin-top: var(--s-2); object-fit: contain; object-position: left; }
 
 /* the mod drawer */
 .gb-drawer-skel { display: flex; flex-direction: column; gap: var(--s-3); }
@@ -117,7 +146,7 @@
 .gb-gallery-main img { width: 100%; height: 100%; object-fit: contain; }
 .gb-gallery.is-nsfw .gb-gallery-main img { filter: blur(1.4rem); transform: scale(1.1); }
 .gb-nsfw-show { padding: var(--s-2) var(--s-3); border-radius: 999px; }
-.gb-gallery-main:is(:hover, :focus-visible) .gb-nsfw-show { background: var(--surface) !important; }
+.gb-gallery-main:hover .gb-nsfw-show, html:is(.kbd, .pad) .gb-gallery-main:focus-visible .gb-nsfw-show { background: var(--surface) !important; }
 .gb-nsfw-cover { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); color: var(--text); font-weight: 600; }
 .gb-gallery-thumbs-wrap { display: flex; align-items: center; gap: var(--s-1); min-width: 0; }
 .gb-gallery-thumbs-wrap > .gb-gallery-thumbs { flex: 1; min-width: 0; }
@@ -140,6 +169,7 @@
 .gb-summary { color: var(--text-2); }
 
 .gb-files .sub-h { margin-top: 0; }
+.gb-files > .hint { margin-bottom: var(--s-2); }
 .gb-file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
 .gb-file { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); }
 .gb-file.is-archived { opacity: .8; }
@@ -152,10 +182,13 @@
 .gb-file-q { display: flex; flex-direction: column; gap: var(--s-1); width: 10rem; }
 .gb-older, .gb-posts-t { display: inline-flex; align-items: center; gap: var(--s-2); margin-top: var(--s-2); padding: var(--s-1) var(--s-2); border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; }
 .gb-older:hover, .gb-posts-t:hover { background: var(--hover); }
+.gb-older + .gb-file-list { margin-top: var(--s-2); }
 
 .gb-desc { line-height: 1.6; overflow-wrap: anywhere; --gb-l-lo: .74; --gb-l-hi: .95; }
 [data-scheme="light"] .gb-desc { --gb-l-lo: .32; --gb-l-hi: .55; }
 .gb-desc :is(p, ul, ol, blockquote, table, pre, h1, h2, h3, h4) { margin: 0 0 var(--s-3); }
+/* no margin under the last block, so a post card has the same inset top and bottom */
+.gb-desc > :last-child { margin-bottom: 0; }
 .gb-desc h1 { font-size: 1.3rem; }
 .gb-desc h2 { font-size: 1.15rem; }
 .gb-desc :is(h3, h4) { font-size: 1.02rem; }
@@ -189,6 +222,7 @@
 .gb-desc .gb-yt:hover { box-shadow: inset 0 0 0 1px var(--line-2); }
 
 .gb-posts { display: flex; flex-direction: column; gap: var(--s-2); }
+.gb-posts > .gb-posts-t { margin-top: 0; }
 .gb-posts-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-3); }
 .gb-post { padding: var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); display: flex; flex-direction: column; gap: var(--s-2); }
 .gb-post-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
@@ -227,6 +261,8 @@
 .gb-comment.is-reply { gap: var(--s-2); }
 .gb-comment-main { flex: 1; min-width: 0; }
 .gb-comment-main > .gb-comment-list { margin-top: var(--s-2); padding-left: var(--s-1); }
+/* the rest of a reply thread keeps the same space as the reply list and the error line */
+.gb-comment-replies + :is(.muted, .waiting), .gb-comment-main > .gb-comment-list + .btn { margin-top: var(--s-2); }
 .gb-comment-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-bottom: var(--s-1); font-size: var(--t-small); }
 .gb-comment-who { font-weight: 600; }
 .gb-comment-text :is(p, ul, ol, blockquote, table, h1, h2, h3, h4):last-child { margin-bottom: 0; }
@@ -246,7 +282,7 @@
 .gbb-saved .hint { margin: 0; }
 .gbb-saved-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 18rem; overflow: auto; }
 .gbb-saved-i { display: flex; align-items: center; gap: .15rem; border-radius: var(--radius-sm); }
-.gbb-saved-i:hover, .gbb-saved-i:focus-within { background: var(--surface-2); }
+.gbb-saved-i:hover, .gbb-saved-i:has(.gbb-saved-in), html:is(.kbd, .pad) .gbb-saved-i:focus-within { background: var(--surface-2); }
 .gbb-saved-i.is-on .gbb-saved-b { color: var(--accent-ink); font-weight: 650; }
 .gbb-saved-b { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s-2); padding: .45rem .5rem; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
 /* a long name takes more lines instead of losing its end */

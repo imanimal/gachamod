@@ -93,6 +93,8 @@
 .toggle-sm .toggle-knob { width: calc(1.15rem - 6px); height: calc(1.15rem - 6px); }
 .toggle:hover:not(.off) .toggle-track { box-shadow: inset 0 1px 2px rgb(0 0 0 / .25), inset 0 0 0 1px var(--text-3); }
 .toggle.on .toggle-track { background: var(--accent); box-shadow: inset 0 1px 2px rgb(0 0 0 / .15); }
+/* a picked accent that hardly shows on the panels (black on a dark theme, lib/theme.ts applyAccent): its fills get an edge */
+[data-accent-faint] :is(.btn-primary:not(:focus-visible), .toggle.on .toggle-track, .swatch.on) { outline: 1px solid color-mix(in srgb, var(--text) 40%, transparent); outline-offset: -1px; }
 .toggle.on .toggle-knob { transform: translateX(1.1rem); }
 .toggle-sm.on .toggle-knob { transform: translateX(.9rem); }
 .toggle-l { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
@@ -102,7 +104,7 @@
 .check-box { flex: none; width: 1.2rem; height: 1.2rem; border-radius: var(--radius-xs); display: grid; place-items: center; background: var(--bg-2); box-shadow: inset 0 0 0 1.5px var(--line-3, var(--line-2));
   transition: background-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .check:hover:not(.off) .check-box { box-shadow: inset 0 0 0 1.5px var(--text-2); }
-.check-box .i { width: .85rem; height: .85rem; stroke-width: 3; opacity: 0; transform: scale(.4); transition: transform var(--dur) var(--ease-spring), opacity var(--dur-fast) var(--ease); }
+.check-box .i { width: .85rem; height: .85rem; stroke-width: 2.1; opacity: 0; transform: scale(.4); transition: transform var(--dur) var(--ease-spring), opacity var(--dur-fast) var(--ease); }
 .check.on .check-box { background: var(--accent); box-shadow: none; color: var(--on-accent); }
 .check.on .check-box .i { opacity: 1; transform: none; }
 
@@ -215,7 +217,7 @@ html.pad .tab:focus { outline-offset: -3px; }
 .t-info { --tone: var(--info); --on-tone: var(--on-info, #fff); } .t-muted { --tone: var(--text-3); --on-tone: var(--bg); }
 .badge { display: inline-flex; align-items: center; gap: var(--s-1); flex: none; height: 1.4rem; padding: 0 var(--s-2); border-radius: var(--radius-xs); font-size: var(--t-meta); font-weight: 700; letter-spacing: .01em; line-height: 1; white-space: nowrap;
   background: var(--surface-2); color: var(--text-2); }
-.badge .i { width: 1em; height: 1em; stroke-width: 2; }
+.badge .i { width: 1em; height: 1em; stroke-width: 1.4; }
 .badge[class*="t-"] { background: color-mix(in srgb, var(--tone) 15%, transparent); color: var(--tone); }
 .badge.t-accent { color: var(--accent-ink); }
 .badge.t-muted { background: var(--surface-2); color: var(--text-2); }
@@ -288,6 +290,8 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .menu-i.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--bad) 13%, transparent); }
 .menu-i:disabled { opacity: .4; }
 /* right-click menus (ui/ContextMenu.tsx): a compact .popover.ctx with headers, key hints, checks and submenus */
+/* the menu itself holds focus until an item is picked; the picked item shows the ring */
+.ctx:focus { outline: none; }
 .ctx { min-width: 13.5rem; max-width: 22rem; max-height: calc(100vh - 12px); padding: .3rem; animation-duration: 120ms; }
 .ctx .menu-i { padding: .38rem .6rem; gap: var(--s-2); font-size: .95em; }
 .ctx .menu-i.on { background: var(--surface-2); color: var(--text); }
@@ -295,7 +299,7 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .menu-k { flex: none; margin-left: var(--s-4); padding: 0; background: none; box-shadow: none; color: var(--text-3); font-family: var(--font); font-size: var(--t-meta); font-weight: 600; }
 .menu-sub { flex: none; width: .95em; height: .95em; margin-right: -.2rem; color: var(--text-3); }
 .menu-c { flex: none; width: 1.05em; height: 1.05em; display: grid; place-items: center; color: var(--accent-ink); }
-.menu-c .i { width: 100%; height: 100%; stroke-width: 2.4; color: inherit; }
+.menu-c .i { width: 100%; height: 100%; stroke-width: 1.8; color: inherit; }
 .menu-ni { flex: none; width: 1.15em; }
 .menu-img { flex: none; width: 1.35em; height: 1.35em; border-radius: 50%; object-fit: cover; background: var(--img-bg); }
 .menu-h { padding: var(--s-2) var(--s-2) var(--s-1); color: var(--text-3); font-size: var(--t-meta); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -316,7 +320,7 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 /* never a wall of text: past three lines the rest is in the hover tip */
 .toast .tt { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 /* a long message shows whole while pointed at or focused (the toast waits meanwhile) */
-.toast:hover .tt, .toast:focus-within .tt { -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
+.toast:hover .tt, html:is(.kbd, .pad) .toast:focus-within .tt { -webkit-line-clamp: unset; line-clamp: none; overflow: visible; }
 .toast > .i { color: var(--ok); }
 .toast.bad > .i { color: var(--bad); }
 .toast.info > .i { color: var(--info); }
@@ -325,10 +329,9 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .toast-act.toast-more { font-weight: 500; color: inherit; opacity: .8; }
 .toast-x { flex: none; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: var(--radius-sm); color: var(--text-3); }
 .toast-x:hover { background: var(--hover); color: var(--text); }
-.t-life { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--accent); transform-origin: left; animation: life linear forwards; opacity: .7; }
+.t-life { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--accent); transform-origin: left; opacity: .7; }
 .toast.bad .t-life { background: var(--bad); }
 .toast.info .t-life { background: var(--info); }
-.toast:is(:hover, :focus-within) .t-life { animation-play-state: paused; }
 .apptip { position: fixed; z-index: 120; max-width: 22rem; padding: .38rem .62rem; border-radius: var(--radius-sm); background: var(--text); color: var(--bg); font-size: .84em; font-weight: 600; line-height: 1.35;
   pointer-events: none; box-shadow: 0 6px 18px rgb(0 0 0 / .3); animation: tipIn 130ms var(--ease-out); }
 
@@ -348,7 +351,8 @@ button.tile:hover, a.tile:hover, .tile.click:hover { box-shadow: inset 0 0 0 1px
 .tile-tl .badge.t-accent, .tile-tr .badge.t-accent { background: var(--accent); }
 .tile-tl .badge.t-muted, .tile-tr .badge.t-muted { background: color-mix(in srgb, var(--bg) 78%, transparent); color: var(--text); }
 .tile-hover { opacity: 0; transition: opacity var(--dur) var(--ease); }
-.tile:hover .tile-hover, .tile:focus-within .tile-hover { opacity: 1; }
+/* hover, or keyboard and controller focus (a mouse press leaves focus behind) */
+.tile:hover .tile-hover, html:is(.kbd, .pad) .tile:focus-within .tile-hover { opacity: 1; }
 .tile-body { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-3); min-width: 0; }
 .tile-t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-sub { color: var(--text-3); font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -459,6 +463,21 @@ button.gallery-main { cursor: zoom-in; }
 .swatch { width: 1.9rem; height: 1.9rem; flex: none; border-radius: 50%; background: var(--c, var(--accent)); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2); transition: transform var(--dur) var(--ease-spring), box-shadow var(--dur) var(--ease); }
 .swatch:hover { box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2), 0 0 0 2px var(--line-2); }
 .swatch.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--c, var(--accent)); }
+/* ui/ColorPicker.tsx */
+.cpick { display: grid; gap: var(--s-3); padding: var(--s-3); }
+.cpick-prev { display: grid; grid-template-columns: 2fr 1fr 1fr; border-radius: var(--radius-sm); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line-2); }
+.cpick-prev > span { display: grid; place-items: center; height: 2.6rem; font-weight: 750; font-size: 1.1em; }
+.cpick-dark { background: #1c1d22; }
+.cpick-light { background: #f4f4f2; }
+.cpick-note { margin: 0; }
+.cpick-presets { display: grid; grid-template-columns: repeat(6, 1.6rem); justify-content: space-between; row-gap: var(--s-2); }
+.cpick-sw { width: 1.6rem; height: 1.6rem; box-shadow: inset 0 0 0 1px var(--line-2); }
+.cpick-row { display: grid; grid-template-columns: 5.5rem auto 1fr auto; align-items: center; gap: var(--s-1); }
+.cpick-l { font-size: .88em; color: var(--text-2); }
+.cpick-range { appearance: none; width: 100%; height: .7rem; margin: 0; border-radius: 99px; background: var(--track); box-shadow: inset 0 0 0 1px var(--line-2); cursor: pointer; }
+.cpick-range::-webkit-slider-thumb { appearance: none; width: 1rem; height: 1rem; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .45), 0 1px 3px rgb(0 0 0 / .4); }
+.cpick-range:focus-visible, html.kbd .cpick-range:focus { outline: 2px solid var(--ring); outline-offset: 3px; }
+.cpick-hex { display: grid; grid-template-columns: 5.5rem 1fr; align-items: center; gap: var(--s-1); }
 .dot { display: inline-block; flex: none; width: .55rem; height: .55rem; border-radius: 50%; background: var(--tone, var(--text-3)); }
 .prose { color: var(--text-2); line-height: 1.6; overflow-wrap: anywhere; user-select: text; }
 .prose > * + * { margin-top: .75em; }
@@ -492,7 +511,6 @@ button.gallery-main { cursor: zoom-in; }
 @keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(270%); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-@keyframes life { to { transform: scaleX(0); } }
 @keyframes nope { 20%, 60% { transform: translateX(-3px); } 40%, 80% { transform: translateX(3px); } }
 @keyframes saved { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } to { box-shadow: 0 0 0 10px transparent; } }
 

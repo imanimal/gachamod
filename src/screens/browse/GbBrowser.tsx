@@ -23,6 +23,7 @@ import { applySaved, describe, isPlain, matching, removeSaved, renameSaved, save
 import { KINDS, SORTS, beginVisit, endCarry, endVisit, kindLabel, kindTitle, openWithFilters, setFilters, sortLabel, takePlace, useFilters, useLibIndex, type BrowseFilters, type BrowseSort } from "./state";
 import type { GbCategoryRef as Cat } from "../../lib/gamebanana";
 import "./browse.css";
+import "./gb-inline.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { useHint } from "../../shell/hints";
 import { gameShort } from "../../lib/games";
@@ -417,7 +418,7 @@ function Browser({ gs, embedded, onExpand, character: fixedChar }: GbBrowserProp
           ))}
           {chips.length > 1 && <Button size="sm" variant="ghost" icon="x" className="gbb-clear" onClick={clearAll} title={t("Remove every filter")}>{t("Clear all")}</Button>}
           {canSave && (
-            <Button size="sm" variant="ghost" icon="pin" className="gbb-clear" onClick={() => saveFilters(game)}
+            <Button size="sm" variant="ghost" icon="pin" className="gbb-clear" onClick={() => saveFilters(game, true)}
               title={t("Keep this set of filters under Saved, to put it back in one click")}>{t("Save filters")}</Button>
           )}
         </div>

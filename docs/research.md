@@ -261,6 +261,17 @@ GameBanana also has a newer "Remote Install" flow in its frontend (`Download.js`
 - Tools use `/img/ss/tools`. Category icons are `https://images.gamebanana.com/img/ico/ModCategory/<file>` (useful as character portraits). Game icons/banners are `/img/ico/games/`, `/img/banners/games/`.
 - Embeddable banners: `https://gamebanana.com/mods/embeddables/<id>` with variants listed in `_aEmbeddables._aVariants`.
 
+### 2.8 Member customization (points shop perks)
+
+Members buy these with points. Where each one shows up in apiv11, checked 2026-11-18:
+
+- `GET Member/<id>/ProfilePage` has all of them: `_aSubjectShaper` (name style: `_sTextColor`, `_sTextHoverColor`, `_sFont`, `_sBorderStyle` one of Stroke, Drop Shadow, Glow, Drop Glow, with `_sBorderColor` and `_sBorderHoverColor`), `_sUpicUrl` (a picture shown instead of the name), `_sHovatarUrl` and `_sHdHovatarUrl` (avatar on hover), `_sHdAvatarUrl`, `_aCubeatar` (`Speed`, `SpinAxes` [x, y, z]; the site's three.js code subtracts speed * 0.01 * axis from each rotation per frame), `_aCooltip` (the hover card: font, text effect, box border size, style and colour, background colour, background picture as `_sBackgroundImageUrl` or `_sBackgroundImageFile` under `_sBackgroundImageBaseUrl`), `_bIsOnline`, `_sOnlineTitle`, `_sOfflineTitle`, `_sHonoraryTitle`, `_sSigUrl` (signature picture) and `_aBio` (a list of `{_sTitle, _sValue}`).
+- `GET Member/<id>/AvatarTooltip` is the hover card's own data.
+- Mod lists and `Mod/<id>/ProfilePage` give each submitter `_aSubjectShaper`, `_sUpicUrl`, `_sHovatarUrl` and `_bIsOnline`. Comment posters (`_aPoster`) only have `_sUpicUrl` and `_sSigUrl`. `Member/Multi` rejects the style properties.
+- Text effects as CSS text-shadow: Stroke `-1px -1px 0 C, 1px -1px 0 C, -1px 1px 0 C, 1px 1px 0 C`, Drop Shadow `1px 1px C`, Glow `0 0 3px C`, Drop Glow `1px 1px 1px C`. A Cooltip with no background colour uses `#000000e6`.
+- Uberstyle (a member's CSS for their profile page): `GET Member/UiConfig?_sUrl=/members/<id>` returns `_sUberstyleUrl`. That address on files.gamebanana.com answers with a 302 and no CORS header, so a webview fetch fails; `https://images.gamebanana.com/Member/uberstyles/<file>` serves the same file with `Access-Control-Allow-Origin: *`. The CSS targets GameBanana's own page (`body`, `#TopNav`, `#SideNav`, `#BodyWrapper`, `#SubNavigator`, `.PageModule`, `column`), so it can't be used as is.
+- Submission descriptions (`_sText`) keep members' inline `style` attributes.
+
 ---
 
 ## 3. XXMI Launcher

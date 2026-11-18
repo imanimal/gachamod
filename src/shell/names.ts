@@ -46,6 +46,7 @@ const SECTIONS: Record<string, string> = {
   launch: t("Launch"), problems: t("Problems"), fixes: t("Fixes"), conflicts: t("Conflicts"), "key-clashes": t("Key clashes"),
   ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Share and import"), others: t("Mods from other managers"),
   makers: t("Mod makers"), hash: t("Find a hash"),
+  disk: t("Storage"), "disk-big": t("Biggest mods"), "disk-dupes": t("Mods installed twice"),
   history: t("History"), dev: t("Dev tools"), extensions: t("Extensions"),
 };
 /** "set-trash-days" (one setting in Settings) reads "Trash days". */

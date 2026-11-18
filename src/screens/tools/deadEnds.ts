@@ -31,6 +31,7 @@ export async function muteDeadEnds(game: GameId, rows: ModHealthRow[]) {
     : (one ? t("Muted {mod} until its author posts an update", { mod: one }) : tn(rows.length, "Muted {n} mod until their author posts an update", "Muted {n} mods until their author posts an update"));
   record({
     label,
+    brief: one ? (changed.length ? t("Turned off the mod until its author posts an update") : t("Muted the mod until its author posts an update")) : undefined,
     undo: async () => { if (changed.length) await restoreStates(game, before, changed); await held?.undo(); },
     redo: async () => { if (offIds.length) publish(game, await library.setEnabled(game, offIds, false)); await held?.redo(); },
   });

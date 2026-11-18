@@ -23,7 +23,9 @@
   .mod-card.is-off .mod-card-char { color: var(--text-3); }
   .mod-card:hover { box-shadow: inset 0 1.5px 0 rgb(255 255 255 / .1), 0 0 0 2px var(--acc), 0 3px 0 2px rgb(0 0 0 / .75); }
   .mod-card-foot .toggle { right: .5rem; bottom: .55rem; }
-  .mod-card-more { background: #0c0c0c; color: #fff; box-shadow: 0 0 0 1.5px var(--rim); }
+  /* the card has a 5px rim, so the key and the badges sit that much further in, off the picture's edge */
+  .mod-card-more { top: calc(.35rem + 5px); right: calc(.35rem + 5px); background: #0c0c0c; color: #fff; box-shadow: 0 0 0 1.5px var(--rim); }
+  .mod-card-badges { top: calc(.45rem + 5px); left: calc(.45rem + 5px); right: calc(2.4rem + 5px); }
   .mod-card-fav { background: var(--yellow); color: #0a0a0a; box-shadow: 0 0 0 2px var(--ink); transform: rotate(-8deg); }
   .mod-card-update { cursor: pointer; }
   .mod-card.is-row { padding: 3px; border-radius: 999px; }
@@ -46,7 +48,7 @@
   .home-quick-count:hover { color: #fff; }
   .home-quick-bar { background: var(--dots), var(--well); border-top: 2px solid var(--ink); }
   .home-pchip { height: 2.2rem; background: var(--dots), #0c0c0c; color: #e4e4e4; font-weight: 800; font-style: italic; border: 2.5px solid var(--ring-g); box-shadow: 0 0 0 1.5px var(--rim); }
-  .home-pchip:hover { color: var(--acc); box-shadow: 0 0 0 1.5px var(--acc); }
+  .home-pchip:hover { color: var(--acc-text, var(--acc)); box-shadow: 0 0 0 1.5px var(--acc); }
   .home-pchip.on { color: #0a0a0a; background: var(--dots-ink), linear-gradient(180deg, var(--acc-hi), var(--acc-lo)); border-color: var(--ink); box-shadow: 0 0 0 1.5px var(--acc-dk); }
   .home-pchip.on .home-pchip-on { color: #0a0a0a; }
   .home-all { color: var(--acc-ink); font-weight: 800; font-style: italic; border-radius: 13px; box-shadow: inset 0 0 0 2px var(--line-2); }

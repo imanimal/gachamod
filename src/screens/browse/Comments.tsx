@@ -8,6 +8,7 @@ import { toast } from "../../ui/toast";
 import { errorText, shell } from "../../lib/api";
 import { commentReplies, isAbort, modComments, sanitizeHtml, type GbComment, type GbCommentPage, type GbModel } from "../../lib/gamebanana";
 import { t, tn } from "../../lib/i18n";
+import { useCreatorStyles } from "../../lib/prefs";
 
 type OnLink = (e: MouseEvent | KeyboardEvent) => void;
 
@@ -108,19 +109,24 @@ function Comment({ c, onLink, reply }: { c: GbComment; onLink: OnLink; reply?: b
   const [open, setOpen] = useState(false);
   const html = useMemo(() => sanitizeHtml(c.html), [c.html]);
   const name = c.author?.name ?? t("Someone");
+  const styles = useCreatorStyles();
   return (
     <li className={`gb-comment${reply ? " is-reply" : ""}`}>
       <Avatar src={c.author?.avatar ?? null} name={name} size={reply ? 24 : 32} />
       <div className="gb-comment-main">
         <div className="gb-comment-h">
           {c.author
-            ? <CreatorLink id={c.author.id} name={name} className="gb-comment-who" />
+            ? <CreatorLink id={c.author.id} name={name} className="gb-comment-who" style={c.author.style} />
             : <strong>{name}</strong>}
           {c.labels.includes("Submitter") && <Badge tone="accent">{t("Author")}</Badge>}
           {c.pinned && !reply && <Badge icon="pin">{t("Pinned")}</Badge>}
           <span className="muted" title={new Date(c.added * 1000).toLocaleString()}>{timeAgo(c.added)}</span>
         </div>
         <div className="gb-desc gb-comment-text selectable" onClick={onLink} onKeyDown={onLink} dangerouslySetInnerHTML={{ __html: html }} />
+        {styles && c.author?.sig && (
+          <img key={c.author.sig} className="gb-sig" src={c.author.sig} alt="" loading="lazy" decoding="async" title={t("{name}'s signature on GameBanana", { name })}
+            onError={(e) => { e.currentTarget.hidden = true; }} />
+        )}
         {c.replies > 0 && !reply && (
           <button type="button" className="gb-older gb-comment-replies" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             <Icon name={open ? "down" : "chevron"} /><span>{tn(c.replies, "{n} reply", "{n} replies")}</span>

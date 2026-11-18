@@ -8,8 +8,11 @@ import { retoast, toast } from "../ui/toast";
 import { t, tb } from "./i18n";
 
 export interface Op {
-  /** Past tense, sentence case: "Turned off 3 mods". */
+  /** Past tense, sentence case: "Turned off 3 mods". The title bar's undo list shows it. */
   label: string;
+  /** What the toast says when the label names things: "Hid the mod from Browse" for "Hid Beach Walk from Browse".
+   *  Toasts never list names; the undo list keeps them. */
+  brief?: string;
   undo: () => Promise<unknown>;
   redo: () => Promise<unknown>;
   at: number;
@@ -30,7 +33,10 @@ function errText(e: unknown): string {
   return tb(String(e));
 }
 
-/** Record a finished operation and offer Undo. */
+/** Record a finished operation and offer Undo in a toast. `quiet` records it for Ctrl+Z and the title bar's undo list
+ *  without a toast: use it when the control the user just used still shows the new state and one more click puts it
+ *  back (a switch, a segmented choice, a follow button). The toast is for changes that reach past what's on screen:
+ *  a mod that vanishes, other mods turned off, files moved. */
 export function record(op: Omit<Op, "at">, quiet = false): Entry {
   const e: Entry = { ...op, at: Date.now(), id: seq++, state: "done" };
   past.push(e);
@@ -53,7 +59,7 @@ function show(e: Entry, text: string, label: "Undo" | "Redo", toastId?: number) 
   if (!id || !retoast(id, text, action)) id = toast(text, false, action);
   toastOf.set(e.id, id);
 }
-function offerUndo(e: Entry, toastId?: number) { show(e, t("{label}.", { label: e.label }), "Undo", toastId); }
+function offerUndo(e: Entry, toastId?: number) { show(e, t("{label}.", { label: e.brief ?? e.label }), "Undo", toastId); }
 // "Turned off 3 mods" reads "Undone: turned off 3 mods", but a label that opens with a name ("Beach Walk Camellya: Kept
 // ...") keeps its capitals: only a plain first word followed by a lowercase word is lowered.
 function lowerFirst(label: string): string {
@@ -61,13 +67,13 @@ function lowerFirst(label: string): string {
   if (!/^\p{Lu}\p{Ll}+$/u.test(first) || /^\p{Lu}/u.test(second)) return label;
   return label.charAt(0).toLowerCase() + label.slice(1);
 }
-function offerRedo(e: Entry, toastId?: number) { show(e, t("Undone: {label}.", { label: lowerFirst(e.label) }), "Redo", toastId); }
+function offerRedo(e: Entry, toastId?: number) { show(e, t("Undone: {label}.", { label: lowerFirst(e.brief ?? e.label) }), "Redo", toastId); }
 
 /** Undo the newest operation, or the one given (it must be the newest still done). */
 export async function undo(target?: Entry, toastId?: number): Promise<boolean> {
   if (running) return false;
   const e = target ?? past[past.length - 1];
-  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast(t("Nothing to undo. You haven't broken anything yet")); return false; }
+  if (!e || e.state !== "done" || !past.includes(e)) { if (!target) toast(t("Nothing to undo")); return false; }
   // undoing an older one first undoes what came after it, so the inverse runs on the state it expects
   while (past.length && past[past.length - 1] !== e) { const later = past[past.length - 1]; if (!(await undoOne(later))) return false; }
   const ok = await undoOne(e);

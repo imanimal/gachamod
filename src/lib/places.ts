@@ -18,6 +18,7 @@ const PLACES: Array<[RegExp, ToastAction]> = [
   [/Open XXMI Launcher (once|and)|Set it in XXMI Launcher|launch in XXMI Launcher|Only XXMI Launcher can/i,
     { label: t("Open XXMI Launcher"), run: () => xxmi.open().catch((e) => { toast(errorText(e), true); }) }],
   [/no Mods folder/i, { label: t("Mods folders"), run: settings("mod-folders") }],
+  [/The drive is full/i, { label: t("View storage"), run: settings("disk") }],
   [/game folder (isn't set|is gone)|game folder again in Settings|loader folder in Settings|yet\. Settings, Games|isn't set up|Set up a game first/i,
     { label: t("Game folders"), run: settings("games") }],
   [/Hide adult mods from the chatbot/i, { label: t("AI helper settings"), run: settings("set-ai-adult") }],

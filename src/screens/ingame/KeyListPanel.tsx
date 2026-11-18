@@ -12,7 +12,7 @@ import { LazyImg } from "../../ui/LazyImg";
 import { toast } from "../../ui/toast";
 import { menuHandler, type MenuEntry } from "../../ui/ContextMenu";
 import { HotkeyField } from "../profiles/HotkeyField";
-import { keyHits, useKeyList } from "./KeyListParts";
+import { keyHits, saveKeyList, useKeyList } from "./KeyListParts";
 
 const STYLE_HINT: Record<KeyListSettings["style"], (key: string) => string> = {
   window: (key) => t("{key} opens gachamod's menu over the game on the Keys tab. In exclusive fullscreen the game draws the list in its top right corner instead. The game reloads once after a change here.", { key }),
@@ -22,14 +22,6 @@ const STYLE_HINT: Record<KeyListSettings["style"], (key: string) => string> = {
 const MENUS_TIP = t("Stops listing every mod that shows a key menu in game, now and for mods added later");
 const ALL_TIP = t("Stops listing every mod here. Tick Listed on a mod to show it again");
 
-/** What a change of the settings did, for Undo. */
-function changeLabel(before: KeyListSettings, next: KeyListSettings): string {
-  if (before.on !== next.on) return next.on ? t("Turned the key list on") : t("Turned the key list off");
-  if (before.style !== next.style) return next.style === "window" ? t("Set the key list to show over the game") : t("Set the key list to show inside the game");
-  if (before.key !== next.key) return t("Set the key list's key to {key}", { key: next.key });
-  return next.own ? t("Listed mods with a key menu") : t("Left out mods with a key menu");
-}
-
 export function KeyListPanel({ game }: { game: GameId }) {
   const kl = useKeyList(game);
   const { list } = kl;
@@ -38,18 +30,11 @@ export function KeyListPanel({ game }: { game: GameId }) {
   const words = q.trim().toLowerCase();
   const found = useMemo(() => list?.mods.filter((m) => keyHits(m, words)) ?? [], [list, words]);
 
+  // the same save as the key list's key in Settings > Hotkeys
   const save = async (next: KeyListSettings) => {
     if (!list) return;
-    const before = list.settings;
     setBusy("settings");
-    try {
-      kl.settle(await keyList.set(game, next));
-      record({
-        label: changeLabel(before, next),
-        undo: async () => { kl.settle(await keyList.set(game, before)); },
-        redo: async () => { kl.settle(await keyList.set(game, next)); },
-      });
-    } catch (e) { toast(errorText(e), true); } finally { setBusy(null); }
+    try { await saveKeyList(game, list.settings, next, kl.settle); } finally { setBusy(null); }
   };
   const choose = async (m: ModKeyList, listed: boolean | null) => {
     setBusy(m.modId);

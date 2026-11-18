@@ -94,13 +94,14 @@ function AddKey({ what, pad, onBinding }: { what: string; pad: boolean; onBindin
 /** A change to the menu's keys: it gets the keys as they are when it saves (another change may still be saving). */
 export type BindsUpdate = (binds: Record<string, string[]>) => Record<string, string[]>;
 
-/** `onChange` gets the change and what its Undo step says ("Added K to Close the menu"); the backend says when a key
- *  already does something else. */
-export function MenuKeys({ menu, onChange }: { menu: MenuSettings; onChange: (update: BindsUpdate, label: string) => void }) {
+/** `onChange` gets the change, what its Undo step says ("Added K to Close the menu") and `say`: true when the chip or
+ *  button that made it goes away, so the change gets a toast with Undo. The backend says when a key already does
+ *  something else. `open`: the fold starts open (Settings > Hotkeys). */
+export function MenuKeys({ menu, onChange, open }: { menu: MenuSettings; onChange: (update: BindsUpdate, label: string, say?: boolean) => void; open?: boolean }) {
   const usual = ROWS.every((r) => same(menu.binds[r.id] ?? [], MENU_BINDS[r.id] ?? []));
-  const set = (id: string, f: (keys: string[]) => string[], label: string) => onChange((b) => ({ ...b, [id]: f(b[id] ?? []) }), label);
+  const set = (id: string, f: (keys: string[]) => string[], label: string, say = false) => onChange((b) => ({ ...b, [id]: f(b[id] ?? []) }), label, say);
   return (
-    <details className="live-binds">
+    <details className="live-binds" open={open}>
       <summary title={t("Change the keys and controller buttons that move, pick and close in the skin menu")}>{t("Menu keys")}</summary>
       <ul className="live-binds-l">
         {ROWS.map((r) => {
@@ -112,7 +113,7 @@ export function MenuKeys({ menu, onChange }: { menu: MenuSettings; onChange: (up
                 {keys.map((k) => (
                   <BindChip key={k} binding={k} what={r.label} pad={r.id === PAD_ROW}
                     onBinding={(b) => set(r.id, (ks) => ks.map((x) => (x === k ? b : x)), t("Changed {old} to {key} for {what}", { old: bindingLabel(k), key: bindingLabel(b), what: r.label }))}
-                    onRemove={() => set(r.id, (ks) => ks.filter((x) => x !== k), t("Removed {key} from {what}", { key: bindingLabel(k), what: r.label }))} />
+                    onRemove={() => set(r.id, (ks) => ks.filter((x) => x !== k), t("Removed {key} from {what}", { key: bindingLabel(k), what: r.label }), true)} />
                 ))}
                 {keys.length < MOST && <AddKey what={r.label} pad={r.id === PAD_ROW}
                   onBinding={(b) => set(r.id, (ks) => (ks.length < MOST && !ks.includes(b) ? [...ks, b] : ks), t("Added {key} to {what}", { key: bindingLabel(b), what: r.label }))} />}
@@ -126,7 +127,7 @@ export function MenuKeys({ menu, onChange }: { menu: MenuSettings; onChange: (up
           : t("Click a key to rebind it. Keyboard keys work in both menus. In the menu over the game the arrow keys and Enter always work as well, and a controller moves in it the way it does in gachamod. Controller buttons are off: turn on Use a controller in the menu.")}
       </p>
       {!usual && <Button size="sm" variant="ghost" icon="undo" title={t("Arrow keys, Enter, the D-pad, A, B and both sticks, as the menu starts out")}
-        onClick={() => onChange(() => ({ ...MENU_BINDS }), t("Put back the usual menu keys"))}>{t("Use the usual keys")}</Button>}
+        onClick={() => onChange(() => ({ ...MENU_BINDS }), t("Put back the usual menu keys"), true)}>{t("Use the usual keys")}</Button>}
     </details>
   );
 }

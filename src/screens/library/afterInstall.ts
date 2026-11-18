@@ -11,7 +11,7 @@ import { enableNewPref } from "../settings/automatic";
 import { liveCharacterOf, liveReady, makeLive } from "../ingame/data";
 import { publish, restoreStates } from "./data";
 import { overlapping } from "./overlap";
-import { t, tb, tn } from "../../lib/i18n";
+import { stops, t, tb, tn } from "../../lib/i18n";
 
 const ASKED_KEY = "mods.enableNew.asked";
 /** Two installs this close together share a toast. */
@@ -92,38 +92,38 @@ function offerSwitch(game: GameId, who: string, skins: ModEntry[], lead: string,
   const key = `${game}:${who.toLowerCase()}`;
   const act: ToastAction = { label: t("Switch in game"), run: () => makeLive(game, skins.map((m) => m.id), who) };
   const was = switches.get(key);
-  if (was && retoast(was.id, t("Installed {n} skins for {name}. Switch {name}'s skins while you play?", { n: was.n + 1, name: who }), act, false, open)) { was.n++; return; }
-  switches.set(key, { id: toast(t("{text}. Switch {name}'s skins while you play?", { text: lead, name: who }), false, act, open), n: 1 });
+  if (was && retoast(was.id, t("Installed {n} skins for the same character. Switch them while you play?", { n: was.n + 1 }), act, false, open)) { was.n++; return; }
+  switches.set(key, { id: toast(t("{text}. Switch this character's skins while you play?", { text: lead }), false, act, open), n: 1 });
 }
 
-/** The backend's text names the mod's group when it has no character ("Installed X for NPCs & Entities"): drop that. */
-function plainText(text: string, mod?: ModEntry) {
-  if (!mod || mod.character) return text;
-  const dot = text.indexOf(". ");
-  const head = dot < 0 ? text : text.slice(0, dot), tail = dot < 0 ? "" : text.slice(dot);
-  const at = head.lastIndexOf(" for ");
-  if (at < 0) return text;
-  const what = head.slice(at + 5);
-  // "Skin for Lumine" is the mod's own name, not a group
-  if (mod.name.toLowerCase().includes(what.toLowerCase())) return text;
-  return head.slice(0, at) + tail;
+/** The backend's "Installed X for Y. Notes" in the user's language, without the names toasts never list: "Installed
+ *  the mod. Notes", or "Installed 3 mods" for a bundle or several variants (`several`). */
+function plainText(raw: string): { text: string; several: boolean } {
+  const dot = raw.indexOf(". ");
+  const head = dot < 0 ? raw : raw.slice(0, dot), tail = dot < 0 ? "" : raw.slice(dot + 2);
+  const m = /^Installed (\d+) (variants|mods) /.exec(head);
+  const n = m ? Number(m[1]) : 1;
+  const lead = !m ? t("Installed the mod") : m[2] === "variants" ? tn(n, "Installed {n} variant", "Installed {n} variants") : tn(n, "Installed {n} mod", "Installed {n} mods");
+  return { text: tail ? stops([lead, tb(tail)]) : lead, several: !!m };
 }
 
-/** The one way an install toast says the mod is on and what went off for it. */
-const onText = (text: string, off: ModEntry[]) => (!off.length ? t("{text}. It's on", { text })
-  : off.length === 1 ? t("{text}. It's on, and {mod} went off", { text, mod: off[0]!.name })
-  : tn(off.length, "{text}. It's on, and {n} other skin went off", "{text}. It's on, and {n} other skins went off", { text }));
+/** The one way an install toast says the mod is on and what went off for it. With several installed, the first one
+ *  is turned on. */
+const onText = (text: string, off: ModEntry[], several = false) => several
+  ? (!off.length ? t("{text}. The first one is on", { text })
+    : tn(off.length, "{text}. The first one is on, and {n} other skin went off", "{text}. The first one is on, and {n} other skins went off", { text }))
+  : (!off.length ? t("{text}. It's on", { text })
+    : tn(off.length, "{text}. It's on, and {n} other skin went off", "{text}. It's on, and {n} other skins went off", { text }));
 
 /** `text` is the backend's "Installed X for Y". `modIds[0]` is the mod to turn on (the first of several variants). */
 export async function afterInstall(rawText: string, game: GameId, modIds: string[]) {
   const open: ToastAction = { label: t("Open"), run: () => { if (currentGame()?.id !== game) setGame(game); go({ view: "library", modId: modIds[0] }); } };
-  // the backend's text in the user's language (plainText reads the English)
-  let text = tb(rawText);
+  // the backend's text in the user's language, without names
+  const { text, several } = plainText(rawText);
   try {
     await enableNewPref.ready;
     const all = await library.list(game);
     const mod = all.find((m) => m.id === modIds[0]);
-    text = tb(plainText(rawText, mod));
     if (!enableNewPref.get() || !modIds.length) { await say(t("{text}. Turn it on in Mods", { text }), open, { on: false, prefOff: true, off: 0 }); return; }
     if (!mod || mod.enabled) { await say(text, open, { on: false, prefOff: false, off: 0 }); return; }
     const others = liveCharacterOf(game, mod.id) ? [] : overlapping(mod, all);
@@ -143,17 +143,17 @@ export async function afterInstall(rawText: string, game: GameId, modIds: string
 
     // the first time: say it happens by itself, with the way out. Mods turned on while it shows join it
     const turned: Turned = { game, before, ids };
-    if (!openOffer() && !(await wasAsked()) && !openOffer()) { showOffer(onText(text, off), turned); return; }
+    if (!openOffer() && !(await wasAsked()) && !openOffer()) { showOffer(onText(text, off, several), turned); return; }
     openOffer()?.turned.push(turned);
 
     // two skins for one character: switching them while playing is one click away
     const who = mod.character;
     const skins = who ? all.filter((m) => same(m.character, who) && !m.parent) : [];
     if (who && skins.length > 1 && !liveCharacterOf(game, mod.id) && liveReady(game)) {
-      offerSwitch(game, who, skins, onText(text, off), open);
+      offerSwitch(game, who, skins, onText(text, off, several), open);
       return;
     }
-    await say(onText(text, off), open, { on: true, prefOff: false, off: off.length });
+    await say(onText(text, off, several), open, { on: true, prefOff: false, off: off.length });
   } catch (e) {
     if (!enableNewPref.get()) toast(t("{text}. Turn it on in Mods", { text }), false, open);
     else toast(t("{text}, but it couldn't be turned on: {error}", { text, error: errorText(e) }), true, open);

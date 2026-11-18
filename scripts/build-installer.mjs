@@ -1,7 +1,8 @@
 // Builds the Windows installer. Folders of the build machine under the user's home are written as "~" inside the
 // programs (panic messages name source files), so nothing it makes carries user folder names. GACHAMOD_POSTHOG_KEY
-// (and GACHAMOD_POSTHOG_HOST for PostHog's EU server) come from the environment or from a .env file at the repo root
-// (git ignores it). Without the key the build sends no usage counts, crash reports, feedback or game checks. The update
+// (and GACHAMOD_POSTHOG_HOST for PostHog's EU server) come from the environment, a .env file at the repo root (git
+// ignores it) or %USERPROFILE%\.tauri\gachamod.env, which `npm run posthog-key` writes and a release worktree finds
+// too. Without the key the build sends no usage counts, crash reports, feedback or game checks. The update
 // files (the installer's .sig) are signed with %USERPROFILE%\.tauri\gachamod.key or TAURI_SIGNING_PRIVATE_KEY; without
 // either the installer is built unsigned and can't be released as an update.
 //
@@ -20,13 +21,16 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const at = (p) => join(root, p);
 
+// the repo's .env wins over the one in .tauri, and the environment over both
 const fromFile = {};
-try {
-  for (const line of readFileSync(at(".env"), "utf8").split(/\r?\n/)) {
-    const m = line.match(/^\s*(GACHAMOD_[A-Z_]+)\s*=\s*"?([^"#]*?)"?\s*$/);
-    if (m) fromFile[m[1]] = m[2];
-  }
-} catch { /* no .env */ }
+for (const file of [join(homedir(), ".tauri", "gachamod.env"), at(".env")]) {
+  try {
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*(GACHAMOD_[A-Z_]+)\s*=\s*"?([^"#]*?)"?\s*$/);
+      if (m) fromFile[m[1]] = m[2];
+    }
+  } catch { /* no such file */ }
+}
 const env = { ...fromFile, ...process.env };
 
 const home = env.USERPROFILE ?? env.HOME ?? "";

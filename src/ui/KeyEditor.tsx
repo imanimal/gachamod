@@ -25,8 +25,10 @@ const changedSubs = new Set<Changed>();
 export function keysChanged(game: string, modId: string) { changedSubs.forEach((f) => f(game, modId)); }
 export function onKeysChanged(f: Changed): () => void { changedSubs.add(f); return () => { changedSubs.delete(f); }; }
 
-/** Record an edit that took backups: Undo restores them, and restoring hands back the backups that redo it. */
-export function recordBackups(label: string, taken: Array<{ game: string; modId: string; backup: Backup }>) {
+/** Record an edit that took backups: Undo restores them, and restoring hands back the backups that redo it. `brief`
+ *  is the toast's words when the label names mods; `quiet` records it without a toast, for a switch that shows the
+ *  change itself. */
+export function recordBackups(label: string, taken: Array<{ game: string; modId: string; backup: Backup }>, opts?: { brief?: string; quiet?: boolean }) {
   let next = taken.slice();
   const flip = async () => {
     const out: typeof next = [];
@@ -38,14 +40,17 @@ export function recordBackups(label: string, taken: Array<{ game: string; modId:
     for (const tk of next) keysChanged(tk.game, tk.modId);
     if (failed) throw failed;
   };
-  record({ label, undo: flip, redo: flip });
+  record({ label, brief: opts?.brief, undo: flip, redo: flip }, opts?.quiet);
 }
 
-/** Apply a KeyEdit's result: Undo with its backup, a note when there is one. */
-export function recordEdit(game: GameId, modId: string, edit: KeyEdit, fallback: string) {
+/** Apply a KeyEdit's result: Undo with its backup. `brief` is the toast's words (the backend's label names the mod);
+ *  false records it without a toast, for a switch that shows the change itself. A note from the backend (a key
+ *  clash, "Press F10 in game") always shows. */
+export function recordEdit(game: GameId, modId: string, edit: KeyEdit, fallback: string, brief: string | false = t("Changed the mod's keys")) {
   keysChanged(game, modId);
   if (!edit.backup) { toast(edit.note ?? fallback); return; }
-  recordBackups(edit.note ? `${edit.backup.label}. ${edit.note}` : edit.backup.label, [{ game, modId, backup: edit.backup }]);
+  const say = brief === false ? edit.note : edit.note ? `${brief}. ${edit.note}` : brief;
+  recordBackups(edit.note ? `${edit.backup.label}. ${edit.note}` : edit.backup.label, [{ game, modId, backup: edit.backup }], { brief: say ?? undefined, quiet: !say });
 }
 
 // ── press-to-capture ──
@@ -311,12 +316,12 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
     return () => { live = false; off(); };
   }, [game, modId, load]);
 
-  const run = useCallback(async (what: string, job: () => Promise<KeyEdit>, fallback: string) => {
+  const run = useCallback(async (what: string, job: () => Promise<KeyEdit>, fallback: string, brief: string | false) => {
     setBusy(what);
     try {
       const edit = await job();
       if (current.current === `${game}|${modId}`) setKeys(edit.keys);
-      recordEdit(game, modId, edit, fallback);
+      recordEdit(game, modId, edit, fallback, brief);
     } catch (e) {
       toast(errorText(e), true);
     } finally {
@@ -349,7 +354,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
           : onScreen === "cant" || onScreen === "partial" ? keys.onScreenNote ?? undefined
           : onScreen === "on" ? t("Added by gachamod. Turn it off if a toggle stops working in game")
           : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while its character isn't on screen")}
-        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"))} />
+        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"), false)} />
       {showAi && (
         <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot")}
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>{t("Ask the AI helper")}</Button>
@@ -378,13 +383,13 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
                   <span key={`${l.field}-${l.index}`} className="ke-line">
                     {l.field === "back" && <span className="ke-back hint" title={t("Steps back through the looks")}>{t("Back")}</span>}
                     <KeyChip line={l} disabled={busy !== null || l.off}
-                      onBinding={(b) => run(`k${at}`, () => modKeys.rebind(game, modId, { ini: e.ini, section: e.section, field: l.field, index: l.index }, b), t("That's already the key"))} />
+                      onBinding={(b) => run(`k${at}`, () => modKeys.rebind(game, modId, { ini: e.ini, section: e.section, field: l.field, index: l.index }, b), t("That's already the key"), t("Changed the key"))} />
                   </span>
                 ))}
               </span>
               <span className="ke-on" title={e.off ? t("Turn this toggle back on") : t("Turn this toggle off. The mod stays on, only this toggle stops working")}>
                 <Toggle size="sm" checked={!e.off} disabled={busy !== null} ariaLabel={t("{name} toggle", { name: said ?? e.name })}
-                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), t("No change"))} />
+                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), t("No change"), false)} />
               </span>
             </li>
           );
@@ -398,7 +403,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   const reset = ours && (
     <Button size="sm" variant="ghost" icon="undo" busy={busy === "reset"} disabled={busy !== null && busy !== "reset"}
       title={t("Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before its first change. Undo brings the changes back")}
-      onClick={() => run("reset", () => modKeys.putBack(game, modId), t("The files are already the author's"))}>{t("Put back original files")}</Button>
+      onClick={() => run("reset", () => modKeys.putBack(game, modId), t("The files are already the author's"), t("Put back the original files"))}>{t("Put back original files")}</Button>
   );
 
   if (compact) return <div className="ke ke-compact">{body}{reset && <div className="ke-foot">{reset}</div>}</div>;

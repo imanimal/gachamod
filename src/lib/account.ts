@@ -8,7 +8,7 @@ import { errorText, settings } from "./api";
 import { forgetModPage } from "./gamebanana";
 import { record } from "./history";
 import { t, tb, tn } from "./i18n";
-import { creatorsPref, jsonPref, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type NsfwMode } from "./prefs";
+import { creatorsPref, jsonPref, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type CreatorRef, type NsfwMode } from "./prefs";
 import { call, listen } from "./tauri";
 import { toast } from "../ui/toast";
 
@@ -36,6 +36,8 @@ export function setAccountState(s: AccountState) {
 const ON_KEY = "account.gbSignIn";
 
 let started = false;
+/** Sign out is running: the account card shows it, so the event it sends gets no toast. */
+let leaving = false;
 function start() {
   if (started) return;
   started = true;
@@ -47,9 +49,9 @@ function start() {
     const was = state.user;
     setAccountState({ ...s, signing: false });
     if (s.user && !was) {
-      toast(t("Signed in to GameBanana as {name}", { name: s.user.name }));
+      toast(t("Signed in to GameBanana"));
       void matchAdult("signin");
-    } else if (!s.user && was) toast(t("You're signed out of GameBanana"), false, { label: t("Sign in"), run: () => void signIn() });
+    } else if (!s.user && was && !leaving) toast(t("You're signed out of GameBanana"), false, { label: t("Sign in"), run: () => void signIn() });
   }).catch(() => {});
   // the sign-in window closed without a sign-in: say so, and why when there was an error
   void listen<string | null>("gb-login-closed", (why) => {
@@ -59,6 +61,8 @@ function start() {
   }).catch(() => {});
 }
 export const useAccount = () => useSyncExternalStore((f) => { start(); subs.add(f); return () => { subs.delete(f); }; }, () => state);
+/** Hear every change to the sign-in state, outside React. */
+export function onAccount(f: () => void): () => void { start(); subs.add(f); return () => { subs.delete(f); }; }
 
 /** Open GameBanana's sign-in page over gachamod. It closes by itself once the user is in. */
 export async function signIn() {
@@ -71,7 +75,9 @@ export async function signIn() {
 }
 
 export async function signOut() {
+  leaving = true;
   try { setAccountState({ ...(await call<AccountState>("gb_sign_out")), signing: false }); } catch (e) { toast(errorText(e), true); }
+  finally { leaving = false; }
 }
 
 /** Follow or unfollow on GameBanana. Errors are said once and don't undo the app's own follow. */
@@ -107,7 +113,8 @@ async function matchAdult(when: "start" | "signin" | "asked") {
     await gbAdultSeenPref.set(mode);
     if (r.untouched && !seen && when !== "asked") return;
     if (mode === nsfwPref.get()) return;
-    await nsfwPref.set(mode, MATCHED[mode]);
+    // a change past the switch the person used (or none at all, at start): say it
+    await nsfwPref.set(mode, MATCHED[mode], true);
   } catch { /* the app's setting stays as it is */ }
 }
 
@@ -164,7 +171,8 @@ export async function likeMod(modId: number, name: string, on: boolean) {
   };
   try {
     await put(on);
-    record({ label: on ? t("Liked {name} on GameBanana", { name }) : t("Took back the like on {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) });
+    // the Like button shows it: no toast
+    record({ label: on ? t("Liked {name} on GameBanana", { name }) : t("Took back the like on {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) }, true);
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -178,18 +186,46 @@ export async function subscribeMod(modId: number, name: string, on: boolean) {
   };
   try {
     await put(on);
-    record({ label: on ? t("Subscribed to {name} on GameBanana", { name }) : t("Unsubscribed from {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) });
+    record({ label: on ? t("Subscribed to {name} on GameBanana", { name }) : t("Unsubscribed from {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) }, true);
+  } catch (e) { toast(errorText(e), true); }
+}
+
+/** Follow a creator, here and on GameBanana, and like one of their mods (`like` false: only follow). One Undo step
+ *  takes both back. */
+export async function likeAndFollow(mod: { id: number; name: string }, c: CreatorRef, like: boolean) {
+  const key = String(c.id);
+  const old = creatorsPref.get()[key];
+  const put = async (on: boolean) => {
+    if (like) {
+      await call("gb_like", { modId: mod.id, on });
+      forgetModPage(mod.id);
+      await mark(likedPref, mod.id, on);
+    }
+    const list = { ...creatorsPref.get() };
+    if (on) list[key] = { ...(list[key] ?? old ?? {}), id: c.id, name: c.name, avatar: c.avatar ?? list[key]?.avatar ?? null, sub: true, blocked: false, at: Date.now() };
+    else if (old) list[key] = old;
+    else delete list[key];
+    await creatorsPref.set(list);
+    await followRemote(c.id, on);
+  };
+  try {
+    await put(true);
+    record({
+      label: like ? t("Liked {mod} and followed {creator} on GameBanana", { mod: mod.name, creator: c.name }) : t("Followed {creator} on GameBanana", { creator: c.name }),
+      brief: like ? t("Liked the mod and followed the creator on GameBanana") : t("Followed the creator on GameBanana"),
+      undo: () => put(false), redo: () => put(true),
+    });
   } catch (e) { toast(errorText(e), true); }
 }
 
 /** Thank a mod's creator on GameBanana with `points` of the member's points (`free`: the first thanks of the day,
  *  which GameBanana pays for). It can't be taken back, so it isn't in Undo. True when GameBanana took it. */
-export async function thankMod(modId: number, name: string, creator: string, points: number, free = false): Promise<boolean> {
+export async function thankMod(modId: number, points: number, free = false): Promise<boolean> {
   try {
     await call("gb_thank", { modId, points });
     forgetModPage(modId);
     await mark(thankedPref, modId, true);
-    toast(free ? t("Thanked {creator} for {name}", { creator, name }) : tn(points, "Thanked {creator} for {name} with {n} point", "Thanked {creator} for {name} with {n} points", { creator, name }));
+    toast(free ? t("Thanked the creator") : tn(points, "Thanked the creator with {n} point", "Thanked the creator with {n} points"));
     return true;
   } catch (e) { toast(errorText(e), true); return false; }
 }

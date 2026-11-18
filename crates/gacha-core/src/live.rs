@@ -70,12 +70,17 @@ fn key_gate(group: u32, slot: u32) -> String { format!("{} && $\\gachamod\\live\
 /// The line a gated section runs when it draws, which tells the menu the character is on screen.
 const SEEN: &str = "run = CommandList\\gachamod\\live\\Seen";
 pub(crate) fn var_name(group: u32) -> String { format!("gachamod\\live\\g{group}") }
-/// The saved value that says a group's character is on screen (`menu::constants`, `CommandListOnScreen`).
-fn on_screen_name(group: u32) -> String { format!("gachamod\\live\\o{group}") }
-
-/// The groups among `groups` whose character the game saved as on screen, in that order.
-fn on_screen(importer: &Path, groups: impl Iterator<Item = u32>) -> Vec<u32> {
-    groups.filter(|n| crate::ini::user_value(importer, &on_screen_name(*n)).and_then(|v| v.parse::<f64>().ok()).is_some_and(|v| v >= 0.5)).collect()
+/// Who the game saved as on screen (`$o<group>` and `$last`, kept by `menu::constants` and `CommandListOnScreen`):
+/// the groups among `groups` whose character is on screen, the one that came on screen last first and the others in
+/// the order of `groups`; and the group that came on screen last, on screen now or not.
+fn on_screen(importer: &Path, groups: &[u32]) -> (Vec<u32>, Option<u32>) {
+    // one read of d3dx_user.ini for every group
+    let saved: HashMap<String, f64> = crate::ini::user_values(importer, "gachamod\\live\\").into_iter()
+        .filter_map(|(k, v)| Some((k, v.parse::<f64>().ok()?))).collect();
+    let mut on: Vec<u32> = groups.iter().copied().filter(|n| saved.get(&format!("o{n}")).is_some_and(|v| *v >= 0.5)).collect();
+    let last = saved.get("last").filter(|v| **v >= 0.5).map(|v| v.round() as u32).filter(|n| groups.contains(n));
+    if let Some(i) = last.and_then(|l| on.iter().position(|n| *n == l)) { let l = on.remove(i); on.insert(0, l); }
+    (on, last)
 }
 
 // ── what the app remembers (setting "live.<game>") ──
@@ -150,9 +155,13 @@ pub struct LiveInfo {
     /// The drawn menu needs no tester options here (`drawn_menu_open`). Elsewhere it is marked as a tester option,
     /// also once they are on.
     pub checked: bool,
-    /// The groups whose character the game last saved as on screen (`$o<group>` in d3dx_user.ini), in the order of
-    /// `groups`. Empty while the game isn't running: values left from its last run say nothing.
+    /// The groups whose character the game last saved as on screen (`$o<group>` in d3dx_user.ini): the one that came
+    /// on screen last first, then the others in the order of `groups`. Empty while the game isn't running: values
+    /// left from its last run say nothing.
     pub on_screen: Vec<u32>,
+    /// The group whose character came on screen last (`$last`), on screen now or not. None while the game isn't
+    /// running.
+    pub last_seen: Option<u32>,
 }
 
 /// How the skin menu opens while playing. `style`: "window" (gachamod's menu over the game; the game draws its own
@@ -374,11 +383,37 @@ pub fn unwrap(text: &str) -> String {
 /// Gate one ini's draw sections and keys on `group == slot`. Earlier edits are taken out first, so wrapping again
 /// with another slot is safe. None when the ini has nothing to gate.
 pub fn wrap(text: &str, group: u32, slot: u32) -> std::result::Result<Option<String>, String> {
-    wrap_with(text, group, slot, &HashMap::new())
+    wrap_with(text, group, slot, &HashMap::new(), !has_mesh(text))
 }
 
-/// `wrap`, with the vertex count each buffer hash has to be raised to for the whole group (`raises`).
-fn wrap_with(text: &str, group: u32, slot: u32, raise: &HashMap<String, u32>) -> std::result::Result<Option<String>, String> {
+/// A TextureOverride that draws the character's model: it binds or draws a buffer, or matches part of an index
+/// buffer. These tell that the character is on screen. One that only swaps a texture doesn't: a texture can also
+/// show in the game's menus or on other characters (the same rule as `keys::draw_sections`).
+fn mesh(section: &str, body: &[&str]) -> bool {
+    section.starts_with("textureoverride") && body.iter().filter_map(|l| line_key(l)).any(|k| {
+        ["ib", "drawindexed", "draw", "drawindexedinstanced", "drawinstanced", "handling", "match_first_index", "match_index_count"].contains(&k.as_str())
+            || k.strip_prefix("vb").is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    })
+}
+
+/// Any TextureOverride in the ini draws the character's model (`mesh`).
+fn has_mesh(text: &str) -> bool {
+    let (mut name, mut body): (Option<String>, Vec<&str>) = (None, Vec::new());
+    for l in text.lines() {
+        if let Some(h) = header(l) {
+            if name.as_deref().is_some_and(|n| mesh(n, &body)) { return true; }
+            (name, body) = (Some(h), Vec::new());
+        } else {
+            body.push(l);
+        }
+    }
+    name.as_deref().is_some_and(|n| mesh(n, &body))
+}
+
+/// `wrap`, with the vertex count each buffer hash has to be raised to for the whole group (`raises`). `seen_all`:
+/// every gated TextureOverride tells the menu the character is on screen, for a mod with no section that draws a
+/// model (a recolour); otherwise only the ones that draw one do.
+fn wrap_with(text: &str, group: u32, slot: u32, raise: &HashMap<String, u32>, seen_all: bool) -> std::result::Result<Option<String>, String> {
     let text = unwrap(text);
     let nl = if text.contains("\r\n") || !text.contains('\n') { "\r\n" } else { "\n" };
     let g = gate(group, slot);
@@ -444,7 +479,7 @@ fn wrap_with(text: &str, group: u32, slot: u32, raise: &HashMap<String, u32>) ->
                 Some(last) => {
                     gated += 1;
                     out.push_str(&format!("{BEGIN}{nl}"));
-                    if name.starts_with("textureoverride") { out.push_str(&format!("{SEEN}{group}{nl}")); }
+                    if name.starts_with("textureoverride") && (seen_all || mesh(&name, body)) { out.push_str(&format!("{SEEN}{group}{nl}")); }
                     out.push_str(&format!("if {g}{nl}"));
                     for &j in rest.iter().filter(|&&j| j <= last) { out.push_str(&with_nl(&line(j))); }
                     out.push_str(&format!("endif{nl}{END}{nl}"));
@@ -517,10 +552,12 @@ fn plan(m: &ModEntry, group: u32, slot: u32, raise: &HashMap<String, u32>) -> st
         inis.push((abs, rel, to_text(&bytes)));
     }
     if let Some(r) = refuse(m, &inis) { return Err(r); }
+    // a mod with an ini of textures beside its model: the textures don't say the character is on screen
+    let seen_all = !inis.iter().any(|(_, _, t)| has_mesh(t));
     let mut out = Vec::new();
     let mut any = false;
     for (abs, rel, text) in inis {
-        let new = wrap_with(&text, group, slot, raise).map_err(|e| format!("in {rel}, {e}"))?;
+        let new = wrap_with(&text, group, slot, raise, seen_all).map_err(|e| format!("in {rel}, {e}"))?;
         if let Some(new) = new {
             any |= new.contains(BEGIN);
             // already gated this way: nothing to write
@@ -967,6 +1004,23 @@ fn saved_since_sent(game: &str, importer: &Path) -> bool {
     std::fs::metadata(importer.join("d3dx_user.ini")).and_then(|m| m.modified()).is_ok_and(|saved| saved > at)
 }
 
+// Who each game last said was on screen (`on_screen_moved`).
+shared_list!(on_screen_was, (String, Vec<u32>));
+
+/// The game saved its values and who is on screen changed since the last look. The menu over the game asks again
+/// then, so a character switched in just before it opened still comes first.
+pub fn on_screen_moved(db: &Db, game: &str) -> bool {
+    let groups: Vec<u32> = load(db, game).groups.iter().map(|g| g.n).collect();
+    if groups.is_empty() { return false; }
+    let Ok(imp) = crate::games::importer_dir(db, game) else { return false };
+    let now = on_screen(&imp, &groups).0;
+    on_screen_was(|l| match l.iter_mut().find(|(g, _)| g == game) {
+        Some((_, was)) if *was == now => false,
+        Some((_, was)) => { *was = now; true }
+        None => { l.push((game.to_string(), now)); true }
+    })
+}
+
 /// Mark live skins as on (the one showing) or on standby (off, but the folder stays on to switch in at once). A mod
 /// that left its group goes back to plain on.
 pub(crate) fn overlay(db: &Db, game: &str, entries: &mut [ModEntry]) {
@@ -1025,14 +1079,15 @@ pub fn info(db: &Db, game: &str) -> Result<LiveInfo> {
         .map(|(c, l)| LiveReady { character: c, mods: l.into_iter().filter(|m| !live.contains(m.id.as_str())).map(|m| live_mod(Some(m), &m.id, 0)).collect() })
         .collect();
     ready.sort_by(|a, b| a.character.to_lowercase().cmp(&b.character.to_lowercase()));
-    // fresh only while the game saves every second (`fast_saves`); its windows ask each time they open
-    let on_screen = match crate::games::importer_dir(db, game) {
-        Ok(imp) if running => on_screen(&imp, store.groups.iter().map(|g| g.n)),
-        _ => Vec::new(),
+    // fresh only while the game saves every second (`fast_saves`); its windows ask each time they open, and the menu
+    // over the game again when it changes (`on_screen_moved`)
+    let (on_screen, last_seen) = match crate::games::importer_dir(db, game) {
+        Ok(imp) if running => on_screen(&imp, &store.groups.iter().map(|g| g.n).collect::<Vec<_>>()),
+        _ => (Vec::new(), None),
     };
     Ok(LiveInfo {
         groups, ready, running, menu: menu_settings(db, game), blocked: !reaches(db, game), all: all_on(db, game), allowed: allowed(db, game),
-        checked: drawn_menu_open(game), on_screen,
+        checked: drawn_menu_open(game), on_screen, last_seen,
     })
 }
 
@@ -1649,14 +1704,53 @@ if $swap == 1\r\n  drawindexed = auto\r\nendif\r\n\r\n[TextureOverrideHead]\r\nh
         let need = raises([small, big].into_iter());
         assert_eq!((need["de6784e3"], need["22"]), (9000, 5));
         // nothing to gate in a section that only sizes a buffer: its lines stay as settings, the count goes up
-        let w = wrap_with(small, 1, 2, &need).unwrap().unwrap();
+        let w = wrap_with(small, 1, 2, &need, false).unwrap().unwrap();
         assert!(w.contains("[TextureOverrideBodyVertexLimitRaise]\nhash = DE6784E3\n; gachamod:was override_vertex_count = 2910\noverride_vertex_count = 9000\noverride_byte_stride = 40\n; gachamod:added\nmatch_priority = 0\n"), "{w}");
         assert!(!w[..w.find("[TextureOverrideBody]").unwrap()].contains("gachamod:begin"));
         assert_eq!(unwrap(&w), small);
         // the one that already asks for the most is left as written, and the sizes read the same from gated text
-        let w = wrap_with(big, 1, 3, &need).unwrap();
+        let w = wrap_with(big, 1, 3, &need, true).unwrap();
         assert!(w.is_none_or(|w| !w.contains("gachamod:was")));
-        assert_eq!(raises([wrap_with(small, 1, 2, &need).unwrap().unwrap().as_str()].into_iter())["de6784e3"], 2910);
+        assert_eq!(raises([wrap_with(small, 1, 2, &need, false).unwrap().unwrap().as_str()].into_iter())["de6784e3"], 2910);
+    }
+
+    #[test]
+    fn only_the_model_says_the_character_is_on_screen() {
+        // a texture swap can show in the game's menus or on someone else: with the model there, it tells nothing
+        let both = "[TextureOverrideBody]\nhash = 11\nmatch_first_index = 0\nib = R\ndrawindexed = auto\n\n[TextureOverridePosition]\nhash = 22\nvb0 = P\n\n\
+[TextureOverrideIcon]\nhash = 33\nthis = Icon\n";
+        assert!(has_mesh(both));
+        let w = wrap(both, 4, 1).unwrap().unwrap();
+        assert_eq!(w.matches("run = CommandList\\gachamod\\live\\Seen4").count(), 2, "{w}");
+        assert!(w.contains("[TextureOverrideIcon]\nhash = 33\n; gachamod:added\nmatch_priority = 0\n; gachamod:begin\nif $\\gachamod\\live\\g4 == 1\nthis = Icon\n"), "{w}");
+        assert_eq!(unwrap(&w), both);
+        // a recolour has nothing else, so its textures still do
+        let colours = "[TextureOverrideBodyDiffuse]\nhash = 44\nthis = D\n";
+        assert!(!has_mesh(colours));
+        assert!(wrap(colours, 4, 1).unwrap().unwrap().contains("; gachamod:begin\nrun = CommandList\\gachamod\\live\\Seen4\nif "));
+        // in a mod whose model is in another ini, the texture ini says nothing either
+        assert!(wrap_with(colours, 4, 1, &HashMap::new(), false).unwrap().unwrap().matches("Seen4").count() == 0);
+        // a gate written by an older version with the line on every texture loses it at the next wrap
+        let old = wrap(colours, 4, 1).unwrap().unwrap();
+        assert!(!wrap_with(&old, 4, 1, &HashMap::new(), false).unwrap().unwrap().contains("Seen4"));
+    }
+
+    #[test]
+    fn the_character_seen_last_comes_first() {
+        let dir = std::env::temp_dir().join(format!("gachamod-on-screen-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let save = |last: u32| std::fs::write(dir.join("d3dx_user.ini"), format!("[Constants]\n$\\gachamod\\live\\o2 = 1\n$\\gachamod\\live\\o5 = 0\n$\\gachamod\\live\\o7 = 1\n$\\gachamod\\live\\last = {last}\n")).unwrap();
+        save(7);
+        assert_eq!(on_screen(&dir, &[2, 5, 7]), (vec![7, 2], Some(7)));
+        // seen last but gone again: named, and the ones on screen keep the groups' order
+        save(5);
+        assert_eq!(on_screen(&dir, &[2, 5, 7]), (vec![2, 7], Some(5)));
+        // a group that isn't there any more, or nobody seen yet
+        save(9);
+        assert_eq!(on_screen(&dir, &[2, 5, 7]), (vec![2, 7], None));
+        save(0);
+        assert_eq!(on_screen(&dir, &[2, 5, 7]).1, None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -11,12 +11,17 @@ It's early and Windows only.
 
 Download `gachamod-setup.exe` from the [latest release](https://github.com/imanimal/gachamod/releases/latest) and run
 it. Windows may say it protected your PC, because the installer isn't code-signed: click More info, then Run anyway.
-It installs for your Windows account and doesn't need administrator rights. Options has the folder, the desktop
-shortcut and whether gachamod starts as administrator.
+It installs for your Windows account and doesn't need administrator rights. Before you click Install it asks about
+two desktop shortcuts and whether gachamod starts as administrator. The quickstart shortcut starts the game you
+played last, with mods, without opening gachamod's window. Settings, General can put either shortcut back later.
 
-Setup takes a game's look when its file name names the game. `gachamod-setup-zzz.exe` opens in the Zenless Zone Zero
+The first time you close gachamod it asks whether to keep running in the background. If you say yes, it waits in the
+tray using almost no memory, so quickstart, the in-game menu and updates work without the window. You can change this
+in Settings, General.
+
+If the setup file's name has a game in it, setup uses that game's theme. `gachamod-setup-zzz.exe` opens in the Zenless Zone Zero
 theme, and the release has one for Genshin, Star Rail, Wuthering Waves and Endfield too, so a link like
-`https://github.com/imanimal/gachamod/releases/latest/download/gachamod-setup-genshin.exe` gets Genshin's.
+`https://github.com/imanimal/gachamod/releases/latest/download/gachamod-setup-genshin.exe` opens in Genshin's theme.
 
 gachamod updates itself. A new version downloads in the background and installs when you close the app, or right
 away if you click Restart in the toast. Settings, Automatic can turn that off.
@@ -27,8 +32,8 @@ Setup opens in the theme gachamod last showed. Repair puts the program, its shor
 Uninstall leaves your mods in their folders; tick "Also delete gachamod's data" to move its settings, profiles and
 trash to the Recycle Bin too.
 
-Play Genshin, Star Rail, Wuthering Waves or Endfield? Switching skins while you play has only been checked in Zenless
-Zone Zero so far. Start your game, open Help, Check this game, and go through the steps. It takes about ten minutes
+Switching skins while you play has only been checked in Zenless Zone Zero so far. If you play Genshin, Star Rail,
+Wuthering Waves or Endfield, start your game, open Help, Check this game, and go through the steps. It takes about ten minutes
 and sends the answers to the developer (docs/testing.md).
 
 ## What it does

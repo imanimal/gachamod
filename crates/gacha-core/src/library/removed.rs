@@ -5,6 +5,9 @@
 //! character, GameBanana link, tags, favourite, a small copy of its preview under `<data>/archive/<id>/`. Its kept
 //! option values (`mod_vars`) and profile places (`profile_mods`, `profile_vars`) stay, keyed by its mod id. When the
 //! same GameBanana mod is installed again it takes that id back (install.rs), so all of it applies again.
+//!
+//! A mod with no GameBanana link can't be downloaded again, so when its files leave the trash they go to the Recycle
+//! Bin unless "trash.unsourced" is "delete" (values "ask", the default, "recycle" and "delete").
 
 use super::*;
 use crate::model::ModSource;
@@ -64,6 +67,12 @@ pub fn trash_days(db: &Db) -> i64 {
     db.setting("trash.days").ok().flatten().and_then(|v| v.trim().parse::<i64>().ok()).map(|d| d.clamp(0, 3650)).unwrap_or(0)
 }
 
+/// Files of removed mods with no GameBanana link go to the Recycle Bin when they leave the trash by themselves
+/// ("trash.unsourced" is "recycle", or "ask" while nobody has chosen). Only "delete" deletes them for good.
+pub fn unsourced_to_recycle_bin(db: &Db) -> bool {
+    db.setting("trash.unsourced").ok().flatten().is_none_or(|v| v.trim() != "delete")
+}
+
 struct TrashRow { id: i64, game: String, mod_id: String, name: String, kept: PathBuf, reason: String, removed_at: i64, size: u64, entry: ModEntry }
 
 const TRASH_COLS: &str = "id, game, mod_id, name, kept_path, reason, removed_at, size, data";
@@ -111,13 +120,21 @@ fn forget_if_unused(db: &Db, mod_id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Delete a trashed mod's files: the numbered folder that holds it, only ever inside a "trash" folder.
-fn delete_files(kept: &Path) -> std::io::Result<()> {
+/// Delete a trashed mod's files: the numbered folder that holds it, only ever inside a "trash" folder. With `recycle`
+/// the mod's folder goes to the Recycle Bin under its own name first.
+fn delete_files(kept: &Path, recycle: bool) -> Result<()> {
     let Some(holder) = kept.parent() else { return Ok(()) };
     let in_trash = holder.ancestors().any(|a| a.file_name().is_some_and(|n| n.eq_ignore_ascii_case("trash")));
-    if in_trash && holder.exists() { fs::remove_dir_all(holder)?; }
+    if !in_trash || !holder.exists() { return Ok(()); }
+    if recycle && kept.exists() {
+        if cfg!(test) { fs::remove_dir_all(kept)?; } else { crate::recycle::to_recycle_bin(&[kept.to_path_buf()])?; }
+    }
+    fs::remove_dir_all(holder)?;
     Ok(())
 }
+
+/// A trash row's files go to the Recycle Bin: asked for, and the mod has no GameBanana link to download it again.
+fn recycles(row: &TrashRow, recycle: bool) -> bool { recycle && row.entry.source.is_none() }
 
 /// The app's data folder from a trash path (`<data>/trash/<game>/<id>/<folder>`).
 fn data_dir_of(kept: &Path) -> Option<PathBuf> {
@@ -186,9 +203,9 @@ fn purge_row(db: &Db, row: &TrashRow, strict: bool) -> Result<bool> {
     let keep = !replaced && !alive(db, &row.mod_id)?
         && !exists(db, "SELECT 1 FROM trash WHERE mod_id = ?1 AND id <> ?2", params![row.mod_id, row.id])?;
     let aid = if keep { Some(archive_row(db, row)?) } else { None };
-    if let Err(e) = delete_files(&row.kept) {
+    if let Err(e) = delete_files(&row.kept, recycles(row, unsourced_to_recycle_bin(db))) {
         if let Some(a) = aid { drop_archive(db, a)?; }
-        if strict { return Err(e.into()); }
+        if strict { return Err(e); }
         return Ok(false);
     }
     db.conn.execute("DELETE FROM trash WHERE id = ?1", [row.id])?;
@@ -198,7 +215,7 @@ fn purge_row(db: &Db, row: &TrashRow, strict: bool) -> Result<bool> {
 }
 
 /// Delete the files of trash entries older than "trash.days" (all of them at 0) and keep their details in the
-/// archive. Runs at startup, when the setting changes and whenever the trash or archive is listed.
+/// archive. Files of mods with no GameBanana link go to the Recycle Bin unless "trash.unsourced" is "delete". Runs at startup, when the setting changes and whenever the trash or archive is listed.
 pub fn purge_expired(db: &Db) -> Result<u64> {
     let t = now();
     let cutoff = t - trash_days(db) * 86400;
@@ -253,8 +270,9 @@ pub fn archive_list(db: &Db, game: Option<&str>) -> Result<Vec<ArchiveEntry>> {
 }
 
 /// Forget removed mods for good: their trash files, archived details, kept values and profile places. Keys are
-/// ArchiveEntry keys ("t12", "a3"). Returns how many went.
-pub fn archive_forget(db: &Db, keys: &[String]) -> Result<u64> {
+/// ArchiveEntry keys ("t12", "a3"). With `recycle`, the files of mods with no GameBanana link go to the Recycle Bin
+/// instead of being deleted; the rest are deleted either way. Returns how many went.
+pub fn archive_forget(db: &Db, keys: &[String], recycle: bool) -> Result<u64> {
     let mut n = 0;
     for k in keys {
         let id: Option<i64> = k.get(1..).and_then(|s| s.parse().ok());
@@ -262,7 +280,7 @@ pub fn archive_forget(db: &Db, keys: &[String]) -> Result<u64> {
         if k.starts_with('t') {
             let rows = trash_rows(db, "id = ?1", [id])?;
             let Some(r) = rows.first() else { continue };
-            delete_files(&r.kept)?;
+            delete_files(&r.kept, recycles(r, recycle))?;
             db.conn.execute("DELETE FROM trash WHERE id = ?1", [id])?;
             forget_if_unused(db, &r.mod_id)?;
             n += 1;
@@ -312,7 +330,7 @@ pub fn removed_by_gb(db: &Db, game: &str, gb_mod_id: u64) -> Result<Vec<Removed>
 /// Drop a removed mod's entry once a new install took its place (its old trash files go too).
 pub fn drop_removed(db: &Db, r: &Removed) -> Result<()> {
     if let Some((id, kept)) = &r.trash {
-        let _ = delete_files(kept);
+        let _ = delete_files(kept, false);
         db.conn.execute("DELETE FROM trash WHERE id = ?1", [id])?;
     }
     if let Some(id) = r.archive { drop_archive(db, id)?; }

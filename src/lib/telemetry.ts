@@ -21,10 +21,10 @@ const UNCOUNTED = new Set(["telemetry_events", "log_write", "report_ui_error", "
 
 const plain = (s: string) => s.replace(/[^A-Za-z0-9 _.-]/g, "").slice(0, 60);
 
-/** Count a usage event. */
+/** Count a usage event. `game` defaults to the game picked in the sidebar. */
 export function note(name: UsageEvent["name"], props: UsageEvent["props"] = {}) {
   if (!inTauri()) return;
-  queue.push({ name, props: { ...props, game: currentGame()?.id ?? "none" } });
+  queue.push({ name, props: { game: currentGame()?.id ?? "none", ...props } });
   if (queue.length > 500) queue.splice(0, queue.length - 500);
 }
 

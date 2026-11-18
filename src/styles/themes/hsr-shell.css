@@ -39,7 +39,7 @@
   .wk { width: 44px; color: #c9ccd6; }
   .wk:hover { background: rgb(255 255 255 / .12); color: #fff; }
   .wk-x:hover { background: var(--red); color: #fff; }
-  .wk .i { stroke-width: 1.5; }
+  .wk .i { stroke-width: 1.2; }
 
   .gbadge { border-radius: 50%; box-shadow: 0 0 0 1px rgb(255 255 255 / .28); font-weight: 700; letter-spacing: 0; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--g-accent) 80%, #fff), var(--g-accent) 55%, color-mix(in srgb, var(--g-accent) 60%, #000)); }
   .gbadge.has-img { background: var(--img-bg); }
@@ -76,7 +76,7 @@
   .nv { padding: 0 .75rem; gap: .7rem; border-radius: var(--cut-sm); background: #1c1c1f; color: #dcdee6; font-weight: 600; letter-spacing: .01em;
     transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur-fast) var(--ease); }
   .nv::before { display: none; }
-  .nv .i { color: #fff; stroke-width: 1.6; }
+  .nv .i { color: #fff; stroke-width: 1.2; }
   &[data-nav="grid"] .side-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: 2.7rem; grid-auto-rows: 4.15rem; gap: 4px; }
   &[data-nav="grid"] .nv { flex-direction: column; align-items: center; justify-content: center; gap: .3rem; padding: .35rem .1rem .3rem; font-size: .72rem; text-align: center; }
   &[data-nav="grid"] .nv .i { width: 1.5rem; height: 1.5rem; }
@@ -142,7 +142,7 @@
   .page-h-t { display: flex; align-items: center; gap: .9rem; flex-wrap: wrap; min-width: 10rem; }
   .page-h h1 { position: relative; font-size: 1.22rem; font-weight: 700; letter-spacing: .015em; line-height: 1.1; gap: .7rem; padding-top: .95rem; }
   .page-h h1 > span::before { content: "Astral Express"; position: absolute; top: .05rem; left: 3.15rem; font-size: .76rem; font-weight: 600; letter-spacing: .03em; color: var(--gold-t); white-space: nowrap; }
-  .page-h h1 .i { width: 2.45rem; height: 2.45rem; margin-top: -.95rem; padding: .62rem; border-radius: 50%; color: var(--gold-hi); background: radial-gradient(circle, rgb(224 190 120 / .18), transparent 70%); box-shadow: inset 0 0 0 1.5px rgb(224 190 120 / .8), 0 0 0 3px rgb(11 13 26 / .1), 0 0 0 4px rgb(224 190 120 / .28); stroke-width: 1.7; }
+  .page-h h1 .i { width: 2.45rem; height: 2.45rem; margin-top: -.95rem; padding: .62rem; border-radius: 50%; color: var(--gold-hi); background: radial-gradient(circle, rgb(224 190 120 / .18), transparent 70%); box-shadow: inset 0 0 0 1.5px rgb(224 190 120 / .8), 0 0 0 3px rgb(11 13 26 / .1), 0 0 0 4px rgb(224 190 120 / .28); stroke-width: 1.3; }
   .page-h-sub { margin: .75rem 0 0; padding-left: .9rem; color: var(--text-3); font-weight: 500; font-size: .86em; max-width: 40rem; box-shadow: inset 1px 0 0 rgb(255 255 255 / .22); line-height: 1.3; }
   .page-h-a { gap: .5rem; }
   .page-h-more { gap: .45rem; }

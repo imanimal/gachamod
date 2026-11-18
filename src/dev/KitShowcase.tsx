@@ -170,7 +170,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
   useEffect(() => { ticker.current = window.setInterval(() => setProg((p) => (p >= 1 ? 0 : p + 0.05)), 400); return () => clearInterval(ticker.current); }, []);
   useEffect(() => {
     if (opens("menu")) setMenuAt(document.querySelector<HTMLElement>("[data-kit-menu]"));
-    if (opens("toast")) { toast("Installed Coca Cola for Ellen Joe"); toast("Turned off 3 mods", false, { label: "Undo", run: () => {} }); toast("Close the game first, then try again", true); }
+    if (opens("toast")) { toast("Installed 2 mods"); toast("Turned off 3 mods", false, { label: "Undo", run: () => {} }); toast("Close the game first, then try again", true); }
   }, []);
   const tog = (id: string) => setChips((l) => (l.includes(id) ? l.filter((x) => x !== id) : [...l, id]));
   const tones: Tone[] = ["accent", "ok", "warn", "bad", "info", "muted"];
@@ -302,7 +302,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
         <Button onClick={() => setConfirm(true)} variant="danger" icon="trash">Confirm</Button>
         <Button onClick={() => setDrawer(true)} icon="file">Drawer</Button>
         <Button data-kit-menu onClick={(e) => setMenuAt(e.currentTarget)} iconRight="down">Menu</Button>
-        <Button onClick={() => toast("Installed Coca Cola for Ellen Joe")}>Toast</Button>
+        <Button onClick={() => toast("Installed 2 mods")}>Toast</Button>
         <Button onClick={() => toast("Turned off 3 mods", false, { label: "Undo", run: () => { toast("Turned them back on"); } })}>Toast with Undo</Button>
         <Button onClick={() => toast("Close the game first, then try again", true)}>Error toast</Button>
         <Button title="Tips show the shortcut when there is one (Ctrl+R)" icon="info">Hover for a tip</Button>

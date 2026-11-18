@@ -13,6 +13,7 @@
     "app:attach": "tauri dev --config src-tauri/tauri.attach.conf.json",
     "installer": "node scripts/build-installer.mjs",
     "release": "node scripts/release.mjs",
+    "posthog-key": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/posthog-key.ps1",
     "build:setup": "vite build --config vite.setup.config.ts",
     "setup": "cargo run -p gachamod-setup --"
   },

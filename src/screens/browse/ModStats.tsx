@@ -10,8 +10,9 @@ import { Icon, type IconName } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
 import { t, tn } from "../../lib/i18n";
 
-/** `act`: the like, subscribe and thanks buttons (mods, not tools). */
-export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: boolean; onFiles: () => void; onComments: () => void }) {
+/** `act`: the like, subscribe and thanks buttons (mods, not tools). `nudge`: the mod has been in use a while without a
+ *  like, so the heart beats now and then while signed in. */
+export function ModStats({ mod, act, nudge, onFiles, onComments }: { mod: GbMod; act: boolean; nudge?: boolean; onFiles: () => void; onComments: () => void }) {
   const acc = useAccount();
   const signedIn = acc.available && !!acc.user;
   const liked = useLiked(mod.id);
@@ -58,6 +59,7 @@ export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: b
       {act && !own ? (
         <>
           <Stat icon="heart" on={liked} pressed={signedIn ? liked : undefined} disabled={busy === "like"} onClick={() => toggle("like")}
+            className={nudge && signedIn && !liked ? "nudge" : undefined}
             title={!signedIn ? tn(likes, "{n} like. Sign in to GameBanana to like it", "{n} likes. Sign in to GameBanana to like it")
               : liked ? tn(likes, "{n} like, yours included. Click to take back your like", "{n} likes, yours included. Click to take back your like")
               : tn(likes, "{n} like. Click to like it on GameBanana. Nobody is notified", "{n} likes. Click to like it on GameBanana. Nobody is notified")}>
@@ -101,11 +103,11 @@ export function ModStats({ mod, act, onFiles, onComments }: { mod: GbMod; act: b
   );
 }
 
-function Stat({ icon, title, on, pressed, disabled, onClick, children }: {
-  icon: IconName; title: string; on?: boolean; pressed?: boolean; disabled?: boolean; onClick: (el: HTMLElement) => void; children: ReactNode;
+function Stat({ icon, title, on, pressed, disabled, className, onClick, children }: {
+  icon: IconName; title: string; on?: boolean; pressed?: boolean; disabled?: boolean; className?: string; onClick: (el: HTMLElement) => void; children: ReactNode;
 }) {
   return (
-    <button type="button" className={`gb-stat gb-stat-btn${on ? " on" : ""}`} title={title} aria-pressed={pressed} disabled={disabled}
+    <button type="button" className={`gb-stat gb-stat-btn${on ? " on" : ""}${className ? ` ${className}` : ""}`} title={title} aria-pressed={pressed} disabled={disabled}
       onClick={(e) => onClick(e.currentTarget)}>
       <Icon name={icon} className={on && (icon === "heart" || icon === "bell") ? "fill" : ""} />{children}
     </button>
@@ -141,7 +143,7 @@ function ThankBox({ anchor, mod, creator, me, again, onClose, onSent }: {
           title={short ? t("You have {points} points. Pick fewer", { points: me?.points ?? 0 }) : undefined}
           onClick={() => {
             setBusy(true);
-            void thankMod(mod.id, mod.name, creator, points, free).then((ok) => { setBusy(false); if (ok) onSent(points, free); });
+            void thankMod(mod.id, points, free).then((ok) => { setBusy(false); if (ok) onSent(points, free); });
           }}>
           {free ? t("Thank for free") : tn(points, "Thank for {n} point", "Thank for {n} points")}
         </Button>

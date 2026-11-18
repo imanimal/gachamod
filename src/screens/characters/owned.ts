@@ -3,10 +3,9 @@
 // own file. Also the "other managers" import for the Mods folder. Owner: LIBRARY area.
 import { useEffect, useSyncExternalStore } from "react";
 import { dialogs, errorText, otherManagers, owned as ownedApi, settings, type ForeignInfo, type GameId, type OwnedImport } from "../../lib/api";
-import { charCount, charNoun, gameShort } from "../../lib/games";
+import { charCount, charNoun } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
 import { record } from "../../lib/history";
-import { allGames } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
 import { toast } from "../../ui/toast";
 import { notesText } from "../../lib/notes";
@@ -55,16 +54,15 @@ async function change(game: GameId, names: string[], on: boolean): Promise<strin
   return changed;
 }
 
-const shortName = (game: GameId) => gameShort(allGames().find((g) => g.id === game)) || game;
 const count = (game: GameId, n: number) => charCount(game, n);
 
-/** Mark characters as owned or not, with Undo. */
+/** Mark characters as owned or not, with Undo. The Owned button, menu check or tile mark shows it, so no toast. */
 export async function setOwned(game: GameId, names: string[], on: boolean) {
   try {
     const changed = await change(game, names, on);
     if (!changed.length) return;
     const what = changed.length === 1 ? changed[0]! : count(game, changed.length);
-    record({ label: on ? t("Marked {what} as owned", { what }) : t("Marked {what} as not owned", { what }), undo: () => change(game, changed, !on), redo: () => change(game, changed, on) });
+    record({ label: on ? t("Marked {what} as owned", { what }) : t("Marked {what} as not owned", { what }), undo: () => change(game, changed, !on), redo: () => change(game, changed, on) }, true);
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -106,9 +104,9 @@ export async function importOwned(game: GameId, from: OwnedSource): Promise<Owne
   apply(r.game, r.added, true);
   if (r.unknown.length) unknown.set(r.game, { names: r.unknown, format: r.format }); else unknown.delete(r.game);
   emit();
-  // "in Genshin" when the export was for another game, and how many names matched nothing
+  // "in another game" when the export was for another game, and how many names matched nothing
   const more = (text: string) => {
-    const there = r.game !== game ? t("{text} in {game}", { text, game: shortName(r.game) }) : text;
+    const there = r.game !== game ? t("{text} in another game", { text }) : text;
     return r.unknown.length ? t("{text}, {n} not recognised", { text: there, n: r.unknown.length }) : there;
   };
   if (!r.added.length) {
@@ -139,7 +137,7 @@ export async function saveOwned(game: GameId) {
     const path = await dialogs.saveFile({ title: t("Save the {noun} you own", { noun: charNoun(game).toLowerCase() }), defaultPath: file, extensions: ["json"] });
     if (!path) return;
     const n = await ownedApi.exportFile(game, path);
-    toast(t("Saved {what} to {file}", { what: count(game, n), file: path.split(/[\\/]/).pop() ?? path }));
+    toast(t("Saved {what} to the file", { what: count(game, n) }));
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -177,6 +175,7 @@ export async function importForeign(game: GameId, onDone?: () => void) {
     const who = r.managers.length > 1 ? t("{names} and {last}", { names: r.managers.slice(0, -1).join(", "), last: r.managers[r.managers.length - 1]! }) : r.managers[0];
     record({
       label: who ? t("Brought in details for {mods} from {who}", { mods, who }) : t("Brought in details for {mods}", { mods }),
+      brief: t("Brought in details for {mods}", { mods }),
       undo: async () => { await otherManagers.undo(game, r.undo); onDone?.(); },
       redo: async () => { await otherManagers.import(game); onDone?.(); },
     });

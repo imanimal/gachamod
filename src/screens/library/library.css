@@ -27,7 +27,6 @@
 
 /* the grid: kit .cards gives the columns */
 .mod-grid { --card-min: 11.2rem; }
-.mod-grid.is-loading { display: grid; grid-template-columns: repeat(auto-fill, minmax(11.2rem, 1fr)); gap: var(--s-4); }
 .mod-card-skel { height: 12.5rem; border-radius: var(--radius); }
 /* while a list reads, its placeholders are rows */
 .mod-grid.is-loading.is-list { display: flex; flex-direction: column; gap: var(--s-1); }
@@ -58,7 +57,10 @@
 .mod-card-foot { display: contents; }
 .mod-card-foot .toggle { position: absolute; right: .55rem; bottom: .6rem; }
 .mod-card-more { position: absolute; top: .35rem; right: .35rem; opacity: 0; }
-.mod-card:hover .mod-card-more, .mod-card-more:focus-visible, .mod-card:focus-within .mod-card-more { opacity: 1; }
+/* hover, or focus while the keyboard or a controller is in use (html.kbd/.pad, which a mouse move clears). Plain
+   :focus-within or :focus-visible would keep it showing after a press and drag off the card, or after Escape gives
+   focus back to the card */
+.mod-card:hover .mod-card-more, html:is(.kbd, .pad) .mod-card:focus-within .mod-card-more { opacity: 1; }
 /* on the picture it gets the .on-img plate (kit.css). Kept low (:where) so a game theme's own filled button wins */
 :where(.mod-card:not(.is-row)) .mod-card-more { color: var(--text); background: color-mix(in srgb, var(--surface) 86%, transparent);
   -webkit-backdrop-filter: blur(10px) saturate(1.2); backdrop-filter: blur(10px) saturate(1.2); box-shadow: inset 0 0 0 1px var(--line-2), 0 2px 8px rgb(0 0 0 / .35); }
@@ -103,7 +105,8 @@
 .mod-drawer-tagin { flex: 1; min-width: 8rem; height: 2rem; padding: 0 var(--s-2); border-radius: var(--radius-sm); background: var(--bg-2); border: 1px solid var(--line); }
 .mod-drawer-flags { display: flex; align-items: center; gap: var(--s-6); flex-wrap: wrap; }
 .mod-drawer-flags > span { display: flex; }
-.mod-drawer-facts { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-5) 0; padding-top: var(--s-4); border-top: 1px solid var(--line); }
+/* the rows bring their own padding and divider, so no gap; it ends the drawer, so no bottom margin */
+.mod-drawer-facts { display: flex; flex-direction: column; margin-top: var(--s-5); padding-top: var(--s-4); border-top: 1px solid var(--line); }
 .mod-drawer-facts .kv-v { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 .mod-drawer-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: var(--t-small); }
 .link-btn { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--accent); }
@@ -118,6 +121,8 @@
 
 /* drawer additions */
 .mod-drawer-who { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1); margin: -.4rem 0 var(--s-4); }
+/* likes, subscribers and thanks from its GameBanana page, under who made it */
+.mod-drawer-gb { display: flex; align-items: center; gap: var(--s-2); margin: calc(var(--s-2) - var(--s-4)) 0 var(--s-4); }
 .mod-drawer-family { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-1) var(--s-2); margin: -.4rem 0 var(--s-4); color: var(--text-2); }
 .mod-drawer-sub { display: inline-flex; align-items: center; gap: var(--s-1); }
 .mod-drawer-health { margin-bottom: var(--s-4); }
@@ -130,8 +135,9 @@
 
 /* archive */
 .archive { display: flex; flex-direction: column; gap: var(--s-4); }
-.archive-top { display: flex; align-items: center; gap: var(--s-4); flex-wrap: wrap; }
-.archive-hint { flex: 1 1 22rem; max-width: 48rem; }
+/* the two buttons sit as close as other button pairs; the hint keeps more room before them */
+.archive-top { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.archive-hint { flex: 1 1 22rem; max-width: 48rem; margin-right: var(--s-2); }
 .archive-grid { --tile-min: 13.5rem; }
 .archive-img { position: absolute; inset: 0; }
 .archive-card .tile-sub .qlink { text-decoration: none; }
@@ -144,6 +150,8 @@
 .lib-ask-picks .chip .portrait { flex: none; margin-left: -.5rem; }
 .lib-ask-picks .chip .i { width: .85em; height: .85em; }
 .lib-ask-now { display: flex; justify-content: center; }
+/* a question's text, its choices and the setting link, spaced like the other small windows */
+.lib-say { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-3); }
 .lib-ask-url { display: flex; align-items: flex-end; gap: var(--s-2); }
 .lib-ask-url .field { flex: 1; }
 .lib-ask-previews { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-2); }
@@ -220,7 +228,7 @@
 :where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked .drawer-b { padding: var(--s-3) var(--s-4) var(--s-5); }
 :where(:root:not([data-theme]), [data-theme="default"]) .page .drawer.is-docked .drawer-f { padding-inline: var(--s-4); }
 .mod-pane.is-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); padding: var(--s-5); text-align: center; color: var(--text-3); }
-.mod-pane.is-empty .i { width: 2rem; height: 2rem; }
+.mod-pane.is-empty .i { width: 2rem; height: 2rem; --i-sw: 1.7; }
 .mod-pane.is-empty .hint { max-width: 18rem; }
 
 /* a narrow window: the list keeps only the pictures and icons (each keeps its name as its tip) */
@@ -240,11 +248,12 @@
    of it, so the switch, picture, name, character, size, each kind of badge (ModCard's mb-* classes) and the "..." key
    keep one column each; a column that no row uses takes no room. The body and the foot hand their parts to the row.
    Every part names its column and row 1, and the offsets the cards use are reset, so a theme's card rules can't move
-   them. Rows have one height and no content-visibility, which would cut them off the shared columns */
+   them. Rows have one height and no content-visibility, which would cut them off the shared columns. The 8px track
+   before the badges keeps them as far from the text as the text columns are from each other */
 .mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: fit-content(10rem); --dense-size: auto;
   display: grid; column-gap: 0; align-content: start;
   grid-template-columns: [sw] auto [pic] auto [name] minmax(5rem, 1fr) [char] var(--dense-char) [size] var(--dense-size)
-    [b-start hp] auto [fav] auto [upd] auto [cf] auto [ini] auto [parts] auto [sub] auto [keys] auto [live] auto [b-end more] auto; }
+    var(--s-2) [b-start hp] auto [fav] auto [upd] auto [cf] auto [ini] auto [parts] auto [sub] auto [keys] auto [live] auto [b-end more] auto; }
 .mod-grid.is-dense .mod-card.is-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; grid-template-rows: 100%; align-items: center;
   gap: 0; height: calc(2.5rem * var(--d, 1)); content-visibility: visible; contain-intrinsic-size: none; }
 .mod-grid.is-dense .mod-card.is-row :is(.mod-card-body, .mod-card-foot) { display: contents; }

@@ -311,7 +311,7 @@ html.pad .side-prof-list .side-p:focus:not(.on) { box-shadow: none; }
 .profile-icon.is-emoji { overflow: visible; line-height: 1; border-radius: 30%; background: var(--surface-2); }
 /* a line icon in the profile's colour (the colour is set inline; without one it sits on a plain tile) */
 .profile-icon.is-glyph, .profile-icon.is-initials { display: inline-grid; place-items: center; border-radius: 30%; background: var(--surface-2); color: var(--text-2); font-style: normal; }
-.profile-icon.is-glyph .i { width: 58%; height: 58%; stroke-width: 2.1; }
+.profile-icon.is-glyph .i { width: 58%; height: 58%; stroke-width: 1.8; }
 .profile-icon.is-initials { font-weight: 700; }
 
 /* ── the view ── */
@@ -382,13 +382,16 @@ html.pad .side-prof-list .side-p:focus:not(.on) { box-shadow: none; }
 .dropzone { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--scrim); pointer-events: none; animation: fadeIn 140ms ease-out; }
 .dropzone-card { display: flex; flex-direction: column; align-items: center; gap: var(--s-2); max-width: 27rem; padding: var(--s-8); text-align: center; border: 2px dashed var(--accent); border-radius: var(--radius-lg);
   background: var(--surface); box-shadow: var(--shadow-lg); animation: popIn var(--dur) var(--ease-out); }
-.dropzone-card .i { width: 2.4rem; height: 2.4rem; color: var(--accent-ink); }
+.dropzone-card .i { width: 2.4rem; height: 2.4rem; --i-sw: 1.7; color: var(--accent-ink); }
 .dropzone-card strong { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
 .dropzone-card span { color: var(--text-2); }
 
 .keys-list { display: grid; grid-template-columns: auto 1fr; gap: var(--s-2) var(--s-4); align-items: center; }
 .keys-list > div { display: contents; }
 .keys-list kbd { justify-self: start; }
+/* a note right before or after a list of keys (Settings > Hotkeys, the ? sheet) never touches it */
+.hint + .keys-list { margin-top: var(--s-3); }
+:is(.keys-list, .sub-h + .waiting) + .hint { margin-top: var(--s-4); }
 .sub-h { margin: var(--s-4) 0 var(--s-2); font-size: .95rem; font-weight: 750; }
 
 @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } }
@@ -416,7 +419,8 @@ html.pad .side-prof-list .side-p:focus:not(.on) { box-shadow: none; }
 .tb-act-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb-act-s, .tb-act-n { color: var(--text-3); font-variant-numeric: tabular-nums; }
 .tb-act.is-long { color: var(--warn); }
-.act-list { display: flex; flex-direction: column; gap: .15rem; }
+/* rows are split by a line, so no gap: the line sits halfway between them */
+.act-list { display: flex; flex-direction: column; }
 .act-row { padding: var(--s-2); border-radius: var(--radius-sm); }
 .act-row + .act-row { border-top: 1px solid var(--line); border-radius: 0; }
 .act-head { display: flex; align-items: center; gap: var(--s-2); }

@@ -19,7 +19,7 @@ import { openKofi } from "../../lib/support";
 import { Paged } from "./Paged";
 import "./settings.css";
 import { AccountSection } from "./AccountSection";
-import { HotkeysSection } from "./HotkeysSection";
+import { HotkeysSection, MenuKeysSection, ShortcutsSection } from "./HotkeysSection";
 import { TransferSection, UpdateRow } from "./SettingsTransfer";
 import { AppearanceSection, CustomThemesSection, GeneralSection, GraphicsSection, LayoutSection } from "./Appearance";
 import { AdultSection, AutomaticSection, BrokenModsSection, CreatorsSection, InstallingSection, ModsSection, StorageSection } from "./Sections";
@@ -30,9 +30,11 @@ import { PAGES, sectionOf } from "./settingsSearch";
 import { registerPanels } from "./menuSearch";
 import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
+import { BackgroundSection, DesktopShortcutsSection } from "./DesktopShortcuts";
 import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
 import { Installing, SetupError } from "./Onboarding";
 import { MovePanel } from "../modtools/MovePanel";
+import { BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel, storageShown } from "./Storage";
 import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
 export { SetRow, openXxmi, useSetting };
@@ -41,12 +43,13 @@ export const XXMI_RELEASES = "https://github.com/SpectrumQT/XXMI-Launcher/releas
 
 // Settings' panels for the search at the top of Settings and Tools (menuSearch.ts), by the ids in settingsSearch.ts
 registerPanels("settings", {
-  general: GeneralSection,
+  general: GeneralSection, "desktop-shortcuts": DesktopShortcutsSection, background: BackgroundSection,
   games: GamesSection, xxmi: XxmiSection,
   launch: LaunchSections, migoto: LaunchSections, "game-start": GameStartSection,
   others: MovePanel, mods: ModsSection, adult: AdultSection, "mod-folders": ModFoldersSection, installing: InstallingSection,
   automatic: AutomaticSection, "broken-mods": BrokenModsSection, storage: StorageSection,
-  creators: CreatorsSection, hotkeys: HotkeysSection,
+  disk: StoragePanel, "disk-big": BiggestModsPanel, "disk-dupes": DuplicatesPanel,
+  creators: CreatorsSection, hotkeys: HotkeysSection, "menu-keys": MenuKeysSection, shortcuts: ShortcutsSection,
   appearance: AppearanceSection, layout: LayoutSection, themes: CustomThemesSection, graphics: GraphicsSection,
   fun: FunSection,
   account: AccountSection, integrations: IntegrationsSection, ai: AiSection,
@@ -60,16 +63,17 @@ export function Settings() {
   return (
     <div className="page settings pg-screen">
       <PageHeader title={t("Settings")} icon="settings" />
-      <Paged name="settings" label={t("Settings pages")} pages={PAGES} fallback={sectionOf}>
+      <Paged name="settings" label={t("Settings pages")} pages={PAGES} fallback={sectionOf} onShow={storageShown}>
         {{
-          general: <><GeneralSection /><GraphicsSection /></>,
+          general: <><GeneralSection /><BackgroundSection /><DesktopShortcutsSection /><GraphicsSection /></>,
           appearance: <><AppearanceSection /><LayoutSection /><CustomThemesSection /></>,
-          hotkeys: <HotkeysSection />,
+          hotkeys: <><HotkeysSection /><MenuKeysSection /><ShortcutsSection /></>,
           fun: <FunSection />,
           games: <><GamesSection /><XxmiSection /></>,
           launch: <><LaunchSections /><GameStartSection /></>,
           mods: <><MovePanel /><ModsSection /><ModFoldersSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
           downloads: <InstallingSection />,
+          disk: <StoragePage />,
           gamebanana: <><AccountSection /><IntegrationsSection /><CreatorsSection /><AdultSection /></>,
           ai: <AiSection />,
           extensions: <ExtensionsSection />,
@@ -91,7 +95,7 @@ function useDetect(list: GameState[]): [boolean, () => Promise<void>] {
     try {
       const before = list.filter((g) => g.modsDir).length;
       const after = ((await recheck(true)) ?? list).filter((g) => g.modsDir).length;
-      toast(after > before ? tn(after - before, "Found {n} more", "Found {n} more") : t("Nothing new found"));
+      toast(after > before ? tn(after - before, "Found {n} more Mods folder", "Found {n} more Mods folders") : t("Nothing new found"));
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };
@@ -165,9 +169,8 @@ async function uninstallLoaders(ids?: GameId[]): Promise<boolean> {
   try {
     const r = await xxmi.uninstall(ids);
     setGames(r.games);
-    const one = ids?.length === 1 ? r.games.find((g) => g.id === ids[0]) : undefined;
-    const moved = one ? t("Moved {game}'s mod loader to the Recycle Bin.", { game: gameShort(one) }) : t("Moved XXMI Launcher to the Recycle Bin.");
-    const kept = !r.kept.length ? "" : r.kept.length === 1 ? t("Your mods stay in {folder}", { folder: r.kept[0]! }) : tn(r.kept.length, "Your mods stay in {n} Mods folder", "Your mods stay in {n} Mods folders");
+    const moved = ids?.length === 1 ? t("Moved the mod loader to the Recycle Bin.") : t("Moved XXMI Launcher to the Recycle Bin.");
+    const kept = !r.kept.length ? "" : r.kept.length === 1 ? t("Your mods stay in the Mods folder") : tn(r.kept.length, "Your mods stay in {n} Mods folder", "Your mods stay in {n} Mods folders");
     toast(kept ? `${moved} ${kept}` : moved, false, { label: t("Install again"), run: () => void installLoaders(ids) });
     return true;
   } catch (e) { toast(errorText(e), true); return false; }
@@ -186,8 +189,8 @@ function GameRow({ game }: { game: GameState }) {
         [field]: picked,
         ...(field === "importerDir" ? { modsDir: null, viaXxmi: false } : {}),
       };
+      // the row shows the new path
       setGames(await games.setPaths(game.id, next));
-      toast(t("Saved {game}'s folder", { game: gameShort(game) }));
     } catch (e) { toast(errorText(e), true); }
   };
   const show = async (v: boolean) => {
@@ -218,7 +221,7 @@ function GameRow({ game }: { game: GameState }) {
         </div>
         {folder(t("Game"), game.gameDir, "gameDir", t("Where the game's exe is"), t("Pick the game folder"))}
         {folder(t("Mod loader"), game.importerDir, "importerDir", t("The folder with d3dx.ini and Mods"), t("Pick the mod loader folder"))}
-        {game.modsDir && folder(t("Mods"), game.modsDir, "modsDir", t("Where mods live"), t("Pick the mods folder"))}
+        {game.modsDir && folder(t("Mods"), game.modsDir, "modsDir", t("Where mods are"), t("Pick the mods folder"))}
         {notes.map((n) => <span key={n} className="hint set-game-note">{n}</span>)}
         {!game.modsDir && game.xxmi && (
           <span className="row set-game-fix">
@@ -254,10 +257,11 @@ function ModFoldersSection() {
   const [busy, detect] = useDetect(list);
   const setup = useSetup();
   if (!list.length) return null;
-  const pick = async (g: GameState) => { if (await pickModsFolder(g.id)) toast(t("Saved {game}'s Mods folder", { game: gameShort(g) })); };
+  // the row shows the new path, so picking one says nothing more
+  const pick = (g: GameState) => pickModsFolder(g.id);
   return (
     <Panel title={t("Mods folders")} icon="folder" id="mod-folders" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title={t("Look for XXMI Launcher and each game's Mods folder again")}>{t("Detect again")}</Button>}>
-      <p className="hint set-note">{t("gachamod finds each game's Mods folder from its mod loader. Pick another one here when your mods live somewhere else.")}</p>
+      <p className="hint set-note">{t("gachamod finds each game's Mods folder from its mod loader. Pick another one here when your mods are somewhere else.")}</p>
       <div className="set-games">
         {list.map((g) => {
           const dir = g.modsDir;
@@ -361,20 +365,17 @@ function XxmiSection() {
 
 // ── links and files ──
 
-/** Per integration: the row id, what it does when on, and the toasts. */
-const LINKS: Record<string, { row: string; on: string; toastOn: string; toastOff: string }> = {
-  "scheme:gachamod": { row: "set-links", on: t("GameBanana's 1-click install buttons send mods here"),
-    toastOn: t("1-click installs open in gachamod"), toastOff: t("1-click installs no longer open gachamod") },
-  "file:.gachamod": { row: "set-files", on: t("Double-clicking a mod pack opens it here"),
-    toastOn: t(".gachamod files open in gachamod"), toastOff: t(".gachamod files no longer open gachamod") },
+/** Per integration: the row id and what it does when on. The switch shows the change, so it doesn't toast. */
+const LINKS: Record<string, { row: string; on: string }> = {
+  "scheme:gachamod": { row: "set-links", on: t("GameBanana's 1-click install buttons send mods here") },
+  "file:.gachamod": { row: "set-files", on: t("Double-clicking a mod pack opens it here") },
 };
 
 function IntegrationsSection() {
   const [list, setList] = useState<Integration[] | null>(null);
   useEffect(() => { integrations.get().then(setList).catch(() => setList([])); }, []);
   const set = async (i: Integration, on: boolean) => {
-    const link = LINKS[i.id];
-    try { setList(await integrations.set(i.id, on)); toast(on ? link?.toastOn ?? t("Turned on") : link?.toastOff ?? t("Turned off")); }
+    try { setList(await integrations.set(i.id, on)); }
     catch (e) { toast(errorText(e), true); }
   };
   return (

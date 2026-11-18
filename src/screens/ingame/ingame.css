@@ -1,5 +1,6 @@
 /* Switching skins in game (Tools panel and the mod drawer). Owner: INGAME area. */
-.live-list { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-2); }
+.live-list { display: flex; flex-direction: column; gap: var(--s-3); margin-top: var(--s-3); }
+.live-list:first-child { margin-top: 0; }
 .live-row { display: flex; flex-direction: column; gap: var(--s-2); }
 .live-row-h, .live-ready-row { display: flex; align-items: center; gap: var(--s-2); }
 .live-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
@@ -20,19 +21,25 @@
 .live-blocked { display: flex; align-items: center; gap: var(--s-3); margin-top: var(--s-3); padding: var(--s-2) var(--s-3); border: 1px solid var(--warn); border-radius: var(--radius); }
 .live-blocked p { flex: 1; margin: 0; font-size: var(--t-small); }
 .live-blocked .icon { flex: none; color: var(--warn); }
+/* Run as administrator under the warning: as far from it as the blocks around it */
+.live-blocked + .set-rows { margin-top: var(--s-3); }
 /* another app has the key too (KeyClash.tsx): the buttons stay together and drop under the words when it gets narrow */
 .key-clash { flex-wrap: wrap; }
 .key-clash p { flex: 1 1 14rem; }
 .key-clash-b { display: flex; flex-wrap: wrap; gap: var(--s-2); }
-.live-all { margin: var(--s-3) 0 var(--s-1); }
+.live-all { margin: 0 0 var(--s-1); }
 .live-menu { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-3) 0 var(--s-1); }
 .live-menu-row { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-2) var(--s-4); }
 .live-menu-l { align-self: center; font-weight: 600; }
 .live-menu .hotkey-field { width: 14rem; }
 .live-menu .hint { margin: 0; }
+/* "None of your mods has a character yet" under the menu settings */
+.live-menu + .muted { margin-top: var(--s-3); }
 .live-binds > summary { cursor: pointer; font-weight: 600; width: fit-content; }
 .live-binds[open] > summary { margin-bottom: var(--s-2); }
 .live-binds-l { list-style: none; margin: 0 0 var(--s-2); padding: 0; display: flex; flex-direction: column; }
+/* "Use the usual keys" under the note */
+.live-binds > .hint + .btn { margin-top: var(--s-2); }
 .live-bind { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-4); padding: var(--s-1) 0; border-bottom: 1px solid var(--line); }
 .live-bind:last-child { border-bottom: 0; }
 .live-bind-t { flex: 1 1 10rem; }

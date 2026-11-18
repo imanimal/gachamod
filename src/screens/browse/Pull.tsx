@@ -11,7 +11,6 @@ import { listMods, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { hiddenModsPref, isBlocked, nsfwPref } from "../../lib/prefs";
 import { toast } from "../../ui/toast";
 import { libIndexNow, openGbMod } from "./state";
-import { gameShort } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
 
 type Stars = 3 | 4 | 5;
@@ -67,7 +66,7 @@ export function usePull(game: GameState): { on: boolean; word: string; busy: boo
       let card = await draw(game, stars);
       // nothing left after the filters: try the next rarity down
       while (!card && stars > 3) { stars = (stars - 1) as Stars; card = await draw(game, stars); }
-      if (!card) { toast(t("Nothing to pull for {game} right now. Try again in a moment", { game: gameShort(game) })); return; }
+      if (!card) { toast(t("Nothing to pull right now. Try again in a moment")); return; }
       void pullsSince.set(stars === 5 ? 0 : pullsSince.get() + 1);
       await flash(stars);
       openGbMod(card.id);

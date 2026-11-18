@@ -43,7 +43,7 @@
   --bg: #1b2232; --bg-2: #141a27; --surface: #3b4354; --surface-2: #495366; --surface-3: #566074; --raised: #5d677b;
   --line: rgb(236 229 216 / .14); --line-2: rgb(236 229 216 / .28);
   --text: #ece5d8; --text-2: #c9c3b6; --text-3: #959cab;
-  --accent: var(--acc); --on-accent: #2a3040; --accent-soft: rgb(211 188 142 / .18); --accent-ink: var(--acc); --accent-2: var(--yellow);
+  --accent: var(--acc); --on-accent: #2a3040; --accent-soft: rgb(211 188 142 / .18); --accent-ink: var(--acc-text, var(--acc)); --accent-2: var(--yellow);
   --ok: var(--lime); --warn: var(--orange); --bad: var(--red-hi); --info: var(--blue); --on-bad: #fff;
   --ring: #fff; --hover: rgb(236 229 216 / .08);
   --radius: 6px; --radius-sm: 4px; --radius-lg: 8px; --radius-xs: 3px; --radius-pill: 999px; --stack-gap: .75rem;
@@ -76,7 +76,7 @@
     --bg-2: #1d2633; --surface: #3b4354; --surface-2: #495366; --surface-3: #566074; --raised: #5d677b;
     --line: rgb(236 229 216 / .13); --line-2: rgb(236 229 216 / .26);
     --text: #ece5d8; --text-2: #c9c3b6; --text-3: #adb3c0;
-    --accent-ink: var(--acc); --accent-soft: rgb(211 188 142 / .18);
+    --accent-ink: var(--acc-text, var(--acc)); --accent-soft: rgb(211 188 142 / .18);
     --ok: var(--lime); --warn: var(--orange-lt); --bad: var(--red-lt); --info: var(--blue-lt); --on-bad: #1b2232;
     --hover: rgb(236 229 216 / .08); --img-bg: #2a3242; --ring: #fff;
     color: var(--text);
@@ -90,8 +90,8 @@
   .btn { height: 2.3rem; padding: 0 1.15rem; font-size: 1.02em; }
   .btn-sm { height: 1.95rem; padding: 0 .85rem; font-size: .93em; }
   .btn-lg { height: 2.85rem; padding: 0 1.5rem; font-size: 1.1em; }
-  .btn .i { stroke-width: 2.1; }
-  .btn > .i:first-child, .btn > .spin:first-child { box-sizing: content-box; width: 1.02em; height: 1.02em; padding: .4em; margin-left: -.86rem; border-radius: 50%; background: var(--cap); color: var(--yellow); stroke-width: 2.3; }
+  .btn .i { stroke-width: 1.6; }
+  .btn > .i:first-child, .btn > .spin:first-child { box-sizing: content-box; width: 1.02em; height: 1.02em; padding: .4em; margin-left: -.86rem; border-radius: 50%; background: var(--cap); color: var(--yellow); stroke-width: 1.8; }
   .btn > .spin:first-child { width: .8em; height: .8em; padding: 0; border-width: 2px; margin: 0 .2rem 0 -.5rem; border-color: rgb(255 204 50 / .3); border-top-color: var(--yellow); background: none; box-shadow: 0 0 0 .45em var(--cap); }
   .btn.btn-sm > .i:first-child { padding: .3em; margin-left: -.64rem; }
   .btn.btn-lg > .i:first-child { padding: .45em; margin-left: -1.15rem; }
@@ -108,7 +108,7 @@
   .btn:active:not(:disabled), .ibtn:active:not(:disabled) { transform: scale(.97); filter: sepia(.35) brightness(.97); }
   .btn:disabled, .ibtn:disabled { opacity: .45; filter: saturate(.4); }
   .ibtn { border-radius: 50%; }
-  .ibtn .i { stroke-width: 2; }
+  .ibtn .i { stroke-width: 1.6; }
   .ibtn.btn-ghost { color: var(--text-2); }
   .ibtn.btn-ghost:hover:not(:disabled) { background: var(--hover); color: var(--text); }
   .ibtn.on, .ibtn.on:hover:not(:disabled) { background: var(--b-fill); color: var(--b-ink); box-shadow: none; }
@@ -154,7 +154,7 @@
   .search { height: 2.3rem; border-radius: 999px; padding-left: .9rem; background: var(--f-bg); box-shadow: inset 0 0 0 1.5px var(--f-ring); color: var(--text-2); }
   .search:hover { box-shadow: inset 0 0 0 1.5px var(--text-2); }
   .search:focus-within { box-shadow: inset 0 0 0 1.5px var(--text), 0 0 10px rgb(255 255 255 / .2); color: var(--text); }
-  .search .i { stroke-width: 2.2; }
+  .search .i { stroke-width: 1.7; }
   .search-k, kbd, .kbd { border-radius: 5px; background: var(--b-fill); color: var(--b-ink); font-family: var(--font); font-weight: 700; box-shadow: none; }
   .search-x { border-radius: 50%; }
   .field-l { font-weight: 700; color: var(--title); font-size: .92em; }
@@ -167,7 +167,7 @@
   .select select:hover { box-shadow: 0 0 0 2px #fff, 0 0 10px rgb(255 255 255 / .3); }
   .select select:focus { box-shadow: 0 0 0 2px #fff; }
   .select select option { background: #3b4354; color: #ece5d8; }
-  .select .i { color: var(--b-ink); stroke-width: 2.6; }
+  .select .i { color: var(--b-ink); stroke-width: 2; }
   .hint { color: var(--text-3); font-weight: 500; }
 
   /* ── panel: cream over the sky, a title over a hairline with diamond ends ── */
@@ -176,7 +176,7 @@
   .panel-h { position: relative; min-height: 2.9rem; padding: .55rem .9rem .5rem 1.1rem; border-bottom: 0; }
   .panel-h::after { content: ""; position: absolute; left: .7rem; right: .7rem; bottom: 0; height: 10px; background: var(--rule-ink); pointer-events: none; }
   .panel-t { font-size: 1.1rem; font-weight: 700; color: var(--title); }
-  .panel-t .i { color: #b08d57; stroke-width: 2; }
+  .panel-t .i { color: #b08d57; stroke-width: 1.6; }
   .panel-n { background: var(--band); color: var(--ink); box-shadow: inset 0 0 0 1px var(--tan); font-weight: 700; }
   .panel-b { padding: .75rem 1.1rem 1rem; }
   .panel.flush .panel-b { padding: .5rem; }
@@ -247,7 +247,7 @@
   /* close: a cream disc with a dark ring and cross */
   .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { width: 2.25rem; height: 2.25rem; color: var(--ink); background: #eee5d8; box-shadow: inset 0 0 0 2.5px #eee5d8, inset 0 0 0 4.5px var(--ink), 0 1px 4px rgb(0 0 0 / .3); }
   .dialog-h > .ibtn:last-child { position: absolute; right: .7rem; top: .7rem; }
-  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { width: 1.05rem; height: 1.05rem; stroke-width: 3.2; }
+  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { width: 1.05rem; height: 1.05rem; stroke-width: 2.5; }
   .dialog-h > .ibtn:last-child:hover:not(:disabled), .drawer-h > .ibtn:last-child:hover:not(:disabled) { background: #fff; color: var(--ink); box-shadow: inset 0 0 0 2.5px #fff, inset 0 0 0 4.5px var(--ink), 0 0 12px rgb(255 255 255 / .5); }
 
   /* ── drawer: a navy side panel, gold title over a gold rule ── */
@@ -264,7 +264,7 @@
   .menu { gap: 1px; }
   .menu hr { border-top: 1px solid rgb(236 229 216 / .14); margin: .25rem .6rem; }
   .menu-i { padding: .45rem .85rem; border-radius: 1.2rem; color: var(--cream); font-weight: 700; }
-  .menu-i .i { color: #b9bdc7; stroke-width: 2; }
+  .menu-i .i { color: #b9bdc7; stroke-width: 1.6; }
   .menu-i:hover:not(:disabled) { background: #636c80; color: #fff; }
   .menu-i:hover:not(:disabled) .i { color: var(--yellow); }
   .menu-i.danger, .menu-i.danger .i { color: #ff9a87; }
@@ -349,8 +349,10 @@
 [data-theme="gi"][data-accent="electro"] { --acc: #af8ef3; --acc-hi: #c9b3f7; --acc-ink: #6445ad; }
 [data-theme="gi"][data-accent="dendro"] { --acc: #a5c83b; --acc-hi: #c1dc72; --acc-ink: #4d6210; }
 [data-theme="gi"][data-accent="cryo"] { --acc: #9fd6e3; --acc-hi: #c4e7ef; --acc-ink: #255d6a; }
-/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it, a darker shade and --accent-pick-hi,
+   a shade that reads as text on dark panels; --acc-text is what text in the accent uses, so black works too) */
 [data-theme="gi"][data-accent^="#"] {
+  --acc-text: var(--accent-pick-hi);
   --acc: var(--accent-pick); --acc-hi: color-mix(in srgb, var(--accent-pick) 70%, #fff); --acc-ink: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
 }
 

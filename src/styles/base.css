@@ -114,7 +114,7 @@ html[data-motion-scroll="off"] * { scroll-behavior: auto !important; }
 /* without hardware acceleration (lib/idle.ts sets html[data-gpu="off"]) nothing blurs, in any theme */
 [data-gpu="off"] * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
-.i { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.i { width: 1.15em; height: 1.15em; flex: none; fill: none; stroke: currentColor; stroke-width: var(--i-sw, 1.35); stroke-linecap: round; stroke-linejoin: round; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .muted { color: var(--text-3); }
 .mono { font-family: var(--font-mono); }

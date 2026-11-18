@@ -22,6 +22,9 @@ export function installDemo() {
   registerDemo({
     app_info: () => ({ name: "gachamod", version: "0.1.0-demo" }),
     startup_opened: () => [],
+    app_show: () => undefined,
+    app_close: () => undefined,
+    app_close_asked: () => undefined,
     settings_get: ({ key }) => demoDb.settings.get(String(key)) ?? null,
     settings_set: ({ key, value }) => { demoDb.settings.set(String(key), String(value)); },
     open_path: () => undefined,

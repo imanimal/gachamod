@@ -103,7 +103,7 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
   const way = (retry: string, retryTip: string) => (
     <>
       <Button icon="refresh" onClick={() => setAttempt((n) => n + 1)} title={retryTip}>{retry}</Button>
-      <Button icon="power" onClick={() => void setExtensionEnabled(ext, false)} title={t("Turns {name} off. Undo turns it back on", { name: m.name })}>{t("Turn off")}</Button>
+      <Button icon="power" onClick={() => void setExtensionEnabled(ext, false, true)} title={t("Turns {name} off. Undo turns it back on", { name: m.name })}>{t("Turn off")}</Button>
       {m.homepage && <Button icon="external" onClick={() => void shell.openUrl(m.homepage!)} title={m.homepage}>{t("Author's page")}</Button>}
     </>
   );

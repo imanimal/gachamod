@@ -120,9 +120,11 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
     const what = modsName(named.length ? named : list);
     const base = on ? t("Added {mods} to {profile}", { mods: what, profile: p.name }) : t("Took {mods} out of {profile}", { mods: what, profile: p.name });
     const label = notes.length ? t("{label}, {notes}", { label: base, notes: notes.join(", ") }) : base;
+    // the card's switch shows the mod going in or out: the toast is for the character's other mods it took out
+    const brief = notes.length ? tn(notes.length, "Took {n} other mod for this character out of the profile", "Took {n} other mods for this character out of the profile") : undefined;
     try {
       await setMembers(game, p.id, ins, outs);
-      record({ label, undo: () => setMembers(game, p.id, outs, ins), redo: () => setMembers(game, p.id, ins, outs) });
+      record({ label, brief, undo: () => setMembers(game, p.id, outs, ins), redo: () => setMembers(game, p.id, ins, outs) }, !brief);
     } catch (e) {
       setMembersState(before);
       toast(errorText(e), true);

@@ -9,8 +9,10 @@ import { t } from "./i18n";
 interface Pref<T> {
   get: () => T;
   use: () => T;
-  /** Set and save. `label` records an undo step with that label ("Blocked Somebody"). */
-  set: (v: T, label?: string) => Promise<void>;
+  /** Set and save. `label` records an undo step for Ctrl+Z and the title bar's undo list ("Blocked Somebody"), without
+   *  a toast: the control that changed it shows the new state. `say` adds a toast with Undo, for a change that reaches
+   *  past what's on screen: true shows the label, a string shows those words instead (no names in toasts). */
+  set: (v: T, label?: string, say?: true | string) => Promise<void>;
   /** Resolves once the saved value has been read. */
   ready: Promise<void>;
 }
@@ -37,10 +39,10 @@ export function pref<T>(key: string, fallback: T, parse: (raw: string) => T | un
     get: () => { void load(); return value; },
     use: () => useSyncExternalStore(sub, () => value),
     get ready() { return load(); },
-    set: async (v, label) => {
+    set: async (v, label, say) => {
       const before = value;
       await save(v);
-      if (label) record({ label, undo: () => save(before), redo: () => save(v) });
+      if (label) record({ label, brief: typeof say === "string" ? say : undefined, undo: () => save(before), redo: () => save(v) }, !say);
     },
   };
   all.set(key, p as Pref<unknown>);
@@ -87,18 +89,44 @@ const FLAG_WORDS: Record<CreatorFlag, [(name: string) => string, (name: string) 
   prio: [(name) => t("Prioritized {name}", { name }), (name) => t("Stopped prioritizing {name}", { name })],
   blocked: [(name) => t("Blocked {name}", { name }), (name) => t("Unblocked {name}", { name })],
 };
+// the same in toasts, which never list names
+const FLAG_BRIEF: Record<CreatorFlag, [string, string]> = {
+  sub: [t("Following the creator"), t("Stopped following the creator")],
+  fav: [t("Added the creator to favourites"), t("Removed the creator from favourites")],
+  prio: [t("Prioritized the creator"), t("Stopped prioritizing the creator")],
+  blocked: [t("Blocked the creator and hid their mods"), t("Unblocked the creator")],
+};
 
 export const creatorsPref = jsonPref<Record<string, CreatorFlags>>("creators", {});
 export const useCreators = () => creatorsPref.use();
 export const creatorOf = (id: number | null | undefined): CreatorFlags | undefined => (id ? creatorsPref.get()[String(id)] : undefined);
 export const isBlocked = (id: number | null | undefined) => !!creatorOf(id)?.blocked;
 
-/** Turn one flag on or off for a creator, with Undo. Blocking also stops following and prioritizing. */
+const boolPref = (key: string, fallback: boolean) =>
+  pref<boolean>(key, fallback, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
+/** Creator names show what the creator set on GameBanana: name colour, font and effect, upic, hover avatar, Cubeatar,
+ *  hover card style and signature. */
+export const creatorStylesPref = boolPref("gb.creatorStyles", true);
+export const useCreatorStyles = () => creatorStylesPref.use();
+/** A creator's page takes the colours, background and fonts of their GameBanana Uberstyle. */
+export const uberstylesPref = boolPref("gb.uberstyles", true);
+export const useUberstyles = () => uberstylesPref.use();
+
+/** The quickstart shortcut opens gachamod's window too. Off, only the game comes up (src-tauri background.rs reads
+ *  "quickstart.open"). */
+export const quickstartOpensPref = boolPref("quickstart.open", false);
+/** Closing the window keeps gachamod running in the background, with a tray icon (src-tauri background.rs reads
+ *  "app.background"). Unset shows as on: the first close asks (shell/CloseAsk.tsx), and quickstart stays. */
+export const backgroundPref = boolPref("app.background", true);
+
 /** Set by lib/account.ts while the user is signed in to GameBanana: following a creator follows them there too. */
 let remoteFollow: ((id: number, on: boolean) => Promise<void>) | null = null;
 export function setRemoteFollow(f: typeof remoteFollow) { remoteFollow = f; }
 
-export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean) {
+/** Turn one flag on or off for a creator, with Undo. Blocking also stops following and prioritizing. The button that
+ *  did it shows the new state, so only changes that reach further toast: blocking (their mods vanish), a follow that
+ *  goes to GameBanana too, and `say` for a control that goes away (a row in a list). */
+export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean, say = false) {
   const before = creatorsPref.get();
   const list = { ...before };
   const old = list[String(c.id)];
@@ -110,16 +138,19 @@ export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean) {
   else list[String(c.id)] = next;
   const [yes, no] = FLAG_WORDS[flag];
   const label = (on ? yes : no)(next.name);
+  const brief = FLAG_BRIEF[flag][on ? 0 : 1];
+  const blocking = flag === "blocked" && on;
   const subBefore = !!old?.sub, subAfter = !!list[String(c.id)]?.sub;
   const rf = remoteFollow;
   if (rf && subBefore !== subAfter) {
     // one request per click, and Undo sends the opposite one
     const put = async (v: Record<string, CreatorFlags>, sub: boolean) => { await creatorsPref.set(v); await rf(c.id, sub); };
     void put(list, subAfter);
-    record({ label: t("{label}, on GameBanana too", { label }), undo: () => put(before, subBefore), redo: () => put(list, subAfter) });
+    const gb = blocking ? t("Blocked the creator and unfollowed them on GameBanana") : subAfter ? t("Followed the creator on GameBanana too") : t("Unfollowed the creator on GameBanana too");
+    record({ label: t("{label}, on GameBanana too", { label }), brief: gb, undo: () => put(before, subBefore), redo: () => put(list, subAfter) });
     return;
   }
-  void creatorsPref.set(list, label);
+  void creatorsPref.set(list, label, blocking || say ? brief : undefined);
 }
 
 /** Note the newest mod time seen for followed creators (no undo). */
@@ -140,7 +171,8 @@ export const useHiddenMods = () => hiddenModsPref.use();
 export function hideMod(id: number, name: string, hide = true) {
   const now = new Set(hiddenModsPref.get());
   if (hide) now.add(id); else now.delete(id);
-  void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }));
+  // hiding takes the card away, so it toasts with Undo; showing again is plain
+  void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }), hide ? t("Hid the mod from Browse") : undefined);
 }
 
 // ── custom character portraits (a mod preview or an image the user picked), per game ──
@@ -152,5 +184,6 @@ export function setCustomPortrait(game: string, name: string, src: string | null
   const list = { ...portraitPref.get() };
   const k = portraitKey(game, name);
   if (src) list[k] = src; else delete list[k];
-  void portraitPref.set(list, src ? t("New picture for {name}", { name }) : t("{name}'s picture is back to the default", { name }));
+  // the new picture shows where it was picked; going back to the default loses the custom one, so that toasts with Undo
+  void portraitPref.set(list, src ? t("New picture for {name}", { name }) : t("{name}'s picture is back to the default", { name }), src ? undefined : t("Put the default picture back"));
 }

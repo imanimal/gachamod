@@ -21,7 +21,6 @@ import { MOVE_KEYWORDS, TOOL_PAGES, toolsPageOf, toolsWhere } from "./toolsSearc
 import { ConflictsPanel, HashLookupPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
 import { MovePanel } from "../modtools/MovePanel";
 import { MigotoSection } from "../settings/Launch";
-import { BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel } from "./Storage";
 import { setToolsPage, useToolsCounts } from "../modtools/toolsBadge";
 import { t, tn } from "../../lib/i18n";
 import { gameName, gameShort } from "../../lib/games";
@@ -35,7 +34,7 @@ async function importPack() {
 }
 
 async function clearShaderCache(g: GameState) {
-  if (g.running) { toast(t("Close {game} first. It rebuilds the shader cache on the next start", { game: gameName(g) })); return; }
+  if (g.running) { toast(t("Close the game first. It rebuilds the shader cache on the next start")); return; }
   try { const b = await dev.clearShaderCache(g.id); toast(b ? t("Freed {size}", { size: formatBytes(b) }) : t("The shader cache is already empty")); }
   catch (e) { toast(errorText(e), true); }
 }
@@ -94,7 +93,6 @@ function ToolsPages({ game }: { game: GameState }) {
           conflicts: <><ConflictsPanel /><KeyClashesPanel /></>,
           ingame: <><InGamePanel game={game.id} /><KeyListPanel game={game.id} /></>,
           packs: <><PacksPanel /><MovePanel /></>,
-          disk: <StoragePage />,
           makers: <><DevSection game={game} /><MigotoSection game={game} /><HashLookupPanel /></>,
         }}
       </Paged>
@@ -147,12 +145,12 @@ function DevSection({ game }: { game: GameState }) {
             <div className="tools-dev-row">
               <span><b>{t("Reload mods in game")}</b><span className="hint">{t("Brings {game} to the front and presses {key}, its reload key in d3dx.ini", { game: gameShort(game), key: game.reloadKey || "F10" })}</span></span>
               <Button icon="refresh" busy={busy === "reload"} disabled={!game.running} title={game.running ? t("Press {key} in the game", { key: game.reloadKey || "F10" }) : t("{game} isn't running", { game: gameName(game) })}
-                onClick={() => void run("reload", async () => { await dev.reload(game.id); toast(t("Reloaded mods in game")); })}>{t("Reload")}</Button>
+                onClick={() => void run("reload", () => dev.reload(game.id))}>{t("Reload")}</Button>
             </div>
             <div className="tools-dev-row">
               <span><b>{t("Shader cache")}</b><span className="hint">{st ? tn(st.shaderCache.files, "{size}, {n} file. It rebuilds on the next start", "{size}, {n} files. It rebuilds on the next start", { size: formatBytes(st.shaderCache.bytes) }) : "…"}</span></span>
               <Button icon="trash" busy={busy === "cache"} disabled={!st?.shaderCache.bytes || game.running} title={game.running ? t("Close the game first") : t("Delete the shader cache. The game rebuilds it on the next start")}
-                onClick={() => void run("cache", async () => { const b = await dev.clearShaderCache(game.id); toast(t("Freed {size}", { size: formatBytes(b) })); })}>{t("Clear")}</Button>
+                onClick={() => void run("cache", () => dev.clearShaderCache(game.id))}>{t("Clear")}</Button>
             </div>
             <div className="tools-dev-row">
               <span><b>{t("Frame dumps")}</b><span className="hint">{st ? t("{size} in FrameAnalysis folders", { size: formatBytes(st.frameDumps.bytes) }) : "…"}</span></span>
@@ -160,7 +158,7 @@ function DevSection({ game }: { game: GameState }) {
                 onClick={() => void run("dumps", async () => { const b = await dev.clearFrameDumps(game.id); toast(t("Moved {size} of frame dumps to the Recycle Bin", { size: formatBytes(b) })); })}>{t("Delete")}</Button>
             </div>
             <div className="tools-dev-row">
-              <span><b>{t("Saved mod options")}</b><span className="hint">{t("Every mod goes back to its first look. A copy of d3dx_user.ini is kept")}</span></span>
+              <span><b>{t("Saved mod options")}</b><span className="hint">{t("Resets every mod's options. A copy of d3dx_user.ini is kept")}</span></span>
               <Button variant="danger" icon="trash" busy={busy === "wipe"} disabled={!st?.d3dxUserIni || game.running} title={game.running ? t("Close the game first") : t("Reset every mod's options. A copy of d3dx_user.ini is kept, and Undo (Ctrl+Z) puts it back")}
                 onClick={() => void run("wipe", wipeOptions)}>{t("Wipe")}</Button>
             </div>
@@ -193,9 +191,6 @@ registerPanels("tools", {
   keylist: forGame((g) => <KeyListPanel game={g.id} />),
   packs: PacksPanel,
   others: MovePanel,
-  disk: StoragePanel,
-  "disk-big": BiggestModsPanel,
-  "disk-dupes": DuplicatesPanel,
   dev: forGame((g) => <DevSection game={g} />),
   migoto: forGame((g) => <MigotoSection game={g} />),
   hash: HashLookupPanel,

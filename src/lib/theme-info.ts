@@ -71,6 +71,28 @@ export function onColor(hex: string): string {
   return contrast(l, 0) >= contrast(l, 1) ? "#0c0e13" : "#ffffff";
 }
 
+/** How well two colours read on each other, 1 (the same) to 21 (black on white). 1 when either isn't a colour. */
+export function contrastOf(a: string, b: string): number {
+  const x = rgb(a), y = rgb(b);
+  return x && y ? contrast(luminance(x), luminance(y)) : 1;
+}
+
+/** `hex` as text on `bg`: unchanged when it reads at `min`:1, else mixed toward white on a dark `bg` or black on a
+ *  light one until it does. A black accent on a dark theme comes back as a grey that reads there. */
+export function readableOn(hex: string, bg: string, min = 4.5): string {
+  const c = rgb(hex), b = rgb(bg);
+  if (!c || !b) return hex;
+  const lb = luminance(b);
+  if (contrast(luminance(c), lb) >= min) return hex;
+  const to = contrast(lb, 1) >= contrast(lb, 0) ? 255 : 0;
+  let out = c;
+  for (let i = 1; i <= 20; i++) {
+    out = c.map((v) => v + (to - v) * (i / 20)) as [number, number, number];
+    if (contrast(luminance(out), lb) >= min) break;
+  }
+  return toHex(out);
+}
+
 /** A shade of `hex` dark enough to carry white text and to read as text on white (4.5:1). */
 export function darkShade(hex: string): string {
   let c = rgb(hex);

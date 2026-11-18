@@ -1,0 +1,18 @@
+/* A GameBanana member's name style (lib/nameStyle.ts): colour, hover colour, font and text effect as they set them
+   on GameBanana, the effects drawn the way GameBanana draws them. Settings, Creators turns them off. */
+.gb-name { --sh-e: var(--sh-ec, currentColor); font-family: var(--sh-font, inherit); }
+.gb-name:hover { --sh-e: var(--sh-ehc, var(--sh-ec, currentColor)); }
+.gb-name.has-c, .qlink.gb-name.has-c { color: var(--sh-c); }
+.gb-name.has-hc:hover, .qlink.gb-name.has-hc:hover { color: var(--sh-hc); }
+.gb-name.fx-stroke { text-shadow: -1px -1px 0 var(--sh-e), 1px -1px 0 var(--sh-e), -1px 1px 0 var(--sh-e), 1px 1px 0 var(--sh-e); }
+.gb-name.fx-shadow { text-shadow: 1px 1px var(--sh-e); }
+.gb-name.fx-glow { text-shadow: 0 0 3px var(--sh-e); }
+.gb-name.fx-dropGlow { text-shadow: 1px 1px 1px var(--sh-e); }
+
+/* the picture GameBanana shows in place of a name (upic), at the height of the text around it */
+.gb-upic { display: inline-block; height: 1.3em; width: auto; max-width: 100%; vertical-align: middle; object-fit: contain; }
+
+/* the avatar a member swaps in on hover, laid over their avatar (it pulls back by the avatar's width and gap, so the
+   text doesn't move); keyboard and controller users see it while the link has focus */
+.qlink-img.qlink-hov { margin-left: -1.45em; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.qlink-user:hover .qlink-hov, html:is(.kbd, .pad) .qlink-user:focus .qlink-hov { opacity: 1; }

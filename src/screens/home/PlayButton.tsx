@@ -8,8 +8,7 @@ import { Popover } from "../../ui/Popover";
 import { menuHandler } from "../../ui/ContextMenu";
 import { canInstallLoader, installLoaders, useSetup } from "../../lib/setup";
 import { toast } from "../../ui/toast";
-import { errorText, games, settings, xxmi, type GameState } from "../../lib/api";
-import { windowAction } from "../../lib/tauri";
+import { app as appApi, errorText, games, settings, xxmi, type GameState } from "../../lib/api";
 import { allGames, go, useGame } from "../../lib/store";
 import { HOLD, STUCK_MS } from "../../lib/activity";
 import { shuffleBeforePlay } from "../library/shuffle";
@@ -17,6 +16,7 @@ import { setKickFixDone } from "../../lib/kickFix";
 import { askKick } from "./KickWarning";
 import { gameName, gameShort } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
+import { note as noteUsage } from "../../lib/telemetry";
 import "./home.css";
 
 // shared by every Play button, so the sidebar's and Home's agree
@@ -43,14 +43,17 @@ function elapsed(ms: number): string {
 let asking = false;
 
 /** Start a game (with or without mods). Errors become toasts; the button shows Starting until it runs. Genshin
- *  Impact with mods first warns about its "Illegal tool detected" kick until the fix is done (lib/kickFix.ts). */
-export async function play(game: GameState, vanilla = false) {
+ *  Impact with mods first warns about its "Illegal tool detected" kick until the fix is done (lib/kickFix.ts).
+ *  `needsYou` runs before anything the player has to see: that question, an error, a game that didn't start
+ *  (quickstart shows its hidden window then). */
+export async function play(game: GameState, vanilla = false, needsYou?: () => void) {
   if (starting.has(game.id) || game.running || asking) return;
   if (game.id === "gi" && !vanilla) {
     asking = true;
     try {
       const k = await games.kickCheck(game.id).catch(() => null);
       if (k?.warn) {
+        needsYou?.();
         const a = await askKick(k.undone);
         if (a === "cancel") return;
         if (a === "done") await setKickFixDone(true);
@@ -67,6 +70,7 @@ export async function play(game: GameState, vanilla = false) {
     starting.delete(game.id);
     changed();
     const again = { label: t("Try again"), run: () => { const g = allGames().find((x) => x.id === game.id); if (g) void play(g, vanilla); } };
+    needsYou?.();
     toast(t("{game} didn't start. A launcher window waiting for an answer can hold it, so check the taskbar", { game: gameName(game) }), true,
       game.xxmi ? { label: t("Open XXMI Launcher"), run: () => { xxmi.open().catch((e) => toast(errorText(e), true)); } } : again,
       game.xxmi ? again : undefined);
@@ -74,13 +78,17 @@ export async function play(game: GameState, vanilla = false) {
   try {
     if (!vanilla) await shuffleBeforePlay(game.id);
     const note = await games.launch(game.id, vanilla);
+    noteUsage("game launched", { game: game.id, mode: vanilla ? "vanilla" : "modded" });
     giveUp();
-    toast(note ?? (vanilla ? t("Starting {game} without mods", { game: gameName(game) }) : t("Starting {game}", { game: gameName(game) })), "info");
+    // the Play button says Starting: only a note from the launch is news
+    if (note) toast(note, "info");
     const close = await settings.get(`${game.id}.closeOnLaunch`).catch(() => null);
-    if (close === "1") window.setTimeout(() => void windowAction("close"), 1500);
+    // to the background or quit, as Keep running in the background says, never with the first-close question
+    if (close === "1") window.setTimeout(() => { appApi.close(false).catch(() => {}); }, 1500);
   } catch (e) {
     starting.delete(game.id);
     changed();
+    needsYou?.();
     toast(errorText(e), true);
   }
 }
@@ -151,7 +159,7 @@ export function PlayButton({ big = false }: { big?: boolean }) {
     : game.viaXxmi ? t("Start {game} with mods through XXMI (Ctrl+Enter)", { game: name }) : t("Start {game} (Ctrl+Enter)", { game: name });
   // the same entries for the More button and a right-click on Play
   const startItems = (close: () => void) => [
-    { label: t("Play without mods"), icon: "play" as const, disabled: isRunning || isStarting, hint: t("Starts the game with no mods, the way the developers intended. Brave"),
+    { label: t("Play without mods"), icon: "play" as const, disabled: isRunning || isStarting, hint: t("Starts the game with no mods"),
       onClick: () => { close(); void play(game, true); } },
     ...(game.xxmi ? [{ label: t("Open XXMI Launcher"), icon: "external" as const, onClick: () => {
       close(); xxmi.open().catch((e) => toast(errorText(e), true));

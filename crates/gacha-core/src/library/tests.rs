@@ -435,6 +435,29 @@ fn remove_deletes_files_by_default() {
 }
 
 #[test]
+fn unsourced_files_go_to_the_recycle_bin_unless_set_to_delete() {
+    let t = Tree::new("trash-unsourced");
+    t.add("Ellen Joe/Maid Ellen");
+    let db = t.db();
+    let list = scan(&db, "zzz").unwrap();
+    let d = db.lock().unwrap();
+    assert!(unsourced_to_recycle_bin(&d), "nobody chose yet: the Recycle Bin");
+    d.set_setting("trash.unsourced", "recycle").unwrap();
+    assert!(unsourced_to_recycle_bin(&d));
+    d.set_setting("trash.unsourced", "delete").unwrap();
+    assert!(!unsourced_to_recycle_bin(&d));
+
+    // forgetting a trash entry with recycle takes its files and its record
+    d.set_setting("trash.days", "14").unwrap();
+    let maid = by_name(&list, "Maid Ellen").clone();
+    remove(&d, &t.data, "zzz", std::slice::from_ref(&maid.id), "removed").unwrap();
+    let key = archive_list(&d, Some("zzz")).unwrap()[0].key.clone();
+    assert_eq!(archive_forget(&d, &[key], true).unwrap(), 1);
+    assert!(archive_list(&d, Some("zzz")).unwrap().is_empty());
+    assert!(!t.data.join("trash").join("zzz").read_dir().is_ok_and(|mut r| r.next().is_some()));
+}
+
+#[test]
 fn move_meta_and_add_folder() {
     let t = Tree::new("move");
     t.add("Coca Cola");

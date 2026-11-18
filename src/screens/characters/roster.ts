@@ -38,7 +38,9 @@ export function setCharHidden(game: GameId, name: string, hidden: boolean) {
   const set = new Set(all[game] ?? []);
   if (hidden) set.add(norm(name)); else set.delete(norm(name));
   all[game] = [...set];
-  void hiddenCharsPref.set(all, hidden ? t("Hid {name} from the roster", { name }) : t("Showing {name} in the roster again", { name }));
+  // hiding takes it off the roster, so that toasts with Undo; showing it again puts it back in view
+  void hiddenCharsPref.set(all, hidden ? t("Hid {name} from the roster", { name }) : t("Showing {name} in the roster again", { name }),
+    hidden ? t("Hid the character from the roster") : undefined);
 }
 
 // ── the backend's list, kept for the session so the roster draws at once when you come back to it ──

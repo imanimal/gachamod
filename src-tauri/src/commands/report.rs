@@ -1,9 +1,9 @@
-//! Logs, crash reports, usage counts and feedback (gacha_core::logs, gacha_core::telemetry), and starting as
-//! administrator. Owner: SYSTEM area.
+//! Logs, crash reports, usage counts and feedback (gacha_core::logs, gacha_core::telemetry), starting as
+//! administrator, and the desktop shortcuts (gacha_core::shortcuts). Owner: SYSTEM area.
 use crate::state::{blocking, AppState};
 use gacha_core::Result;
 use gacha_core::telemetry::{self, Feedback, UiEvent};
-use gacha_core::{devtools, gamecheck, logs};
+use gacha_core::{devtools, gamecheck, logs, shortcuts};
 use tauri::State;
 
 fn lock(db: &gacha_core::db::Shared) -> Result<std::sync::MutexGuard<'_, gacha_core::db::Db>> {
@@ -97,4 +97,44 @@ pub async fn admin_set_always(on: bool) -> Result<AdminState> {
         logs::info(if on { "gachamod starts as administrator from now on" } else { "gachamod no longer starts as administrator" });
         Ok(admin_now())
     }).await
+}
+
+/// Which desktop shortcuts are there: gachamod's, quickstart's and the games' own quickstarts.
+#[tauri::command]
+pub async fn shortcuts_state() -> Result<shortcuts::State> { blocking(|| Ok(shortcuts::state())).await }
+
+/// Make a desktop shortcut (again).
+#[tauri::command]
+pub async fn shortcuts_create(st: State<'_, AppState>, kind: shortcuts::Kind) -> Result<shortcuts::State> {
+    let (db, data) = (st.db.clone(), st.data_dir.clone());
+    blocking(move || {
+        let s = shortcuts::create(kind, &*lock(&db)?, &data)?;
+        logs::info(format!("Made the {kind:?} shortcut on the desktop"));
+        Ok(s)
+    }).await
+}
+
+/// Take a desktop shortcut away.
+#[tauri::command]
+pub async fn shortcuts_remove(kind: shortcuts::Kind) -> Result<shortcuts::State> { blocking(move || shortcuts::remove(kind)).await }
+
+/// Make a game's own quickstart on the desktop (again), with the game's icon.
+#[tauri::command]
+pub async fn shortcuts_create_game(st: State<'_, AppState>, game: String) -> Result<shortcuts::State> {
+    let (db, data) = (st.db.clone(), st.data_dir.clone());
+    blocking(move || {
+        let s = shortcuts::create_game(&game, &*lock(&db)?, &data)?;
+        logs::info(format!("Made the {game} quickstart on the desktop"));
+        Ok(s)
+    }).await
+}
+
+#[tauri::command]
+pub async fn shortcuts_remove_game(game: String) -> Result<shortcuts::State> { blocking(move || shortcuts::remove_game(&game)).await }
+
+/// The game the quickstart shortcut starts is now `game`: its icon follows.
+#[tauri::command]
+pub async fn shortcuts_follow(st: State<'_, AppState>, game: String) -> Result<()> {
+    let (db, data) = (st.db.clone(), st.data_dir.clone());
+    blocking(move || shortcuts::follow(&game, &*lock(&db)?, &data)).await
 }

@@ -12,6 +12,8 @@ holds and how to turn it off.
 
 A build sends nothing unless `GACHAMOD_POSTHOG_KEY` was set when it was built (`npm run installer` warns when it
 isn't). `GACHAMOD_POSTHOG_HOST` points at the EU server (`https://eu.i.posthog.com`) when the project lives there.
+`npm run posthog-key` asks for the key (typed hidden), finds which server knows it and writes both to
+`%USERPROFILE%\.tauri\gachamod.env`, which the installer build reads from any checkout.
 Debug builds (`npm run app`) send usage counts and crashes only with `GACHAMOD_TELEMETRY_DEV=1`, so the developer's
 own clicks don't count. Feedback goes from any build that has the key.
 
@@ -38,6 +40,12 @@ game picked in the sidebar (`zzz`, `gi`) or `none`.
 | `click` | `target` | A click on anything marked `data-t` (the feedback buttons, Restart as administrator, Tell the developer) |
 | `input` | `kind`: `mouse`, `keyboard` or `controller` | The first use of each in a run |
 | `f10 note` | `game`, `blocked` | The player was told to press F10 (`blocked`: the game runs as administrator) |
+| `game launched` | `game`, `mode`: `modded` or `vanilla` | Play started a game |
+| `download queued` | `game`, `kind`: `new` or `update` | A GameBanana file went into the download queue |
+| `mods toggled` | `game`, `on`, `count` | Mods turned on or off (`count`: how many were asked for) |
+| `profile switched` | `game` | A profile switch from the window. Hotkey switches in the game aren't counted |
+| `profile made` | `game`, `from`: `now` (the mods on now), `empty` or `copy` | A new or duplicated profile |
+| `extension installed` | `kind`: `theme` or `extension`, `update` | A listed package installed or updated |
 
 ## Crash reports
 

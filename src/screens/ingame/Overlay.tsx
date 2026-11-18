@@ -85,6 +85,8 @@ export function Overlay() {
       held(listen<{ game: GameId; tab?: "keys" }>("overlay-open", (p) => {
         setMenuGame(p.game); setOpenTab(p.tab === "keys" ? "keys" : null); void reloadLive(p.game); setOpened((n) => n + 1);
       })),
+      // the game saved a change in who is on screen while the menu shows (overlay.rs on_screen_changed)
+      held(listen<{ game: GameId }>("overlay-here", (p) => void reloadLive(p.game))),
       // what the backend says ("Installed X for Y"). The app's own window turns a new mod on (library/afterInstall.ts);
       // here the message shows with the way to the mod
       held(appApi.onToast((p) => {
@@ -116,10 +118,16 @@ export function Overlay() {
  *  the game when the menu opened. */
 interface Who { name: string; group: LiveGroup | null; mods: ModEntry[]; showing: string | null; here: boolean }
 
-/** The characters the game says are on screen, in the order of its groups. */
-function onScreenNames(info: LiveInfo | null): string[] {
-  const on = info?.onScreen ?? [];
-  return info && on.length ? info.groups.filter((g) => on.includes(g.group)).map((g) => g.character) : [];
+/** Who the game says is on screen. `here`: the characters on screen, the one that came on screen last first. `lead`:
+ *  the characters the list starts with: those, or with nobody on screen (a menu or a loading screen in the game) the
+ *  character seen last. */
+interface Seen { here: string[]; lead: string[] }
+function onScreenNames(info: LiveInfo | null): Seen {
+  if (!info?.running) return { here: [], lead: [] };
+  const name = (n: number) => info.groups.find((g) => g.group === n)?.character;
+  const here = (info.onScreen ?? []).map(name).filter((c): c is string => !!c);
+  const last = info.lastSeen != null ? name(info.lastSeen) : undefined;
+  return { here, lead: here.length ? here : last ? [last] : [] };
 }
 
 /** The game's installed mods (null while reading), read again each time the menu opens and when the library changes. */
@@ -200,16 +208,30 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     else close();
   }, [close]);
 
-  // Who is on screen, taken once each time the menu opens: first what is known, then the game's answer that comes
-  // in a moment later. After that it stays, so characters don't move in the list while the menu shows.
-  const [here, setHere] = useState<string[]>([]);
-  const hereAt = useRef<{ opened: number; info: LiveInfo | null; done: boolean }>({ opened: -1, info: null, done: false });
+  /** The tile the menu put the focus on by itself. While the focus is still there, the player hasn't moved in the menu. */
+  const autoFocus = useRef<HTMLElement | null>(null);
+  const putFocus = (el: HTMLElement | null | undefined) => { el?.focus(); autoFocus.current = el ?? null; };
+  /** The player hasn't picked a character, opened a mod, typed or moved the focus since the menu opened. */
+  const untouched = () => {
+    const a = document.activeElement;
+    return selRef.current === null && !detailRef.current && (!a || a === document.body || a === autoFocus.current);
+  };
+  // Who is on screen each time the menu opens: first what is known, then the game's answer that comes in a moment
+  // later, and the answers after it (the game saves who is on screen about a second after a swap) until the player
+  // moves in the menu. After that it stays, so characters don't move in the list under the player.
+  const [seenNow, setSeenNow] = useState<Seen>({ here: [], lead: [] });
+  const hereAt = useRef<{ opened: number; info: LiveInfo | null }>({ opened: -1, info: null });
   useEffect(() => {
     const h = hereAt.current;
-    if (h.opened !== opened) { hereAt.current = { opened, info, done: false }; setHere(onScreenNames(info)); return; }
-    if (!h.done && info && info !== h.info) { h.done = true; setHere(onScreenNames(info)); }
-  }, [opened, info]);
-  const hereKey = here.join("\n");
+    const take = () => {
+      const next = onScreenNames(info);
+      setSeenNow((was) => (was.here.join("\n") === next.here.join("\n") && was.lead.join("\n") === next.lead.join("\n") ? was : next));
+    };
+    if (h.opened !== opened) { hereAt.current = { opened, info }; autoFocus.current = null; take(); return; }
+    if (info && info !== h.info && untouched()) { h.info = info; take(); }
+  }, [opened, info]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { here, lead } = seenNow;
+  const hereKey = `${here.join("\n")}|${lead.join("\n")}`;
 
   const everyone = useMemo<Who[]>(() => {
     if (!info || !mods) return [];
@@ -229,14 +251,14 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     }
     const order = recent(game);
     const rank = (w: Who) => { const i = order.indexOf(w.name); return i < 0 ? order.length : i; };
-    // the characters on screen first, then the ones played last
-    const seen = (w: Who) => { const i = here.indexOf(w.name); return i < 0 ? here.length : i; };
+    // the characters on screen first (or the one seen last), then the ones played last
+    const seen = (w: Who) => { const i = lead.indexOf(w.name); return i < 0 ? lead.length : i; };
     return [...names.values()].sort((a, b) => Number(a.name === OTHER) - Number(b.name === OTHER) || seen(a) - seen(b) || rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [info, mods, game, opened, hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** The characters on screen, then the others as they were played last, for the Keys tab (read again each time the
-   *  menu opens). */
-  const order = useMemo(() => [...here, ...recent(game)], [game, opened, hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The characters on screen (or the one seen last), then the others as they were played last, for the Keys tab (read
+   *  again each time the menu opens). */
+  const order = useMemo(() => [...lead, ...recent(game)], [game, opened, hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const selRef = useRef(sel);
   selRef.current = sel;
   const words = q.trim().toLowerCase();
@@ -259,6 +281,8 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     go({ view: "library" });
     setKeysAt(openTab === "keys" ? currentRoute() : null);
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a tile that goes away (another character, tab or a mod's details) sends no mouseleave or blur
+  useEffect(() => setHint(null), [tab, who?.name, detail]);
 
   // Pages the app's parts ask for (a card's Installed tag, a character's name, a toast's button). A mod of the
   // library opens its details here. A character opens their skins, or their mods on GameBanana when there are none.
@@ -288,9 +312,9 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   }, [route, loading, mods, everyone, game]);
   useEffect(() => {
     if (loading) return;
-    const timer = window.setTimeout(() => (root.current?.querySelector<HTMLElement>(".ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-tile, .ov-who"))?.focus(), 80);
+    const timer = window.setTimeout(() => putFocus(root.current?.querySelector<HTMLElement>(".ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-tile, .ov-who")), 80);
     return () => window.clearTimeout(timer);
-  }, [opened, loading]);
+  }, [opened, loading]); // eslint-disable-line react-hooks/exhaustive-deps
   // Browse and Downloads: the focus goes to the first card or row once one shows (the tile that had it is gone), unless
   // the player put it somewhere meanwhile
   const pageKey = tab === "browse" ? `browse:${route.user ?? ""}` : tab;
@@ -308,11 +332,11 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
     return () => window.clearInterval(timer);
   }, [pageKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // the game's answer came in after the menu opened: the focus follows to the character on screen, unless the player
-  // picked a character meanwhile
+  // moved in the menu meanwhile
   useEffect(() => {
-    if (loading || !hereKey || selRef.current !== null) return;
+    if (loading || hereKey === "|" || !untouched()) return;
     const timer = window.setTimeout(() => {
-      if (selRef.current === null) root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on, .ov-pane .ov-tile")?.focus();
+      if (untouched()) putFocus(root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on, .ov-pane .ov-tile"));
     }, 80);
     return () => window.clearTimeout(timer);
   }, [hereKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -456,7 +480,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       onClick: () => void turn(m, true, true) },
     m.enabled && { label: t("Turn off"), icon: "block", keys: "Enter", onClick: () => void turn(m, false) },
     { label: t("Details"), icon: "info", keys: "I", onClick: () => setDetail({ mod: m }) },
-    m.hasKeys && { label: t("Show its keys"), icon: "keyboard", onClick: () => keysOf(m) },
+    m.hasKeys && { label: t("Show keys"), icon: "keyboard", onClick: () => keysOf(m) },
   ];
 
   const modOf = (id: string) => mods?.find((m) => m.id === id) ?? null;
@@ -467,14 +491,14 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       title: t("Turns it on next to {name} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods", { name: w.showing }),
       onClick: () => void beside(full!, w.showing!) },
     full && { label: t("Details"), icon: "info", keys: "I", onClick: () => setDetail({ mod: full }) },
-    !!full?.hasKeys && { label: t("Show its keys"), icon: "keyboard", onClick: () => keysOf(full!) },
+    !!full?.hasKeys && { label: t("Show keys"), icon: "keyboard", onClick: () => keysOf(full!) },
   ];
   const key = info?.menu.key ?? t("the menu key");
   /** Enter in the character search: on to the found character's skins. After the key is done, so the same Enter
    *  doesn't also press the tile it lands on. */
   const toSkins = () => window.setTimeout(() =>
     (root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on") ?? root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile, .ov-rail .ov-who"))?.focus(), 0);
-  const tipFor = (character: string) => (on: boolean) => setHint(on ? newSkinTip(character) : null);
+  const tipFor = (character: string, fresh: boolean) => (on: boolean) => setHint(on && fresh ? newSkinTip(character) : null);
   const listKey = kl.list?.settings.key;
   /** The keys for what has the focus, along the bottom: [keys, what they do, a longer tip]. */
   const tabsChip: [string, string, string] = ["Tab", t("Tabs"), keysOn ? t("Tab or the bumpers switch between My mods, Keys, Browse and Downloads")
@@ -523,7 +547,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
           : (<>
             <div className="ov-side">
               <SearchField className="ov-find" value={q} onChange={setQ} placeholder={t("Find a character")} onEnter={toSkins} />
-              {!shown.length ? <p className="muted ov-none">{words ? t("No character or skin has that name.") : t("No mods here yet. Browse has some.")}</p> : (
+              {!shown.length ? <p className="muted ov-none">{words ? t("No character or skin has that name.") : t("No mods yet. Find some in Browse.")}</p> : (
             <nav className="ov-rail" aria-label={t("Characters")}>
               {shown.map((w, i) => (
                 <button key={w.name} type="button" className={`ov-who${w === who ? " on" : ""}`} style={{ "--i": Math.min(i, 14) } as React.CSSProperties}
@@ -562,7 +586,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
                         const fresh = !!info && isNewSkin(game, info, who.group!, m.modId);
                         return (
                           <Tile key={m.modId} i={i + 1} on={who.group!.active === m.slot} busy={busy === `${who.name}-${m.slot}`} name={m.name} src={fileUrl(m.preview)} blur={full?.nsfw}
-                            fresh={fresh} onHint={fresh ? tipFor(who.name) : undefined} shift={!!full && !!who.showing && who.group!.active !== m.slot}
+                            fresh={fresh} onHint={tipFor(who.name, fresh)} shift={!!full && !!who.showing && who.group!.active !== m.slot}
                             title={who.group!.active === m.slot ? t("{name} is showing", { name: m.name }) : !m.enabled ? t("{name} is off. Picking it turns it on, and it shows after the game reloads", { name: m.name })
                               : who.showing && full ? t("Show {name}. Shift+click or Shift+Enter shows it next to {showing} instead, and it stops switching in game", { name: m.name, showing: who.showing })
                               : t("Show {name}", { name: m.name })}
@@ -683,7 +707,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
           {showing ? <Badge tone="ok" icon="check">{t("Showing")}</Badge> : m.enabled ? <Badge tone="ok">{t("On")}</Badge> : <Badge>{t("Off")}</Badge>}
           {m.updateAvailable && (m.source?.modId
             ? <Badge tone="accent" icon="update" title={t("GameBanana has a newer file. Click to update. Options, tags and on/off state stay")}
-                onClick={() => void installLatest(game, m.source!.modId, m.name, m.id)}>{t("Update")}</Badge>
+                onClick={() => void installLatest(game, m.source!.modId, m.id)}>{t("Update")}</Badge>
             : <Badge tone="accent">{t("Update")}</Badge>)}
           {m.hasKeys && <Badge title={t("It has keys that change parts of it while you play. Click to see them")} onClick={onKeys}>{t("Toggles")}</Badge>}
         </div>

@@ -32,6 +32,8 @@
   .mod-card-update { cursor: pointer; }
   .mod-card.is-row { border-radius: 3px; background: var(--weave), var(--paper); }
   .mod-card.is-row .mod-card-img { border-radius: 3px 3px 1rem 3px; width: 4.6rem; }
+  /* the picture stays as far off the lime bar as off the top and bottom */
+  .mod-card.is-row .mod-card-hit { padding-left: var(--s-2); }
   .mod-card.is-row:not(.is-off):not(.sel) { box-shadow: inset 4px 0 0 var(--lime), 0 1px 3px rgb(8 12 22 / .3); }
   .mod-card.is-row:hover { box-shadow: var(--cursor-ring); }
   .mod-card.is-row .mod-card-more { background: var(--band); box-shadow: none; }
@@ -131,8 +133,10 @@
      pill's radius plus that gap and the two curves stay parallel. A one-line row reads as a pill ── */
   .set-game, .set-row, .set-pergame-r, .ext-src { --set-pad: .45rem; --set-ctl: calc(1.55rem + 6px); --set-r: calc(var(--set-ctl) / 2 + var(--set-pad));
     --hit-x: 3px; --hit-r: calc(var(--set-r) - 3px); }
-  .set-game { padding: .6rem .9rem; margin-bottom: .4rem; border: 0; border-radius: var(--set-r); background: var(--weave), var(--paper); box-shadow: inset 0 0 0 1px var(--tan); }
-  .set-game:last-child { border: 0; }
+  .set-game { padding: .6rem .9rem; margin-bottom: 5px; border: 0; border-radius: var(--set-r); background: var(--weave), var(--paper); box-shadow: inset 0 0 0 1px var(--tan); }
+  .set-game:last-child { border: 0; margin-bottom: 0; }
+  /* a list right after another (One-game mode, then the games) sits the same 5px below it as the rows inside */
+  :is(.set-rows, .set-games) + :is(.set-rows, .set-games) { margin-top: 5px; border-top: 0; }
   .set-game-h b, .set-game-h strong { font-weight: 700; }
   .set-row { padding: var(--set-pad) var(--set-pad) var(--set-pad) 1.2rem; margin-bottom: 5px; border: 0; border-radius: var(--set-r);
     background: linear-gradient(90deg, var(--paper) 0 60%, #ece3d2 68%); box-shadow: inset 0 0 0 1px #ddd1bd; }
@@ -147,6 +151,7 @@
   .set-importer { border-radius: 999px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--tan); font-weight: 600; }
   .theme-card .theme-preview { border-radius: 3px 3px 1.2rem 3px; }
   .set-pergame-r { border-radius: var(--set-r); padding: .3rem .9rem; }
+  .set-pergame-h { padding: 0 .9rem; }
   .ext-src { border-radius: var(--set-r); padding-left: .9rem; }
   .set-pergame-r:nth-child(odd) { background: rgb(255 255 255 / .35); }
 

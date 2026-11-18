@@ -8,22 +8,23 @@ import { DropZone } from "./ui/DropZone";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import { Backdrop } from "./ui/Deco";
 import { ContextMenuHost, menuForFocus } from "./ui/ContextMenu";
-import { about as aboutApi, app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi, shell as shellApi } from "./lib/api";
+import { about as aboutApi, app as appApi, appUpdate, errorText, games as gamesApi, queue as queueApi, settings as settingsApi, shell as shellApi, type GoEvent, type Opened } from "./lib/api";
 import { held } from "./lib/tauri";
 import { reviewUnsurePref } from "./screens/settings/automatic";
 import { allGames, back, currentGame, emitApp, forward, go, onRoute, currentRoute, patchGame, refreshGames, setGame, setOnlyGame, takeRestoreScroll, useDailyGames, useGame, useGames, useNav, useRoute, type View } from "./lib/store";
 import { applyGameTheme, setThemePick, themePick, watchSystemScheme } from "./lib/theme";
 import { chillPref, HIDDEN_THEME, onKonami, watchKonamiKeys } from "./lib/fun";
 import { Seasonal } from "./ui/Seasonal";
-import { notePlaying } from "./lib/playtime";
 import { warmUp } from "./lib/warmup";
-import { MOD_SHORTCUTS, PAD_SHORTCUTS, SHORTCUTS, installKeys } from "./lib/keys";
+import { installKeys } from "./lib/keys";
 import { installGamepad } from "./lib/gamepad";
 import { installUndoKeys } from "./lib/history";
 import { applyTextSize, applyZoom, installZoomKeys } from "./lib/zoom";
 import { Titlebar } from "./shell/Titlebar";
 import { Sidebar } from "./shell/Sidebar";
 import { CommandPalette } from "./shell/CommandPalette";
+import { CloseAsk } from "./shell/CloseAsk";
+import { ShortcutGroups } from "./shell/Shortcuts";
 import { installGlobalInput } from "./shell/globalInput";
 import { introSearch, openPalette, setHelpOpen, toggleHelp, toggleSide, useHelpOpen, useSideCollapsed } from "./shell/state";
 import { doneHint } from "./shell/hints";
@@ -51,6 +52,8 @@ import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
 import { afterInstall } from "./screens/library/afterInstall";
 import { watchKeyClashes } from "./screens/ingame/otherKeys";
 import { installSmoothScroll } from "./lib/smoothScroll";
+import { installCreatorReminders } from "./lib/creatorReminders";
+import { followGame, isPlayLink, quickstart } from "./screens/home/quickstart";
 import { splashReady } from "./splash/splash";
 import { t } from "./lib/i18n";
 
@@ -115,6 +118,7 @@ export function App() {
 
   // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
   useEffect(() => installSmoothScroll(), []);
+  useEffect(() => installCreatorReminders(), []);
 
   // Settings, Fun extras: chill mode, and the Konami code, which reveals a hidden theme (lib/fun.ts)
   const chill = chillPref.use();
@@ -136,21 +140,42 @@ export function App() {
   useEffect(() => { if (game) void warmUp(game); }, [game?.id, game?.modsDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // a game starting or stopping
-  useEffect(() => held(gamesApi.onState((p) => { patchGame(p.game, { running: p.running }); notePlaying(p.game, p.running); })), []);
+  useEffect(() => held(gamesApi.onState((p) => { patchGame(p.game, { running: p.running }); })), []);
   // another app's key that is also gachamod's (Medal's screenshot key and the skin menu's): ask in a toast
   useEffect(() => (loaded ? watchKeyClashes() : undefined), [loaded]);
 
-  // links and files the app was started with or handed later
+  // the tray icon's menu, in this language, for when gachamod runs in the background (src-tauri background.rs)
   useEffect(() => {
-    const open = (o: { kind: "link"; url: string } | { kind: "file"; path: string }) => {
-      if (o.kind === "link") emitApp({ type: "open-gb-link", url: o.url });
+    settingsApi.set("tray.labels", JSON.stringify({ open: t("Open gachamod"), play: t("Quickstart"), quit: t("Quit gachamod") })).catch(() => {});
+  }, []);
+
+  // the quickstart shortcut starts the game open now, so its icon becomes that game's
+  useEffect(() => { if (game) followGame(game.id); }, [game?.id]);
+
+  // links and files the app was started with or handed later, and pages the menu over a game handed over
+  useEffect(() => {
+    const goTo = (p: GoEvent) => {
+      if (currentGame()?.id !== p.game && allGames().some((g) => g.id === p.game)) setGame(p.game);
+      if (p.route) go(p.route);
+      if (p.ai) emitApp({ type: "ai", task: p.ai });
+    };
+    const open = (o: Opened) => {
+      if (o.kind === "go") goTo(o);
+      else if (o.kind === "link" && isPlayLink(o.url)) void quickstart(o.url);
+      else if (o.kind === "link") emitApp({ type: "open-gb-link", url: o.url });
       else if (o.path.toLowerCase().endsWith(".gachamod")) emitApp({ type: "open-pack", path: o.path });
       else emitApp({ type: "install-paths", paths: [o.path] });
     };
-    appApi.startupOpened().then((list) => list.forEach(open)).catch(() => {});
+    // asked once the listeners are in place: from then on the backend sends events instead of keeping them
+    const listening = [
+      appApi.onDeepLink((p) => open({ kind: "link", url: p.url })),
+      appApi.onOpenFile((p) => open({ kind: "file", path: p.path })),
+      // the menu over a game handed a page or an AI job to this window, which is in front now (overlay.rs)
+      appApi.onGo(goTo),
+    ];
+    void Promise.allSettled(listening).then(() => appApi.startupOpened()).then((list) => list.forEach(open)).catch(() => {});
     const offs = [
-      held(appApi.onDeepLink((p) => open({ kind: "link", url: p.url }))),
-      held(appApi.onOpenFile((p) => open({ kind: "file", path: p.path }))),
+      ...listening.map(held),
       held(appApi.onToast((p) => {
         const o = p.open;
         const review = p.review;
@@ -159,7 +184,7 @@ export function App() {
             if (!reviewUnsurePref.get()) return;
             toast(t("gachamod wasn't sure where some of this mod's files go. Check its folder against the mod's install steps"), false,
               { label: t("Review files"), run: () => { shellApi.openPath(review).catch((e) => toast(errorText(e), true)); } },
-              { label: t("Don't show again"), run: () => void reviewUnsurePref.set(false, t("Stopped asking about files gachamod can't place")) });
+              { label: t("Don't show again"), run: () => void reviewUnsurePref.set(false, t("Stopped asking about files gachamod can't place"), true) });
           });
         }
         if (o && p.installed?.length) { void afterInstall(p.text, o.game, p.installed); return; }
@@ -176,12 +201,6 @@ export function App() {
           return;
         }
         toast(p.text, !!p.bad, o ? { label: t("Open"), run: () => { if (currentGame()?.id !== o.game) setGame(o.game); go({ view: "library", modId: o.modId }); } } : undefined);
-      })),
-      // the menu over a game handed a page or an AI job to this window, which is in front now (overlay.rs)
-      held(appApi.onGo((p) => {
-        if (currentGame()?.id !== p.game && allGames().some((g) => g.id === p.game)) setGame(p.game);
-        if (p.route) go(p.route);
-        if (p.ai) emitApp({ type: "ai", task: p.ai });
       })),
       // a newer gachamod downloaded in the background (commands/app.rs)
       held(appUpdate.onReady((p) => {
@@ -307,15 +326,12 @@ export function App() {
       <CommandPalette />
       {help && (
         <Dialog icon="keyboard" title={t("Shortcuts")} onClose={() => setHelpOpen(false)}>
-          <div className="keys-list">{SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
-          <h3 className="sub-h">{t("On a mod")}</h3>
-          <div className="keys-list">{MOD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
-          <h3 className="sub-h">{t("Controller")}</h3>
-          <div className="keys-list">{PAD_SHORTCUTS.map(([k, what]) => <div key={k}><kbd>{k}</kbd><span>{what}</span></div>)}</div>
+          <ShortcutGroups game={game?.id} />
         </Dialog>
       )}
       <Seasonal />
       <ContextMenuHost />
+      <CloseAsk />
       <Toasts />
     </div>
     </ErrorBoundary>

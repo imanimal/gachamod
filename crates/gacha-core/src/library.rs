@@ -76,7 +76,7 @@ pub fn migrate(db: &Db) -> Result<()> {
 mod parts;
 pub use parts::{merge, parts, parts_in, set_part, ModPart};
 mod removed;
-pub use removed::{archive_forget, archive_list, drop_removed, in_trash, purge_expired, removed_by_gb, trash_days, trash_purge, ArchiveEntry, Removed};
+pub use removed::{archive_forget, archive_list, drop_removed, in_trash, purge_expired, removed_by_gb, trash_days, trash_purge, unsourced_to_recycle_bin, ArchiveEntry, Removed};
 
 /// IMM keeps every mod here (3DMigoto skips it because of the DISABLED prefix) ...
 pub const IMM_STORE: &str = "DISABLED - ALL MODS ARE STORED HERE (Managed by IMM)";

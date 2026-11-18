@@ -24,7 +24,7 @@ export async function rescan(game: GameState) {
   try {
     const l = await library.scan(game.id);
     emitApp({ type: "library-refresh", game: game.id });
-    toast(tn(l.length, "Found {n} mod in {game}", "Found {n} mods in {game}", { game: gameName(game) }));
+    toast(tn(l.length, "Found {n} mod", "Found {n} mods"));
   } catch (e) { toast(errorText(e), true); return; }
   // a rescan asked for by hand also looks for updates
   await checkModUpdates(game, true);
@@ -32,7 +32,7 @@ export async function rescan(game: GameState) {
 
 export async function checkModUpdates(game: GameState, quiet = false) {
   // one toast that turns into the result
-  const id = quiet ? null : toast(t("Checking for mod updates in {game}", { game: gameName(game) }));
+  const id = quiet ? null : toast(t("Checking for mod updates"));
   const say = (text: string, action?: ToastAction, bad = false) => { if (id === null || !retoast(id, text, action, bad)) toast(text, bad, action); };
   try {
     const ids = await checkUpdates(await library.list(game.id));
@@ -44,20 +44,21 @@ export async function checkModUpdates(game: GameState, quiet = false) {
 }
 
 export function openModsFolder(game: GameState) {
-  if (!game.modsDir) { toast(t("{game} has no Mods folder yet", { game: gameName(game) })); return; }
+  if (!game.modsDir) { toast(t("This game has no Mods folder yet")); return; }
   shell.openPath(game.modsDir).catch((e) => toast(errorText(e), true));
 }
 
-/** Turn one-game mode on for a game, or off (null), with Undo. */
-export function focusGame(id: GameId | null) {
+/** Turn one-game mode on for a game, or off (null), with Undo. `say`: a toast with Undo when it hides the other games,
+ *  for the game menu, which closes (Settings' picker shows the choice, so it stays quiet). Showing them all again is
+ *  quiet everywhere: they come back in the sidebar. */
+export function focusGame(id: GameId | null, say = false) {
   const before = onlyGame()?.id ?? null;
   if (before === id) return;
   const g = id ? allGames().find((x) => x.id === id) : null;
   setOnlyGame(id);
   if (id) setGame(id);
-  // one toast that says what changed and carries Undo (the history list keeps the short label)
-  const e = record({ label: g ? t("Showed only {game}", { game: gameShort(g) }) : t("Showed all games again"), undo: async () => setOnlyGame(before), redo: async () => setOnlyGame(id) }, true);
-  toast(g ? t("Only {game} shows now. Search still finds your other games", { game: gameName(g) }) : t("All your games show again"), false, { label: t("Undo"), run: () => void undo(e) });
+  record({ label: g ? t("Showed only {game}", { game: gameShort(g) }) : t("Showed all games again"), brief: g ? t("Showed only this game") : undefined,
+    undo: async () => setOnlyGame(before), redo: async () => setOnlyGame(id) }, !(g && say));
 }
 
 /** Hide a game from the sidebar (with Undo). Its mods and settings stay. */
@@ -67,7 +68,7 @@ export async function hideGame(id: GameId) {
   const set = async (shown: boolean) => { setGames(await gamesApi.setShown(id, shown)); };
   try {
     await set(false);
-    record({ label: t("Hid {game}", { game: gameName(g) }), undo: () => set(true), redo: () => set(false) });
+    record({ label: t("Hid {game}", { game: gameName(g) }), brief: t("Hid the game"), undo: () => set(true), redo: () => set(false) });
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -82,7 +83,7 @@ registerMenu("game", ({ id }) => {
     { header: gameName(g) },
     !cur && { label: t("Switch to {game}", { game: gameShort(g) }), icon: "swap", onClick: () => setGame(id) },
     { label: g.running ? t("Running") : t("Play"), icon: "play", disabled: g.running || (!g.viaXxmi && !g.gameDir), onClick: () => void play(g) },
-    { label: t("Play without mods"), icon: "play", title: t("Starts the game with no mods, the way the developers intended. Brave"), disabled: g.running || !g.gameDir, onClick: () => void play(g, true) },
+    { label: t("Play without mods"), icon: "play", title: t("Starts the game with no mods"), disabled: g.running || !g.gameDir, onClick: () => void play(g, true) },
     "-",
     { label: t("Open Mods folder"), icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
     { label: t("Rescan mods"), icon: "refresh", title: t("Reads the Mods folder again, then checks every mod for updates on GameBanana"), disabled: !g.modsDir, onClick: () => void rescan(g) },
@@ -91,7 +92,7 @@ registerMenu("game", ({ id }) => {
     "-",
     shownCount > 1 && { label: t("Only show {game}", { game: gameShort(g) }), icon: "focus", checked: onlyGame()?.id === id,
       title: t("One-game mode: the sidebar and menus offer only this game. The others stay set up and search still finds them"),
-      onClick: () => focusGame(onlyGame()?.id === id ? null : id) },
+      onClick: () => focusGame(onlyGame()?.id === id ? null : id, true) },
     { label: t("Hide game"), icon: "hide", disabled: shownCount <= 1, title: shownCount <= 1 ? t("It's the only game shown") : t("Hidden games come back from Settings, Games"), onClick: () => void hideGame(id) },
   ];
   return items;

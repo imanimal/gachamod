@@ -11,8 +11,8 @@ import { useSyncExternalStore } from "react";
 import { about, type GameState } from "./api";
 import { jsonPref } from "./prefs";
 import { t } from "./i18n";
-import { BRAND_ACCENT, darkShade, onColor, rgb, THEMES, type Scheme, type SchemeChoice } from "./theme-info";
-export { BRAND_ACCENT, darkShade, onColor, THEMES } from "./theme-info";
+import { BRAND_ACCENT, contrastOf, darkShade, onColor, readableOn, rgb, THEMES, type Scheme, type SchemeChoice } from "./theme-info";
+export { BRAND_ACCENT, contrastOf, darkShade, onColor, readableOn, THEMES } from "./theme-info";
 export type { AccentInfo, Scheme, SchemeChoice, ThemeInfo } from "./theme-info";
 
 const K = {
@@ -63,15 +63,38 @@ export function accentPick(themeId: string): string {
 /** Pick an accent id, or any "#rrggbb" colour. */
 export function setAccentPick(themeId: string, accent: string, game: GameState | null) { write(K.accent(themeId), accent); applyGameTheme(game); }
 
+/** A token's colour on screen now as #rrggbb ("#808080" when it can't be read), for colour pickers and checks. */
+export function tokenHex(token: string): string {
+  const el = document.createElement("span");
+  el.style.color = `var(${token})`;
+  document.body.appendChild(el);
+  const c = getComputedStyle(el).color;
+  el.remove();
+  const to = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
+  const m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/.exec(c);
+  if (m) return `#${to(+m[1]!)}${to(+m[2]!)}${to(+m[3]!)}`;
+  const srgb = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(c);
+  if (srgb) return `#${to(+srgb[1]! * 255)}${to(+srgb[2]! * 255)}${to(+srgb[3]! * 255)}`;
+  return "#808080";
+}
+
+/** Below this a fill barely stands out from the panels under it (a black accent on a dark theme), so it gets an edge. */
+const FAINT_FILL = 1.6;
+/** Panels to check a picked accent against: about what the dark and light themes use. */
+const DARK_PANEL = "#1c1d22", LIGHT_PANEL = "#f4f4f2";
+
 /** Put a theme's accent pick on <html>: data-accent is the accent id or the colour itself (themes match a colour
-    with [data-accent^="#"]), and a colour sets --accent-pick plus text that reads on it and a darker shade. */
-const PICK_VARS = ["--accent-pick", "--accent-pick-on", "--accent-pick-dk"] as const;
+    with [data-accent^="#"]), and a colour sets --accent-pick plus text that reads on it, a darker shade (text on
+    light panels) and --accent-pick-hi, the colour moved just far enough to read as text on dark panels. Any colour
+    works, black too: data-accent-faint marks one that hardly shows on the panels, and kit.css edges its fills. */
+const PICK_VARS = ["--accent-pick", "--accent-pick-on", "--accent-pick-dk", "--accent-pick-hi"] as const;
 function applyAccent(r: HTMLElement, themeId: string): Record<string, string> {
   const pick = accentPick(themeId);
   r.dataset.accent = pick;
-  if (!isAccentHex(pick)) { for (const k of PICK_VARS) r.style.removeProperty(k); return {}; }
-  const vars = { "--accent-pick": pick, "--accent-pick-on": onColor(pick), "--accent-pick-dk": darkShade(pick) };
+  if (!isAccentHex(pick)) { for (const k of PICK_VARS) r.style.removeProperty(k); delete r.dataset.accentFaint; return {}; }
+  const vars = { "--accent-pick": pick, "--accent-pick-on": onColor(pick), "--accent-pick-dk": darkShade(pick), "--accent-pick-hi": readableOn(pick, DARK_PANEL) };
   for (const [k, v] of Object.entries(vars)) r.style.setProperty(k, v);
+  if (contrastOf(pick, r.dataset.scheme === "light" ? LIGHT_PANEL : DARK_PANEL) < FAINT_FILL) r.dataset.accentFaint = ""; else delete r.dataset.accentFaint;
   return vars;
 }
 

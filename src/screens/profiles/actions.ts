@@ -11,6 +11,7 @@ import { currentRoute, emitApp, go } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { publish } from "../library/data";
 import { knownProfiles, loadProfiles, profilesChanged, switchingNow, switchProfile } from "./data";
+import { note as noteUsage } from "../../lib/telemetry";
 
 const fail = (e: unknown) => toast(errorText(e), true);
 const syncKeys = () => void hotkeys.sync().catch(() => {});
@@ -21,7 +22,8 @@ export async function switchTo(game: GameId, to: Profile, list: Profile[] | null
   try { await switchProfile(game, to, list?.find((p) => p.active) ?? null); } catch (e) { fail(e); }
 }
 
-/** A deleted profile's way back: put it back from the snapshot, then remember the new id. */
+/** A made profile's Undo step: take it away with a snapshot, which Redo restores (then remember the new id). Quiet:
+ *  the new card shows it. */
 function undoable(game: GameId, label: string, made: Profile) {
   let id = made.id;
   let snap: ProfileSnapshot | null = null;
@@ -29,7 +31,7 @@ function undoable(game: GameId, label: string, made: Profile) {
     label,
     undo: async () => { snap = await profiles.snapshot(id); await profiles.remove(id); profilesChanged(game); if (snap.profile.hotkey) syncKeys(); },
     redo: async () => { if (!snap) return; id = (await profiles.restore(snap)).id; profilesChanged(game); if (snap.profile.hotkey) syncKeys(); },
-  });
+  }, true);
 }
 
 /** What a new profile starts with: the mods on now, or none (switching to it turns every mod off, like a clean game). */
@@ -61,6 +63,7 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
       p = await profiles.create(game, name, null);
       try { p = await activate(p.id); switched = true; } catch (e) { fail(e); }
     }
+    noteUsage("profile made", { game, from: start });
     profilesChanged(game);
   } catch (e) { fail(e); return null; }
   // the profile is made either way, so a bad field is a toast, not a second try that would make another
@@ -75,8 +78,12 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
   const made = start === "empty" ? t("Made {name}, with no mods on", { name: p.name })
     : switched ? t("Made {name} from the mods on now and switched to it", { name: p.name }) : t("Made {name} from the mods on now", { name: p.name });
   const label = moved ? t("{label}. Moved {key} from {name}", { label: made, key: moved.hotkey ?? "", name: moved.name }) : made;
+  const madeBrief = start === "empty" ? t("Made a profile with no mods on")
+    : switched ? t("Made a profile from the mods on now and switched to it") : t("Made a profile from the mods on now");
+  const brief = moved ? t("{label}. Moved {key} from another profile", { label: madeBrief, key: moved.hotkey ?? "" }) : madeBrief;
   const e = record({
     label,
+    brief,
     undo: async () => {
       if (switched && was) await activate(was.id);
       snap = await profiles.snapshot(id);
@@ -95,7 +102,7 @@ export async function makeProfile(game: GameId, start: NewStart, name: string, e
   }, start === "empty");
   if (start === "empty") {
     // switching turns every mod off, so it waits for a click
-    const id0: number = toast(t("{label}.", { label }), false, { label: t("Undo"), run: () => void undo(e, id0) }, {
+    const id0: number = toast(t("{label}.", { label: brief }), false, { label: t("Undo"), run: () => void undo(e, id0) }, {
       label: t("Switch to it"),
       run: async () => {
         const now = await loadProfiles(game).catch(() => null);
@@ -123,6 +130,7 @@ export async function quickNewProfile(game: GameId): Promise<Profile | null> {
 export async function duplicateProfile(game: GameId, p: Profile): Promise<Profile | null> {
   try {
     const c = await profiles.create(game, t("{name} copy", { name: p.name }), p.id);
+    noteUsage("profile made", { game, from: "copy" });
     profilesChanged(game);
     undoable(game, t("Made {name}", { name: c.name }), c);
     requestEdit(c.id, "rename");
@@ -131,7 +139,7 @@ export async function duplicateProfile(game: GameId, p: Profile): Promise<Profil
 }
 
 /** Change a profile's fields, with Undo back to what they were. A hotkey taken from another profile goes back to it
- *  on Undo too. */
+ *  on Undo too. The card shows the change, so only taking another profile's hotkey toasts. */
 export async function patchProfile(game: GameId, p: Profile, patch: ProfilePatch, label: string): Promise<boolean> {
   const before: ProfilePatch = {};
   for (const k of Object.keys(patch) as Array<keyof ProfilePatch>) (before as Record<string, string>)[k] = p[k] ?? "";
@@ -145,7 +153,11 @@ export async function patchProfile(game: GameId, p: Profile, patch: ProfilePatch
   };
   try {
     await put(patch);
-    record({ label: holder ? t("{label}. Moved {key} from {name}", { label, key: holder.hotkey ?? "", name: holder.name }) : label, undo: () => put(before, true), redo: () => put(patch) });
+    record({
+      label: holder ? t("{label}. Moved {key} from {name}", { label, key: holder.hotkey ?? "", name: holder.name }) : label,
+      brief: holder ? t("Moved {key} from another profile", { key: holder.hotkey ?? "" }) : undefined,
+      undo: () => put(before, true), redo: () => put(patch),
+    }, !holder);
     return true;
   } catch (e) { fail(e); return false; }
 }
@@ -158,7 +170,7 @@ export function renameProfile(game: GameId, p: Profile, name: string) {
 
 /** Replace a profile's mods with the ones on now. Undo puts its old list back. */
 export async function saveInto(game: GameId, p: Profile) {
-  if (p.active) { toast(t("{name} is on now, so it follows your changes already", { name: p.name })); return; }
+  if (p.active) { toast(t("That profile is on now, so it follows your changes already")); return; }
   try {
     let id = p.id;
     let before = await profiles.snapshot(id);
@@ -171,7 +183,7 @@ export async function saveInto(game: GameId, p: Profile) {
       before = prior;
       profilesChanged(game);
     };
-    record({ label: t("Saved the mods on now into {name}", { name: p.name }), undo: swap, redo: swap });
+    record({ label: t("Saved the mods on now into {name}", { name: p.name }), brief: t("Saved the mods on now into the profile"), undo: swap, redo: swap });
   } catch (e) { fail(e); }
 }
 
@@ -186,6 +198,7 @@ export async function deleteProfile(game: GameId, p: Profile, list: Profile[] | 
     if (p.hotkey) syncKeys();
     record({
       label: p.active ? t("Deleted {name}. The next profile is on now, with the same mods", { name: p.name }) : t("Deleted {name}", { name: p.name }),
+      brief: p.active ? t("Deleted the profile. The next profile is on now, with the same mods") : t("Deleted the profile"),
       undo: async () => { id = (await profiles.restore(snap)).id; profilesChanged(game); if (p.hotkey) syncKeys(); },
       redo: async () => { snap = await profiles.snapshot(id); await profiles.remove(id); profilesChanged(game); if (p.hotkey) syncKeys(); },
     });

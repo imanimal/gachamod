@@ -1,4 +1,5 @@
-// Logs, crash reports, usage counts, feedback, and starting as administrator (src-tauri commands/report.rs).
+// Logs, crash reports, usage counts, feedback, starting as administrator and the desktop shortcuts (src-tauri
+// commands/report.rs).
 // Owner: SYSTEM area.
 import { call, listen } from "../tauri";
 import { EVENTS } from "./types";
@@ -15,7 +16,11 @@ export type FeedbackKind = "problem" | "idea" | "other";
 export interface Feedback { kind: FeedbackKind; text: string; contact?: string; logs: boolean; screen?: string; game?: string }
 
 /** One usage event: a name the backend knows and a few short plain values (telemetry.rs drops anything else). */
-export interface UsageEvent { name: "screen" | "click" | "setting" | "input" | "used"; props: Record<string, string | number | boolean> }
+export interface UsageEvent {
+  name: "screen" | "click" | "setting" | "input" | "used" | "game launched" | "download queued" | "mods toggled" | "profile switched"
+    | "profile made" | "extension installed";
+  props: Record<string, string | number | boolean>;
+}
 
 export interface AdminState { elevated: boolean; always: boolean }
 
@@ -81,4 +86,20 @@ export const admin = {
   setAlways: (on: boolean) => call<AdminState>("admin_set_always", { on }),
   /** Close and open again as administrator. Windows asks first; false when the player said no there. */
   restart: () => call<boolean>("app_restart_admin"),
+};
+
+/** The desktop shortcuts: gachamod, quickstart (gachamod://play, screens/home/quickstart.ts) and a quickstart for one
+ *  game (gachamod://play/zzz). */
+export type ShortcutKind = "app" | "quickstart";
+export interface ShortcutState { app: boolean; quickstart: boolean; /** Games with a quickstart of their own. */ games: string[] }
+
+export const shortcuts = {
+  state: () => call<ShortcutState>("shortcuts_state"),
+  /** Make it on the desktop, over one that's there. */
+  create: (kind: ShortcutKind) => call<ShortcutState>("shortcuts_create", { kind }),
+  remove: (kind: ShortcutKind) => call<ShortcutState>("shortcuts_remove", { kind }),
+  createGame: (game: string) => call<ShortcutState>("shortcuts_create_game", { game }),
+  removeGame: (game: string) => call<ShortcutState>("shortcuts_remove_game", { game }),
+  /** The quickstart shortcut now starts `game`, so its icon becomes that game's. */
+  follow: (game: string) => call<void>("shortcuts_follow", { game }),
 };

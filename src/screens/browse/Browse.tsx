@@ -13,6 +13,7 @@ import { useMotd } from "../../lib/motd";
 import { gameName } from "../../lib/games";
 import { t } from "../../lib/i18n";
 import "./browse.css";
+import "./gb-inline.css";
 
 export function Browse() {
   const game = useGame();

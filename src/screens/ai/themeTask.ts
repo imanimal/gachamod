@@ -94,7 +94,7 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
 
   return {
     prompt,
-    shares: [t("What you typed"), t("The theme settings gachamod understands, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)")],
+    shares: [t("What you typed"), t("The theme settings gachamod supports, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)")],
     parse: parseThemeReply,
     read(parsed) {
       const { theme: reply, cut } = parsed as ReturnType<typeof parseThemeReply>;

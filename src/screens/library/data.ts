@@ -12,11 +12,12 @@ import { record, undo } from "../../lib/history";
 import { toast } from "../../ui/toast";
 import { t, tn } from "../../lib/i18n";
 import { notesText } from "../../lib/notes";
-import { autoRescanPref, trashDaysPref, watchModsPref } from "../settings/automatic";
+import { autoRescanPref, trashDaysPref, unsourcedPref, watchModsPref } from "../settings/automatic";
 import { confirmDelete } from "./confirmDelete";
 import { sayF10 } from "../../lib/elevation";
+import { note as noteUsage } from "../../lib/telemetry";
 
-const count = (n: number) => tn(n, "{n} mod", "{n} mods");
+const count =(n: number) => tn(n, "{n} mod", "{n} mods");
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -165,15 +166,43 @@ export function useMods(game: GameId, { showsErrors = false }: { showsErrors?: b
 
 // ── actions with Undo ──
 
-const nameOf = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : count(list.length));
+const nameOf = (list: ModEntry[], names = true) => (names && list.length === 1 ? list[0]!.name : count(list.length));
 
-/** "Turned on 2, turned off Coca Cola" style summary of a change. */
-export function summarize(change: ModChange): string {
+/** "Turned on 2, turned off Coca Cola" style summary of a change. `names` false counts every side, for a toast
+ *  ("Turned on 2 mods, turned off 1 mod"). */
+export function summarize(change: ModChange, names = true): string {
   const on = change.changed.filter((m) => m.enabled), off = change.changed.filter((m) => !m.enabled);
-  if (on.length && off.length) return t("Turned on {on}, turned off {off}", { on: nameOf(on), off: nameOf(off) });
-  if (on.length) return t("Turned on {mods}", { mods: nameOf(on) });
-  if (off.length) return t("Turned off {mods}", { mods: nameOf(off) });
+  if (on.length && off.length) return t("Turned on {on}, turned off {off}", { on: nameOf(on, names), off: nameOf(off, names) });
+  if (on.length) return t("Turned on {mods}", { mods: nameOf(on, names) });
+  if (off.length) return t("Turned off {mods}", { mods: nameOf(off, names) });
   return t("Nothing changed");
+}
+
+// backend notes that name the mods a switch reached through sub-mod links: the count of other mods says it
+const FAMILY_NOTE = /^Turned (on .+ too, since .+ is its sub-mod|its sub-mod .+ back on|off its sub-mod .+ too)\.?$/;
+const OPTIONS_NOTE = /^Options for .+ come back after you close the game\.?$/;
+
+/** The backend's notes for a toast, which never lists names: the sub-mod notes go (the count of other mods says
+ *  it) and the options notes are counted. Errors keep their names, since nothing else says which mod failed. */
+export function briefNotes(notes: string[]): string[] {
+  const options = notes.filter((n) => OPTIONS_NOTE.test(n)).length;
+  const rest = notes.filter((n) => !FAMILY_NOTE.test(n) && !OPTIONS_NOTE.test(n));
+  if (!options) return rest;
+  return [tn(options, "The mod's options come back after you close the game", "Options for {n} mods come back after you close the game"), ...rest];
+}
+
+/** What a switch changed besides the mods asked for, counted: "Turned off 1 other mod for this character". */
+function othersText(change: ModChange, asked: Set<string>, before: Map<string, boolean>, prior: ModEntry[]): string[] {
+  const others = change.changed.filter((m) => !asked.has(m.id) && before.get(m.id) !== m.enabled);
+  if (!others.length) return [];
+  const on = others.filter((m) => m.enabled), off = others.filter((m) => !m.enabled);
+  const who = new Set([...prior.filter((m) => asked.has(m.id)), ...others].map((m) => (m.character ?? "").toLowerCase()));
+  const one = who.size === 1 && !who.has("");
+  const out: string[] = [];
+  if (off.length) out.push(one ? tn(off.length, "Turned off {n} other mod for this character", "Turned off {n} other mods for this character")
+    : tn(off.length, "Turned off {n} other mod", "Turned off {n} other mods"));
+  if (on.length) out.push(tn(on.length, "Also turned on {n} other mod", "Also turned on {n} other mods"));
+  return out;
 }
 
 /** Put mods back to earlier on/off states (undo). Offs first so the one-skin rule never undoes the ons. */
@@ -184,31 +213,41 @@ export async function restoreStates(game: GameId, prior: Map<string, boolean>, i
   if (ons.length) publish(game, await library.setEnabled(game, ons, true));
 }
 
-/** Turn mods on or off, show one toast with the notes and an Undo. `prior` is every mod's state before.
+/** Turn mods on or off with an Undo step. `prior` is every mod's state before. A switch shows its own new state, so
+ *  only several mods at once, mods it changed besides the ones asked for, and notes get a toast.
  *  `turnOffOthers`: the user's answer about the character's other mods (overlap.ts). Throws on failure (the caller
  *  shows it and undoes its optimistic change). */
 export async function toggleMods(game: GameId, ids: string[], on: boolean, prior: ModEntry[], turnOffOthers?: boolean): Promise<ModChange> {
   const change = await library.setEnabled(game, ids, on, turnOffOthers);
+  noteUsage("mods toggled", { game, on, count: ids.length });
   publish(game, change);
   const before = new Map(prior.map((m) => [m.id, m.enabled]));
   const changedIds = change.changed.map((m) => m.id);
   if (!changedIds.length) {
-    const rest = sayF10(change.notes);
+    const rest = briefNotes(sayF10(change.notes));
     if (rest.length) toast(notesText(rest));
     return change;
   }
-  // names everything that changed, so a skin the one-skin rule turned off shows up too ("Turned on X, turned off Y")
+  // the undo list names everything that changed, so a skin the one-skin rule turned off shows up too ("Turned on X,
+  // turned off Y"); the toast counts
   const main = summarize(change);
+  const rest = sayF10(change.notes);
+  const asked = new Set(ids);
+  const mine = change.changed.filter((m) => asked.has(m.id) && before.get(m.id) !== m.enabled);
+  const brief = notesText([...(mine.length > 1 ? [summarize({ ...change, changed: mine }, false)] : []), ...othersText(change, asked, before, prior), ...briefNotes(rest)]);
   record({
-    label: notesText([main, ...sayF10(change.notes)]),
+    label: notesText([main, ...rest]),
+    brief: brief || undefined,
     undo: () => restoreStates(game, before, changedIds),
     redo: async () => { publish(game, await library.setEnabled(game, ids, on, turnOffOthers)); },
-  });
+  }, !brief);
   return change;
 }
 
-/** Turn some mods off and others on as one action with one Undo ("Wear", "Default outfit"). */
-export async function changeStates(game: GameId, label: string, ons: string[], offs: string[], prior: ModEntry[]): Promise<ModChange> {
+/** Turn some mods off and others on as one action with one Undo ("Wear", "Default outfit"). `label` is for the undo
+ *  list; the toast says `brief` (no names), or the label when it's left out, plus what changed besides and notes.
+ *  `brief` null keeps it quiet unless something else changed. */
+export async function changeStates(game: GameId, label: string, ons: string[], offs: string[], prior: ModEntry[], brief?: string | null): Promise<ModChange> {
   const merged: ModChange = { changed: [], removed: [], notes: [] };
   const add = (c: ModChange) => {
     for (const m of c.changed) { const i = merged.changed.findIndex((x) => x.id === m.id); if (i >= 0) merged.changed[i] = m; else merged.changed.push(m); }
@@ -220,25 +259,31 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
   const before = new Map(prior.map((m) => [m.id, m.enabled]));
   const changedIds = merged.changed.map((m) => m.id);
   if (!changedIds.length) {
-    const rest = sayF10(merged.notes);
+    const rest = briefNotes(sayF10(merged.notes));
     if (rest.length || !merged.notes.length) toast(rest.length ? notesText(rest) : t("Nothing to change"));
     return merged;
   }
+  const rest = sayF10(merged.notes);
+  const said = notesText([...(brief === undefined ? [label] : brief ? [brief] : []), ...othersText(merged, new Set([...ons, ...offs]), before, prior), ...briefNotes(rest)]);
   record({
-    label: notesText([label, ...sayF10(merged.notes)]),
+    label: notesText([label, ...rest]),
+    brief: said || undefined,
     undo: () => restoreStates(game, before, changedIds),
     redo: async () => {
       if (offs.length) publish(game, await library.setEnabled(game, offs, false));
       if (ons.length) publish(game, await library.setEnabled(game, ons, true));
     },
-  });
+  }, !said);
   return merged;
 }
 
 /** Send mods to the trash with Undo (restores them from the trash, or downloads them again). When the trash keeps no
- *  files, mods with no GameBanana link can't come back, so that is asked first. */
+ *  files, the files of mods with no GameBanana link go to the Recycle Bin, or with "trash.unsourced" at "delete"
+ *  they're deleted for good and can't come back, so that is asked first. */
 export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModChange> {
-  const lost = trashDaysPref.get() > 0 ? [] : list.filter((m) => !m.source);
+  await unsourcedPref.ready;
+  const binned = unsourcedPref.get() !== "delete";
+  const lost = trashDaysPref.get() > 0 || binned ? [] : list.filter((m) => !m.source);
   if (lost.length && !(await confirmDelete(lost, list.length))) return { changed: [], removed: [], notes: [] };
   const ids = list.map((m) => m.id);
   const change = await library.remove(game, ids);
@@ -250,6 +295,7 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
   const many = removedNames.length >= 50;
   const entry = record({
     label: t("Removed {mods}", { mods: nameOf(removedNames) }),
+    brief: removedNames.length === 1 ? t("Removed the mod") : t("Removed {n} mods", { n: removedNames.length }),
     undo: async () => {
       const trash = await library.trash(game);
       const back: string[] = [];
@@ -273,9 +319,13 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
       if (stuck.length) {
         const first = stuck.slice(0, 3).join(", ");
         const names = stuck.length > 3 ? t("{names} and {n} more", { names: first, n: stuck.length - 3 }) : first;
-        toast(stuck.length === 1
-          ? t("Couldn't bring back {names}. The files were deleted and there's no GameBanana link", { names })
-          : t("Couldn't bring back {names}. Their files were deleted and they have no GameBanana link", { names }), true);
+        toast(binned
+          ? stuck.length === 1
+            ? t("Couldn't bring back {names}. There's no GameBanana link, but the files are in the Recycle Bin", { names })
+            : t("Couldn't bring back {names}. They have no GameBanana link, but their files are in the Recycle Bin", { names })
+          : stuck.length === 1
+            ? t("Couldn't bring back {names}. The files were deleted and there's no GameBanana link", { names })
+            : t("Couldn't bring back {names}. Their files were deleted and they have no GameBanana link", { names }), true);
       }
       gone = back;
     },
@@ -285,6 +335,6 @@ export async function removeMods(game: GameId, list: ModEntry[]): Promise<ModCha
       gone = ch.removed;
     },
   }, many);
-  if (many) toast(t("Removed {n} mods. Fresh start?", { n: removedNames.length }), false, { label: t("Undo"), run: () => void undo(entry) });
+  if (many) toast(t("Removed {n} mods", { n: removedNames.length }), false, { label: t("Undo"), run: () => void undo(entry) });
   return change;
 }

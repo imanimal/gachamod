@@ -1,0 +1,49 @@
+/* A GameBanana member's avatar on a spinning cube (ui/Cubeatar.tsx). The component sets the box size, the
+   perspective, --cube (the edge), --cube-k (the still cube's scale) and --cube-pose on the root, and --t (seconds a
+   turn), --at (start offset) and --dir on each spinning layer. The layers nest x, then y, then z. */
+.cubeatar { position: relative; display: inline-block; flex: none; vertical-align: middle; }
+.cubeatar-r { position: absolute; inset: 0; transform-style: preserve-3d; }
+.cubeatar-r.is-spin {
+  animation-duration: var(--t); animation-delay: var(--at); animation-direction: var(--dir);
+  animation-timing-function: linear; animation-iteration-count: infinite;
+}
+.cubeatar-rx.is-spin { animation-name: cubeatar-x; }
+.cubeatar-ry.is-spin { animation-name: cubeatar-y; }
+.cubeatar-rz.is-spin { animation-name: cubeatar-z; }
+@keyframes cubeatar-x { from { transform: rotateX(0deg); } to { transform: rotateX(360deg); } }
+@keyframes cubeatar-y { from { transform: rotateY(0deg); } to { transform: rotateY(360deg); } }
+@keyframes cubeatar-z { from { transform: rotateZ(0deg); } to { transform: rotateZ(360deg); } }
+
+/* every face is the avatar; faces turned away are hidden, so the cube reads as solid */
+.cubeatar-face {
+  position: absolute; left: 50%; top: 50%; width: var(--cube); height: var(--cube); max-width: none;
+  margin: calc(var(--cube) / -2); object-fit: cover; border-radius: calc(var(--cube) * .06);
+  background: var(--img-bg); backface-visibility: hidden; pointer-events: none; user-select: none;
+}
+.cubeatar-front { transform: translateZ(calc(var(--cube) / 2)); }
+.cubeatar-back { transform: rotateY(180deg) translateZ(calc(var(--cube) / 2)); }
+.cubeatar-right { transform: rotateY(90deg) translateZ(calc(var(--cube) / 2)); }
+.cubeatar-left { transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2)); }
+.cubeatar-top { transform: rotateX(90deg) translateZ(calc(var(--cube) / 2)); }
+.cubeatar-bottom { transform: rotateX(-90deg) translateZ(calc(var(--cube) / 2)); }
+
+/* nobody is looking at the window (lib/idle.ts): the cube holds where it is and draws no frames */
+html[data-idle] .cubeatar-r { animation-play-state: paused; }
+
+/* Standing still: no spin set, interface animations off, or no hardware acceleration. The base.css rule for
+   animations off would end the spin after 1ms and leave the cube face on, flat; instead it turns to a three-quarter
+   view, scaled to take the same room as the spin, with the top lit and the right side shaded. */
+.cubeatar.is-still, html:is([data-motion="reduced"], [data-motion="0"], [data-gpu="off"]) .cubeatar { scale: var(--cube-k); }
+:is(.cubeatar.is-still, html:is([data-motion="reduced"], [data-motion="0"], [data-gpu="off"]) .cubeatar) .cubeatar-r { animation: none; }
+:is(.cubeatar.is-still, html:is([data-motion="reduced"], [data-motion="0"], [data-gpu="off"]) .cubeatar) .cubeatar-rx { transform: var(--cube-pose); }
+:is(.cubeatar.is-still, html:is([data-motion="reduced"], [data-motion="0"], [data-gpu="off"]) .cubeatar) .cubeatar-top { filter: brightness(1.12); }
+:is(.cubeatar.is-still, html:is([data-motion="reduced"], [data-motion="0"], [data-gpu="off"]) .cubeatar) .cubeatar-right { filter: brightness(.8); }
+/* Windows' reduce motion setting stills it too, unless the app's own switch has animations on: theme.ts copies the
+   Windows setting on first start, and after that the switch decides */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"], [data-motion="1"]) .cubeatar { scale: var(--cube-k); }
+  html:not([data-motion="full"], [data-motion="1"]) .cubeatar .cubeatar-r { animation: none; }
+  html:not([data-motion="full"], [data-motion="1"]) .cubeatar .cubeatar-rx { transform: var(--cube-pose); }
+  html:not([data-motion="full"], [data-motion="1"]) .cubeatar .cubeatar-top { filter: brightness(1.12); }
+  html:not([data-motion="full"], [data-motion="1"]) .cubeatar .cubeatar-right { filter: brightness(.8); }
+}

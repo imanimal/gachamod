@@ -93,14 +93,18 @@ export async function turnOff(game: GameId, ids: string[], names: string[]) {
   const set = async (on: boolean) => { await library.setEnabled(game, ids, on); emitApp({ type: "library-refresh", game }); };
   await set(false);
   const label = names.length === 1 ? t("Turned off {name}", { name: names[0]! }) : tn(names.length, "Turned off {n} mod", "Turned off {n} mods");
-  record({ label, undo: () => set(true), redo: () => set(false) });
+  record({ label, brief: names.length === 1 ? t("Turned off the other mod") : undefined, undo: () => set(true), redo: () => set(false) });
 }
 
 /** Ignore the conflict between these mods (nothing in them changes), or stop ignoring it. With Undo. */
 export async function ignoreConflict(game: GameId, ids: string[], names: string[], on = true) {
   const set = async (v: boolean) => { await modtools.ignoreConflict(game, ids, v); emitApp({ type: "library-refresh", game }); };
   await set(on);
-  record({ label: on ? t("Ignored the conflict between {names}", { names: oxford(names) }) : t("Stopped ignoring {names}", { names: oxford(names) }), undo: () => set(!on), redo: () => set(on) });
+  record({
+    label: on ? t("Ignored the conflict between {names}", { names: oxford(names) }) : t("Stopped ignoring {names}", { names: oxford(names) }),
+    brief: on ? t("Ignored the conflict") : t("Showing the conflict again"),
+    undo: () => set(!on), redo: () => set(on),
+  });
 }
 
 /** Take the shared parts out of one mod, so the other mods show them. With Undo (the backup puts them back). */
@@ -108,7 +112,7 @@ export async function dropShared(game: GameId, id: string, hashes: string[]) {
   let backup = await modtools.dropShared(game, id, hashes);
   emitApp({ type: "library-refresh", game });
   const flip = async () => { backup = await backups.restore(backup.id); emitApp({ type: "library-refresh", game }); };
-  record({ label: tb(backup.label), undo: flip, redo: flip });
+  record({ label: tb(backup.label), brief: t("Took the shared parts out of the mod"), undo: flip, redo: flip });
 }
 
 /** A file name Windows accepts ("Ellen: skins?" -> "Ellen skins"). */

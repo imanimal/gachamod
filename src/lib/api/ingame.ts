@@ -37,9 +37,13 @@ export const MENU_BINDS: Readonly<Record<string, string[]>> = {
  *  a tester option. */
 export interface LiveInfo {
   groups: LiveGroup[]; ready: LiveReady[]; running: boolean; menu: MenuSettings; blocked: boolean; all: boolean; allowed: boolean; checked: boolean;
-  /** The groups whose character is on screen in the running game, as it last saved them (live.rs `on_screen`).
-   *  Empty while the game is closed. The menu over the game opens on these characters. */
+  /** The groups whose character is on screen in the running game, as it last saved them (live.rs `on_screen`), the
+   *  one that came on screen last first. Empty while the game is closed. The menu over the game opens on these
+   *  characters. */
   onScreen?: number[];
+  /** The group whose character came on screen last, on screen now or not. Null while the game is closed. The menu
+   *  over the game opens on it when nobody is on screen (a menu or a loading screen in the game). */
+  lastSeen?: number | null;
 }
 export interface LiveChange { changed: string[]; skipped: ModSkip[]; backups: ModBackup[]; turnedOn: string[]; turnedOff: string[] }
 /** `reload`: the mod was off and was turned on, so it shows after a reload. `send`: the pick went to the running game. */

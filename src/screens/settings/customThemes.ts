@@ -32,6 +32,7 @@ export async function saveTheme(theme: CustomTheme, isNew: boolean, game: GameSt
   record({
     label: !isNew ? t("Changed the theme {theme}", { theme: saved.name })
       : game ? t("Made the theme {theme} for {game}", { theme: saved.name, game: gameName(game) }) : t("Made the theme {theme}", { theme: saved.name }),
+    brief: isNew ? t("Made the theme") : t("Saved the theme"),
     undo: () => put(before, game, pickBefore),
     redo: () => put(after, game, pickAfter),
   });
@@ -42,7 +43,7 @@ export async function deleteTheme(theme: CustomTheme) {
   const before = customThemesPref.get();
   const after = before.filter((x) => x.id !== theme.id);
   await put(after, null, null);
-  record({ label: t("Deleted the theme {theme}", { theme: theme.name }), undo: () => put(before, null, null), redo: () => put(after, null, null) });
+  record({ label: t("Deleted the theme {theme}", { theme: theme.name }), brief: t("Deleted the theme"), undo: () => put(before, null, null), redo: () => put(after, null, null) });
 }
 
 /** A copy to edit: "Night (copy)". */
@@ -57,7 +58,7 @@ export const themeText = (th: CustomTheme) => JSON.stringify({ name: th.name, ba
 
 export function copyTheme(th: CustomTheme) {
   navigator.clipboard.writeText(themeText(th))
-    .then(() => toast(t("Copied {theme}. Anyone can import it in Settings, Custom themes", { theme: th.name })))
+    .then(() => toast(t("Copied the theme. Anyone can import it in Settings, Custom themes")))
     .catch(() => toast(t("Couldn't copy to the clipboard"), true));
 }
 
@@ -82,5 +83,6 @@ export async function addThemes(themes: CustomTheme[]) {
   // an imported theme is the user's own, even when its JSON names a package
   for (const { pkg: _pkg, ...own } of themes) after.push({ ...own, id: uniqueId(own.id, after) });
   await put(after, null, null);
-  record({ label: themes.length === 1 ? t("Imported the theme {theme}", { theme: themes[0]!.name }) : tn(themes.length, "Imported {n} theme", "Imported {n} themes"), undo: () => put(before, null, null), redo: () => put(after, null, null) });
+  record({ label: themes.length === 1 ? t("Imported the theme {theme}", { theme: themes[0]!.name }) : tn(themes.length, "Imported {n} theme", "Imported {n} themes"),
+    brief: themes.length === 1 ? t("Imported the theme") : undefined, undo: () => put(before, null, null), redo: () => put(after, null, null) });
 }

@@ -67,13 +67,13 @@
   /* stage parts: dark ground, light text. Kit parts inside them read these tokens. */
   :is(.titlebar, .side, .page-h, .dialog-h, .drawer-h, .toast, .floatbar, .library-bulk, .hero, .home-hero, .home-quick, .codeblock, .tabs, .apptip) {
     --text: #f4f4f4; --text-2: #c4c4c4; --text-3: #8d8d8d; --line: rgb(255 255 255 / .12); --line-2: rgb(255 255 255 / .26);
-    --hover: rgb(255 255 255 / .08); --ring: var(--acc); --accent-ink: var(--acc); --img-bg: #2a2a2a; --br-c: #f4f4f4;
+    --hover: rgb(255 255 255 / .08); --ring: var(--acc-text, var(--acc)); --accent-ink: var(--acc-text, var(--acc)); --img-bg: #2a2a2a; --br-c: #f4f4f4;
     --bg: var(--stage); --bg-2: var(--stage-lo); --surface: #262626; --surface-2: #2e2e2e; --surface-3: #383838; --raised: #3a3a3a;
     --accent-soft: color-mix(in srgb, var(--acc) 18%, transparent);
   }
   /* charcoal name plates on cards: light text, the signal colour reads as text */
   :is(.tile-body, .mod-card-body, .gb-card, .home-tile, .char-skin, .char-tile-name, .portrait-n) {
-    --text: #fff; --text-2: #c4c4c4; --text-3: #b0b0b0; --hover: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .14); --accent-ink: var(--acc);
+    --text: #fff; --text-2: #c4c4c4; --text-3: #b0b0b0; --hover: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .14); --accent-ink: var(--acc-text, var(--acc));
   }
 
   /* ── glyph strips (ui/Deco.tsx): a running code ticker ── */
@@ -89,7 +89,7 @@
   .btn-sm { height: 1.85rem; padding: 0 .35rem 0 .8rem; font-size: .9em; }
   .btn-sm:not(:has(> .i, > .spin)) { padding: 0 .8rem; }
   .btn-lg { height: 2.7rem; padding: 0 .5rem 0 1.4rem; font-size: 1.04em; }
-  .btn > .i:first-child, .btn > .spin:first-child { order: 3; box-sizing: content-box; width: .95em; height: .95em; padding: .3em; margin-left: auto; border-radius: 50%; background: var(--pill-ink); color: #fff; stroke-width: 2.3; }
+  .btn > .i:first-child, .btn > .spin:first-child { order: 3; box-sizing: content-box; width: .95em; height: .95em; padding: .3em; margin-left: auto; border-radius: 50%; background: var(--pill-ink); color: #fff; stroke-width: 1.8; }
   .btn > .spin:first-child { width: .8em; height: .8em; border-width: 2px; border-color: rgb(255 255 255 / .3); border-top-color: #fff; }
   .btn.btn-sm > .i:first-child { padding: .24em; }
   .btn-t { order: 2; }
@@ -118,7 +118,7 @@
   :is(.titlebar, .side, .page-h, .dialog-h, .drawer-h, .toast) .ibtn.btn-ghost:hover:not(:disabled) { background: #f4f4f4; color: #111; }
   .ibtn.btn-secondary { box-shadow: 0 0 0 1px rgb(0 0 0 / .45); }
   .ibtn.on, .ibtn.on:hover:not(:disabled) { background: var(--acc); color: #111; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .3); }
-  .ibtn .i { stroke-width: 2.1; }
+  .ibtn .i { stroke-width: 1.6; }
 
   /* ── switch: a capsule track with a pill knob; on = signal yellow ── */
   .toggle-track { width: 2.75rem; height: 1.35rem; background: #5c5b59; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .35), inset 0 1px 2px rgb(0 0 0 / .3); }
@@ -161,7 +161,7 @@
   .tab.on::before, .tab.on + .tab::before { display: none; }
   .tab.on .i { color: #111; }
   .tab-n { border-radius: 2px; background: rgb(255 255 255 / .14); color: #fff; }
-  .tab.on .tab-n { background: #111; color: var(--acc); }
+  .tab.on .tab-n { background: #111; color: var(--acc-text, var(--acc)); }
 
   /* ── fields: white pills with a dark hairline ── */
   .search { height: 2.15rem; border-radius: 999px; background: var(--pill); box-shadow: 0 0 0 1px rgb(0 0 0 / .4); color: #6a6a6a; padding-left: .9rem; }
@@ -180,7 +180,7 @@
   .select select { font-weight: 600; padding-right: 2.2rem; }
   .select select option { background: #fff; color: var(--pill-ink); }
   .field input::placeholder, .field textarea::placeholder { color: #767676; }
-  .select .i { color: var(--pill-ink); stroke-width: 2.6; }
+  .select .i { color: var(--pill-ink); stroke-width: 2; }
   .hint { color: var(--text-3); font-weight: 500; }
 
   /* ── panel: a light sheet under a charcoal header plate ── */
@@ -188,7 +188,7 @@
   .panel-h { min-height: 2.25rem; padding: .25rem .4rem .25rem 0; gap: .5rem; border-bottom: 0; border-radius: 4px 4px 0 0; color: #f4f4f4;
     background: var(--hatch-ink) right 0 top 0 / 4.5rem 100% no-repeat, linear-gradient(90deg, #2c2c2c, var(--plate)); --text: #f4f4f4; --text-2: #c4c4c4; --text-3: #8d8d8d; --hover: rgb(255 255 255 / .1); --line: rgb(255 255 255 / .14); }
   .panel-t { font-size: .95rem; font-weight: 600; gap: .65rem; letter-spacing: .01em; }
-  .panel-t .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .32rem .45rem; margin: -.25rem 0; background: var(--acc); color: #111; stroke-width: 2.3; border-radius: 4px 0 0 0; }
+  .panel-t .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .32rem .45rem; margin: -.25rem 0; background: var(--acc); color: #111; stroke-width: 1.8; border-radius: 4px 0 0 0; }
   .panel-t:not(:has(.i))::before { content: ""; width: 4px; height: 1.1em; margin-left: .5rem; background: var(--acc); }
   .panel-n { background: var(--acc); color: #111; border-radius: 2px; font-weight: 700; padding: .08rem .45rem; }
   .panel-b { padding: .7rem .8rem .8rem; }
@@ -208,7 +208,7 @@
 
   /* ── tags: small squared labels ── */
   .badge { height: 1.25rem; padding: 0 .42rem; border-radius: 2px; font-weight: 700; font-size: .72em; letter-spacing: .02em; background: var(--plate); color: #f2f2f2; }
-  .badge .i { stroke-width: 2.4; }
+  .badge .i { stroke-width: 1.9; }
   .badge[class*="t-"] { background: var(--tone); color: #fff; box-shadow: none; }
   .badge.t-accent { background: var(--acc); color: #111; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2); }
   .badge.t-warn, .badge.t-ok, .badge.t-info { color: #111; }
@@ -246,9 +246,9 @@
     background: var(--contour) 70% 40% / 380px, linear-gradient(180deg, #1a1a1a, #333 120%); }
   .dialog-h::after, .drawer-h::after { content: ""; position: absolute; left: 1.3rem; bottom: .55rem; width: 3.2rem; height: 2px; background: repeating-linear-gradient(90deg, rgb(255 255 255 / .35) 0 2px, transparent 2px 5px); }
   .dialog-h h2, .drawer-h h2 { font-size: 1.2rem; font-weight: 500; letter-spacing: .01em; }
-  .dialog-h h2 .i { width: 1.1em; height: 1.1em; color: var(--acc); stroke-width: 2; }
+  .dialog-h h2 .i { width: 1.1em; height: 1.1em; color: var(--acc-text, var(--acc)); stroke-width: 1.6; }
   .dialog-h > .ibtn:last-child, .drawer-h > .ibtn:last-child { width: 2rem; height: 2rem; background: #f4f4f4; color: #111; }
-  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { stroke-width: 3; width: 1rem; height: 1rem; }
+  .dialog-h > .ibtn:last-child .i, .drawer-h > .ibtn:last-child .i { stroke-width: 2.3; width: 1rem; height: 1rem; }
   .dialog-h > .ibtn:last-child:hover:not(:disabled), .drawer-h > .ibtn:last-child:hover:not(:disabled) { background: var(--acc); color: #111; }
   .dialog-b { padding: 1rem 1.3rem 1.2rem; }
   .dialog-f, .drawer-f { padding: .6rem 1rem; background: var(--foot); border-top: 1px solid rgb(0 0 0 / .1); border-radius: 0; }
@@ -266,7 +266,7 @@
   .menu-i:hover:not(:disabled) { background: #60605e; color: #fff; }
   .menu-i:hover:not(:disabled)::before { content: ""; position: absolute; left: 3px; top: 25%; bottom: 25%; width: 2px; background: #fff; }
   .menu-i:hover:not(:disabled) :is(.i, .menu-k, .menu-sub) { color: #fff; }
-  .menu-i:hover:not(:disabled) .menu-c { color: var(--acc); }
+  .menu-i:hover:not(:disabled) .menu-c { color: var(--acc-text, var(--acc)); }
   .menu-i.danger, .menu-i.danger .i { color: var(--bad); }
   /* right-click menus and the command palette share the list look */
   .ctx .menu-i { padding: .38rem .7rem; }
@@ -292,7 +292,7 @@
 
   /* ── toast: a charcoal bar with a status disc and a yellow edge ── */
   .toast { border-radius: 4px; padding: .5rem .5rem .5rem .7rem; gap: .65rem; background: var(--contour) 0 0 / 300px, rgb(27 27 27 / .96); color: #f4f4f4; box-shadow: inset 3px 0 0 var(--acc), 0 0 0 1px #000, 0 12px 28px rgb(0 0 0 / .4); font-weight: 600; animation: efToast var(--dur-slow) var(--ease-out); }
-  .toast > .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .3rem; border-radius: 50%; background: var(--acc); color: #111; stroke-width: 2.8; }
+  .toast > .i { box-sizing: content-box; width: .95rem; height: .95rem; padding: .3rem; border-radius: 50%; background: var(--acc); color: #111; stroke-width: 2.2; }
   .toast.bad { box-shadow: inset 3px 0 0 var(--red), 0 0 0 1px #000, 0 12px 28px rgb(0 0 0 / .4); }
   .toast.bad > .i { background: var(--red); color: #fff; }
   .toast-act { font-weight: 700; border-radius: 999px; padding: .3rem .85rem; color: #111; background: #f4f4f4; }
@@ -316,7 +316,7 @@
   .tile-tl .badge, .tile-tr .badge { backdrop-filter: none; }
   .hero { border-radius: 4px; background: var(--contour) 0 0 / 420px, var(--stage); box-shadow: 0 0 0 1px #000; color: #f4f4f4; }
   .hero-bg::after { background: linear-gradient(90deg, rgb(20 20 20 / .94) 0%, rgb(20 20 20 / .6) 45%, transparent 80%); }
-  .hero-k { color: var(--acc); letter-spacing: .16em; font-weight: 600; }
+  .hero-k { color: var(--acc-text, var(--acc)); letter-spacing: .16em; font-weight: 600; }
   .hero-k::before { content: "// "; }
   .hero-t { font-weight: 600; letter-spacing: 0; }
   .stats { gap: .5rem; }
@@ -384,8 +384,10 @@
 [data-theme="ef"][data-accent="orange"] { --acc: #ff8a1f; --acc-lo: #e86e00; --acc-wash: #f6dcc2; --acc-ink: #8a3d00; }
 [data-theme="ef"][data-accent="lime"] { --acc: #c5e03a; --acc-lo: #a8c21c; --acc-wash: #e6efc0; --acc-ink: #4d5c00; }
 [data-theme="ef"][data-accent="cyan"] { --acc: #3fd0f0; --acc-lo: #19b2d6; --acc-wash: #c9ecf4; --acc-ink: #005c73; }
-/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it, a darker shade and --accent-pick-hi,
+   a shade that reads as text on dark panels; --acc-text is what text in the accent uses, so black works too) */
 [data-theme="ef"][data-accent^="#"] {
+  --acc-text: var(--accent-pick-hi);
   --acc: var(--accent-pick); --acc-lo: color-mix(in srgb, var(--accent-pick) 86%, #000); --acc-wash: color-mix(in srgb, var(--accent-pick) 28%, #fff);
   --acc-ink: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
 }
@@ -404,7 +406,7 @@
   --bg: var(--sheet); --bg-2: var(--sheet-lo); --surface: var(--sheet-hi); --surface-2: #2a2a2a; --surface-3: #353535; --raised: #333;
   --line: rgb(255 255 255 / .1); --line-2: rgb(255 255 255 / .22);
   --text: var(--ink); --text-2: #bdbdbd; --text-3: #8e8e8e;
-  --accent-soft: color-mix(in srgb, var(--acc) 20%, transparent); --accent-ink: var(--acc);
+  --accent-soft: color-mix(in srgb, var(--acc) 20%, transparent); --accent-ink: var(--acc-text, var(--acc));
   --ok: var(--green); --warn: #f2b233; --bad: var(--red); --info: var(--blue); --warn-ink: var(--warn);
   --hover: rgb(255 255 255 / .06);
   --shadow: 0 1px 0 rgb(0 0 0 / .5), 0 1px 3px rgb(0 0 0 / .4); --shadow-lg: 0 18px 44px rgb(0 0 0 / .65), 0 2px 0 rgb(0 0 0 / .5);

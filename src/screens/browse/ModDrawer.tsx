@@ -159,16 +159,9 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
 
   const install = async (file: GbFile, replaces?: string) => {
     if (!mod || !target) return;
-    try {
-      await queueModFile(target.id, mod, file, replaces);
-      const name = mod.name, other = target.id !== here.id ? gameShort(target) : null;
-      const text = replaces
-        ? other ? t("Updating {name} for {game}", { name, game: other }) : t("Updating {name}", { name })
-        : archived
-        ? other ? t("Reinstalling {name} for {game}", { name, game: other }) : t("Reinstalling {name}", { name })
-        : other ? t("Downloading {name} for {game}", { name, game: other }) : t("Downloading {name}", { name });
-      toast(text, false, { label: t("Show"), run: () => go("downloads") });
-    } catch (e) { toast(errorText(e), true); }
+    // the footer button and the file's row show the download, so it needs no toast
+    try { await queueModFile(target.id, mod, file, replaces); }
+    catch (e) { toast(errorText(e), true); }
   };
 
   const jumpKeys = () => {
@@ -214,7 +207,8 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
 
           <div className="gb-mod-head">
             {mod.submitter && (
-              <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-submitter" />
+              <CreatorLink id={mod.submitter.id} name={mod.submitter.name} avatar={mod.submitter.avatar} modId={mod.id} className="gb-submitter"
+                style={mod.submitter.style} hoverAvatar={mod.submitter.hoverAvatar} />
             )}
             <ModStats key={mod.id} mod={mod} act={!tool}
               onFiles={() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
@@ -423,7 +417,7 @@ function FileList({ mod, game, installed, archived, snap, older, setOlder, onIns
             <span title={new Date(f.added * 1000).toLocaleString()}>{timeAgo(f.added)}</span>
             <span>{tn(f.downloads, "{n} download", "{n} downloads")}</span>
             {scan && <Badge tone={scan === "pending" ? "info" : "warn"} title={t("GameBanana's file check")}>{scan === "pending" ? t("Being checked") : t("Check: {result}", { result: scan })}</Badge>}
-            {f.warnings?.map((w) => <Badge key={w} tone="muted" title={t("GameBanana's file check noticed this")}>{w}</Badge>)}
+            {f.warnings?.map((w) => <Badge key={w} tone="muted" title={t("Flagged by GameBanana's file check")}>{w}</Badge>)}
           </div>
           {f.description && <p className="gb-file-desc">{f.description}</p>}
         </div>

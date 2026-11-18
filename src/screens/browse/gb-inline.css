@@ -1,0 +1,40 @@
+/* What GameBanana authors set with inline styles, as the classes and --gb* variables that src/lib/inlineStyle.ts
+   writes. Colours take a lightness that suits the scheme (like .gb-fc in browse.css), so every theme stays readable.
+   gb-center is in browse.css. Load this after browse.css. */
+
+/* background lightness mirrors the text range (--gb-l-lo/hi from browse.css, which themes flip on light cards), so
+   text always reads on it: .25 to .34 under light text, .9 to .96 under dark text */
+.gb-desc { --gb-bg-lo: calc(1.4 - 1.55 * var(--gb-l-lo)); --gb-bg-hi: calc(1.81 - 1.55 * var(--gb-l-hi)); }
+
+.gb-desc .gb-left { text-align: left; }
+.gb-desc .gb-right { text-align: right; }
+.gb-desc .gb-justify { text-align: justify; }
+
+.gb-desc .gb-bold { font-weight: 700; }
+.gb-desc .gb-regular { font-weight: 400; }
+.gb-desc .gb-italic { font-style: italic; }
+.gb-desc .gb-upright { font-style: normal; }
+.gb-desc .gb-under { text-decoration: underline; text-underline-offset: 2px; }
+.gb-desc .gb-strike { text-decoration: line-through; }
+.gb-desc .gb-under.gb-strike { text-decoration: underline line-through; }
+.gb-desc .gb-upper { text-transform: uppercase; }
+.gb-desc .gb-lower { text-transform: lowercase; }
+.gb-desc .gb-caps { text-transform: capitalize; }
+
+/* sizes are clamped in inlineStyle.ts too; this keeps them in range if a theme changes the base size */
+.gb-desc .gb-size { font-size: clamp(.8em, var(--gbfs), 2em); }
+.gb-desc .gb-font { font-family: var(--gbff); }
+.gb-desc .gb-mono { font-family: var(--font-mono); }
+
+/* a background keeps its hue at a lightness where the theme's text (and .gb-fc colours) still read */
+.gb-desc .gb-bg { background-color: var(--surface-2); background-color: oklch(from var(--gbbg) clamp(var(--gb-bg-lo), l, var(--gb-bg-hi)) min(c, .08) h); }
+.gb-desc .gb-spoiler.gb-bg:not(.open) { background-color: var(--text-3); }
+
+/* a border without a colour takes the theme's line; a coloured one reads like coloured text */
+.gb-desc .gb-border { border-width: var(--gbbw); border-style: var(--gbbs); border-color: var(--line-2); }
+.gb-desc .gb-bc { border-color: var(--gbbc); border-color: oklch(from var(--gbbc) clamp(var(--gb-l-lo), l, var(--gb-l-hi)) min(c, .2) h); }
+.gb-desc .gb-round { border-radius: var(--radius-sm); }
+.gb-desc .gb-pad { padding: var(--gbp); }
+
+/* pictures sized by the author ("30%" puts three in a row), never wider than the description */
+.gb-desc .gb-width { width: min(var(--gbw), 100%); }

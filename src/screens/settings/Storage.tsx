@@ -1,13 +1,14 @@
-// Tools › Storage: where disk space goes. The total, a breakdown by category, game or character, the biggest mods,
+// Settings › Storage: where disk space goes. The total, a breakdown by category, game or character, the biggest mods,
 // mods installed twice, and a few cleaning suggestions that show only when they would free a fair amount and stay
 // hidden once dismissed. Mod sizes come from the library at once; the rest is measured off the UI thread
-// (gacha-core storage.rs) and can be skipped. The report lives for the session, and mod changes anywhere update it.
+// (gacha-core storage.rs) and can be skipped, starting when the page first shows (or a search draws a panel), not when
+// Settings opens. The report lives for the session, and mod changes anywhere update it.
 // Owner: SYSTEM area.
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Badge, Button, IconButton, Panel, Segmented, Select, Waiting, formatBytes, timeAgo } from "../../ui/kit";
 import { toast } from "../../ui/toast";
-import { LazyImg } from "../../ui/LazyImg";
-import { dev, errorText, fileUrl, library, shell, storage, type GameId, type ModEntry, type StorageCategory, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
+import { Preview, useNsfwMode } from "../library/Preview";
+import { dev, errorText, library, shell, storage, type GameId, type ModEntry, type StorageCategory, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
 import { held } from "../../lib/tauri";
 import { allGames, go, goIn, useGames } from "../../lib/store";
 import { record } from "../../lib/history";
@@ -15,7 +16,6 @@ import { registerCommands } from "../../lib/search";
 import { onPublish, publish, removeMods } from "../library/data";
 import { gameName, gameShort } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
-import { toolsWhere } from "./toolsSearch";
 import "./storage.css";
 
 // ── the report, shared by the page's panels for the session ──
@@ -50,15 +50,22 @@ async function measure() {
 
 const skip = () => { skipped = true; storage.cancel().catch(() => {}); };
 
-/** The report, measured the first time any of the page's panels shows (search results draw them one at a time). */
-function useReport() {
+/** The report. A panel drawn by itself (search results draw them one at a time) measures the first time it shows;
+ *  the Storage page's own panels (`onPage`) wait for the page to show (`storageShown`), since Settings draws every
+ *  page at once. */
+function useReport(onPage?: boolean) {
   const s = useStorage();
-  useEffect(() => { if (!state.report && !state.measuring) void measure(); }, []);
+  useEffect(() => { if (!onPage && !state.report && !state.measuring) void measure(); }, [onPage]);
   return s;
 }
 
+/** Settings shows a page: the Storage page measures the first time it shows. */
+export function storageShown(page: string | null) {
+  if (page === "disk" && !state.report && !state.measuring) void measure();
+}
+
 const fromEntry = (m: ModEntry): StorageMod => ({ id: m.id, game: m.game, name: m.name, character: m.character, enabled: m.enabled || !!m.standby, bytes: m.sizeBytes,
-  files: m.fileCount, path: m.path, installedAt: m.installedAt, thumb: m.thumb ?? null });
+  files: m.fileCount, path: m.path, installedAt: m.installedAt, preview: m.preview, thumb: m.thumb ?? null, nsfw: m.nsfw });
 
 // mods removed, put back, toggled or renamed anywhere keep the report right
 onPublish((game, change) => patchReport((r) => {
@@ -190,7 +197,7 @@ async function recycleArchives(game: GameId | null) {
 
 async function clearCache(game: GameId) {
   const g = allGames().find((x) => x.id === game);
-  if (g?.running) { toast(t("Close {game} first. It rebuilds the shader cache on the next start", { game: gameName(g) })); return; }
+  if (g?.running) { toast(t("Close the game first")); return; }
   try {
     const b = await dev.clearShaderCache(game);
     toast(b ? t("Freed {size}", { size: formatBytes(b) }) : t("The shader cache is already empty"));
@@ -398,8 +405,8 @@ function ItemRow({ game, item, showGame }: { game: GameId | null; item: StorageI
   );
 }
 
-export function StoragePanel() {
-  const { report, measuring, step } = useReport();
+export function StoragePanel({ onPage }: { onPage?: boolean }) {
+  const { report, measuring, step } = useReport(onPage);
   const sc = useScope();
   const games = useGames();
   const [view, setViewState] = useState<View>(lastView);
@@ -528,9 +535,10 @@ function Measuring({ title, icon, id }: { title: string; icon: "sort" | "layers"
   return <Panel title={title} icon={icon} id={id}><Waiting what={stepText(step)}><Button size="sm" onClick={skip} title={t("Stop measuring and show what's measured so far")}>{t("Skip")}</Button></Waiting></Panel>;
 }
 
-export function BiggestModsPanel() {
-  const { report } = useReport();
+export function BiggestModsPanel({ onPage }: { onPage?: boolean }) {
+  const { report } = useReport(onPage);
   const sc = useScope();
+  const nsfw = useNsfwMode();
   const [which, setWhich] = useState<"all" | "off">("all");
   const [shown, setShown] = useState(10);
   if (!report) return <Measuring title={t("Biggest mods")} icon="sort" id="disk-big" />;
@@ -548,7 +556,7 @@ export function BiggestModsPanel() {
             {list.slice(0, shown).map((m) => (
               <li key={m.id} className="st-mod">
                 <button type="button" className="st-mod-b" onClick={() => openMod(m)} title={t("Open {name} in Mods", { name: m.name })}>
-                  <span className="st-thumb">{m.thumb && <LazyImg src={fileUrl(m.thumb)} alt="" />}</span>
+                  <Preview className="st-thumb" src={m.nsfw && nsfw === "hide" ? null : m.preview} thumb={m.thumb} blur={m.nsfw && nsfw === "blur"} icon="mods" />
                   <span className="st-mod-t"><b>{m.name}</b>
                     <span className="hint">{[m.character ?? "", sc === "all" ? shortOf(m.game) : "", tn(m.files, "{n} file", "{n} files")].filter(Boolean).join(" · ")}</span>
                   </span>
@@ -570,8 +578,8 @@ export function BiggestModsPanel() {
 
 // ── mods installed twice ──
 
-export function DuplicatesPanel() {
-  const { report, measuring } = useReport();
+export function DuplicatesPanel({ onPage }: { onPage?: boolean }) {
+  const { report, measuring } = useReport(onPage);
   const sc = useScope();
   const [busy, setBusy] = useState<string | null>(null);
   if (!report) return <Measuring title={t("Mods installed twice")} icon="layers" id="disk-dupes" />;
@@ -623,14 +631,13 @@ export function DuplicatesPanel() {
   );
 }
 
-/** The Storage page: the overview, the biggest mods and mods installed twice. */
+/** The Storage page in Settings: the overview, the biggest mods and mods installed twice. */
 export function StoragePage() {
-  return <><StoragePanel /><BiggestModsPanel /><DuplicatesPanel /></>;
+  return <><StoragePanel onPage /><BiggestModsPanel onPage /><DuplicatesPanel onPage /></>;
 }
 
+// the page itself; its panels ("Disk space", "Biggest mods", "Mods installed twice") are listed by settingsSearch.ts
 registerCommands("storage", () => [
-  { id: "tools:storage", title: t("Storage"), section: "Pages", icon: "box", where: toolsWhere("disk"),
-    keywords: "disk space storage size cleanup clean free space duplicates big biggest", run: () => go({ view: "tools", section: "disk" }) },
-  { id: "tools:duplicates", title: t("Mods installed twice"), section: "Pages", icon: "layers", where: toolsWhere("disk"),
-    keywords: "duplicate duplicates copies twice same mod clean", run: () => go({ view: "tools", section: "disk-dupes" }) },
+  { id: "page:storage", title: t("Storage"), section: "Pages", icon: "box", where: t("Settings"),
+    keywords: "disk space storage size cleanup clean free space duplicates big biggest", run: () => go({ view: "settings", section: "disk" }) },
 ]);

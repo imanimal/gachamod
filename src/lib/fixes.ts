@@ -7,13 +7,12 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { backups, errorText, fixers as fixersApi, fixes as fixesApi, type FixAll, type FixTried, type FixerFile, type FixerRun, type GameId, type ModBackup, type ModHealthRow, type ToolLink } from "./api";
 import { gbToolId, newestFile, toolPage, type GbFile } from "./gamebanana";
-import { record } from "./history";
+import { record, undo } from "./history";
 import { jsonPref, pref } from "./prefs";
 import { emitApp, go, onApp } from "./store";
 import { timeAgo } from "../ui/kit";
 import { stops, t, tb, tn } from "./i18n";
 import { toast } from "../ui/toast";
-import { oxford } from "./notes";
 import { holdsPref, useHolds } from "./holds";
 
 export interface ModHealth {
@@ -184,8 +183,9 @@ export function useBrokenOn(game: GameId | null | undefined): string[] | null {
 /** The last known health of a game's mods (for menus and panels outside React's tree). */
 export const healthNow = (game: GameId) => maps.get(game) ?? EMPTY;
 
-/** Record fixes so Undo restores every changed mod (and Redo makes the fixes again). */
-function recordFixes(game: GameId, label: string, changed: ModBackup[]) {
+/** Record fixes so Undo restores every changed mod (and Redo makes the fixes again). Quiet: the run's own toast
+ *  carries the Undo button. */
+function recordFixes(game: GameId, label: string, brief: string | undefined, changed: ModBackup[]) {
   let next = changed.slice();
   const flip = async () => {
     const out: ModBackup[] = [];
@@ -198,19 +198,16 @@ function recordFixes(game: GameId, label: string, changed: ModBackup[]) {
     void reloadHealth(game, true);
     if (failed) throw failed;
   };
-  record({ label, undo: flip, redo: flip });
+  return record({ label, brief, undo: flip, redo: flip }, true);
 }
 
 const VIEW_FIXES = { label: t("View in Fixes"), run: () => go({ view: "tools", section: "fixes" }) };
 
-/** What a fix run says about the mods it left alone ("Velina: the model changed, so it needs an update from its
- *  author"). */
+/** Why a fix run left mods alone, each reason once ("The mod's folder isn't there any more"). Only a single mod's
+ *  toast shows it, so it names no mods. */
 function skippedNote(r: FixAll): string {
   if (!r.skipped.length) return "";
-  // the same reason for several mods reads once: "A, B, and C: the model changed, so it needs an update from its author"
-  const byReason = new Map<string, string[]>();
-  for (const s of r.skipped) byReason.set(s.reason, [...(byReason.get(s.reason) ?? []), s.name]);
-  const parts = [...byReason].map(([reason, names]) => t("{names}: {reason}", { names: oxford(names, 4), reason: tb(reason) }));
+  const parts = [...new Set(r.skipped.map((s) => tb(s.reason)))];
   return parts.length > 3
     ? tn(parts.length - 3, "{notes}. And {n} more reason", "{notes}. And {n} more reasons", { notes: stops(parts.slice(0, 3)) })
     : stops(parts);
@@ -239,6 +236,7 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   const changed = out.changed.map((c) => c.b);
   const fixedN = out.changed.filter((c) => !still(c.b.modId)).length;
   const stillN = out.changed.length - fixedN + out.untouched;
+  let entry: ReturnType<typeof recordFixes> | null = null;
   if (changed.length) {
     const one = out.changed.length === 1 ? out.changed[0]! : null;
     const label = one
@@ -248,7 +246,8 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
       : fixedN === changed.length
         ? tn(changed.length, "Fixed {n} mod for the game update", "Fixed {n} mods for the game update")
         : tn(changed.length, "Tried to fix {n} mod", "Tried to fix {n} mods");
-    recordFixes(game, label, changed);
+    const brief = one ? (one.tool && still(one.b.modId) ? t("Ran the fixer on the mod") : t("Fixed the mod")) : undefined;
+    entry = recordFixes(game, label, brief, changed);
   }
   // one toast: a single mod gets its own story, several get a count and the way to the list
   const lines: string[] = [];
@@ -256,11 +255,11 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
   if (ids.length === 1) {
     const id = ids[0]!;
     const c = out.changed.find((x) => x.b.modId === id);
-    if (c && !still(id)) lines.push(c.tool ? t("Fixed {name} with {tool}", { tool: c.tool, name: c.b.name }) : t("Fixed {name}", { name: c.b.name }));
+    if (c && !still(id)) lines.push(t("Fixed the mod"));
     else if (c) {
       const did = c.tool
-        ? tn(c.files ?? 1, "{tool} changed {n} file in {name} and it is still broken", "{tool} changed {n} files in {name} and it is still broken", { tool: c.tool, name: c.b.name })
-        : t("Swapped the outdated hashes in {name} and it is still broken", { name: c.b.name });
+        ? tn(c.files ?? 1, "The fixer changed {n} file and the mod is still broken", "The fixer changed {n} files and the mod is still broken")
+        : t("Swapped the outdated hashes and the mod is still broken");
       lines.push(t("{note}. {needs}", { note: did, needs: NEEDS }));
     }
     lines.push(...out.notes, ...out.errors);
@@ -273,7 +272,8 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
     lines.push(...out.errors);
   }
   if (!lines.length) { lines.push(t("Nothing there could be fixed automatically")); view = undefined; }
-  toast(changed.length ? t("{text}. Undo puts the files back", { text: stops(lines) }) : stops(lines), !fixedN && (stillN > 0 || out.errors.length > 0), view);
+  const undoRun = entry && { label: t("Undo"), run: () => { void undo(entry); } };
+  toast(changed.length ? t("{text}. Undo puts the files back", { text: stops(lines) }) : stops(lines), !fixedN && (stillN > 0 || out.errors.length > 0), view ?? undoRun ?? undefined, view && undoRun ? undoRun : undefined);
   return changed.length;
 }
 
@@ -336,7 +336,7 @@ export async function downloadFixer(game: GameId, tool: { id: number; name: stri
   try {
     const f = await fixersApi.download(game, { toolId: tool.id, fileId: file.id, tool: tool.name, file: file.name, url: file.downloadUrl, md5: file.md5 });
     fixerLists.set(game, [...(fixerLists.get(game) ?? []).filter((x) => x.fileId !== f.fileId), f]);
-    toast(t("Downloaded {name}", { name: tool.name }));
+    toast(t("Downloaded the fixer"));
     return f;
   } catch (e) {
     toast(errorText(e), true);
@@ -408,7 +408,7 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
         const rest = [...healthNow(game)].filter(([id, h]) => h.status === "unfixable" && h.tool?.url === tool.url && !ids.includes(id) && !fixerBusy.has(`mod:${id}`)).map(([id]) => id);
         rest.forEach((id) => setBusy(`mod:${id}`, true));
         setBusy("waiting", true);
-        toast(t("{tool} is open in a separate window. Run it there. gachamod sees what it changes, so the window can stay open", { tool: named(f.tool) }), false, { label: t("Stop waiting"), run: stopWaiting });
+        toast(t("The fixer is open in a separate window. Run it there. gachamod sees what it changes, so the window can stay open"), false, { label: t("Stop waiting"), run: stopWaiting });
         try {
           const runs = await fixersApi.runAll(game, f.fileId, [...ids, ...rest]);
           for (const run of runs) done.push({ run, tool: named(f.tool), quiet: !ids.includes(run.modId) });
@@ -429,8 +429,9 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
     if (r.backup) { out.changed.push({ b: { modId: r.modId, name: r.name, backup: r.backup }, tool, files: r.changed }); continue; }
     if (quiet) continue;
     out.untouched++;
+    // notes show only in a single mod's toast, so they name neither the mod nor the fixer
     out.notes.push(r.stopped
-      ? t("{tool} was still running on {name} after 2 minutes, so gachamod stopped it. It changed no files", { tool, name: r.name })
-      : t("{note}. {needs}", { note: t("{tool} changed no files in {name}", { tool, name: r.name }), needs: NEEDS }));
+      ? t("The fixer was still running after 2 minutes, so gachamod stopped it. It changed no files")
+      : t("{note}. {needs}", { note: t("The fixer changed no files in the mod"), needs: NEEDS }));
   }
 }

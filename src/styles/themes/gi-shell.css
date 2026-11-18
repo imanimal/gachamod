@@ -78,7 +78,7 @@
   /* rows (the default): slate ink rows, the open one a slate pill */
   &:not([data-nav="grid"]) .nv-b { position: static; }
   &:not([data-nav="grid"]) .nv { min-height: 0; flex-direction: row; justify-content: flex-start; text-align: left; border-radius: 1.2rem; padding: 0 .8rem; background: transparent; color: var(--ink); box-shadow: none; animation: none; }
-  &:not([data-nav="grid"]) .nv .i { width: 1.2rem; height: 1.2rem; color: var(--ink); }
+  &:not([data-nav="grid"]) .nv .i { width: 1.2rem; height: 1.2rem; color: var(--ink); stroke-width: 1.4; }
   &:not([data-nav="grid"]) .nv:hover:not(:disabled) { background: rgb(59 66 85 / .08); color: var(--ink); box-shadow: none; }
   &:not([data-nav="grid"]) .nv:hover:not(:disabled) .i { color: var(--ink); }
   &:not([data-nav="grid"]) .nv.on, &:not([data-nav="grid"]) .nv.on:hover:not(:disabled) { background: var(--slate-btn); color: var(--cream); box-shadow: 0 1px 3px rgb(40 30 10 / .25); }

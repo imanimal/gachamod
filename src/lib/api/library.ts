@@ -103,8 +103,9 @@ export const library = {
   /** Removed mods of one game (or every game with null), newest first: trash entries (files kept "trash.days" days,
    *  default 0) and archived ones (details only). Installing the same GameBanana mod again restores either. */
   archive: (game: GameId | null) => call<ArchiveEntry[]>("archive_list", { game }),
-  /** Forget archived mods for good (their details, saved options and profile places). Keys from ArchiveEntry. */
-  archiveForget: (keys: string[]) => call<number>("archive_forget", { keys }),
+  /** Forget archived mods for good (their details, saved options and profile places). Keys from ArchiveEntry. With
+   *  `recycle`, the files of mods with no GameBanana link go to the Recycle Bin instead of being deleted. */
+  archiveForget: (keys: string[], recycle = false) => call<number>("archive_forget", { keys, recycle }),
   onChanged: (cb: (p: { game: GameId }) => void) => listen<{ game: GameId }>(EVENTS.libraryChanged, cb),
 };
 

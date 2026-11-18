@@ -25,9 +25,11 @@ export const SHORTCUTS: Array<[string, string]> = [
   ["F6, Shift+F6", t("Move between the page, messages, title bar and sidebar")],
   [t("Shift+F10, Menu key"), t("The focused thing's right-click menu")],
   ["Escape", t("Close the top window, drawer or menu")],
-  ["Ctrl+Z, Ctrl+Y", t("Undo, redo")],
+  ["Ctrl+Z", t("Undo")],
+  ["Ctrl+Y, Ctrl+Shift+Z", t("Redo")],
   ["Ctrl+=, Ctrl+-, Ctrl+0", t("Zoom in, zoom out, reset the zoom")],
-  ["?", t("This list")],
+  ["?", t("The list of shortcuts")],
+  ["Shift+` (~)", t("Developer console, when it's turned on in Settings, Feedback and privacy")],
 ];
 
 /** Keys on a mod card or row, for the shortcuts list. */
@@ -59,6 +61,34 @@ export const PAD_SHORTCUTS: Array<[string, string]> = [
   [t("View (tap)"), t("Back")],
   [t("Right stick press"), t("The focused thing's menu")],
   [t("Menu"), t("Play")],
+];
+
+/** The game's reload key, which XXMI sets. */
+export const reloadShortcut = (key: string): [string, string] => [key, t("Reload mods in the game. XXMI sets this key")];
+
+/** Keys while a game runs, with the keys this game uses: the player picks the first two (Settings > Hotkeys, Tools >
+ *  Switch skins in game) and XXMI sets the reload key. A key left out is off in that game. */
+export const gameShortcuts = (k: { menu?: string; list?: string; reload: string }): Array<[string, string]> => [
+  ...(k.menu ? [[k.menu, t("Open or close the skin menu")] as [string, string]] : []),
+  ...(k.list ? [[k.list, t("Show the key list: the toggle keys of the mods showing now")] as [string, string]] : []),
+  reloadShortcut(k.reload),
+];
+
+/** Keys in gachamod's menu over the game that can't be changed (screens/ingame/Overlay.tsx). The menu's other keys
+ *  are the player's to pick (screens/ingame/MenuKeys.tsx). */
+export const OVERLAY_SHORTCUTS: Array<[string, string]> = [
+  [t("Arrow keys"), t("Move between characters, skins and mods")],
+  ["Enter", t("Pick the skin, or press what has focus")],
+  ["Shift+Enter", t("Turn a mod on next to the others")],
+  ["Tab, Shift+Tab", t("Next or previous tab: My mods, Keys, Browse, Downloads")],
+  ["I", t("Details in My mods, install in Browse")],
+  [t("/ or start typing"), t("Search")],
+  [t("Shift+F10, Menu key"), t("The focused tile's right-click menu")],
+  [t("Alt+Left, mouse back button"), t("Back")],
+  ["Escape", t("Back, or close the menu")],
+  ["LB, RB", t("Previous or next tab, on a controller")],
+  ["Y", t("Search, on a controller")],
+  [t("Menu, right stick press"), t("The focused tile's right-click menu, on a controller")],
 ];
 
 const typing = (target: EventTarget | null) => {
@@ -253,9 +283,13 @@ export function installTips(): () => void {
   document.addEventListener("keydown", kbd, true);
   document.addEventListener("mousemove", move);
   window.addEventListener("scroll", hide, true);
+  // the window losing focus or hiding (Alt+Tab, the game in front, the in-game menu's key) sends no mouseout
+  window.addEventListener("blur", hide);
+  document.addEventListener("visibilitychange", hide);
   return () => {
     document.removeEventListener("mouseover", over); document.removeEventListener("mouseout", out); document.removeEventListener("focusin", focus);
     document.removeEventListener("focusout", hide); document.removeEventListener("mousedown", down, true); document.removeEventListener("keydown", kbd, true);
     document.removeEventListener("mousemove", move); window.removeEventListener("scroll", hide, true);
+    window.removeEventListener("blur", hide); document.removeEventListener("visibilitychange", hide);
   };
 }

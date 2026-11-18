@@ -11,7 +11,7 @@ const TIPS: Tip[] = [
   { id: "paste", icon: "link", weight: 1, text: t("Paste a GameBanana link anywhere to open it here") },
   { id: "drop", icon: "archive", weight: 1, text: t("Drop a mod's zip or folder onto the window to install it. A zip full of mods installs each one") },
   { id: "batches", icon: "downloads", weight: 1, text: t("In Downloads, turn a whole batch of new mods on or off at once") },
-  { id: "undo", icon: "undo", weight: 1, text: t("[Ctrl+Z] undoes your last change, [Ctrl+Y] brings it back") },
+  { id: "undo", icon: "undo", weight: 2, text: t("[Ctrl+Z] undoes your last change. [Ctrl+Shift+Z] or [Ctrl+Y] redoes it") },
   { id: "games", icon: "swap", weight: 1, text: t("[Ctrl+Tab] switches to your next game") },
   { id: "play", icon: "play", weight: 1, text: t("[Ctrl+Enter] starts the current game") },
   { id: "keys", icon: "keyboard", weight: 1, text: t("Press [?] to see every shortcut") },

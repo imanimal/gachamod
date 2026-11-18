@@ -71,7 +71,7 @@ export const CHATBOTS: Chatbot[] = [
   { id: "gemini", name: "Gemini", url: "https://gemini.google.com/app" },
   { id: "copilot", name: "Copilot", url: "https://copilot.microsoft.com/" },
   { id: "grok", name: "Grok", url: "https://grok.com/", prefill: (q) => `https://grok.com/?q=${encodeURIComponent(q)}` },
-  { id: "other", name: t("Another one"), url: "" },
+  { id: "other", name: t("Other"), url: "" },
 ];
 export const chatbotOf = (id: ChatbotId | "" | null | undefined): Chatbot | undefined => CHATBOTS.find((c) => c.id === id);
 

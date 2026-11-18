@@ -6,13 +6,15 @@ import { Component, Fragment, Suspense, lazy, useEffect, useId, useRef, useState
 import { dialogs, errorKind, errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { fixLabel, stopWaiting, triedNote, useFixerBusy, useModHealth } from "../../lib/fixes";
 import { holdMods, holdOn, releaseMods, useHolds } from "../../lib/holds";
-import { gbToolId } from "../../lib/gamebanana";
+import { gbToolId, isAbort, modPage, type GbMod } from "../../lib/gamebanana";
+import { ModStats } from "../browse/ModStats";
+import { openGbMod } from "../browse/state";
 import { nsfwLabel, setNsfw, useNsfw, type NsfwMode } from "../../lib/prefs";
 import { trashDaysPref } from "../settings/automatic";
 import { sentences, stops, t, tn, tx } from "../../lib/i18n";
 import { closeRoute, go, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
-import { Button, Drawer, IconButton, Row, Segmented, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
+import { Button, Drawer, IconButton, Row, Segmented, Spinner, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { nsfwTip } from "../browse/menus";
 import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
@@ -146,7 +148,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
   const saveChar = () => {
     const c = character.trim();
     if (c === (mod.character ?? "")) return;
-    void setCharacter(game, [mod], names.find((n) => n.toLowerCase() === c.toLowerCase()) ?? c);
+    void setCharacter(game, [mod], names.find((n) => n.toLowerCase() === c.toLowerCase()) ?? c, true);
   };
   const saveTag = () => {
     const tg = tag.trim();
@@ -219,6 +221,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
         ))}
         {mod.version && <span className="hint"> · v{mod.version.replace(/^v/i, "")}</span>}
       </p>
+      {mod.source?.site === "gamebanana" && mod.source.modId > 0 && <GbStats key={mod.source.modId} mod={mod} modId={mod.source.modId} />}
 
       {mod.parent && (
         <div className="mod-drawer-family">
@@ -383,6 +386,27 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
   );
 }
 
+/** In use this long without a like, the heart beats now and then. */
+const NUDGE_AFTER_S = 3 * 24 * 3600;
+
+/** Like, subscribe and thank on its GameBanana page, with the page's counts. Downloads and comments open the page. */
+function GbStats({ mod, modId }: { mod: ModEntry; modId: number }) {
+  const [page, setPage] = useState<GbMod | null | undefined>(undefined);
+  useEffect(() => {
+    const ask = new AbortController();
+    modPage(modId, ask.signal).then(setPage, (e: unknown) => { if (!isAbort(e)) setPage(null); });
+    return () => ask.abort();
+  }, [modId]);
+  if (page === null) return null;
+  if (!page) return <p className="mod-drawer-gb hint"><Spinner /> {t("Asking GameBanana for its likes")}</p>;
+  const old = mod.installedAt > 0 && Date.now() / 1000 - mod.installedAt > NUDGE_AFTER_S;
+  return (
+    <div className="mod-drawer-gb">
+      <ModStats mod={page} act nudge={old} onFiles={() => openGbMod(modId)} onComments={() => openGbMod(modId)} />
+    </div>
+  );
+}
+
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "gif"];
 const extOfPath = (p: string) => p.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase() ?? "";
 const extOfType = (type: string) => ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" } as Record<string, string>)[type] ?? null;
@@ -405,11 +429,12 @@ function usePreviewSetter(game: GameId, mod: ModEntry) {
     try {
       const own = await ownPreview(game, m);
       show(await work());
+      // the new picture shows in place: Ctrl+Z still puts the old one back
       record({
         label: t("New preview for {mod}", { mod: m.name }),
         undo: async () => show(own ? await library.setPreviewData(game, m.id, own.bytes, own.ext) : await library.clearPreview(game, m.id)),
         redo: async () => show(await work()),
-      });
+      }, true);
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };

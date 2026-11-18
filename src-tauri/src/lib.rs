@@ -1,6 +1,7 @@
 //! Tauri shell: window setup, links and files handed to the app, and the command list. All file and mod logic lives in
 //! `gacha-core`. Commands are grouped by area (docs/spec.md); an area adds its new commands only inside its own block.
 
+mod background;
 mod commands;
 mod hotkeys;
 mod overlay;
@@ -11,12 +12,14 @@ mod state;
 use gacha_core::model::events;
 use tauri::{Emitter, Manager};
 
-/// A link or file the app was started with or handed (a second start passes its arguments here).
+/// A link or file the app was started with or handed (a second start passes its arguments here), or a page the
+/// menu over the game handed over (`Go`, overlay.rs) while the window was closed.
 #[derive(Clone, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Opened {
     Link { url: String },
     File { path: String },
+    Go { game: String, route: Option<serde_json::Value>, ai: Option<serde_json::Value> },
 }
 
 fn opened_from_args<I: IntoIterator<Item = String>>(args: I) -> Vec<Opened> {
@@ -34,8 +37,14 @@ fn hand_to_ui(app: &tauri::AppHandle, items: Vec<Opened>) {
         match &o {
             Opened::Link { url } => { let _ = app.emit(events::DEEP_LINK, serde_json::json!({ "url": url })); }
             Opened::File { path } => { let _ = app.emit(events::OPEN_FILE, serde_json::json!({ "path": path })); }
+            Opened::Go { game, route, ai } => { let _ = app.emit_to("main", overlay::GO, serde_json::json!({ "game": game, "route": route, "ai": ai })); }
         }
     }
+}
+
+/// Keep these for the main window's page, which asks once it starts (`startup_opened`).
+fn pending(app: &tauri::AppHandle, items: Vec<Opened>) {
+    if let Some(p) = app.try_state::<Pending>() { p.0.lock().unwrap_or_else(|e| e.into_inner()).extend(items); }
 }
 
 /// A screen smaller than the first window's size (1366x768 at 125%, a handheld) gets the window maximized, so the
@@ -90,14 +99,27 @@ pub fn browser_flags<'a, R: tauri::Runtime, M: Manager<R>>(b: tauri::WebviewWind
 }
 
 /// The main window (tauri.conf.json, "create": false), made here so its browser flags can follow the setting.
-fn main_window(app: &tauri::App, flags: Flags) -> tauri::Result<tauri::WebviewWindow> {
+/// `visible` false: made hidden, for a quickstart that only starts the game, or to show once it's there
+/// (background.rs). Closing it goes through `background::close`; it going away ends gachamod unless gachamod moved to
+/// the background.
+fn main_window(app: &tauri::AppHandle, flags: Flags, visible: bool) -> tauri::Result<tauri::WebviewWindow> {
     let Some(conf) = app.config().app.windows.iter().find(|w| w.label == "main").cloned() else {
         return Err(tauri::Error::WindowNotFound);
     };
     let mut tries = 0;
     loop {
-        match browser_flags(tauri::WebviewWindowBuilder::from_config(app.handle(), &conf)?, flags).build() {
-            Ok(w) => return Ok(w),
+        match browser_flags(tauri::WebviewWindowBuilder::from_config(app, &conf)?, flags).visible(visible).build() {
+            Ok(w) => {
+                render::watch_window(&w);
+                render::hook_webview(&w);
+                let handle = app.clone();
+                w.on_window_event(move |e| match e {
+                    tauri::WindowEvent::CloseRequested { api, .. } => { api.prevent_close(); background::close(&handle, true); }
+                    tauri::WindowEvent::Destroyed if !background::away(&handle) => handle.exit(0),
+                    _ => {}
+                });
+                return Ok(w);
+            }
             // right after Restart, the closing copy's WebView2 may still run with the other setting for a moment
             Err(e) if tries < 4 && app.get_webview_window("main").is_none() => {
                 tries += 1;
@@ -109,9 +131,15 @@ fn main_window(app: &tauri::App, flags: Flags) -> tauri::Result<tauri::WebviewWi
     }
 }
 
+/// The main window made again after gachamod ran in the background, hidden (background.rs shows it).
+fn open_main(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> { main_window(app, Flags::of(app), false) }
+
 /// What the app was started with, for the UI to pick up once it is listening.
 #[tauri::command]
-fn startup_opened(st: tauri::State<'_, Pending>) -> Vec<Opened> { std::mem::take(&mut *st.0.lock().unwrap()) }
+fn startup_opened(app: tauri::AppHandle, st: tauri::State<'_, Pending>) -> Vec<Opened> {
+    background::page_ready(&app);
+    std::mem::take(&mut *st.0.lock().unwrap_or_else(|e| e.into_inner()))
+}
 
 #[derive(Default)]
 struct Pending(std::sync::Mutex<Vec<Opened>>);
@@ -133,8 +161,9 @@ pub fn run() {
                 gacha_core::logs::quitting();
                 app.restart();
             }
-            if let Some(w) = app.get_webview_window("main") { let _ = w.unminimize(); let _ = w.show(); let _ = w.set_focus(); }
-            hand_to_ui(app, opened_from_args(argv));
+            // SYSTEM: an update's new version starting in the background while this copy still runs: nothing to do
+            if argv.iter().any(|a| a == background::BACKGROUND_ARG) { return; }
+            background::second_start(app, opened_from_args(argv));
         }))
         .plugin(tauri_plugin_dialog::init())
         // SYSTEM: gachamod's own updates (commands/app.rs)
@@ -144,6 +173,7 @@ pub fn run() {
         .manage(hotkeys::Held::default())
         .manage(overlay::Showing::default())
         .manage(Pending::default())
+        .manage(background::Background::default())
         // EXTENSIONS: extension pages and their files (http://gmext.localhost/<id>/<file> on Windows)
         .register_asynchronous_uri_scheme_protocol("gmext", |ctx, req, responder| {
             let app = ctx.app_handle().clone();
@@ -172,19 +202,28 @@ pub fn run() {
             // SYSTEM: the rendering log (render.rs) watches the windows from the moment they open
             gacha_core::render_log::init(&logs_dir, render::setting(&state.db));
             let log = std::env::args().any(|a| a == BROWSER_LOG_ARG);
+            // SYSTEM: a quickstart start keeps the window hidden while it starts the game, and --background (an
+            // update installed in the background) starts with no window at all (background.rs)
+            let opened = opened_from_args(std::env::args());
+            let away = std::env::args().any(|a| a == background::BACKGROUND_ARG);
+            let hidden = !away && background::quiet_start(&state.db, &opened);
             app.manage(state);
             // the console (src/dev/console) shows the log as it's written
             let logs_to = app.handle().clone();
             gacha_core::logs::set_sink(move |level, text| { let _ = logs_to.emit(events::APP_LOG, serde_json::json!({ "level": level.name(), "text": text })); });
             app.manage(Flags { gpu, log });
-            let main = main_window(app, Flags { gpu, log })?;
-            render::watch_window(&main);
-            render::hook_webview(&main);
-            fit_to_screen(&main);
+            if away {
+                background::started_away(app.handle());
+            } else {
+                background::starting(app.handle());
+                let main = main_window(app.handle(), Flags { gpu, log }, !hidden)?;
+                // a hidden window gets its size when it's first shown (background::show)
+                if hidden { background::started_hidden(app.handle()); } else { fit_to_screen(&main); }
+            }
             let sys = app.handle().clone();
             std::thread::spawn(move || render::write_system(&sys, gpu, log));
             render::start(app.handle().clone());
-            *app.state::<Pending>().0.lock().unwrap() = opened_from_args(std::env::args());
+            *app.state::<Pending>().0.lock().unwrap() = opened;
             runner::start(app.handle().clone());
             // BACKEND: trash older than "trash.days" leaves its files and keeps its details in the archive
             if let Ok(db) = app.state::<state::AppState>().db.lock() { let _ = gacha_core::library::purge_expired(&db); }
@@ -206,20 +245,22 @@ pub fn run() {
                 let _ = handle.emit(events::GAME_STATE, serde_json::json!({ "game": g, "running": r }));
                 // INGAME: a game that runs as administrator decides who holds the menu key
                 if r { if let Ok(d) = handle.state::<state::AppState>().db.lock() { gacha_core::live::note_elevation(&d, g); } }
+                // SETTINGS/AI: play time for the year card, counted here so it adds up with no window
+                if let Ok(d) = handle.state::<state::AppState>().db.lock() { gacha_core::playtime::note(&d, g, r); }
                 hotkeys::on_game_state(&handle, r);
                 overlay::on_game_state(&handle);
+                background::on_game_state(&handle, r);
             }, move |_, text| { let _ = notes.emit(events::TOAST, serde_json::json!({ "text": text, "bad": false })); }, move |g| {
                 // INGAME: the game saved its values: picks made in its own menu show in the app's windows too
-                let moved = follow.state::<state::AppState>().db.lock().is_ok_and(|d| gacha_core::live::follow_game(&d, g));
+                let (moved, here) = follow.state::<state::AppState>().db.lock()
+                    .map(|d| (gacha_core::live::follow_game(&d, g), gacha_core::live::on_screen_moved(&d, g))).unwrap_or((false, false));
                 if moved { let _ = follow.emit(events::LIBRARY_CHANGED, serde_json::json!({ "game": g })); }
+                // the menu over the game follows who is on screen while the player hasn't moved in it yet
+                if here { overlay::on_screen_changed(&follow, g); }
             });
             // INGAME: both sticks pressed in opens the skin menu. The menu window is made again whenever its key is
-            // pressed, so closing the main window ends the app rather than leave it running with no window to close
+            // pressed, so the main window going away ends the app (main_window) unless it went to the background
             overlay::watch_pad(app.handle().clone());
-            if let Some(w) = app.get_webview_window("main") {
-                let handle = app.handle().clone();
-                w.on_window_event(move |e| { if let tauri::WindowEvent::Destroyed = e { handle.exit(0); } });
-            }
             commands::app::start_auto_update(app.handle().clone());
             // SYSTEM: usage counts and crash reports go out every few minutes and at quit, when they're on
             let (http, tdb) = { let s = app.state::<state::AppState>(); (s.http.clone(), s.db.clone()) };
@@ -342,6 +383,12 @@ pub fn run() {
             render::render_state,
             commands::report::admin_state,
             commands::report::admin_set_always,
+            commands::report::shortcuts_state,
+            commands::report::shortcuts_create,
+            commands::report::shortcuts_remove,
+            commands::report::shortcuts_create_game,
+            commands::report::shortcuts_remove_game,
+            commands::report::shortcuts_follow,
             commands::report::game_check_setup,
             commands::report::game_check_saved,
             commands::report::game_check_menu,
@@ -416,6 +463,9 @@ pub fn run() {
             commands::system::save_look,
             commands::system::setup_available,
             commands::system::setup_open,
+            background::app_show,
+            background::app_close,
+            background::app_close_asked,
             // ── BACKEND ──
             commands::library::mod_fetch_preview,
             commands::library::archive_list,
@@ -457,6 +507,10 @@ pub fn run() {
         .build(context)
         .expect("error while running gachamod")
         .run(|app, e| {
+            // the last window closed while gachamod runs in the background: keep running (app.exit still quits)
+            if let tauri::RunEvent::ExitRequested { code: None, api, .. } = &e {
+                if background::away(app) { api.prevent_exit(); }
+            }
             if let tauri::RunEvent::Exit = e {
                 gacha_core::logs::quitting();
                 // what's left to send goes now, for a few seconds at most

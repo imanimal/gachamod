@@ -637,27 +637,49 @@ are left out. The controller's buttons that open the menu also open the window o
 does the same there (`ingame/data.ts` `boundAction`); arrow keys and Enter always keep what they do in a window,
 and a controller moves in it as in the rest of the app (`lib/gamepad.ts`), whatever the bindings say.
 
-Which character is on screen: every gated TextureOverride starts with `run = CommandList\gachamod\live\Seen<group>`,
-which sets the frame's flag `$s<group>`; `[Present]` reads it and clears it with `post`. A live skin's keys also get
-`&& $\gachamod\live\open == 0`, so arrow keys in the menu don't flip its toggles. Mods gated by an older version get
-both on the next scan.
+Which character is on screen: a gated TextureOverride that draws the character's model starts with
+`run = CommandList\gachamod\live\Seen<group>`, which sets the frame's flag `$s<group>`; `[Present]` reads it and
+clears it with `post`. A section counts as the model when it binds or draws a buffer or matches part of an index
+buffer (`ib`, `vb0` and up, `draw`, `drawindexed`, `handling`, `match_first_index`, `match_index_count`;
+`live::mesh`). One that only swaps a texture doesn't, since a texture can also show in the game's menus or on another
+character (`keys::draw_sections` follows the same rule). A mod with no model section at all (a recolour) still marks
+from its textures, or it could never be seen; a texture-only ini in a mod whose model sits in another ini doesn't.
+Until 2026-11-17 every gated TextureOverride set the flag. A live skin's keys also get `&& $\gachamod\live\open == 0`,
+so arrow keys in the menu don't flip its toggles. Mods gated by an older version get both on the next scan.
 
 From those flags live.ini keeps one saved value per group, `$o<group>` (0 or 1): the character is on screen. It is
 declared in `[Constants]` and kept by `[CommandListOnScreen]`, run from `[Present]` whether the drawn menu is on or not.
-`$o<group>` follows the flag only once the flag has held its new value for `menu::HOLD` frames in a row (30: half a
-second at 60 fps, a second at 30), counted in `$h<group>`; a frame that agrees again starts the count over. So a
-character who blinks out of view for a moment changes nothing. That matters because `$o` is saved, and every change
-of a saved value makes the game write d3dx_user.ini again. Per frame it costs one comparison and one assignment per
-group, and a few more lines on the frames where a flag disagrees. No draws.
+`$o<group>` turns on once the flag has been on for `menu::HOLD_ON` frames in a row (12: a fifth of a second at 60 fps)
+and off once it has been off for `menu::HOLD` (30: half a second at 60 fps, a second at 30), counted in `$h<group>`;
+a frame that agrees again starts the count over. So a character who blinks out of view for a moment changes nothing,
+and one switched in shows up quickly. Until 2026-11-17 both ways waited 30 frames. `$o` is saved, and a change makes
+the game write d3dx_user.ini again, but the loader writes at most once per `settings_auto_save_interval` however
+many values changed (`SavePersistentSettings` runs from `RunFrameActions` only when that much time passed since the
+last try), so quick swaps cost no more than one write a second. Per frame it costs one comparison and one assignment
+per group, and a few more lines on the frames where a flag disagrees. No draws.
 
-The game writes the new value within a second only while `settings_auto_save_interval` is 1 (`live::fast_saves`,
-"fast save" on); with the loader's own 60 it can be a minute late. The app reads it in `live::info`
-(`LiveInfo.on_screen`: the groups whose `$o` is 1, in the order of the groups), and only while the game runs, since the
-values left from the last run say nothing. The window over the game asks for `live_info` each time it opens, puts
-those characters first, tags them "On screen" and opens on the first. `follow_game` doesn't look at `$o`, so these
-saves don't make the app's windows reload their lists. They don't read back as picks either: such a save holds the
-same `$g` values the game already had, and the rules above (picks waiting for a load, picks still being keyed in, saves
-older than the app's last tap) apply to it like to any other save.
+When `$o<group>` turns on, `$last` (saved, never cleared) takes the group's number: the character that came on screen
+last. `[Constants]` ends with `post $o<group> = 0` for every group, which runs after the loader read d3dx_user.ini
+(the `post` part of `[Constants]` runs after the saved values load, and a change it makes counts as one to save). So
+the values the last run saved, or the ones from before an F10, are written over with 0 at the next save, and only
+characters drawn since come back on. Before 2026-11-17 a character on screen when the game closed stayed "on screen"
+at the next start until 30 frames passed and the game saved.
+
+The game writes a new value within a second or two only while `settings_auto_save_interval` is 1 (`live::fast_saves`,
+"fast save" on); with the loader's own 60 it can be a minute late. The app reads it in `live::info` with one read of
+the file (`LiveInfo.on_screen`: the groups whose `$o` is 1, the one in `$last` first and the rest in the order of the
+groups; `LiveInfo.last_seen`: `$last`), and only while the game runs, since the values left from the last run say
+nothing. The window over the game asks for `live_info` each time it opens, puts those characters first, tags them
+"On screen" and opens on the first. With nobody on screen (a menu or a loading screen in the game) it opens on the
+character seen last, without the tag. A swap made just before the menu opened reaches d3dx_user.ini a moment later:
+the watcher calls `live::on_screen_moved` on every save, and when who is on screen changed, `overlay::on_screen_changed`
+sends `overlay-here` to the menu window if it shows for that game. The menu reads `live_info` again and follows the
+new answer until the player moves in it (the focus left the tile the menu focused, a character was picked, a mod's
+details opened or the search has the focus); after that the list stays put. Before 2026-11-17 the menu took the
+first answer after opening and kept it. `follow_game` doesn't look at `$o`, so these saves don't make the app's
+windows reload their lists. They don't read back as picks either: such a save holds the same `$g` values the game
+already had, and the rules above (picks waiting for a load, picks still being keyed in, saves older than the app's
+last tap) apply to it like to any other save.
 
 Opening the menu (`CommandListMenuToggle`) first copies the `$o` values into `$m<group>` (`CommandListMenuFreeze`), and
 that set stays until the menu opens again, so rows don't move while it shows, also after going into a character and
@@ -845,8 +867,15 @@ helper, the app's logic driven from a small program on the real library):
 10. Y in the drawn skin menu shows the key list, and doesn't also do something in the game that matters.
 11. Who is on screen (`$o<group>`), in ZZZ with fast save on: d3dx_user.ini gets the new value about a second after a
     character comes on screen or leaves, and not more often than that in a fight with quick swaps. A character drawn
-    only some frames (a cutscene, the party screen, a portrait) doesn't flip it on and off, and 30 frames is long enough
-    at the game's real frame rate. The window over the game, opened with two characters on screen, lists both first.
+    only some frames (a cutscene, the party screen, a portrait) doesn't flip it on and off, and 12 frames on and 30
+    off are right at the game's real frame rate. The window over the game, opened with two characters on screen, lists
+    both first, the one switched in last at the top. Since 2026-11-17: F7 pressed right after a swap opens on the old
+    character and moves to the new one about a second later while nothing was touched; `post $o<group> = 0` in
+    `[Constants]` clears a character left from the last run at the first save after a start and after F10 (and the
+    "Unrecognised persistent variable" overlay doesn't show for it); `$last` survives a restart; a skin whose ini
+    only swaps textures next to a model ini no longer marks its character when the texture shows elsewhere (a menu,
+    another character with the same texture), and the character on screen is still found for mods whose model
+    sections use only `run = CommandList...` plus `match_first_index`.
 12. The drawn menu with two characters on screen: it opens on the list with both first and checked, the keys on the
     first; the rows stay put while the game swaps characters under the open menu; the mouse and a click pick the row
     under them, Alt held; on a list longer than eight rows the bar and the arrows scroll the reordered rows with no

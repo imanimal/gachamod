@@ -9,6 +9,9 @@
 .tools-other > :not(summary) { margin-bottom: var(--s-2); }
 .tools-switches { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: var(--s-4) var(--s-5); }
 .tools-loglevel { max-width: 16rem; margin-top: var(--s-5); }
+/* a lock note above the switches and the Tools link under them sit clear of the grid, like the other blocks */
+.hint + .tools-switches { margin-top: var(--s-4); }
+.tools-switches + .hint, .tools-loglevel + .hint { margin-top: var(--s-5); }
 .tools-saved { font-size: var(--t-small); color: var(--ok); opacity: 0; transition: opacity var(--dur) var(--ease); }
 .tools-saved.show { opacity: 1; }
 .tools-blocked { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); margin-bottom: var(--s-4); border-radius: var(--radius-sm);
@@ -18,12 +21,17 @@
 .tools-dev { display: flex; flex-direction: column; }
 .tools-dev-row { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-2) 0; border-bottom: 1px solid var(--line); }
 .tools-dev-row > span { flex: 1; display: flex; flex-direction: column; }
+/* no line under the last row, like Settings rows; the log below has its own gap */
+.tools-dev .tools-dev-row:last-child { border-bottom: 0; }
 .tools-log { margin-top: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
 .tools-log-text { margin: 0; max-height: 20rem; overflow: auto; padding: var(--s-3); border-radius: var(--radius-sm); background: var(--bg-2);
   border: 1px solid var(--line); font-size: var(--t-meta); line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
 .tools-xxmi { color: var(--accent-ink); font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .tools-xxmi:hover { color: var(--text); }
 .tools-kick { display: grid; gap: var(--s-2); margin: var(--s-4) 0; }
+/* the steps fold keeps the grid's gap, not its page margins, so it sits as far from the toggle as from the note
+   (the summary keeps its space over the steps when open) */
+.tools-kick > .tools-other, .tools-kick > .tools-other > :last-child, .tools-kick > .tools-other:not([open]) > summary { margin-bottom: 0; }
 
 /* Tools > Fixes: new fixers on GameBanana and where the data comes from */
 .fx-new { margin-top: var(--s-4); padding: var(--s-3); border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
@@ -40,4 +48,6 @@
 .kick-step.done .kick-step-n { color: var(--ok); border-color: var(--ok); }
 .kick-step-b { display: grid; gap: var(--s-2); justify-items: start; min-width: 0; }
 .kick-step-b p { margin: 0; }
+/* "Every step looks done" sits the steps' own gap under the last one */
+.kick-steps > .hint { margin-top: var(--s-3); }
 .kick-step-b .field, .kick-step-b label { justify-self: stretch; }

@@ -1,4 +1,4 @@
-//! Where disk space goes, for Tools › Storage: each game's mods (on and off, per character and per mod), the app's
+//! Where disk space goes, for Settings › Storage: each game's mods (on and off, per character and per mod), the app's
 //! trash, downloaded archives, backups, fix tools, the loader's shader cache, frame dumps and log, mods another
 //! manager keeps outside Mods, XXMI Launcher and gachamod's data folder. It also finds mods installed twice.
 //!
@@ -64,7 +64,11 @@ pub struct ModUse {
     pub files: u32,
     pub path: String,
     pub installed_at: i64,
+    /// The mod's picture (ModEntry::preview), a local path or a URL. `thumb` is its small copy when there is one.
+    pub preview: Option<String>,
     pub thumb: Option<String>,
+    /// Marked for adults, so the picture follows the "Mods for adults" setting.
+    pub nsfw: bool,
 }
 
 /// One character's mods in one game; `name` None for mods without a character. Mirrors `StorageCharacter`.
@@ -347,7 +351,8 @@ fn loader_items(importer: &Path, mods: Option<&Path>, game_dir: Option<&Path>, s
 fn mod_use(m: &ModEntry) -> ModUse {
     ModUse {
         id: m.id.clone(), game: m.game.clone(), name: m.name.clone(), character: m.character.clone(), enabled: m.loaded(),
-        bytes: m.size_bytes, files: m.file_count, path: m.path.clone(), installed_at: m.installed_at, thumb: m.thumb.clone(),
+        bytes: m.size_bytes, files: m.file_count, path: m.path.clone(), installed_at: m.installed_at,
+        preview: m.preview.clone(), thumb: m.thumb.clone(), nsfw: m.nsfw,
     }
 }
 

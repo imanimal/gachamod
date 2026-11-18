@@ -232,20 +232,28 @@ const VARS: &[&str] = &["char", "here", "fv", "sel", "top", "rows", "vis", "act"
 /// The IniParams the shader reads. Other mods may use them too, so the menu puts back what was there.
 const SLOTS: [u32; 4] = [86, 87, 88, 89];
 const XYZW: [char; 4] = ['x', 'y', 'z', 'w'];
-/// Frames a character's flag has to keep its new value before `$o<group>` follows it: about half a second at 60 fps.
+/// Frames a character has to stay out of view before `$o<group>` says it left: about half a second at 60 fps.
 pub(crate) const HOLD: u32 = 30;
+/// Frames a character has to be drawn before `$o<group>` says it is on screen: a fifth of a second at 60 fps, so the
+/// menu knows who was just switched in.
+pub(crate) const HOLD_ON: u32 = 12;
 
-/// The lines for live.ini's [Constants]. `$open`, the on-screen flags and `$o<group>` are always there: the gated mod
-/// inis read them, and the app reads `$o<group>` from the saved values, whether the menu is on or not. `key_list`:
-/// the key list's own variables too.
+/// The lines for live.ini's [Constants]. `$open`, the on-screen flags, `$o<group>` and `$last` are always there: the
+/// gated mod inis read them, and the app reads `$o<group>` and `$last` from the saved values, whether the menu is on
+/// or not. `key_list`: the key list's own variables too.
 pub(crate) fn constants(pages: &[IniPage], on: bool, key_list: bool) -> String {
     let mut o = Out::default();
     o.l("global $open = 0");
+    // the group that came on screen last, kept across loads: the character played last
+    o.l("global persist $last = 0");
     for p in pages {
         o.l(format!("global $s{} = 0", p.n));
         o.l(format!("global persist $o{} = 0", p.n));
         o.l(format!("global $h{} = 0", p.n));
     }
+    // what the last run saved says nothing about who is on screen now: after the saved values load, everyone starts
+    // out of view, and the next save writes that over them
+    for p in pages { o.l(format!("post $o{} = 0", p.n)); }
     if on {
         for v in VARS { o.l(format!("global ${v} = 0")); }
         if pages.len() > 1 {
@@ -302,17 +310,22 @@ pub(crate) fn sections(pages: &[IniPage], l: &Layout, keys: Option<&Keys>, key_l
     }
 
     o.section("CommandListOnScreen");
-    o.l(format!("; o<group> says the character is on screen. It follows the frame's flag once that has kept its new value for {HOLD}"));
-    o.l("; frames in a row, so a character who flickers out of view doesn't change it: it is saved, and every change makes");
-    o.l("; the game write its saved values again");
+    o.l(format!("; o<group> says the character is on screen. It turns on once the frame's flag has been on for {HOLD_ON} frames in a"));
+    o.l(format!("; row and off once it has been off for {HOLD}, so a character who flickers out of view doesn't change it: it is"));
+    o.l("; saved, and every change makes the game write its saved values again. last is the group that came on screen last");
     for p in pages {
         let n = p.n;
         o.l(format!("if $s{n} == $o{n}"));
         o.l(format!("  $h{n} = 0"));
         o.l("else");
         o.l(format!("  $h{n} = $h{n} + 1"));
-        o.l(format!("  if $h{n} >= {HOLD}"));
-        o.l(format!("    $o{n} = $s{n}"));
+        o.l(format!("  if $s{n} == 1 && $h{n} >= {HOLD_ON}"));
+        o.l(format!("    $o{n} = 1"));
+        o.l(format!("    $h{n} = 0"));
+        o.l(format!("    $last = {n}"));
+        o.l("  endif");
+        o.l(format!("  if $s{n} == 0 && $h{n} >= {HOLD}"));
+        o.l(format!("    $o{n} = 0"));
         o.l(format!("    $h{n} = 0"));
         o.l("  endif");
         o.l("endif");
@@ -3118,8 +3131,10 @@ mod tests {
             // saved, so the app can read it; the frame's flag and the count are not
             assert!(c.contains("global persist $o2 = 0\r\n") && c.contains("global persist $o7 = 0\r\n") && c.contains("global $h7 = 0\r\n"));
             assert!(!c.contains("global persist $s") && !c.contains("global persist $h"));
+            // the one that came on screen last is saved too, and what the last run saved is cleared once it loads
+            assert!(c.contains("global persist $last = 0\r\n") && c.contains("post $o2 = 0\r\npost $o7 = 0\r\n"), "{c}");
             assert!(t.contains("[Present]\r\n") && t.contains("run = CommandListOnScreen\r\npost $s2 = 0\r\npost $s7 = 0\r\n"), "{t}");
-            assert!(t.contains("[CommandListOnScreen]\r\n; o<group>") &&t.contains(&format!("if $s7 == $o7\r\n  $h7 = 0\r\nelse\r\n  $h7 = $h7 + 1\r\n  if $h7 >= {HOLD}\r\n    $o7 = $s7\r\n")));
+            assert!(t.contains("[CommandListOnScreen]\r\n; o<group>") && t.contains(&format!("if $s7 == $o7\r\n  $h7 = 0\r\nelse\r\n  $h7 = $h7 + 1\r\n  if $s7 == 1 && $h7 >= {HOLD_ON}\r\n    $o7 = 1\r\n    $h7 = 0\r\n    $last = 7\r\n  endif\r\n  if $s7 == 0 && $h7 >= {HOLD}\r\n    $o7 = 0\r\n")), "{t}");
             balanced(&t, &c);
         }
     }
@@ -3131,11 +3146,15 @@ mod tests {
             let mut sim = Sim::new(&sections(&pages(), &l, menu.as_ref(), None));
             let seen = |sim: &mut Sim, frames: u32| for _ in 0..frames { sim.set("s7", 1.0); sim.frame(); };
             let gone = |sim: &mut Sim, frames: u32| for _ in 0..frames { sim.frame(); };
-            seen(&mut sim, HOLD - 1);
+            seen(&mut sim, HOLD_ON - 1);
             assert_eq!(sim.get("o7"), 0.0, "not yet");
             assert_eq!(sim.get("s7"), 0.0, "the flag clears after each frame");
+            // a frame out of view starts the count again
+            gone(&mut sim, 1);
+            seen(&mut sim, HOLD_ON - 1);
+            assert_eq!(sim.get("o7"), 0.0, "still not");
             seen(&mut sim, 1);
-            assert_eq!(sim.get("o7"), 1.0);
+            assert_eq!((sim.get("o7"), sim.get("last")), (1.0, 7.0));
             assert_eq!(sim.get("o2"), 0.0);
             // a few frames out of view change nothing, and the count starts again when it's back
             gone(&mut sim, HOLD - 1);
@@ -3144,7 +3163,11 @@ mod tests {
             assert_eq!(sim.get("o7"), 1.0);
             gone(&mut sim, 1);
             assert_eq!(sim.get("o7"), 0.0);
+            assert_eq!(sim.get("last"), 7.0, "the character seen last stays known after it left");
             if menu.is_some() { assert_eq!(sim.get("here"), 1.0, "the menu still knows who was seen last"); }
+            // another character comes on screen: it is the last one now
+            for _ in 0..HOLD_ON { sim.set("s2", 1.0); sim.frame(); }
+            assert_eq!((sim.get("o2"), sim.get("last")), (1.0, 2.0));
         }
     }
 

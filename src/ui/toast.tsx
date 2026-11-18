@@ -11,7 +11,8 @@ export interface ToastAction { label: string; run: () => void | Promise<void> }
 export interface ToastOpts { keep?: boolean; onEnd?: () => void }
 /** A toast's tone: true for a failure, "info" for news that isn't a confirmation (a new version, Starting). */
 export type ToastTone = boolean | "info";
-type Toast = { id: number; text: string; bad?: boolean; info?: boolean; action?: ToastAction; more?: ToastAction; ms: number; keep?: boolean; leaving?: boolean };
+/** `run` counts restarts of the time bar (a retoast). */
+type Toast = { id: number; text: string; bad?: boolean; info?: boolean; action?: ToastAction; more?: ToastAction; ms: number; run: number; keep?: boolean; leaving?: boolean };
 let next = 1;
 const MAX = 4;
 const subs = new Set<(t: Toast) => void>();
@@ -55,7 +56,7 @@ export function toast(text: string, tone: ToastTone = false, action?: ToastActio
       if (t === text && live.has(id) && retoast(id, text, action, bad)) return id;
     }
   }
-  const t: Toast = { id: next++, text, bad, info, action, more, ms: lifetime(action, bad), keep: opts?.keep };
+  const t: Toast = { id: next++, text, bad, info, action, more, ms: lifetime(action, bad), run: 0, keep: opts?.keep };
   texts.set(t.id, text);
   if (opts?.onEnd) ends.set(t.id, opts.onEnd);
   subs.forEach((s) => s(t));
@@ -78,26 +79,20 @@ export function dismissToast(id: number) {
 
 export function Toasts() {
   const [list, setList] = useState<Toast[]>([]);
-  const timers = useRef(new Map<number, number>());
   // why each toast holds still: "hover", "focus"
   const holds = useRef(new Map<number, Set<string>>());
+  const [held, setHeld] = useState<ReadonlySet<number>>(new Set());
   const leaveRef = useRef<(id: number) => void>(() => {});
   const listRef = useRef(list);
   listRef.current = list;
+  const unhold = (id: number) => {
+    holds.current.delete(id);
+    setHeld((s) => { if (!s.has(id)) return s; const n = new Set(s); n.delete(id); return n; });
+  };
   useEffect(() => {
-    const arm = (t: Toast, ms = t.ms) => {
-      const old = timers.current.get(t.id);
-      if (old) clearTimeout(old);
-      timers.current.delete(t.id);
-      if (holds.current.get(t.id)?.size) return;
-      timers.current.set(t.id, window.setTimeout(() => leave(t.id), ms));
-    };
     const leave = (id: number) => {
       ended(id);
-      holds.current.delete(id);
-      const old = timers.current.get(id);
-      if (old) clearTimeout(old);
-      timers.current.delete(id);
+      unhold(id);
       setList((l) => l.map((x) => x.id === id ? { ...x, leaving: true } : x));
       window.setTimeout(() => setList((l) => l.filter((x) => x.id !== id)), 220);
     };
@@ -112,12 +107,12 @@ export function Toasts() {
         const room = Math.max(0, MAX - 1 - kept.length);
         const stay = new Set([...kept, ...rest.slice(rest.length - room)]);
         const out = shown.filter((x) => stay.has(x));
-        for (const x of shown) if (!stay.has(x)) { ended(x.id); holds.current.delete(x.id); const tm = timers.current.get(x.id); if (tm) clearTimeout(tm); timers.current.delete(x.id); }
+        for (const x of shown) if (!stay.has(x)) { ended(x.id); holds.current.delete(x.id); }
         return [...out, t];
       });
-      arm(t);
     };
-    const patch = (id: number, p: Partial<Toast>) => setList((l) => l.map((x) => { if (x.id !== id) return x; const n = { ...x, ...p, leaving: false }; arm(n); return n; }));
+    // a new text or button starts the time bar again (`run`), even when the text and time are the same as before
+    const patch = (id: number, p: Partial<Toast>) => setList((l) => l.map((x) => x.id !== id ? x : { ...x, ...p, leaving: false, run: x.run + 1 }));
     const remove = (id: number) => leave(id);
     subs.add(add); updates.add(patch); removers.add(remove);
     return () => { subs.delete(add); updates.delete(patch); removers.delete(remove); };
@@ -128,13 +123,10 @@ export function Toasts() {
     const set = holds.current.get(id) ?? new Set<string>();
     if (on) set.add(why); else set.delete(why);
     holds.current.set(id, set);
-    const old = timers.current.get(id);
-    if (old) clearTimeout(old);
-    timers.current.delete(id);
-    // let go: a short while longer to finish reading
-    if (!set.size) timers.current.set(id, window.setTimeout(() => leaveRef.current(id), 2400));
+    const now = set.size > 0;
+    setHeld((s) => { if (s.has(id) === now) return s; const n = new Set(s); if (now) n.add(id); else n.delete(id); return n; });
   };
-  const close = (id: number) => { ended(id); setList((l) => l.filter((x) => x.id !== id)); };
+  const close = (id: number) => { ended(id); unhold(id); setList((l) => l.filter((x) => x.id !== id)); };
 
   return (
     <div className="toasts" role="status" aria-live="polite">
@@ -148,9 +140,51 @@ export function Toasts() {
           {item.action && <button type="button" className="toast-act" onClick={() => void item.action!.run()}>{item.action.label}</button>}
           {item.more && <button type="button" className="toast-act toast-more" onClick={() => { void item.more!.run(); close(item.id); }}>{item.more.label}</button>}
           <button type="button" className="toast-x" aria-label={t("Dismiss")} title={t("Dismiss")} onClick={() => close(item.id)}><Icon name="x" size={12} /></button>
-          <i key={`${item.text}-${item.ms}`} className="t-life" style={{ animationDuration: `${item.ms}ms` }} aria-hidden="true" />
+          <Life key={item.run} ms={item.ms} paused={!!item.leaving || held.has(item.id)} onDone={() => leaveRef.current(item.id)} />
         </div>
       ))}
     </div>
   );
+}
+
+/** After the pointer or focus leaves a toast, it stays at least this long to finish reading. */
+const GRACE = 2400;
+
+/** The time bar along a toast's bottom edge, and its clock: the toast leaves when the bar runs out, so the two can't
+ *  drift apart. Paused, it stands still; let go with little time left, it runs the last part over GRACE. */
+function Life({ ms, paused, onDone }: { ms: number; paused: boolean; onDone: () => void }) {
+  const ref = useRef<HTMLElement>(null);
+  const anim = useRef<Animation | null>(null);
+  // the running bar: from this width to none over this many ms
+  const span = useRef({ from: 1, dur: ms });
+  const done = useRef(onDone);
+  done.current = onDone;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const start = (from: number, dur: number) => {
+    anim.current?.cancel();
+    const el = ref.current;
+    if (!el) return;
+    span.current = { from, dur };
+    const a = el.animate([{ transform: `scaleX(${from})` }, { transform: "scaleX(0)" }], { duration: Math.max(1, dur), easing: "linear", fill: "forwards" });
+    a.onfinish = () => done.current();
+    if (pausedRef.current) a.pause();
+    anim.current = a;
+  };
+  useEffect(() => {
+    start(1, ms);
+    return () => { anim.current?.cancel(); anim.current = null; };
+  }, [ms]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const a = anim.current;
+    if (!a) return;
+    if (paused) { if (a.playState === "running") a.pause(); return; }
+    if (a.playState !== "paused") return;
+    const { from, dur } = span.current;
+    const at = Math.min(dur, Number(a.currentTime ?? 0));
+    const left = dur - at;
+    if (left >= GRACE) a.play();
+    else start(from * (left / dur), GRACE);
+  }, [paused]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <i ref={ref} className="t-life" aria-hidden="true" />;
 }

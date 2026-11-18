@@ -130,19 +130,18 @@ function clearRows(items: QueueItem[]) {
   if (!ids.length) return;
   ids.forEach((id) => clearing.add(id));
   clearEmit();
-  const one = ids.length === 1 ? items.find((i) => i.id === ids[0])?.req.meta.name : undefined;
   const timer = window.setTimeout(() => {
     void Promise.all(ids.map((id) => queue.remove(id)))
       .catch((e) => toast(errorText(e), true))
       .finally(() => { ids.forEach((id) => clearing.delete(id)); clearEmit(); });
   }, CLEAR_AFTER);
-  const tid = toast(one ? t("Cleared {name} from the list", { name: one }) : tn(ids.length, "Cleared {n} download from the list", "Cleared {n} downloads from the list"), false, {
+  const tid = toast(tn(ids.length, "Cleared {n} download from the list", "Cleared {n} downloads from the list"), false, {
     label: t("Undo"),
     run: () => {
       window.clearTimeout(timer);
       ids.forEach((id) => clearing.delete(id));
       clearEmit();
-      retoast(tid, one ? t("Put back {name}", { name: one }) : tn(ids.length, "Put back {n} download", "Put back {n} downloads"));
+      retoast(tid, tn(ids.length, "Put back {n} download", "Put back {n} downloads"));
     },
   });
 }
@@ -203,8 +202,7 @@ const gbUrl = (i: QueueItem) => i.req.meta.source?.url || `https://gamebanana.co
 /** Install a removed mod again from where it came from. */
 const reinstall = (i: QueueItem) => act(async () => {
   await queue.add({ ...i.req, meta: { ...i.req.meta, replaces: null } });
-  const name = i.req.meta.name || i.req.fileName;
-  toast(name ? t("Installing {name} again", { name }) : t("Installing it again"));
+  toast(t("Installing it again"));
 });
 /** Get the game ready (mod loader or Mods folder), then retry. */
 const fixFolder = (i: QueueItem) => void getReady(i.req.game).then((ok) => { if (ok) act(() => queue.retry(i.id)); });
@@ -268,7 +266,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
   const cancel = () => act(async () => {
     await queue.cancel(i.id);
     const what = i.req.meta.name || i.req.fileName;
-    record({ label: what ? t("Cancelled {name}", { name: what }) : t("Cancelled the download"), undo: () => queue.retry(i.id), redo: () => queue.cancel(i.id) });
+    record({ label: what ? t("Cancelled {name}", { name: what }) : t("Cancelled the download"), brief: t("Cancelled the download"), undo: () => queue.retry(i.id), redo: () => queue.cancel(i.id) });
   });
   const clear = () => clearRows([i]);
 
@@ -428,7 +426,8 @@ export function Downloads() {
       const paths = await dialogs.pickFiles({ title: t("Pick mod archives"), extensions: ["zip", "7z", "rar"], multiple: true });
       if (!paths) { if (!("__TAURI_INTERNALS__" in window)) toast(t("Picking files works in the app. Drop archives on the window there")); return; }
       const o = await installs.local(game.id, paths);
-      toast(o.notes.length ? notesText(o.notes) : tn(paths.length, "Installing {n} mod", "Installing {n} mods"));
+      // the new rows show in the list; only notes about the files need a toast
+      if (o.notes.length) toast(notesText(o.notes));
     } catch (e) { toast(errorText(e), true); }
     finally { setBusy(false); }
   };

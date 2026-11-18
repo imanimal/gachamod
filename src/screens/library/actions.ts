@@ -62,6 +62,7 @@ export async function setParent(game: GameId, mod: ModEntry, parent: string, all
     await run(parent);
     record({
       label: parent ? t("Made {mod} a sub-mod of {parent}", { mod: mod.name, parent: name(parent) }) : t("{mod} is a separate mod again", { mod: mod.name }),
+      brief: parent ? t("Made the mod a sub-mod") : t("Made the sub-mod a separate mod again"),
       undo: () => run(before),
       redo: () => run(parent),
     });
@@ -83,8 +84,9 @@ function oldValues(m: ModEntry, p: MetaPatch): MetaPatch {
   return o;
 }
 
-/** Change details of some mods as one step with Undo. `patchOf` gives each mod's change, or null to leave it. */
-export async function patchMods(game: GameId, list: ModEntry[], patchOf: (m: ModEntry) => MetaPatch | null, label: string): Promise<boolean> {
+/** Change details of some mods as one step with Undo. `patchOf` gives each mod's change, or null to leave it. The
+ *  field that changed shows it, so there's no toast unless `brief` says what to toast (no names). */
+export async function patchMods(game: GameId, list: ModEntry[], patchOf: (m: ModEntry) => MetaPatch | null, label: string, brief?: string): Promise<boolean> {
   const after: Array<[string, MetaPatch]> = [];
   const before: Array<[string, MetaPatch]> = [];
   for (const m of list) {
@@ -101,7 +103,7 @@ export async function patchMods(game: GameId, list: ModEntry[], patchOf: (m: Mod
   };
   try {
     await apply(after);
-    record({ label, undo: () => apply(before), redo: () => apply(after) });
+    record({ label, brief, undo: () => apply(before), redo: () => apply(after) }, !brief);
     return true;
   } catch (e) { fail(e); return false; }
 }
@@ -112,11 +114,16 @@ export function renameMod(game: GameId, m: ModEntry, name: string) {
   return patchMods(game, [m], () => ({ name: n }), t("Renamed {old} to {name}", { old: m.name, name: n }));
 }
 
-export function setCharacter(game: GameId, list: ModEntry[], name: string) {
+/** `quiet` for a field that shows the new character; from a dialog the mod can move to another character's group, so
+ *  that toasts. */
+export function setCharacter(game: GameId, list: ModEntry[], name: string, quiet = false) {
   const n = name.trim();
   const same = (m: ModEntry) => (m.character ?? "").toLowerCase() === n.toLowerCase();
+  const one = list.length === 1;
+  const brief = n ? (one ? t("Changed the mod's character") : tn(list.length, "Changed the character of {n} mod", "Changed the character of {n} mods"))
+    : (one ? t("Cleared the mod's character") : tn(list.length, "Cleared the character of {n} mod", "Cleared the character of {n} mods"));
   return patchMods(game, list, (m) => (same(m) ? null : { character: n }),
-    n ? t("Set {mods} to {name}", { mods: modsName(list), name: n }) : t("Cleared the character of {mods}", { mods: modsName(list) }));
+    n ? t("Set {mods} to {name}", { mods: modsName(list), name: n }) : t("Cleared the character of {mods}", { mods: modsName(list) }), quiet ? undefined : brief);
 }
 
 export function addTag(game: GameId, list: ModEntry[], tag: string) {
@@ -132,9 +139,11 @@ export function removeTag(game: GameId, list: ModEntry[], tag: string) {
     t("Removed the tag \"{tag}\" from {mods}", { tag, mods: modsName(list) }));
 }
 
-export function setFavourite(game: GameId, list: ModEntry[], on: boolean) {
+/** The star or switch shows the new state, so this is quiet unless `say` gives the toast's words (a button that goes
+ *  away when used). */
+export function setFavourite(game: GameId, list: ModEntry[], on: boolean, say?: string) {
   return patchMods(game, list, (m) => (m.favorite === on ? null : { favorite: on }),
-    on ? t("Added {mods} to favourites", { mods: modsName(list) }) : t("Removed {mods} from favourites", { mods: modsName(list) }));
+    on ? t("Added {mods} to favourites", { mods: modsName(list) }) : t("Removed {mods} from favourites", { mods: modsName(list) }), say);
 }
 
 export function setAdult(game: GameId, list: ModEntry[], on: boolean) {
@@ -155,7 +164,10 @@ export async function combineMods(game: GameId, list: ModEntry[]) {
   try {
     const c = await library.merge(game, list.map((m) => m.id));
     publish(game, c);
-    toast(notesText(c.notes), false, c.changed[0] ? { label: t("View parts"), run: () => openDetails(c.changed[0]!, "parts") } : undefined);
+    // the backend's notes name the new mod and its parts: the toast doesn't
+    const notes = c.notes.map((n) => (/^Combined \d+ mods into /.test(n) ? t("Combined {n} mods into one", { n: list.length })
+      : / the same things as another part, so (it's|they're) off$/.test(n) ? t("Parts that draw the same things as another part are off") : n));
+    toast(notesText(notes), false, c.changed[0] ? { label: t("View parts"), run: () => openDetails(c.changed[0]!, "parts") } : undefined);
   } catch (e) { fail(e); }
 }
 
@@ -192,10 +204,10 @@ export async function previewFromGb(game: GameId, m: ModEntry) {
     const page = await modPage(m.source.modId);
     const img = page?.images[0];
     const url = img ? img.s800 ?? img.full ?? img.s530 : null;
-    if (!url) { toast(t("{mod} has no pictures on GameBanana", { mod: m.name })); return; }
+    if (!url) { toast(t("The mod has no pictures on GameBanana")); return; }
+    // the new picture shows on the card and in the details
     const e = await library.fetchPreview(game, m.id, url);
     publish(game, { changed: [e], removed: [], notes: [] });
-    toast(t("Got a preview for {mod}", { mod: m.name }));
   } catch (e) { toast(t("Couldn't get a preview. {error}", { error: errorText(e) }), true); }
 }
 
@@ -212,19 +224,19 @@ export async function ownPreview(game: GameId, m: ModEntry): Promise<{ bytes: Ui
   } catch { return null; }
 }
 
-/** Go back to the picture the mod came with (from its folder or GameBanana). Undo puts the user's own one back. */
+/** Go back to the picture the mod came with (from its folder or GameBanana). Undo puts the user's own one back. The
+ *  picture changes in place, so there's no toast. */
 export async function resetPreview(game: GameId, m: ModEntry) {
   if (!m.customPreview) return;
   try {
     const own = await ownPreview(game, m);
     previewSaved(game, await library.clearPreview(game, m.id));
-    const label = t("Reset the preview of {mod}", { mod: m.name });
-    if (!own) { toast(label); return; }
+    if (!own) return;
     record({
-      label,
+      label: t("Reset the preview of {mod}", { mod: m.name }),
       undo: async () => previewSaved(game, await library.setPreviewData(game, m.id, own.bytes, own.ext)),
       redo: async () => previewSaved(game, await library.clearPreview(game, m.id)),
-    });
+    }, true);
   } catch (e) { toast(t("Couldn't reset the preview. {error}", { error: errorText(e) }), true); }
 }
 
@@ -233,7 +245,7 @@ export async function resetPreview(game: GameId, m: ModEntry) {
 export async function checkForUpdates(game: GameId, list: ModEntry[]) {
   const withSource = list.filter((m) => m.source);
   if (!withSource.length) { toast(t("Only mods from GameBanana can be checked")); return; }
-  const waitText = withSource.length === 1 ? t("Checking {mod} on GameBanana", { mod: withSource[0]!.name }) : tn(withSource.length, "Checking {n} mod on GameBanana", "Checking {n} mods on GameBanana");
+  const waitText = withSource.length === 1 ? t("Checking the mod on GameBanana") : tn(withSource.length, "Checking {n} mod on GameBanana", "Checking {n} mods on GameBanana");
   let waitId = toast(waitText);
   // keep the wait showing until the answer comes (a toast times out by itself)
   const hold = window.setInterval(() => { if (!retoast(waitId, waitText)) waitId = toast(waitText); }, 4000);
@@ -247,8 +259,8 @@ export async function checkForUpdates(game: GameId, list: ModEntry[]) {
     emitApp({ type: "library-refresh", game });
     const hits = withSource.filter((m) => found.has(m.id));
     window.clearInterval(hold);
-    if (!hits.length) say(withSource.length === 1 ? t("{mod} is up to date", { mod: withSource[0]!.name }) : t("They're all up to date"));
-    else say(hits.length === 1 ? t("{mod} has an update", { mod: hits[0]!.name }) : tn(hits.length, "{n} mod has an update", "{n} mods have an update"),
+    if (!hits.length) say(withSource.length === 1 ? t("The mod is up to date") : t("They're all up to date"));
+    else say(withSource.length === 1 ? t("The mod has an update") : tn(hits.length, "{n} mod has an update", "{n} mods have an update"),
       { label: t("Get it"), run: () => void Promise.all(hits.map((m) => getUpdate(game, m))) });
   } catch (e) {
     window.clearInterval(hold);
@@ -273,7 +285,8 @@ export async function getUpdate(game: GameId, m: ModEntry) {
   setUpdating(m.id, true);
   try {
     const item = await queueLatest(game, m.source.modId, m.id);
-    if (item) toast(t("Downloading the update for {mod}", { mod: m.name }), false, { label: t("Downloads"), run: () => go("downloads") });
+    if (item) toast(t("Downloading the update"), false, { label: t("Downloads"), run: () => go("downloads") });
+    // several can run at once (Get it after a check): the name says which one failed
     else toast(t("Couldn't find a newer file for {mod} on GameBanana", { mod: m.name }), true);
   } catch (e) { fail(e); }
   finally { setUpdating(m.id, false); }
@@ -306,16 +319,19 @@ export async function keysOnlyOnScreen(game: GameId, list: ModEntry[]) {
  *  screen or in any profile is lost). */
 export async function setInProfile(game: GameId, p: Profile, list: ModEntry[], on: boolean) {
   const label = on ? t("Added {mods} to {profile}", { mods: modsName(list), profile: p.name }) : t("Took {mods} out of {profile}", { mods: modsName(list), profile: p.name });
+  const briefOf = (n: number) => on ? (n === 1 ? t("Added the mod to the profile") : tn(n, "Added {n} mod to the profile", "Added {n} mods to the profile"))
+    : (n === 1 ? t("Took the mod out of the profile") : tn(n, "Took {n} mod out of the profile", "Took {n} mods out of the profile"));
   try {
     if (p.active) {
+      // the profile in use is the mods that are on: one mod's switch shows it, several at once get a toast
       const ids = list.map((m) => m.id);
-      await changeStates(game, label, on ? ids : [], on ? [] : ids, await library.list(game));
+      await changeStates(game, label, on ? ids : [], on ? [] : ids, await library.list(game), ids.length > 1 ? briefOf(ids.length) : null);
       profilesChanged(game);
       return;
     }
     const members = new Set(await profiles.members(p.id));
     const ids = list.filter((m) => members.has(m.id) !== on).map((m) => m.id);
-    if (!ids.length) { toast(on ? t("Already in {profile}", { profile: p.name }) : t("Not in {profile}", { profile: p.name })); return; }
+    if (!ids.length) { toast(on ? t("Already in the profile") : t("Not in the profile")); return; }
     const inside = async (states: Array<[string[], boolean]>) => {
       const from = (await profiles.list(game)).find((x) => x.active);
       await profiles.activate(p.id);
@@ -332,7 +348,7 @@ export async function setInProfile(game: GameId, p: Profile, list: ModEntry[], o
     const touched = await inside([[ids, on]]);
     const all = [...new Set([...ids, ...touched])];
     const back: Array<[string[], boolean]> = [[all.filter((id) => !members.has(id)), false], [all.filter((id) => members.has(id)), true]];
-    record({ label, undo: () => inside(back), redo: () => inside([[ids, on]]) });
+    record({ label, brief: briefOf(ids.length), undo: () => inside(back), redo: () => inside([[ids, on]]) });
   } catch (e) { fail(e); }
 }
 

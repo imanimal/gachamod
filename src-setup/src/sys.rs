@@ -9,7 +9,8 @@ use winreg::RegKey;
 
 /// The uninstall entry the NSIS installer writes (Windows Settings, Installed apps).
 pub const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\gachamod";
-/// Choices the installer and the app share: `admin`, `adminAsked`, `desktopShortcut` (src-tauri/windows/hooks.nsh).
+/// Choices the installer and the app share: `admin`, `adminAsked`, `desktopShortcut`, `quickstartShortcut`
+/// (src-tauri/windows/hooks.nsh).
 pub const PREFS_KEY: &str = r"Software\gachamod";
 /// Where NSIS keeps the install folder.
 pub const DIR_KEY: &str = r"Software\imanimal\gachamod";
@@ -73,8 +74,16 @@ pub fn forget_install(dir: &Path) {
         .and_then(|k| k.get_value::<String, _>("").ok())
         .is_some_and(|v| v.to_ascii_lowercase().contains(&exe.to_string_lossy().to_ascii_lowercase()));
     for key in ["gachamod", "gachamod.pack"] { if opens_here(key) { let _ = hkcu().delete_subkey_all(format!(r"Software\Classes\{key}")); } }
-    for lnk in [roaming_appdata().join(r"Microsoft\Windows\Start Menu\Programs\gachamod.lnk"), desktop().join("gachamod.lnk")] {
+    let desk = desktop();
+    for lnk in [roaming_appdata().join(r"Microsoft\Windows\Start Menu\Programs\gachamod.lnk"), desk.join("gachamod.lnk"), desk.join("gachamod quickstart.lnk")] {
         let _ = std::fs::remove_file(lnk);
+    }
+    // quickstarts for one game ("Zenless Zone Zero quickstart.lnk", gacha-core shortcuts.rs): their arguments,
+    // gachamod://play/<game>, are in the shortcut file as UTF-16
+    let play: Vec<u8> = "gachamod://play/".encode_utf16().flat_map(u16::to_le_bytes).collect();
+    for e in std::fs::read_dir(&desk).into_iter().flatten().flatten() {
+        if !e.file_name().to_string_lossy().ends_with(" quickstart.lnk") { continue; }
+        if std::fs::read(e.path()).is_ok_and(|b| b.windows(play.len()).any(|w| w == play.as_slice())) { let _ = std::fs::remove_file(e.path()); }
     }
 }
 
@@ -125,6 +134,98 @@ fn image_path(pid: u32) -> Option<String> {
 pub fn launch(exe: &Path) -> Result<(), String> {
     if !exe.exists() { return Err(format!("{} isn't there", exe.display())); }
     Command::new("explorer.exe").arg(exe).spawn().map(|_| ()).map_err(|e| format!("Couldn't start gachamod: {e}"))
+}
+
+/// gachamod starts with no window, only its tray icon (src-tauri background.rs BACKGROUND_ARG).
+pub const BACKGROUND_ARG: &str = "--background";
+
+/// Start gachamod in the background (`--background`) after an update it installed from there. Explorer, which
+/// `launch` goes through, can't pass arguments, so this keeps the rights gachamod should have another way:
+/// - setup isn't running as administrator (nor was the gachamod that started it): gachamod starts directly;
+/// - it is, and the player chose administrator (`admin`, which `jobs::finish` follows too): gachamod starts directly
+///   as administrator, without Windows asking again;
+/// - it is, but the player didn't choose that (gachamod was restarted as administrator for a game): gachamod starts
+///   as the signed-in user with the desktop's rights, the way gachamod's NSIS installer starts it after an update.
+///
+/// When none of that works (gachamod needs Windows' administrator prompt, no desktop to borrow rights from), it opens
+/// the usual way instead, window and all, so it never stays closed after an update without a word.
+pub fn launch_background(exe: &Path) -> Result<(), String> {
+    if !exe.exists() { return Err(format!("{} isn't there", exe.display())); }
+    let as_admin = pref("admin").as_deref() == Some("1");
+    let started = if !elevated() || as_admin {
+        let dir = exe.parent().unwrap_or(exe);
+        // its folder as the working folder, so setup's folder in %TEMP% can be deleted while gachamod runs
+        Command::new(exe).arg(BACKGROUND_ARG).current_dir(dir).spawn().map(|_| ()).map_err(|e| e.to_string())
+    } else {
+        start_as_user(exe, BACKGROUND_ARG)
+    };
+    started.or_else(|_| launch(exe))
+}
+
+/// Setup runs as administrator (it was started by a gachamod that did).
+fn elevated() -> bool {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    // SAFETY: the token is checked before use and closed; the current-process handle is a constant that needs no
+    // close; the out pointers are live locals of the size passed.
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 { return false; }
+        let mut e = TOKEN_ELEVATION { TokenIsElevated: 0 };
+        let mut n = 0u32;
+        let got = GetTokenInformation(token, TokenElevation, &mut e as *mut TOKEN_ELEVATION as *mut _, std::mem::size_of::<TOKEN_ELEVATION>() as u32, &mut n) != 0;
+        CloseHandle(token);
+        got && e.TokenIsElevated != 0
+    }
+}
+
+/// From a setup running as administrator, start `exe` with `args` as the signed-in user, not as administrator: with a
+/// copy of the desktop shell's (Explorer's) rights. This is how gachamod's NSIS installer starts gachamod after an
+/// update (Tauri's nsis_tauri_utils RunAsUser).
+fn start_as_user(exe: &Path, args: &str) -> Result<(), String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::Security::{DuplicateTokenEx, SecurityImpersonation, TokenPrimary, TOKEN_ADJUST_DEFAULT, TOKEN_ADJUST_SESSIONID, TOKEN_ASSIGN_PRIMARY, TOKEN_DUPLICATE, TOKEN_QUERY};
+    use windows_sys::Win32::System::Threading::{CreateProcessWithTokenW, OpenProcess, OpenProcessToken, PROCESS_INFORMATION, PROCESS_QUERY_INFORMATION, STARTUPINFOW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetShellWindow, GetWindowThreadProcessId};
+    let dir = exe.parent().ok_or("gachamod has no folder")?;
+    let app = wide(exe.as_os_str());
+    let cwd = wide(dir.as_os_str());
+    // the command line has to be writable
+    let mut line = wide(OsStr::new(&format!("\"{}\" {args}", exe.display())));
+    let fail = |what: &str| format!("Couldn't {what}: {}", std::io::Error::last_os_error());
+    // SAFETY: every handle is checked before use and closed once; the strings are NUL-ended and outlive the calls; the
+    // structs are zeroed C structs of the size Windows expects.
+    unsafe {
+        let shell = GetShellWindow();
+        if shell.is_null() { return Err("There's no desktop to start gachamod from.".into()); }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(shell, &mut pid);
+        if pid == 0 { return Err(fail("find the desktop")); }
+        let proc = OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid);
+        if proc.is_null() { return Err(fail("open the desktop")); }
+        let mut token: HANDLE = std::ptr::null_mut();
+        let opened = OpenProcessToken(proc, TOKEN_DUPLICATE, &mut token) != 0;
+        let err = fail("read the desktop's rights");
+        CloseHandle(proc);
+        if !opened { return Err(err); }
+        let mut user: HANDLE = std::ptr::null_mut();
+        let access = TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID;
+        let copied = DuplicateTokenEx(token, access, std::ptr::null(), SecurityImpersonation, TokenPrimary, &mut user) != 0;
+        let err = fail("copy the desktop's rights");
+        CloseHandle(token);
+        if !copied { return Err(err); }
+        let mut si: STARTUPINFOW = std::mem::zeroed();
+        si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+        let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
+        let ok = CreateProcessWithTokenW(user, 0, app.as_ptr(), line.as_mut_ptr(), 0, std::ptr::null(), cwd.as_ptr(), &si, &mut pi) != 0;
+        let err = fail("start gachamod");
+        CloseHandle(user);
+        if !ok { return Err(err); }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        Ok(())
+    }
 }
 
 /// Open a web page in the default browser.

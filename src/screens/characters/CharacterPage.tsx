@@ -105,7 +105,7 @@ export function CharacterPage({ game, name, roster, order, mods, setMods, loaded
   }, [name, strip.length, side, listed.length]);
 
   const defaultOutfit = async () => {
-    try { await changeStates(game, t("{name} is back in the default outfit", { name }), [], on.map((m) => m.id), mods); }
+    try { await changeStates(game, t("{name} is back in the default outfit", { name }), [], on.map((m) => m.id), mods, tn(on.length, "Turned off {n} mod", "Turned off {n} mods")); }
     catch (e) { toast(errorText(e), true); }
   };
 

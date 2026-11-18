@@ -149,8 +149,7 @@ function PackExport({ job, onClose }: { job: ExportJob; onClose: () => void }) {
       const r = await packs.export({
         game: job.game, modIds: job.modIds, profileId: job.profileId, scope: job.scope, files, includeVars: vars, title: title.trim() || null, dest,
       });
-      const file = r.path.split(/[\\/]/).pop() ?? r.path;
-      toast(t("Saved {file} ({size})", { file, size: formatBytes(r.size) }), false, {
+      toast(t("Saved the file ({size})", { size: formatBytes(r.size) }), false, {
         label: t("Show in folder"), run: () => { shell.revealPath(r.path).catch((e) => toast(errorText(e), true)); },
       });
       if (live.current) onClose();
@@ -291,14 +290,13 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
       const every = all.length === chosen.size && all.every((m) => chosen.has(m.index));
       const r = await packs.import(path, { only: every ? [] : [...chosen].sort((a, b) => a - b), onExisting, applyProfile: useProfile && canProfile });
       for (const g of ready) emitApp({ type: "library-refresh", game: g });
-      const switched = r.profileId !== null ? (active?.name ?? t("its profile")) : null;
       const parts = [
         r.added.length ? tn(r.added.length, "Added {n} mod.", "Added {n} mods.") : "",
-        r.queued ? tn(r.queued, "{n} download is on the way.", "{n} downloads are on the way.") : "",
+        r.queued ? tn(r.queued, "Queued {n} download.", "Queued {n} downloads.") : "",
         r.replaced.length ? tn(r.replaced.length, "Replaced {n} mod.", "Replaced {n} mods.") : "",
         r.skipped ? tn(r.skipped, "Skipped {n} mod you already have.", "Skipped {n} mods you already have.") : "",
         r.profiles.length > 1 ? tn(r.profiles.length, "Made {n} profile.", "Made {n} profiles.") : "",
-        switched ? t("Switched to {name}.", { name: switched }) : "",
+        r.profileId !== null ? t("Switched to the imported profile.") : "",
       ].filter(Boolean);
       const text = parts.length ? parts.join(lang === "zh-CN" ? "" : " ") : t("Nothing was imported.");
       const added = r.added;
@@ -317,7 +315,7 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
       } else toast(text);
       if (r.notes.length) toast(notesText(r.notes), true);
       if (r.missing.length) {
-        toast(tn(r.missing.length, "The file only names {names}. Ask the sender for it.", "The file only names {names}. Ask the sender for those.", { names: oxford(r.missing, 12) }));
+        toast(tn(r.missing.length, "{n} mod wasn't in the file, only its name. Ask the sender for it.", "{n} mods weren't in the file, only their names. Ask the sender for those."));
       }
       if (live.current) onClose();
     } catch (e) {

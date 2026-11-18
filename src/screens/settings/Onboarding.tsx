@@ -30,17 +30,17 @@ export async function welcome(list: GameState[] = allGames()) {
   startHints();
   const ready = list.filter((g) => g.modsDir && g.shown);
   if (ready.length) {
-    toast(t("Found {games}. gachamod sends its developer anonymous usage counts and crash reports", { games: listNames(ready) }), false,
+    toast(tn(ready.length, "Found {n} game. gachamod sends its developer anonymous usage counts and crash reports", "Found {n} games. gachamod sends its developer anonymous usage counts and crash reports"), false,
       { label: t("Turn those off"), run: () => go({ view: "settings", section: "privacy" }) });
   }
   const more = list.filter(canInstallLoader);
   if (more.length) {
-    toast(tn(more.length, "{games} is on this PC too, without a mod loader", "{games} are on this PC too, without a mod loader", { games: listNames(more) }), false,
+    toast(tn(more.length, "{n} more game on this PC has no mod loader", "{n} more games on this PC have no mod loader"), false,
       { label: t("Install mod loaders"), run: () => void installLoaders(more.map((g) => g.id)) });
   }
   void offerFormat(list);
   findOtherManagers(list).then((names) => {
-    if (names.length) toast(t("Found mods from {managers}", { managers: oxford(names) }), false, { label: t("Bring them in"), run: () => go({ view: "tools", section: "others" }) });
+    if (names.length) toast(t("Found mods from {managers}", { managers: oxford(names) }), false, { label: t("Import mods"), run: () => go({ view: "tools", section: "others" }) });
   }).catch(() => {});
 }
 
@@ -98,7 +98,7 @@ export function FormatIntro() {
       <b>{t("Pick how Mods looks")}</b>
       <p className="hint">{now.manager
         ? t("Mods is laid out like {manager} now, since {manager} is on this PC. Every layout has the same features", { manager: now.manager })
-        : t("Coming from another mod manager? Pick the layout you know. Every layout has the same features")}</p>
+        : t("If you used another mod manager, pick the layout you know. Every layout has the same features")}</p>
       <FormatPicker className="is-small" />
       <div className="row fmt-intro-a">
         <span className="hint grow">{t("You can change this in Settings, Appearance")}</span>
@@ -212,13 +212,13 @@ export function SetupPage({ looking, error, retry }: { looking: boolean; error?:
 
       {managers.length > 0 && (
         <div className="setup-note">
-          <span>{t("Found mods from {managers}. gachamod can bring them in with their on or off state, options and presets.", { managers: oxford(managers) })}</span>
-          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "others" })} title={t("Opens Tools, Share and import, with a button for each manager")}>{t("Bring them in")}</Button>
+          <span>{t("Found mods from {managers}. gachamod can import them with their on or off state, options and presets.", { managers: oxford(managers) })}</span>
+          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "others" })} title={t("Opens Tools, Share and import, with a button for each manager")}>{t("Import mods")}</Button>
         </div>
       )}
 
       <p className="hint setup-more">
-        {tx("Mods already in a folder XXMI doesn't know, or a game XXMI doesn't support, like Punishing: Gray Raven? {link} has those.", {
+        {tx("Add mods from a folder XXMI doesn't use, or a game it doesn't support like Punishing: Gray Raven, in {link}.", {
           link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title={t("Settings, Games: every game with its folders")}>{t("Settings, Games")}</button>,
         })}
       </p>

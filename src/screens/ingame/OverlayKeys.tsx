@@ -41,7 +41,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
     busy.current = true;
     try {
       const edit = await modKeys.rebind(game, m.modId, { ini: r.ini, section: r.section, field: l.field, index: l.index }, binding);
-      recordEdit(game, m.modId, edit, t("That's already the key"));
+      recordEdit(game, m.modId, edit, t("That's already the key"), t("Changed the key"));
       if (edit.backup && edit.note) onSay(t("{note}.", { note: tb(edit.note) }));
     } catch (e) { onSay(errorText(e), true); } finally { busy.current = false; }
   };

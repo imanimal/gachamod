@@ -130,10 +130,10 @@ export function ContextMenuHost() {
   return createPortal(<Panel key={cur.key} items={cur.items} x={cur.x} y={cur.y} depth={0} onClose={closeMenu} />, document.querySelector(".app") ?? document.body);
 }
 
-function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuEntry[]; x: number; y: number; depth: number; onClose: () => void; onBack?: () => void; flipLeft?: number }) {
+function Panel({ items, x, y, depth, onClose, onBack, flipLeft, byKey }: { items: MenuEntry[]; x: number; y: number; depth: number; onClose: () => void; onBack?: () => void; flipLeft?: number; /** opened with the keyboard or controller: focus its first item */ byKey?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
-  const [sub, setSub] = useState<{ index: number; x: number; y: number; left: number } | null>(null);
+  const [sub, setSub] = useState<{ index: number; x: number; y: number; left: number; byKey: boolean } | null>(null);
   const hoverTimer = useRef(0);
 
   useLayoutEffect(() => {
@@ -163,23 +163,37 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
     return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("blur", away); window.removeEventListener("resize", away); document.removeEventListener("scroll", away, true); };
   }, [depth, onClose]);
 
-  // focus the first item so arrows work at once
-  useEffect(() => { if (pos) (ref.current?.querySelector<HTMLElement>(".menu-i:not(:disabled)"))?.focus({ preventScroll: true }); }, [pos === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The menu itself takes focus with nothing picked, so a key shown on an item does it (Enter opens Details, not
+  // the first item) and the arrows start the picking. A submenu opened with Right, Enter or A, and a controller, whose
+  // A presses what's focused, land on the first item. A submenu the pointer opened leaves the focus where it was, so
+  // nothing in it looks picked before the pointer gets there.
+  useEffect(() => {
+    if (!pos) return;
+    const first = ref.current?.querySelector<HTMLElement>(".menu-i:not(:disabled)");
+    if ((depth && byKey) || document.documentElement.classList.contains("pad")) first?.focus({ preventScroll: true });
+    else if (!depth) ref.current?.focus({ preventScroll: true });
+  }, [pos === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = items.filter((i): i is MenuItem | "-" | { header: string } => !!i)
     .filter((i, n, a) => i !== "-" || (n > 0 && n < a.length - 1 && a[n - 1] !== "-"));
 
-  const openSub = (index: number, el: HTMLElement) => {
+  const openSub = (index: number, el: HTMLElement, byKey = false) => {
     const r = el.getBoundingClientRect();
-    setSub({ index, x: r.right - 4, y: r.top - 6, left: r.left + 4 });
+    setSub({ index, x: r.right - 4, y: r.top - 6, left: r.left + 4, byKey });
   };
 
   const onKey = (e: ReactKeyboardEvent) => {
     const btns = [...(ref.current?.querySelectorAll<HTMLElement>(":scope > .menu > .menu-i:not(:disabled)") ?? [])];
+    // keys from an open submenu bubble up through this one: they are the submenu's
+    if (e.target !== ref.current && !btns.includes(e.target as HTMLElement)) return;
     const i = btns.indexOf(document.activeElement as HTMLElement);
     const move = (to: number) => { e.preventDefault(); e.stopPropagation(); btns[(to + btns.length) % btns.length]?.focus(); };
+    // a key shown on an item does that item. Enter and Space press the picked item once there is one
+    const picked = i >= 0 && (e.key === "Enter" || e.key === " ");
+    const hit = picked ? undefined : list.find((it): it is MenuItem => !!it && it !== "-" && !("header" in it) && !!it.keys && !it.disabled && !it.items && sameKeys(it.keys, e));
+    if (hit) { e.preventDefault(); e.stopPropagation(); closeMenu(); hit.onClick?.(); return; }
     if (e.key === "ArrowDown") move(i + 1);
-    else if (e.key === "ArrowUp") move(i - 1);
+    else if (e.key === "ArrowUp") move(i < 0 ? btns.length - 1 : i - 1);
     else if (e.key === "Home") move(0);
     else if (e.key === "End") move(btns.length - 1);
     else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); (onBack ?? onClose)(); }
@@ -188,7 +202,7 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
       const el = document.activeElement as HTMLElement | null;
       const idx = Number(el?.dataset.idx ?? -1);
       const it = list[idx];
-      if (el && it && it !== "-" && !("header" in it) && it.items) { e.preventDefault(); e.stopPropagation(); openSub(idx, el); }
+      if (el && it && it !== "-" && !("header" in it) && it.items) { e.preventDefault(); e.stopPropagation(); openSub(idx, el, true); }
     } else if (e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.altKey) {
       // type a letter to jump to the next item starting with it
       const k = e.key.toLowerCase();
@@ -200,7 +214,7 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
   };
 
   return (
-    <div ref={ref} className="popover ctx" role="menu" onKeyDown={onKey} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    <div ref={ref} className="popover ctx" role="menu" tabIndex={-1} onKeyDown={onKey} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
       style={{ left: pos?.left ?? -9999, top: pos?.top ?? 0, visibility: pos ? "visible" : "hidden", zIndex: 95 + depth }}>
       <div className="menu">
         {list.map((it, n) => {
@@ -218,10 +232,17 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
               onMouseEnter={(e) => {
                 window.clearTimeout(hoverTimer.current);
                 const el = e.currentTarget;
-                hoverTimer.current = window.setTimeout(() => { if (hasSub) openSub(n, el); else setSub(null); }, hasSub ? 90 : 160);
+                hoverTimer.current = window.setTimeout(() => {
+                  if (hasSub && sub?.index === n) return;
+                  // the submenu about to close or change may hold the focus: hand it back so this menu's keys and Escape still work
+                  if (ref.current?.querySelector(":scope > .ctx")?.contains(document.activeElement)) ref.current?.focus({ preventScroll: true });
+                  if (hasSub) openSub(n, el); else setSub(null);
+                }, hasSub ? 90 : 160);
               }}
+              onMouseLeave={() => window.clearTimeout(hoverTimer.current)}
               onClick={(e) => {
-                if (hasSub) { openSub(n, e.currentTarget); return; }
+                // Enter, Space or A on it is a click with no mouse press (detail 0)
+                if (hasSub) { openSub(n, e.currentTarget, e.detail === 0); return; }
                 closeMenu();
                 it.onClick?.();
               }}>
@@ -237,11 +258,24 @@ function Panel({ items, x, y, depth, onClose, onBack, flipLeft }: { items: MenuE
       {sub && (() => {
         const it = list[sub.index];
         if (!it || it === "-" || "header" in it || !it.items) return null;
-        return <Panel items={it.items} x={sub.x} y={sub.y} depth={depth + 1} flipLeft={sub.left} onClose={onClose}
+        return <Panel key={`${sub.index}${sub.byKey ? "k" : ""}`} items={it.items} x={sub.x} y={sub.y} depth={depth + 1} flipLeft={sub.left} byKey={sub.byKey} onClose={onClose}
           onBack={() => { const i = sub.index; setSub(null); window.setTimeout(() => ref.current?.querySelector<HTMLElement>(`[data-idx="${i}"]`)?.focus(), 0); }} />;
       })()}
     </div>
   );
+}
+
+/** A key name as items write it ("Del", "Shift+Space", "Ctrl+K", "F2", "?") and as a key press gives it, the same
+ *  way: lower case, modifiers in one order. */
+const KEY_NAMES: Record<string, string> = { " ": "space", delete: "del", escape: "esc", arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right" };
+function sameKeys(keys: string, e: ReactKeyboardEvent): boolean {
+  const parts = keys.toLowerCase().split("+").map((p) => p.trim());
+  const key = parts.pop() ?? "";
+  const want = [parts.includes("ctrl"), parts.includes("alt"), parts.includes("shift"), KEY_NAMES[key] ?? key].join("+");
+  const k = e.key.toLowerCase();
+  // "?" already needs Shift: a symbol's Shift is part of the symbol
+  const symbol = e.key.length === 1 && !/[\p{L}\p{N} ]/u.test(e.key);
+  return want === [e.ctrlKey || e.metaKey, e.altKey, e.shiftKey && !symbol, KEY_NAMES[k] ?? k].join("+");
 }
 
 /** A small wrapper that gives its child area a menu (for places that aren't a single element). */

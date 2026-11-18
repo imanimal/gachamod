@@ -165,7 +165,8 @@ function ignoreClash(game: string, c: KeyClash, on: boolean) {
   const now = (all[game] ?? []).filter((x) => x !== k);
   all[game] = on ? [...now, k] : now;
   if (!all[game]!.length) delete all[game];
-  void ignoredClashesPref.set(all, on ? t("Ignored the {key} clash", { key: c.label }) : t("Showing the {key} clash again", { key: c.label }));
+  // the clash moves between the list and Ignored, so the toast with Undo stays
+  void ignoredClashesPref.set(all, on ? t("Ignored the {key} clash", { key: c.label }) : t("Showing the {key} clash again", { key: c.label }), true);
 }
 
 export function KeyClashesPanel() {
@@ -184,10 +185,10 @@ export function KeyClashesPanel() {
   useEffect(() => onKeysChanged((g) => { if (g === game && live.current) { reload(); reloadGated(); } }), [game, reload, reloadGated, live]);
   useEffect(() => { setSkipped([]); setGatedOpen(false); }, [game]);
 
-  const edit = async (what: string, modId: string, job: () => Promise<KeyEdit>, fallback: string) => {
+  const edit = async (what: string, modId: string, job: () => Promise<KeyEdit>, fallback: string, brief: string) => {
     if (!game) return;
     setBusy(what);
-    try { recordEdit(game, modId, await job(), fallback); } catch (e) { toast(errorText(e), true); } finally { if (live.current) setBusy(null); }
+    try { recordEdit(game, modId, await job(), fallback, brief); } catch (e) { toast(errorText(e), true); } finally { if (live.current) setBusy(null); }
   };
   const all = async (on: boolean) => {
     if (!game) return;
@@ -240,11 +241,12 @@ export function KeyClashesPanel() {
                       {k.fixable && !k.onScreen && (
                         <Button size="sm" busy={busy === `os${k.modId}`} disabled={!!busy && busy !== `os${k.modId}`}
                           title={t("Make {name}'s keys work only while {character} is on screen. Ends the clash unless the other mod is for the same character", { name: k.name, character: k.character ?? t("its character") })}
-                          onClick={() => edit(`os${k.modId}`, k.modId, () => modKeys.onScreen(game!, k.modId, true), t("The toggles already work only while on screen"))}>{t("Only while on screen")}</Button>
+                          onClick={() => edit(`os${k.modId}`, k.modId, () => modKeys.onScreen(game!, k.modId, true), t("The toggles already work only while on screen"),
+                            t("Made the mod's toggles work only while on screen"))}>{t("Only while on screen")}</Button>
                       )}
                       <KeyChip line={{ label: k.label, field: k.field, original: null, originalLabel: null, off: false }} disabled={!!busy}
                         title={t("Change this key in {name}: click, then press the new key, combination or controller buttons", { name: k.name })}
-                        onBinding={(b) => edit(`k${k.modId}`, k.modId, () => modKeys.rebind(game!, k.modId, { ini: k.ini, section: k.section, field: k.field, index: k.index }, b), t("That's already the key"))} />
+                        onBinding={(b) => edit(`k${k.modId}`, k.modId, () => modKeys.rebind(game!, k.modId, { ini: k.ini, section: k.section, field: k.field, index: k.index }, b), t("That's already the key"), t("Changed the key"))} />
                     </span>
                   </li>
                 ))}
@@ -296,7 +298,7 @@ export function KeyClashesPanel() {
                     <span className="kc-acts">
                       <Button size="sm" variant="ghost" icon="undo" busy={busy === `out${g.modId}`} disabled={!!busy && busy !== `out${g.modId}`}
                         title={t("Take the check out of {name}: its toggles work any time again and its ini goes back to how it was. Undo puts the check back", { name: g.name })}
-                        onClick={() => edit(`out${g.modId}`, g.modId, () => modKeys.onScreen(game!, g.modId, false), t("Nothing to take out"))}>{t("Take it out")}</Button>
+                        onClick={() => edit(`out${g.modId}`, g.modId, () => modKeys.onScreen(game!, g.modId, false), t("Nothing to take out"), t("Took the on-screen check out of the mod"))}>{t("Take it out")}</Button>
                     </span>
                   </li>
                 ))}
@@ -394,7 +396,7 @@ export function PacksPanel() {
 
   const share = (scope: "game" | "all") => {
     if (!g) return;
-    if (scope === "game" && g.modCount === 0) { toast(t("There are no {game} mods to share yet", { game: gameShort(g) })); return; }
+    if (scope === "game" && g.modCount === 0) { toast(t("This game has no mods to share yet")); return; }
     if (scope === "all" && withMods.length === 0) { toast(t("There are no mods to share yet")); return; }
     emitApp({ type: "export-pack", game: g.id, scope });
   };

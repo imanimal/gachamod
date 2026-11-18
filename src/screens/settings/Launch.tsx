@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Button, Panel, Segmented, Select, TextField, Toggle, Waiting } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { placeFor } from "../../lib/places";
+import { backgroundPref } from "../../lib/prefs";
 import { saved } from "../../ui/motion";
 import { errorKind, errorText, launchConfig, type GameId, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
 import { currentGame, go, useGame, useGames } from "../../lib/store";
@@ -259,6 +260,7 @@ function LoadError({ text }: { text: string }) {
 
 function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: ReactNode }) {
   const { cfg, update } = l;
+  const background = backgroundPref.use();
   if (l.loadError) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><LoadError text={l.loadError} /></Panel>;
   if (!cfg) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><Waiting what={t("Reading launch options")} /></Panel>;
 
@@ -316,7 +318,7 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
         </details>
       )}
       <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label={t("Close gachamod when the game starts")}
-        hint={t("Automatic reloads stop while gachamod is closed")} />
+        hint={background ? t("gachamod moves to the tray, so automatic reloads keep working") : t("Automatic reloads stop while gachamod is closed")} />
     </Panel>
   );
 }

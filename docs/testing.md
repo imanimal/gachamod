@@ -32,14 +32,11 @@ Rather not send from the app? Open an issue with the Game check form on GitHub a
 1. Make an account at posthog.com. It asks for US or EU hosting when you sign up; either works.
 2. In the project's settings, copy the project API key (it starts with `phc_`). It can only send events, so it's
    fine inside the installer.
-3. Put it in a file named `.env` at the repo root (git ignores it):
-
-   ```
-   GACHAMOD_POSTHOG_KEY=phc_your_key
-   GACHAMOD_POSTHOG_HOST=https://eu.i.posthog.com
-   ```
-
-   Leave out the second line for US hosting. `npm run installer` reads the file and says where it sends.
+3. Run `npm run posthog-key` and paste the key. Typing is hidden. It asks both PostHog servers which one knows the
+   key and saves the key and server to `%USERPROFILE%\.tauri\gachamod.env`, next to the update signing key, so a
+   release made from a worktree finds it too. `npm run installer` reads the file and says where it sends. A `.env`
+   at the repo root with the same two lines (`GACHAMOD_POSTHOG_KEY`, `GACHAMOD_POSTHOG_HOST`) works as well and wins
+   over the saved one.
 4. Build with `npm run installer` and hand out that installer. Builds from `npm run app` don't send usage counts or
    crashes (feedback and checks still go, if the key was set when they were built).
 
@@ -135,6 +132,31 @@ PC without XXMI, check:
 - Whether the loaders need the Visual C++ runtime on a fresh Windows, and what the game does without it.
 - GitHub's limit for downloads without an account (60 API calls an hour per address) and the message it gives.
 - Antivirus holding or removing `d3d11.dll` or `3dmloader.dll` right after the copy.
+
+### Still to check: desktop shortcuts and setup's choices
+
+Built with `cargo check`, `tsc` and the demo only. With an installer from `npm run installer`:
+
+- A fresh install with all three boxes on: both shortcuts on the desktop, quickstart's with the purple play icon,
+  `quickstart.ico` next to gachamod.exe, and Windows asks for administrator when either one opens gachamod.
+- Quickstart with gachamod closed, and again with it open: the game gachamod last had open starts with mods.
+- Quickstart with gachamod closed: no window shows, a tray icon does, F7 opens the menu over the game, and about 5 s
+  after the game is up Task Manager shows no msedgewebview2.exe under gachamod. After the game closes gachamod stays
+  in the tray (or is gone 15 s later with Keep running in the background off). With Open gachamod with quickstart on,
+  the window opens as before. With a game's folders unset, the window shows with the toast.
+- A window that comes back from the tray (click, Open gachamod, the desktop shortcut, a GameBanana link, the menu
+  over the game's Settings) has its normal size (maximized on a small screen), draws, not black, and the link or page
+  it was opened for shows.
+- The first close of a fresh install asks once; Esc keeps the window and asks again next close; Keep running and Quit
+  are remembered. The tray menu's words are in the app's language. Play time on the year card counts a session
+  played with the window closed.
+- In the background with an update downloaded: it installs with no window and gachamod comes back in the tray on the
+  new version.
+- Boxes off, then Repair: the desktop stays as chosen. Settings, General's Remove, then Repair: the shortcut stays off.
+- Quickstart's icon on the desktop turns into the open game's icon with the quickstart badge bottom right, and
+  changes when you switch games (after a Repair too). A game's own quickstart from Settings has that game's icon,
+  reads well at small desktop icon sizes, and starts that game whichever game was open.
+- Uninstall takes both shortcuts, the games' own quickstarts and `quickstart.ico` away, and the folder goes.
 
 ### Still to check: starting games and the reload key
 
