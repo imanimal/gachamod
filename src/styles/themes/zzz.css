@@ -116,6 +116,7 @@
   /* the slanted block's clip-path would cut its own focus ring, so the whole capsule takes it */
   .seg:has(> .seg-o.on:focus-visible), &.kbd .seg:has(> .seg-o.on:focus) { outline: 2px solid var(--ring); outline-offset: 2px; }
   &.pad .seg:has(> .seg-o.on:focus) { outline-width: 3px; outline-offset: 3px; }
+  .seg-o.on:focus-visible, &.kbd .seg-o.on:focus { outline: none; }
   .seg-sm .seg-o { height: 1.55rem; }
 
   /* ── tabs: real folder tabs; the open one is yellow and stands taller ── */

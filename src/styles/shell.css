@@ -202,7 +202,9 @@
 .side-p:hover { background: var(--hover); color: var(--text); }
 /* the profile list scrolls and clips 3px out, so the focus ring sits inside the row */
 .side-prof-list .side-p:focus-visible, html.kbd .side-prof-list .side-p:focus { outline-offset: -2px; }
-html.pad .side-prof-list .side-p:focus { outline-offset: -3px; box-shadow: none; }
+html.pad .side-prof-list .side-p:focus { outline-offset: -3px; }
+/* the controller's glow would be cut too; the open profile keeps its colour stripe */
+html.pad .side-prof-list .side-p:focus:not(.on) { box-shadow: none; }
 .side-p.on { background: var(--surface); color: var(--text); font-weight: 650; box-shadow: inset 3px 0 0 var(--p-color, var(--accent)); }
 /* the picture sits the same distance (--p-in) from the row's top, bottom and left edge, so it stays clear of the
    row's ring or stripe in every theme, round rows included */
@@ -273,7 +275,8 @@ html.pad .side-prof-list .side-p:focus { outline-offset: -3px; box-shadow: none;
   .side > .side-nav { flex-shrink: 1; min-height: 0; overflow: hidden auto; scrollbar-width: none; }
   /* scrolling, the nav clips at its edges: the focus ring goes inside the button */
   .side > .side-nav .nv:focus-visible, html.kbd .side > .side-nav .nv:focus { outline-offset: -2px; }
-  html.pad .side > .side-nav .nv:focus { outline-offset: -3px; box-shadow: none; }
+  html.pad .side > .side-nav .nv:focus { outline-offset: -3px; }
+  html.pad .side > .side-nav .nv:focus:not(.on) { box-shadow: none; }
   .side > .side-prof { flex-shrink: 1000; }
 }
 @container app (max-height: 40rem) {

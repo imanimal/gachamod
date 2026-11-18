@@ -18,7 +18,8 @@
 .pg-nav-i.on { background: var(--accent-soft); color: var(--accent-ink); }
 /* the list scrolls and clips at its sides, so the focus ring sits inside the item */
 .pg-nav-i:focus-visible, html.kbd .pg-nav-i:focus { outline-offset: -2px; }
-html.pad .pg-nav-i:focus { outline-offset: -3px; box-shadow: none; }
+html.pad .pg-nav-i:focus { outline-offset: -3px; }
+html.pad .pg-nav-i:focus:not(.on) { box-shadow: none; }
 
 /* The pages sit on top of each other. The stage reaches a little past the content on each side, so focus rings and
    theme frames near the edge aren't cut off. */

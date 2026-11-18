@@ -69,8 +69,8 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 /* a short window scrolls the body; its cards never squash and cut off their buttons */
 
 /* a picked swatch's ring reaches up to 5px past it (New Eridu) and the next one's up to 4px, so the gap keeps them
-   apart and the padding keeps the ring inside the row */
-.set-accents { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: calc(var(--s-2) + 7px); padding: 6px; }
+   apart. The row's own padding holds the ring, so the swatches line up with the controls in the other rows */
+.set-accents { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: calc(var(--s-2) + 7px); }
 .swatch-pick-w { position: relative; display: inline-flex; flex: none; }
 .swatch-pick-w input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .swatch-pick { display: grid; place-items: center; }
