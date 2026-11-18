@@ -14,6 +14,7 @@ import { registerModtoolsDemo } from "./modtools";
 import { registerOnlineDemo } from "./online";
 import { registerOtherKeysDemo } from "./otherkeys";
 import { registerReportDemo } from "./report";
+import { registerStorageDemo } from "./storage";
 import { registerSystemDemo } from "./system";
 
 export function installDemo() {
@@ -40,5 +41,6 @@ export function installDemo() {
   registerOtherKeysDemo();
   registerExtensionsDemo();
   registerReportDemo();
+  registerStorageDemo();
   registerAccountDemo();
 }

@@ -17,6 +17,8 @@ export const TOOL_PAGES: PageInfo[] = [
     keywords: "switch skins in game overlay" },
   { id: "packs", label: t("Share and import"), icon: "package", tip: t("Share mods and profiles as a .gachamod file, or bring in mods from another mod manager"),
     keywords: "share and move export import" },
+  { id: "disk", label: t("Storage"), icon: "box", tip: t("What takes disk space, by game, category or character, the biggest mods and mods installed twice"),
+    keywords: "disk space storage size cleanup clean duplicates big biggest" },
   { id: "makers", label: t("Mod makers"), icon: "code", tip: t("Reloading mods in game, the shader cache, 3DMigoto's files, log and switches, and looking up a hash"),
     keywords: "developer dev tools modding" },
 ];
@@ -31,6 +33,9 @@ export const TOOL_SECTIONS: SectionInfo[] = [
   { id: "keylist", page: "ingame", label: t("Key list in game"), icon: "keyboard", keywords: "mod keys toggles hotkeys help f8 in game overlay cheat sheet" },
   { id: "packs", page: "packs", label: t(".gachamod files"), icon: "package", keywords: "export import share send friend backup gachamod pack file links library profiles" },
   { id: "others", page: "packs", label: t("Mods from other managers"), icon: "swap", keywords: MOVE_KEYWORDS },
+  { id: "disk", page: "disk", label: t("Disk space"), icon: "box", keywords: "disk space storage size cleanup clean free up drive full trash downloads archives backups shader cache by game by character category" },
+  { id: "disk-big", page: "disk", label: t("Biggest mods"), icon: "sort", keywords: "big biggest largest heavy mods size sort off unused" },
+  { id: "disk-dupes", page: "disk", label: t("Mods installed twice"), icon: "layers", keywords: "duplicates duplicate copies twice same mod clean" },
   { id: "dev", page: "makers", label: t("Files and logs"), icon: "bug", keywords: "shader cache clear frame dumps frameanalysis log d3dx ini d3dx_user wipe reload loader folder shaderfixes 3dmigoto saved options" },
   { id: "migoto", page: "makers", label: t("Mod maker switches"), icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers" },
   { id: "hash", page: "makers", label: t("Find a hash"), icon: "search", keywords: "hash lookup search which mod uses texture buffer ib vb" },

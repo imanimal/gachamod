@@ -10,4 +10,5 @@ export * from "./modtools";
 export * from "./online";
 export * from "./otherkeys";
 export * from "./report";
+export * from "./storage";
 export * from "./system";

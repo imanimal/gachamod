@@ -14,4 +14,5 @@ pub mod online;
 pub mod otherkeys;
 pub mod profiles;
 pub mod report;
+pub mod storage;
 pub mod system;
