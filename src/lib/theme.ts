@@ -147,7 +147,8 @@ export function applyGameTheme(game: GameState | null) {
   write(K.paint, JSON.stringify({ game: game?.id ?? "", vars, custom: custom ? { id: custom.id, base: custom.base, scheme: custom.scheme, css, layout: custom.layout } : null }));
   const layout = Object.fromEntries(Object.entries(layoutPick()).filter(([k, v]) => LAYOUT_DEFAULTS[k as keyof LayoutPrefs] !== v));
   saveLook({
-    theme: info.id, scheme, accent: accentPick(info.id), full: !custom && schemeMode() !== "game", motion: motion.ui ? "full" : "reduced", vars, layout,
+    theme: info.id, scheme, accent: accentPick(info.id), full: !custom && schemeMode() !== "game", motion: motion.ui ? "full" : "reduced",
+    motionScroll: motion.scroll ? "on" : "off", motionBg: motion.bg ? "on" : "off", vars, layout,
     custom: custom ? { id: custom.id, css, layout: custom.layout } : null,
     game: game ? { id: game.id, name: game.name, short: game.short, importer: game.importer, accent } : null,
   });

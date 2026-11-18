@@ -138,7 +138,7 @@ export function LayoutSection() {
           <Select value={String(size)} onChange={(v) => { setTextSize(Number(v)); setSize(Number(v)); }}
             options={SIZES.map((s) => ({ value: String(s), label: t("{size} px", { size: s }) }))} />
         </SetRow>
-        <SetRow id="set-zoom" label={t("Zoom")} hint={t("The whole window bigger or smaller. Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets")}>
+        <SetRow id="set-zoom" label={t("Zoom")} hint={t("Makes the whole window bigger or smaller. Ctrl+= and Ctrl+- work anywhere, Ctrl+0 resets")}>
           <ZoomControl />
         </SetRow>
         <MotionRows />

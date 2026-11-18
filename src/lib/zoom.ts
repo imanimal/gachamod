@@ -1,6 +1,6 @@
 // Zoom and text size. Zoom scales the whole window, pictures and spacing too: the webview's zoom in the app, CSS
-// zoom on <html> in the browser demo. Ctrl+= and Ctrl+- step it, Ctrl+0 resets, and the level shows for a moment in
-// the corner. Text size is separate: every size is in em from --fs, so one number scales only the text (pixel icons
+// zoom on <html> in the browser demo. Ctrl+= and Ctrl+- step it, Ctrl+0 resets, and the level shows for a moment at
+// the top of the window. Text size is separate: every size is in em from --fs, so one number scales only the text (pixel icons
 // stay crisp at their own sizes). Both are remembered.
 import { inTauri } from "./tauri";
 
@@ -54,7 +54,7 @@ export function stepZoom(dir: 1 | -1) {
 /** The remembered zoom, at startup. */
 export function applyZoom() { const z = getZoom(); if (z !== 1) show(z); }
 
-/** The level in the window's corner for a moment after a key changes it. */
+/** The level at the top of the window for a moment after a key changes it. */
 let badge: HTMLElement | null = null;
 let badgeTimer = 0;
 function flashLevel(z: number) {

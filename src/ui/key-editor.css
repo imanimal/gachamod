@@ -47,7 +47,6 @@
   .ke-keys { grid-column: 1; justify-content: flex-start; }
   .ke-on { grid-row: 1; grid-column: 2; }
 }
-@media (prefers-reduced-motion: reduce) { .ke-chip-live { animation: none; } }
 
 /* key clashes in Tools: hairline rows, the key as the heading and the mods that use it indented under it */
 .kc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container: ke / inline-size; }

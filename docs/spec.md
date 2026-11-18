@@ -1095,7 +1095,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   previews), layout (density, sidebar side, nav style, buttons), text size, zoom, animations and first-start hints ("Layout, text size and animations");
   themes keep their designed corners (the old Corners option is gone, and a saved "corners" is ignored). Zoom
   (`lib/zoom.ts`, "gm.zoom") scales the whole window with the webview's zoom (CSS zoom on <html> in the browser demo):
-  Ctrl+= and Ctrl+- step it, Ctrl+0 resets, the level shows in the corner for a moment, and the Zoom row has minus,
+  Ctrl+= and Ctrl+- step it, Ctrl+0 resets, the level shows at the top of the window for a moment, and the Zoom row has minus,
   reset and plus buttons. Text size stays separate. Animations are three switches: Interface animations
   ("gm.motion", html[data-motion]), Smooth scrolling ("gm.motion.scroll", html[data-motion-scroll]) and Theme
   background motion ("gm.motion.bg", html[data-motion-bg]: game themes' moving backgrounds and seasonal touches).
