@@ -15,7 +15,7 @@ export const TOOL_PAGES: PageInfo[] = [
   { id: "conflicts", label: t("Conflicts"), icon: "layers", tip: t("Mods that are on and change the same parts of a model, or use the same keys") },
   { id: "ingame", label: t("In-game menu"), icon: "swap", tip: t("The menu over the game for picking skins without a reload, and the key list"),
     keywords: "switch skins in game overlay" },
-  { id: "packs", label: t("Sharing"), icon: "package", tip: t("Share mods and profiles as a .gachamod file, or bring in mods from another mod manager"),
+  { id: "packs", label: t("Share and import"), icon: "package", tip: t("Share mods and profiles as a .gachamod file, or bring in mods from another mod manager"),
     keywords: "share and move export import" },
   { id: "makers", label: t("Mod makers"), icon: "code", tip: t("Reloading mods in game, the shader cache, 3DMigoto's files and log, and looking up a hash"),
     keywords: "developer dev tools modding" },

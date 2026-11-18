@@ -1,4 +1,4 @@
-// Which other mod managers have mods gachamod can bring in, for the first-start offer. Tools > Sharing,
+// Which other mod managers have mods gachamod can bring in, for the first-start offer. Tools > Share and import,
 // "Mods from other managers" does the moving (screens/modtools/MovePanel.tsx).
 import { imm, migrate, nrmm, type GameState } from "./api";
 import { t } from "./i18n";

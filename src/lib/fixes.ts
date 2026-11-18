@@ -408,7 +408,7 @@ async function runFixers(game: GameId, rows: Array<{ modId: string; tool: ToolLi
         const rest = [...healthNow(game)].filter(([id, h]) => h.status === "unfixable" && h.tool?.url === tool.url && !ids.includes(id) && !fixerBusy.has(`mod:${id}`)).map(([id]) => id);
         rest.forEach((id) => setBusy(`mod:${id}`, true));
         setBusy("waiting", true);
-        toast(t("{tool} is open in its own window. Run it there. gachamod sees what it changes, so the window can stay open", { tool: named(f.tool) }), false, { label: t("Stop waiting"), run: stopWaiting });
+        toast(t("{tool} is open in a separate window. Run it there. gachamod sees what it changes, so the window can stay open", { tool: named(f.tool) }), false, { label: t("Stop waiting"), run: stopWaiting });
         try {
           const runs = await fixersApi.runAll(game, f.fileId, [...ids, ...rest]);
           for (const run of runs) done.push({ run, tool: named(f.tool), quiet: !ids.includes(run.modId) });

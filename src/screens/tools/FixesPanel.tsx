@@ -59,7 +59,7 @@ export function FixesPanel({ game }: { game: GameId }) {
           onClick={() => void fixWarningsPref.set(!warn, warn ? t("Muted the broken mod warnings") : t("Showing the broken mod warnings again"))}>{warn ? t("Mute warnings") : t("Unmute warnings")}</Button>}
         {waiting && (
           <Button size="sm" variant="ghost" onClick={stopWaiting}
-            title={t("The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far")}>{t("Stop waiting")}</Button>
+            title={t("The fixer is open in a separate window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far")}>{t("Stop waiting")}</Button>
         )}
         {warn && !noData && fixable.length > 0 && (
           <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}

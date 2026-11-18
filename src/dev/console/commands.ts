@@ -97,7 +97,7 @@ export const COMMANDS: Command[] = [
     } },
   { name: "reset", demo: true, help: "Put back every manager the demo moved mods out of, so the moves can run again",
     run: async () => { const s = await demoOnly(); if (!s) return; s.resetMoves(); print("Every manager has its mods again"); } },
-  { name: "managers", args: "[game]", help: "Open Tools > Sharing, Mods from other managers (zzz and gi have the most)", complete: () => gameIds(),
+  { name: "managers", args: "[game]", help: "Open Tools > Share and import, Mods from other managers (zzz and gi have the most)", complete: () => gameIds(),
     run: ([id]) => { if (id && !game(id)) return; go({ view: "tools", section: "others" }); } },
   { name: "firststart", args: "[fresh]", demo: true, help: "Start over as a first start; fresh also takes the mod loaders away (setup page)",
     complete: () => ["fresh"],
@@ -177,7 +177,7 @@ function watched(game: string, what: string) {
     }
     demoEmit("app-log", { level: "info", text: `Watching ${game}'s Mods folder: ${what.toLowerCase()}, rescanning` });
     demoEmit("library-changed", { game });
-    print(`${what}. Mods updates on its own`);
+    print(`${what}. Mods updates by itself`);
   });
 }
 

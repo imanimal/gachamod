@@ -240,7 +240,7 @@ export function KeyClashesPanel() {
                       {k.fixable && !k.onScreen && (
                         <Button size="sm" busy={busy === `os${k.modId}`} disabled={!!busy && busy !== `os${k.modId}`}
                           title={t("Make {name}'s keys work only while {character} is on screen. Ends the clash unless the other mod is for the same character", { name: k.name, character: k.character ?? t("its character") })}
-                          onClick={() => edit(`os${k.modId}`, k.modId, () => modKeys.onScreen(game!, k.modId, true), t("Its toggles already work only while on screen"))}>{t("Only while on screen")}</Button>
+                          onClick={() => edit(`os${k.modId}`, k.modId, () => modKeys.onScreen(game!, k.modId, true), t("The toggles already work only while on screen"))}>{t("Only while on screen")}</Button>
                       )}
                       <KeyChip line={{ label: k.label, field: k.field, original: null, originalLabel: null, off: false }} disabled={!!busy}
                         title={t("Change this key in {name}: click, then press the new key, combination or controller buttons", { name: k.name })}

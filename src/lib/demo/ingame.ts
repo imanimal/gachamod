@@ -206,7 +206,7 @@ export function registerIngameDemo() {
     },
     overlay_hide: async () => {},
     // the demo has one window, so there is no other one to bring forward
-    overlay_open_app: async () => { fail("That page is in gachamod's own window, which the demo doesn't have"); },
+    overlay_open_app: async () => { fail("That page is in the main gachamod window, which the demo doesn't have"); },
     app_restart_admin: async () => { fail("The demo can't restart as administrator"); },
     overlay_pick: async ({ game, group, slot }) => {
       await demoWait(150);

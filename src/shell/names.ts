@@ -44,7 +44,7 @@ const SECTIONS: Record<string, string> = {
   feedback: t("Feedback and privacy"), privacy: t("Usage counts and crash reports"), logs: t("Log files"),
   about: t("About and updates"), updates: t("gachamod updates"), transfer: t("Back up or move your settings"), repair: t("Repair, reset or uninstall"),
   launch: t("Launch"), problems: t("Problems"), fixes: t("Fixes"), conflicts: t("Conflicts"), "key-clashes": t("Key clashes"),
-  ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Sharing"), others: t("Mods from other managers"),
+  ingame: t("In-game menu"), keylist: t("Key list in game"), packs: t("Share and import"), others: t("Mods from other managers"),
   makers: t("Mod makers"), hash: t("Find a hash"),
   history: t("History"), dev: t("Dev tools"), extensions: t("Extensions"),
 };

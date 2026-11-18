@@ -103,7 +103,7 @@ function Options({ mod, vars, running, stillCurrent, onSaved }:
 
   return (
     <Panel title={t("Options")} icon="sliders" className="mi-panel mi-opts-panel">
-      {running && <p className="mi-running hint">{t("Close the game to change options. It saves its own values when it closes.")}</p>}
+      {running && <p className="mi-running hint">{t("Close the game to change options. The game saves its values when it closes.")}</p>}
       {!mod.enabled && <p className="mi-off hint">{t("This mod is off. Options you pick now apply when you turn it on.")}</p>}
       <fieldset className="mi-opts" disabled={running}>
         {vars.map((v) => {
@@ -157,7 +157,7 @@ function Merged({ mod, info, running }: { mod: ModEntry; info: MergedInfo; runni
       <p className="hint">{tn(n, "Made from {n} mod with the merge script. Its key switches between them:", "Made from {n} mods with the merge script. Its key switches between them:")} {info.variants.map((v) => v.name).join(", ")}</p>
       <div className="row">
         <Button icon="layers" busy={busy} disabled={!!why} onClick={() => void split()}
-          title={why ?? t("Each one becomes a mod of its own with its own card. The one showing now stays on. Undo puts the merged mod back")}>
+          title={why ?? t("Each one becomes a separate mod with a card. The one showing now stays on. Undo puts the merged mod back")}>
           {tn(n, "Split into {n} mod", "Split into {n} mods")}
         </Button>
         {!why && info.copyFiles > 0 && (

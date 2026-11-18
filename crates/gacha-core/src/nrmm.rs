@@ -99,7 +99,7 @@ pub(crate) fn shows(rel: &str, dir: &Path, slots: &HashMap<u32, u32>) -> bool {
 pub(crate) fn gated(rel: &str, dir: &Path) -> bool { group_of(rel).is_some() && slot_of(dir).is_some() }
 
 pub(crate) fn managed_error() -> Error {
-    Error::Conflict("No Reload Mod Manager picks which mod of this group shows. Move your mods out of it first (Tools, Sharing).".into())
+    Error::Conflict("No Reload Mod Manager picks which mod of this group shows. Move your mods out of it first (Tools, Share and import).".into())
 }
 
 // ── reading the layout ──

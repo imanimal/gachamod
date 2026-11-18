@@ -481,7 +481,7 @@ fn wrap_with(text: &str, group: u32, slot: u32, raise: &HashMap<String, u32>) ->
 /// Reasons a mod can't be switched live, before touching anything.
 fn refuse(m: &ModEntry, inis: &[(PathBuf, String, String)]) -> Option<String> {
     if m.rel_path.to_ascii_lowercase().contains("_managed_") || inis.iter().any(|(_, _, t)| t.contains("modmanageragl")) {
-        return Some("No Reload Mod Manager manages it. Move your mods out of it first (Tools, Sharing)".into());
+        return Some("No Reload Mod Manager manages it. Move your mods out of it first (Tools, Share and import)".into());
     }
     const LIBS: [&str; 8] = ["orfix", "rabbitfx", "slotfix", "healthbar", "texfx", "global\\", "offsetfix", "skinfix"];
     const CORES: [&str; 6] = ["gimi", "srmi", "wwmi", "zzmi", "efmi", "himi"];

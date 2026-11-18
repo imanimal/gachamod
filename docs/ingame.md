@@ -758,6 +758,10 @@ section's name names a help panel (`[KeyHelp]`, words like help, info, guide, ho
 words), when every variable such a section sets does (`$showinfo`), or when the mod loads a picture with such a name
 (`ToggleGuide.dds`). The key that shows the mod's help is kept when found (`helpKey`).
 
+Tools, Key list in game marks those mods "Has menu". Above the list, "Leave out mods with menus" turns `own` off and
+puts mods listed by hand back to automatic, and "Leave out all" picks every listed mod out one by one. Both have Undo,
+and each mod's right-click menu has them too.
+
 Until 2026-11-16 mods with their own help were left out by default, and the check was much wider: any variable with
 such a word counted, and so did any picture with "toggle" in its name. Most Genshin mods clear a credits picture on
 every key (`$creditinfo = 0` in each key section), so "info" matched and about half the mods with keys in a real

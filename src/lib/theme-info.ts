@@ -7,8 +7,10 @@ export type SchemeChoice = Scheme | "system";
 
 export interface AccentInfo { id: string; name: string; color: string }
 export interface ThemeInfo {
-  id: string; name: string; description: string; schemes: Scheme[];
-  /** The scheme the game's own menus use, the default until the user picks one. */
+  id: string; name: string; schemes: Scheme[];
+  /** What it looks like, in English, for the custom theme prompt (screens/ai/themeTask.ts). Not shown in the app. */
+  look: string;
+  /** The scheme the game's menus use, the default until the user picks one. */
   native: Scheme;
   accents?: AccentInfo[];
   /** Left out of Appearance until it's found (the Konami code; lib/fun.ts). */
@@ -16,31 +18,31 @@ export interface ThemeInfo {
 }
 
 export const THEMES: ThemeInfo[] = [
-  { id: "default", name: t("Default"), description: t("Dark or light, in the game's own colour"), schemes: ["dark", "light"], native: "dark" },
-  { id: "zzz", name: t("New Eridu"), description: t("Zenless Zone Zero's menus: grey frames, black capsules, one bright accent"), schemes: ["dark", "light"], native: "dark",
+  { id: "default", name: t("Default"), look: "Dark or light, in the game's colour", schemes: ["dark", "light"], native: "dark" },
+  { id: "zzz", name: t("New Eridu"), look: "Zenless Zone Zero's menus: grey frames, black capsules, one bright accent", schemes: ["dark", "light"], native: "dark",
     accents: [
       { id: "orange", name: t("Orange"), color: "#ff7a1c" }, { id: "lime", name: t("Lime"), color: "#d6f900" }, { id: "yellow", name: t("Yellow"), color: "#ffd21a" },
       { id: "cyan", name: t("Cyan"), color: "#35d3ff" }, { id: "pink", name: t("Pink"), color: "#ff6aa9" },
     ] },
-  { id: "gi", name: t("Teyvat"), description: t("Genshin Impact's menus: cream paper pages, slate pills, gold rules"), schemes: ["dark", "light"], native: "light",
+  { id: "gi", name: t("Teyvat"), look: "Genshin Impact's menus: cream paper pages, slate pills, gold rules", schemes: ["dark", "light"], native: "light",
     accents: [
       { id: "gold", name: t("Gold"), color: "#d3bc8e" }, { id: "anemo", name: t("Anemo"), color: "#74c2a8" },
       { id: "hydro", name: t("Hydro"), color: "#4cc2f1" }, { id: "pyro", name: t("Pyro"), color: "#ef7938" },
       { id: "electro", name: t("Electro"), color: "#af8ef3" }, { id: "dendro", name: t("Dendro"), color: "#a5c83b" },
       { id: "cryo", name: t("Cryo"), color: "#9fd6e3" },
     ] },
-  { id: "hsr", name: t("Astral Express"), description: t("Honkai: Star Rail's menus: dark glass, pale plates, gold"), schemes: ["dark", "light"], native: "dark" },
-  { id: "ww", name: t("Solaris"), description: t("Wuthering Waves' menus: dark glass under a night sky, paper rows, gold"), schemes: ["dark", "light"], native: "dark",
+  { id: "hsr", name: t("Astral Express"), look: "Honkai: Star Rail's menus: dark glass, pale plates, gold", schemes: ["dark", "light"], native: "dark" },
+  { id: "ww", name: t("Solaris"), look: "Wuthering Waves' menus: dark glass under a night sky, paper rows, gold", schemes: ["dark", "light"], native: "dark",
     accents: [
       { id: "gold", name: t("Gold"), color: "#fdd02c" }, { id: "glacio", name: t("Glacio"), color: "#6fd0f2" },
       { id: "havoc", name: t("Havoc"), color: "#e26aa5" }, { id: "aero", name: t("Aero"), color: "#5fe0b0" },
     ] },
-  { id: "ef", name: t("Talos-II"), description: t("Arknights: Endfield's menus: a light sheet on a charcoal stage, signal yellow"), schemes: ["dark", "light"], native: "light",
+  { id: "ef", name: t("Talos-II"), look: "Arknights: Endfield's menus: a light sheet on a charcoal stage, signal yellow", schemes: ["dark", "light"], native: "light",
     accents: [
       { id: "signal", name: t("Signal"), color: "#ffee00" }, { id: "orange", name: t("Orange"), color: "#ff8a1f" },
       { id: "lime", name: t("Lime"), color: "#c5e03a" }, { id: "cyan", name: t("Cyan"), color: "#3fd0f0" },
     ] },
-  { id: "clay", name: t("Clay"), description: t("Warm ivory or soft charcoal, a clay accent, serif titles"), schemes: ["dark", "light"], native: "light", hidden: true },
+  { id: "clay", name: t("Claude Desktop"), look: "Warm ivory or soft charcoal, a clay accent, serif titles", schemes: ["dark", "light"], native: "light", hidden: true },
 ];
 
 /** gachamod's own colour, used when no game is set up. */

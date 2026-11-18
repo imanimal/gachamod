@@ -58,7 +58,7 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
   const prompt = [
     `Make a theme for gachamod, a Windows app that manages game mods, from this description: "${want}".`,
     "How themes work here: a theme is a base theme, token values, a layout and a stylesheet. The built-in game themes are 60 to 100 KB of CSS each. They define their own materials as custom properties (surfaces, ink, rims, textures made from gradients or inline SVG) and then restyle every part with them: buttons, toggles, chips, tabs, fields, panels, cards, dialogs, menus, toasts, the title bar, the sidebar, page headers, each screen, decoration and motion. Work at that depth. When the description names a style, a material, a game or a mood, give every part in the map below a deliberate look in that style, not just new colours. A small request (\"a pink accent\") only needs tokens.",
-    `"base" is the built-in theme it sits on:\n${THEMES.map((x) => `${x.id}: ${english(x.description)}`).join("\n")}\n` +
+    `"base" is the built-in theme it sits on:\n${THEMES.map((x) => `${x.id}: ${x.look}`).join("\n")}\n` +
       `Use "default" unless the description asks for one of those games' looks. The game themes keep drawing their own menus (shapes, textures) under yours, so your CSS would have to override them.`,
     `Showing now: ${nowName} (${now.scheme})${game ? ` for ${game.name}` : ""}${gameAccent ? `, game colour ${gameAccent}` : ""}. Tokens (only these go in "tokens") with their current values. Colours: #hex, rgb(), hsl(), oklch(), color-mix() or var(--token).\n${tokens}`,
     [

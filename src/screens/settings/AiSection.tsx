@@ -43,7 +43,7 @@ export function AiSection() {
               ))}
             </div>
             {bot === "other" && (
-              <TextField label={t("Its web address (optional)")} value={draft} placeholder="https://chat.example.com" mono
+              <TextField label={t("Web address (optional)")} value={draft} placeholder="https://chat.example.com" mono
                 onChange={setDraft} onBlur={saveUrl}
                 hint={t("Leave empty to only copy the prompt. An address without https:// gets it added")} />
             )}

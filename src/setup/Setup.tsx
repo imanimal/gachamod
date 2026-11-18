@@ -440,7 +440,7 @@ function Done({ view, openAfter, close }: { view: Extract<View, { k: "done" }>; 
     return (
       <Panel>
         <Hero title={t("gachamod is uninstalled")} icon="check" sub={t("Your mods are still in their game folders.")} />
-        {view.dataGone && <p className="setup-p">{t("Its data is in the Recycle Bin if you want it back.")}</p>}
+        {view.dataGone && <p className="setup-p">{t("gachamod's data is in the Recycle Bin if you want it back.")}</p>}
         <div className="setup-actions"><Button variant="primary" autoFocus onClick={close}>{t("Close")}</Button></div>
       </Panel>
     );

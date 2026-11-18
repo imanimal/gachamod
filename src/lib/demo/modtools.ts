@@ -42,7 +42,7 @@ function demoInspect(game: string, id: string): ModInspect {
   // every fifth mod is a merge of three outfits (GIMI's merge script)
   const merged: MergedInfo | null = n % 5 === 0 ? {
     ini: "merged.ini", var: "swapvar", copyFiles: n % 2 ? 2 : 0, copyBytes: n % 2 ? 6_291_456 : 0,
-    blocked: scenario().blockedSplit ? `${m.character ?? "Raiden"} Kimono sits in the mod's main folder, so it can't be a mod of its own` : null,
+    blocked: scenario().blockedSplit ? `${m.character ?? "Raiden"} Kimono sits in the mod's main folder, so it can't be a separate mod` : null,
     variants: ["Regular", "Kimono", "Swimsuit"].map((v, i) => ({ value: String(i), name: `${m.character ?? "Raiden"} ${v}`, ini: `${m.character ?? "Raiden"} ${v}/DISABLED${v}.ini` })),
   } : null;
   if (merged) {

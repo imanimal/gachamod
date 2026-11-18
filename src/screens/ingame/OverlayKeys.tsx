@@ -70,7 +70,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
 
   const empty = !list.settings.on ? (
     <div className="ov-empty"><p>{t("The key list is turned off for this game.")}</p>
-      <Button size="sm" icon="settings" onClick={onSettings} title={t("Opens Tools, Key list in game, in gachamod's own window")}>{t("Key list settings")}</Button></div>
+      <Button size="sm" icon="settings" onClick={onSettings} title={t("Opens Tools, Key list in game, in the main gachamod window")}>{t("Key list settings")}</Button></div>
   ) : !list.mods.length ? (
     <p className="muted ov-empty">{t("None of your mods for this game has keys.")}</p>
   ) : !showing.length ? (
@@ -78,7 +78,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
       <Button size="sm" icon="mods" onClick={onMine} title={t("Your characters and their mods (Tab switches)")}>{t("My mods")}</Button></div>
   ) : !listed.length ? (
     <div className="ov-empty"><p className="muted">{t("You left the mods showing now out of the list.")}</p>
-      <Button size="sm" icon="settings" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window")}>{t("Choose mods")}</Button></div>
+      <Button size="sm" icon="settings" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in the main gachamod window")}>{t("Choose mods")}</Button></div>
   ) : null;
 
   return (
@@ -86,7 +86,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
       {empty ?? (
         <>
           <div className="ov-kbar">
-            <SearchField value={q} onChange={setQ} placeholder={t("Find a character, mod or key")} onEnter={toFirst} />
+            <SearchField value={q} onChange={setQ} placeholder={t("Search")} title={t("Find a character, mod or key")} onEnter={toFirst} />
           </div>
           {!groups.length && <p className="muted ov-none">{t("No character, mod or key matches that.")}</p>}
           {groups.map((g) => (
@@ -103,7 +103,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
           {hidden > 0 && !words && (
             <p className="muted ov-khidden">
               {tn(hidden, "{n} mod showing now isn't listed: you left it out.", "{n} mods showing now aren't listed: you left them out.")}
-              <Button size="sm" variant="ghost" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in gachamod's own window")}>{t("Choose mods")}</Button>
+              <Button size="sm" variant="ghost" onClick={onSettings} title={t("Choose which mods the key list shows. Opens Tools, Key list in game, in the main gachamod window")}>{t("Choose mods")}</Button>
             </p>
           )}
         </>
@@ -120,7 +120,7 @@ function KeyCard({ m, i, onBinding }: { m: ModKeyList; i: number; onBinding: (r:
         <span className="ov-kpic">{src ? <LazyImg src={src} alt="" draggable={false} /> : <Icon name="mods" />}</span>
         <span className="ov-kmod-t">
           <span className="ov-kmod-n">{m.name}</span>
-          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">{t("Shows its key help with {key}", { key: m.helpKey })}</span>}
+          {m.ownHelp && m.helpKey && <span className="ov-kmod-s">{t("Has a key menu ({key})", { key: m.helpKey })}</span>}
         </span>
       </div>
       <ul className="ov-krows">

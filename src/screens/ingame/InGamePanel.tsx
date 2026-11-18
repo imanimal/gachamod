@@ -131,7 +131,7 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
         <div className="live-menu-row">
           <span className="live-menu-l">{t("Menu while you play")}</span>
           <Segmented label={t("Menu while you play")} size="sm" value={menu.style} onChange={(style) => set({ style })} options={[
-            { value: "window", label: t("Over the game"), title: t("gachamod's own menu on top of the game. The better one. Needs borderless or windowed") },
+            { value: "window", label: t("Over the game"), title: t("gachamod's menu on top of the game. The better choice. Needs borderless or windowed") },
             { value: "game", label: t("Inside the game"), title: checked ? t("A plainer menu the game draws itself. Works in exclusive fullscreen")
               : t("A plainer menu the game draws itself. Works in exclusive fullscreen. A tester option in {game}", { game: name }) },
           ]} />
@@ -148,7 +148,7 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
       </div>
       <MenuKeys menu={menu} onChange={(update, label) => void patchMenu(game, menu, (m) => ({ binds: update(m.binds) }), label)} />
       {drawn && <Checkbox checked={menu.fastSave} onChange={(fastSave) => set({ fastSave })} label={t("Show skins picked in the game right away")}
-        title={t("The game saves its values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in its own menu shows here at once. Starts after the game reloads its mods")} />}
+        title={t("The game saves its values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in the game's menu shows here at once. Starts after the game reloads its mods")} />}
       <p className="hint">{MENU_HINT[menu.style](menu.key, drawn)} {blocked ? t("Press {key} in the game after a change here.", { key: reloadKeyOf(game) }) : t("The game reloads once after a change here.")}</p>
       {!drawn && (
         <p className="hint row"><span>{t("Playing in exclusive fullscreen? Tester options add the menu the game draws.")}</span>

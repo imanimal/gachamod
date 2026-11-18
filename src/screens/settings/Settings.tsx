@@ -32,6 +32,7 @@ import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
 import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
 import { Installing, SetupError } from "./Onboarding";
+import { MovePanel } from "../modtools/MovePanel";
 import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
 export { SetRow, openXxmi, useSetting };
@@ -43,7 +44,7 @@ registerPanels("settings", {
   general: GeneralSection,
   games: GamesSection, xxmi: XxmiSection,
   launch: LaunchSections, migoto: LaunchSections, "game-start": GameStartSection,
-  mods: ModsSection, adult: AdultSection, "mod-folders": ModFoldersSection, installing: InstallingSection,
+  others: MovePanel, mods: ModsSection, adult: AdultSection, "mod-folders": ModFoldersSection, installing: InstallingSection,
   automatic: AutomaticSection, "broken-mods": BrokenModsSection, storage: StorageSection,
   creators: CreatorsSection, hotkeys: HotkeysSection,
   appearance: AppearanceSection, layout: LayoutSection, themes: CustomThemesSection, graphics: GraphicsSection,
@@ -67,7 +68,7 @@ export function Settings() {
           fun: <FunSection />,
           games: <><GamesSection /><XxmiSection /></>,
           launch: <><LaunchSections /><GameStartSection /></>,
-          mods: <><ModsSection /><ModFoldersSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
+          mods: <><MovePanel /><ModsSection /><ModFoldersSection /><AutomaticSection /><BrokenModsSection /><StorageSection /></>,
           downloads: <InstallingSection />,
           gamebanana: <><AccountSection /><IntegrationsSection /><CreatorsSection /><AdultSection /></>,
           ai: <AiSection />,
@@ -127,7 +128,7 @@ function GamesSection() {
       {community.length > 0 && <>
         <h3 className="sub-h" id="set-community">{t("Community games")}</h3>
         <p className="hint set-note" title={t("3DMigoto is the program that loads mods into the game. XXMI Launcher bundles one per game for the games above")}>
-          {t("XXMI Launcher doesn't support these. Each needs its own 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.")}</p>
+          {t("XXMI Launcher doesn't support these. Each needs a separate 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.")}</p>
         <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
       </>}
     </Panel>
@@ -325,7 +326,7 @@ function XxmiSection() {
         <>
           <div className="set-kv">
             <span className="muted">{t("Version")}</span>
-            <span>{st.version ?? t("Unknown")}{update && <> <Badge tone="info" onClick={openXxmi} title={t("Opens XXMI Launcher, which installs its own updates")}>{t("{version} available", { version: st.latest ?? "" })}</Badge></>}{st.running && <> <Badge tone="ok">{t("Open")}</Badge></>}</span>
+            <span>{st.version ?? t("Unknown")}{update && <> <Badge tone="info" onClick={openXxmi} title={t("Opens XXMI Launcher, which installs the update")}>{t("{version} available", { version: st.latest ?? "" })}</Badge></>}{st.running && <> <Badge tone="ok">{t("Open")}</Badge></>}</span>
             <span className="muted">{t("Folder")}</span>
             <span className="mono set-path">{st.root}</span>
           </div>
@@ -427,7 +428,7 @@ function AboutSection() {
           <Button size="sm" icon="coffee" onClick={openKofi} title={t("Opens {url} in your browser", { url: "ko-fi.com/aanimal" })}>{t("Tip on Ko-fi")}</Button>
         </div>
       </div>
-      <p className="hint set-note">{t("Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by their own authors.")}{" "}
+      <p className="hint set-note">{t("Mods and previews come from GameBanana. XXMI Launcher and the model importers are separate projects by other authors.")}{" "}
         {t("Fonts: {fonts}, under the SIL Open Font License.", { fonts: oxford(["Manrope", "Rubik", "Anton", "JetBrains Mono"]) })}</p>
     </Panel>
   );

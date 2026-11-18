@@ -37,7 +37,7 @@ function Host() {
           ww: t("Wuthering Waves"), ef: t("Endfield"), zzz: t("Zenless Zone Zero"), gi: t("Genshin Impact"), hsr: t("Star Rail"), hi3: t("Honkai Impact 3rd"),
         })}
       </p>
-      <p>{t("Its pictures load with the game's mods, so the game takes a little longer to load them and uses more memory.")}</p>
+      <p>{t("The menu's pictures load with the game's mods, so the game takes a little longer to load them and uses more memory.")}</p>
       <p>{t("Check this game sends what worked and what didn't to the developer.")}</p>
     </Confirm>
   );

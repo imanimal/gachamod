@@ -171,7 +171,7 @@ pub fn is_imm_rel(rel: &str) -> bool {
 }
 
 fn imm_error() -> Error {
-    Error::Conflict("IMM manages this mod. Move your mods out of IMM first (Tools, Sharing).".into())
+    Error::Conflict("IMM manages this mod. Move your mods out of IMM first (Tools, Share and import).".into())
 }
 
 fn name_of(p: &Path) -> String { p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() }
@@ -1218,7 +1218,7 @@ fn parent_for(db: &Db, game: &str, e: &ModEntry, pick: &str) -> Result<String> {
     let root = p.root().to_string();
     if root == e.id { return Err(Error::Invalid(format!("{} is already a sub-mod of {}", p.name, e.name))); }
     if list(db, game)?.iter().any(|o| o.parent.as_deref() == Some(e.id.as_str())) {
-        return Err(Error::Invalid(format!("{} has sub-mods of its own, so it can't be a sub-mod", e.name)));
+        return Err(Error::Invalid(format!("{} already has sub-mods, so it can't be a sub-mod", e.name)));
     }
     Ok(root)
 }

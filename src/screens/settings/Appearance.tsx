@@ -27,7 +27,7 @@ import { about, errorText } from "../../lib/api";
 import { pref } from "../../lib/prefs";
 import { LANGS, lang, langChoice, setLangChoice, systemLang, t, type LangChoice } from "../../lib/i18n";
 import { settings } from "../../lib/api";
-import { gameName, gameShort } from "../../lib/games";
+import { gameName } from "../../lib/games";
 
 const SCHEME_OPTIONS: Array<{ value: SchemeChoice; label: string; icon?: "moon" | "sun" }> = [
   { value: "dark", label: t("Dark"), icon: "moon" }, { value: "light", label: t("Light"), icon: "sun" }, { value: "system", label: t("System") },
@@ -37,7 +37,7 @@ const LIGHT_NATIVE = THEMES.filter((th) => th.native === "light" && !th.hidden).
 const lightNative = () => new Intl.ListFormat(lang, { type: "conjunction" }).format(LIGHT_NATIVE);
 // the Light tip teases a little, and gives up once it's picked
 const modeOptions = (mode: SchemeMode): Array<{ value: SchemeMode; label: string; icon?: "moon" | "sun" | "controller"; title?: string }> => [
-  { value: "game", label: t("Game's own"), icon: "controller", title: t("Each theme as its game draws its menus: {themes} light, the rest dark", { themes: lightNative() }) },
+  { value: "game", label: t("Match the game"), icon: "controller", title: t("Light or dark like each game's menus: {themes} light, the rest dark", { themes: lightNative() }) },
   { value: "dark", label: t("Dark"), icon: "moon", title: t("Every theme dark") },
   { value: "light", label: t("Light"), icon: "sun", title: mode === "light" ? t("You did this to yourself...") : t("Every theme light, even the one set in space. We won't ask") },
   { value: "system", label: t("System"), title: t("Dark or light as Windows is set") },
@@ -63,8 +63,8 @@ export function AppearanceSection() {
     <Panel title={t("Theme and colours")} icon="palette" id="appearance">
       <div className="field-l">{game ? t("Theme for {game}", { game: gameName(game) }) : t("Theme")}</div>
       <div className="set-themes">
-        <ThemeCard id={defaultFor.id} name={t("Game's own")} description={game ? t("{theme}, the one {game} uses", { theme: defaultFor.name, game: gameShort(game) }) : t("{theme}, the one the game uses", { theme: defaultFor.name })} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
-        {THEMES.filter((th) => !th.hidden || found || pick === th.id).map((th) => <ThemeCard key={th.id} id={th.id} name={th.name} description={th.description} on={pick === th.id} onClick={() => choose(th.id)} disabled={!game} />)}
+        <ThemeCard id={defaultFor.id} name={t("Match the game")} description={t("Uses {theme}", { theme: defaultFor.name })} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
+        {THEMES.filter((th) => !th.hidden || found || pick === th.id).map((th) => <ThemeCard key={th.id} id={th.id} name={th.name} on={pick === th.id} onClick={() => choose(th.id)} disabled={!game} />)}
       </div>
       <div className="set-rows">
         {accents.length > 1 && !theme.custom && (
@@ -87,7 +87,7 @@ export function AppearanceSection() {
               <Segmented<SchemeMode> value={theme.mode} onChange={(v) => setSchemeMode(v, currentGame())} label={t("Light or dark")} options={modeOptions(theme.mode)} />
             </SetRow>
             {theme.mode === "game" && (
-              <SetRow label={t("Just {theme}", { theme: themeName })} hint={themeInfo?.native === "light" ? t("Its game's menus are light. A pick here counts only for {theme}", { theme: themeName }) : t("Its game's menus are dark. A pick here counts only for {theme}", { theme: themeName })}>
+              <SetRow label={t("Just {theme}", { theme: themeName })} hint={themeInfo?.native === "light" ? t("The game's menus are light. A pick here counts only for {theme}", { theme: themeName }) : t("The game's menus are dark. A pick here counts only for {theme}", { theme: themeName })}>
                 <Segmented<SchemeChoice> value={ownSchemeChoice(theme.id)} onChange={(v) => setScheme(v, currentGame())} label={t("Light or dark for {theme}", { theme: themeName })} options={SCHEME_OPTIONS} size="sm" />
               </SetRow>
             )}
@@ -106,7 +106,7 @@ export function GeneralSection() {
         <SetRow id="set-lang" label={t("Language")} hint={t("Changing it reloads the window")}>
           <LanguagePicker />
         </SetRow>
-        <SetRow id="set-intro" label={t("Opening screen")} hint={t("An intro with a one-line tip while gachamod starts. Theme's own plays the one that goes with the theme in use. A click or Escape skips it")}>
+        <SetRow id="set-intro" label={t("Opening screen")} hint={t("An intro with a one-line tip while gachamod starts. Match the theme plays the one that goes with the theme in use. A click or Escape skips it")}>
           <IntroPicker />
         </SetRow>
         <SetRow id="set-hints" label={t("First-start hints")} hint={t("Right after setup, Browse, Install and Downloads look faintly selected until you've used them once")}>
@@ -130,7 +130,7 @@ export function LayoutSection() {
     <Panel title={t("Layout, text size and animations")} icon="layout" id="layout">
       <div className="set-format" id="set-format">
         <div className="field-l">{t("Mods layout")}</div>
-        <span className="hint">{t("How Mods and each character's page are laid out, to feel like the mod manager you used before. Every layout has the same features")}</span>
+        <span className="hint">{t("How Mods and each character's page are laid out. Every layout has the same features")}</span>
         <FormatPicker />
       </div>
       <div className="set-rows">
@@ -147,7 +147,7 @@ export function LayoutSection() {
   );
 }
 
-/** The app's language: Windows' own by default. Saved in the settings too, so it travels with a settings export. */
+/** The app's language: Windows' language by default. Saved in the settings too, so it travels with a settings export. */
 function LanguagePicker() {
   const sys = LANGS.find((l) => l.id === systemLang())!;
   const options: Array<{ value: LangChoice; label: string }> = [
@@ -186,11 +186,11 @@ function GpuSwitch() {
 }
 
 function IntroPicker() {
-  useTheme(); // the "Theme's own" label follows the theme
+  useTheme(); // the "Match the theme" label follows the theme
   const [pick, setPick] = useState(introPick);
   const own = INTRO_LIST.find((i) => i.id === themeIntro())?.name ?? t("Default");
   const options = [
-    { value: "theme", label: t("Theme's own ({intro})", { intro: own }) },
+    { value: "theme", label: t("Match the theme ({intro})", { intro: own }) },
     ...INTRO_LIST.map((i) => ({ value: i.id, label: i.name })),
     { value: "off", label: t("Off") },
   ];
@@ -239,7 +239,7 @@ function LayoutRows() {
 // ── theme cards ──
 
 function ThemeCard({ id, name, description, on, onClick, disabled, scheme, tokens }:
-  { id: string; name: string; description: string; on: boolean; onClick: () => void; disabled?: boolean; scheme?: Scheme; tokens?: Record<string, string> }) {
+  { id: string; name: string; description?: string; on: boolean; onClick: () => void; disabled?: boolean; scheme?: Scheme; tokens?: Record<string, string> }) {
   return (
     <Card className="theme-card" selected={on} onClick={onClick} disabled={disabled} title={description}>
       <span className="theme-preview" {...themeAttrs(id, scheme)} style={tokens as CSSProperties | undefined} aria-hidden="true">
@@ -250,7 +250,7 @@ function ThemeCard({ id, name, description, on, onClick, disabled, scheme, token
           <span className="theme-preview-btn" />
         </span>
       </span>
-      <span className="theme-card-t"><b>{name}</b><span className="hint">{description}</span></span>
+      <span className="theme-card-t"><b>{name}</b>{description && <span className="hint">{description}</span>}</span>
     </Card>
   );
 }

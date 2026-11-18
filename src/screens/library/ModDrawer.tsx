@@ -168,7 +168,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
         <Button variant="danger" icon="trash" onClick={() => { onClose(); void trashMods(game, [mod]); }}
           title={trashDaysPref.get() > 0
             ? tn(trashDaysPref.get(), "Its files stay on your PC for {n} day. A short record stays in Mods, Trash so you can download it again", "Its files stay on your PC for {n} days. A short record stays in Mods, Trash so you can download it again")
-            : t("Its files are deleted right away. A short record stays in Mods, Trash so you can download it again")}>{t("Move to trash")}</Button>
+            : t("The files are deleted right away. A short record stays in Mods, Trash so you can download it again")}>{t("Move to trash")}</Button>
         <span className="grow" />
         <Button variant="ghost" onClick={onClose}>{t("Close")}</Button>
       </>}>
@@ -227,7 +227,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
             ? <span>{tx("Sub-mod of {mod}", { mod: <button type="button" className="link-btn" onClick={() => openDetails(parentMod)} title={t("Open {parent}. {mod} turns off with it and comes back with it", { parent: parentMod.name, mod: mod.name })}>{parentMod.name}</button> })}</span>
             : <span className="hint">{t("The mod it went with isn't installed anymore")}</span>}
           <Button size="sm" variant="ghost" onClick={() => void setParent(game, mod, "", mods)}
-            title={t("Make it a mod of its own again, so turning it on asks about the character's other mods")}>{t("Unlink")}</Button>
+            title={t("Make it a separate mod again, so turning it on asks about the character's other mods")}>{t("Unlink")}</Button>
         </div>
       )}
       {subs.length > 0 && (
@@ -268,7 +268,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
               )}
               {fixerBusy.has("waiting") && fixerBusy.has(`mod:${mod.id}`) && (
                 <Button size="sm" variant="ghost" onClick={stopWaiting}
-                  title={t("The fixer is open in its own window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far")}>{t("Stop waiting")}</Button>
+                  title={t("The fixer is open in a separate window. gachamod carries on by itself a few seconds after the fixer stops changing files. This carries on now, with what it changed so far")}>{t("Stop waiting")}</Button>
               )}
               {(health.tried || health.needsAuthor) && mod.source && (<>
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}

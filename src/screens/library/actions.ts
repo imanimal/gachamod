@@ -61,7 +61,7 @@ export async function setParent(game: GameId, mod: ModEntry, parent: string, all
     const run = async (p: string) => publish(game, { changed: [await library.updateMeta(game, mod.id, { parent: p })], removed: [], notes: [] });
     await run(parent);
     record({
-      label: parent ? t("Made {mod} a sub-mod of {parent}", { mod: mod.name, parent: name(parent) }) : t("{mod} is a mod of its own again", { mod: mod.name }),
+      label: parent ? t("Made {mod} a sub-mod of {parent}", { mod: mod.name, parent: name(parent) }) : t("{mod} is a separate mod again", { mod: mod.name }),
       undo: () => run(before),
       redo: () => run(parent),
     });

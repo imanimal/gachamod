@@ -54,7 +54,7 @@ const FLOWS: Array<{ title: string; demo?: boolean; items: Array<[label: string,
   { title: "Language", items: [
     ["English", "lang en"], ["简体中文", "lang zh-CN"], ["Español", "lang es"], ["Português", "lang pt-BR"], ["Русский", "lang ru"],
     ["A backend message, translated", "toast Moved 15 mods from No Reload Mod Manager"],
-    ["An error that names a place", "error No Reload Mod Manager manages it. Move your mods out of it first (Tools, Sharing)"],
+    ["An error that names a place", "error No Reload Mod Manager manages it. Move your mods out of it first (Tools, Share and import)"],
   ] },
   { title: "Logs", items: [
     ["Print the end of gachamod.log", "log"],

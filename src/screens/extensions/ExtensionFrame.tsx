@@ -119,7 +119,7 @@ export function ExtensionFrame({ ext, slot, game, character }: Props) {
     <>
       {stuck && (
         <Empty icon="puzzle" title={t("{name} isn't answering", { name: m.name })} actions={way(t("Reload page"), t("Starts the page again"))}>
-          {t("Its page hasn't started after 10 seconds. It may be waiting on a site that's down, or it has a fault its author can fix.")}
+          {t("The extension's page hasn't started after 10 seconds. It may be waiting on a site that's down, or it has a fault its author can fix.")}
         </Empty>
       )}
       <iframe ref={ref} className="ext-frame" data-ext={ext.id} title={`${m.name}: ${(slot === "page" ? m.page : m.characterTab)?.title ?? ""}`}

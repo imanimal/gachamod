@@ -619,7 +619,7 @@ UI:
   button when nothing is broken), "Ignore" per mod and
   "Ignore all" (saved in setting "problems.ignored", listed under Ignored with "Show again"), "Fix all" for fixes
   that need no choice; Tools shows it first while something in it has a fix), HashLookupPanel (a field and results), PacksPanel (Share this game's library, Share
-  every game when more than one has mods, Import a .gachamod), MovePanel ("Mods from other managers", Tools > Sharing,
+  every game when more than one has mods, Import a .gachamod), MovePanel ("Mods from other managers", Tools > Share and import and Settings > Mods,
   section "others": a row per manager with mods for the current game. IMM and No Reload Mod Manager get "Move mods"
   with a Confirm, since they move folders; the rest from migrate.detect get "Bring in" (copy, one click, Undo in the
   toast) and "Move instead" with a Confirm when they keep mods outside Mods; a manager that is open shows "Check
@@ -1148,7 +1148,7 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
 (Problems: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" (In-game menu, from
-INGAME: ingame, "keylist"), "packs" (Sharing: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The pages and
+INGAME: ingame, "keylist"), "packs" (Share and import: packs, "imm") and "makers" (Mod makers: "dev", "hash"). The pages and
 panels with their search words are in `toolsSearch.ts`. The panel ids still work as routes. A panel that renders
 nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
 switches are in Settings › Launch (see Settings), and the search above the page list finds them from Tools too.

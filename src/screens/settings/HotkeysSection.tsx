@@ -74,7 +74,7 @@ function ProfileKeys() {
       <div className="set-row" id="set-hotkeys-profiles">
         <span><b>{t("Profile keys")}</b><span className="hint">{list === null ? t("Reading {game}'s profiles", { game: gameShort(game) })
           : keyed.length ? keyed.map((p) => `${p.name}: ${p.hotkey}`).join(t(", "))
-          : t("No {game} profile has its own key yet. Set one in a profile's editor", { game: gameShort(game) })}</span></span>
+          : t("No {game} profile has a key yet. Set one in a profile's editor", { game: gameShort(game) })}</span></span>
         <Button size="sm" icon="profiles" onClick={() => go({ view: "profiles" })} title={t("Opens Profiles, where each profile's editor sets its key (Ctrl+6)")}>{t("Manage profiles")}</Button>
       </div>
     </div>

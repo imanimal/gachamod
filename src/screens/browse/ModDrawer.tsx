@@ -305,7 +305,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             "-",
             { label: t("Move to trash"), icon: "trash", danger: true, hint: t("Remove it from Mods. It stays in the trash, with Undo in the toast"), onClick: () => { const m = menu; setMenu(null); if (target) void trashMods(target.id, [m.same!]); } },
           ] : [
-            { label: t("Install alongside"), icon: "plus", hint: t("Add this file as its own mod and keep {name}", { name: menu.base.name }), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
+            { label: t("Install alongside"), icon: "plus", hint: t("Add this file as a separate mod and keep {name}", { name: menu.base.name }), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
             { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Install this file in its place. Its options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
           ]} />
         </Popover>

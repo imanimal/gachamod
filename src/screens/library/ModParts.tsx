@@ -40,7 +40,7 @@ export function ModParts({ game, mod }: { game: GameId; mod: ModEntry }) {
   const on = parts.filter((p) => p.enabled).length;
   return (
     <Panel title={t("Parts")} icon="layers" className="mi-panel mod-parts" count={t("{on} of {n} on", { on, n: parts.length })}>
-      <p className="hint">{t("Folders inside this mod with their own .ini. A part that's off isn't loaded, and the rest of the mod stays on.")}</p>
+      <p className="hint">{t("Folders inside this mod that have an .ini. A part that's off isn't loaded, and the rest of the mod stays on.")}</p>
       <div className="mod-parts-list">
         {parts.map((p) => (
           <Toggle key={p.name} checked={p.enabled} disabled={busy} onChange={(v) => void set(p, v)}

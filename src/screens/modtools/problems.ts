@@ -116,7 +116,7 @@ export function fixLabel(f: ProblemFix): string {
 
 export function fixHint(f: ProblemFix): string {
   if (f.kind === "keep") return t("Turn off the others by renaming them DISABLED_. Undo puts them back");
-  if (f.kind === "off") return t("Renames {ini} DISABLED_, so the loader uses its own copy. Undo puts it back", { ini: f.ini ?? "" });
+  if (f.kind === "off") return t("Renames {ini} DISABLED_, so the loader uses the other copy. Undo puts it back", { ini: f.ini ?? "" });
   return t("The same file is at {file}. Changes {ini} to load it from there. Undo puts the old line back", { file: (f.to ?? "").replace(/\\/g, "/"), ini: f.ini ?? "" });
 }
 

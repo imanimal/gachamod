@@ -34,7 +34,7 @@ export function XxmiDll({ dll, locked, onChange, onUnsafeOff }: {
   const modeTip = t("How XXMI puts its d3d11.dll into the game. Direct is more reliable. Hook is less reliable but may be less visible to anti-cheats. Skip leaves it out, for a d3d11.dll under Inject libraries");
   const libsTip = list.length ? t("Also loads {files}. XXMI Launcher signs this list, so change it in XXMI Launcher", { files: list.join(", ") })
     : t("Also loads the DLLs on a list, like ReShade. The list is empty: add DLLs to it in XXMI Launcher");
-  const unsafeTip = t("XXMI loads 3DMigoto DLLs that aren't its own, like an older GIMI d3d11.dll. Use only ones from a source you trust. Once it's off, only XXMI Launcher can turn it on again");
+  const unsafeTip = t("XXMI loads 3DMigoto DLLs it didn't ship with, like an older GIMI d3d11.dll. Use only ones from a source you trust. Once it's off, only XXMI Launcher can turn it on again");
 
   const modeHint = lock("dll.injectMode") ?? (noMods ? t("Skip with no libraries injected starts the game without mods") : modeTip);
 

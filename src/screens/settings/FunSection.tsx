@@ -28,7 +28,7 @@ export function FunSection() {
   return (
     <Panel title={t("Fun extras")} icon="sparkle" id="fun">
       <div className="set-rows">
-        <SetRow id="set-chill" label={t("Chill mode")} hint={t("The app's own words in lower case. Mod names, descriptions and anything people wrote stay as written")}>
+        <SetRow id="set-chill" label={t("Chill mode")} hint={t("Lower-case text in menus. Mod names stay as written")}>
           <Segmented<"off" | "on"> size="sm" label={t("Chill mode")} value={chill ? "on" : "off"}
             onChange={(v) => void chillPref.set(v === "on", v === "on" ? t("Turned on chill mode") : t("Turned off chill mode"))}
             options={[{ value: "off", label: t("Off"), title: t("I like my UI uptight.") }, { value: "on", label: t("On"), title: t("chillax text") }]} />

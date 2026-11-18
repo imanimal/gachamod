@@ -242,7 +242,7 @@ pub fn check(mut m: Manifest, root: Option<&Path>) -> Result<Manifest> {
             let scheme = o.split_once(':').map(|(s, _)| s.to_ascii_lowercase()).unwrap_or_default();
             let ok = !scheme.is_empty() && scheme.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.' || b == b'+')
                 && !matches!(scheme.as_str(), "http" | "https" | "file" | "javascript" | "data" | "ms-settings" | "shell" | "gachamod");
-            if !ok { return Err(bad(format!("\"open\" for {} must be the app's own link, like someapp://", a.name))); }
+            if !ok { return Err(bad(format!("\"open\" for {} must be a link that opens the app, like someapp://", a.name))); }
         }
     }
     Ok(m)

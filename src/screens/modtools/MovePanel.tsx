@@ -1,5 +1,6 @@
-// Tools > Sharing, "Mods from other managers": every other mod manager found for the current game, each with one
-// button that brings its mods, on/off state, presets and details into gachamod. Owner: MODTOOLS area.
+// "Mods from other managers", in Tools > Share and import and at the top of Settings > Mods: every other mod manager
+// found for the current game, each with one button that brings its mods, on/off state, presets and details into
+// gachamod. Both copies call the same backend, so they always agree. Owner: MODTOOLS area.
 // IMM and No Reload Mod Manager rewrite or hide mods, so taking over moves them (after a question). The rest keep
 // mods gachamod can already see, or a folder outside Mods: those are copied in by default (one click, Undo in the
 // toast), and moving instead is an option.
@@ -78,7 +79,7 @@ export function MovePanel() {
   const summary = (m: OtherManager) => {
     const parts: string[] = [];
     if (m.inside) parts.push(tn(m.inside, "{n} mod in Mods", "{n} mods in Mods"));
-    if (m.outside) parts.push(tn(m.outside, "{n} mod in its own folder ({size})", "{n} mods in its own folder ({size})", { size: formatBytes(m.outsideBytes) }));
+    if (m.outside) parts.push(tn(m.outside, "{n} mod in a separate folder ({size})", "{n} mods in a separate folder ({size})", { size: formatBytes(m.outsideBytes) }));
     if (m.presets) parts.push(tn(m.presets, "{n} preset", "{n} presets"));
     return parts.join(", ");
   };
@@ -118,7 +119,7 @@ export function MovePanel() {
             </span>
             <Button icon="swap" busy={busy === "nrmm"} onClick={() => setAsk({
               title: tn(nrmmGame.mods, "Move {n} mod from No Reload Mod Manager?", "Move {n} mods from No Reload Mod Manager?"),
-              body: t("Each mod gets its own ini back and moves to Mods/Character/Mod name. The mod showing in each group stays on. NRMM's own files go to gachamod's trash."),
+              body: t("Each mod gets a separate ini again and moves to Mods/Character/Mod name. The mod showing in each group stays on. NRMM's files go to gachamod's trash."),
               yes: t("Move them"),
               run: () => job("nrmm", async () => { const r = await nrmm.takeover(game); done(r.notes, t("Moved the mods from No Reload Mod Manager")); }),
             })} title={t("Close No Reload Mod Manager first. Key changes you made there carry over")}>{t("Move mods")}</Button>
@@ -139,7 +140,7 @@ export function MovePanel() {
                 {m.outside > 0 && (
                   <Button variant="ghost" size="sm" disabled={busy === m.id} onClick={() => setAsk({
                     title: t("Move the mods out of {name}?", { name: m.name }),
-                    body: t("Its folder is left empty and its links in Mods are replaced by the mods themselves, so it saves {size} of disk space. {name} won't list them any more.", { name: m.name, size: formatBytes(m.outsideBytes) }),
+                    body: t("{name}'s folder is left empty and its links in Mods are replaced by the mods themselves, which saves {size} of disk space. {name} won't list them any more.", { name: m.name, size: formatBytes(m.outsideBytes) }),
                     yes: t("Move them"),
                     run: () => bringIn(m, "move"),
                   })} title={t("Moves instead of copying, to save disk space")}>{t("Move instead")}</Button>

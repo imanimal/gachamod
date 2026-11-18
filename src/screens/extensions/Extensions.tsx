@@ -234,7 +234,7 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
         {m && (
           <div className="ext-where">
             {m.characterTab && <Badge tone="muted" icon="characters" onClick={() => go({ view: "characters" })} title={t("A tab on each character's page. Click to go to Characters")}>{t("Tab: {title}", { title: m.characterTab.title })}</Badge>}
-            {m.page && <Badge tone="muted" icon={extIcon(m.page.icon)} onClick={() => go({ view: "extensions", ext: e.id })} title={e.enabled ? t("Its own page, also in the sidebar. Click to open it") : t("Turn it on to open its page")}>{t("Page: {title}", { title: m.page.title })}</Badge>}
+            {m.page && <Badge tone="muted" icon={extIcon(m.page.icon)} onClick={() => go({ view: "extensions", ext: e.id })} title={e.enabled ? t("Has a page, also in the sidebar. Click to open it") : t("Turn it on to open its page")}>{t("Page: {title}", { title: m.page.title })}</Badge>}
             {m.themes.length > 0 && <Badge tone="muted" icon="palette" onClick={() => go({ view: "settings", section: "themes" })} title={t("Listed under Custom themes, where you pick one for a game")}>{tn(m.themes.length, "{n} theme", "{n} themes")}</Badge>}
           </div>
         )}

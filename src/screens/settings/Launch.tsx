@@ -253,7 +253,7 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
         <TextField label={t("Arguments")} mono value={cfg.args} placeholder="-popupwindow -screen-width 1920" onChange={(v) => update({ args: v })}
           hint={t("Added to the game's command line")} />
         {cfg.via === "direct" && (
-          <TextField label={t("Different exe")} mono value={cfg.customExe ?? ""} placeholder={t("Leave empty for the game's own exe")}
+          <TextField label={t("Different exe")} mono value={cfg.customExe ?? ""} placeholder={t("Leave empty to use the game's exe")}
             onChange={(v) => update({ customExe: v || null })} disabled={!!lock("customExe")} hint={lock("customExe")} />
         )}
         <Select label={t("Priority")} value={cfg.processPriority || "NORMAL"} onChange={(v) => update({ processPriority: v })} disabled={!!cfg.locked.processPriority}
@@ -299,9 +299,9 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
 function KickFix({ name, children }: { name: string; children?: ReactNode }) {
   const k = useKick();
   const on = !!k?.said && !k.undone;
-  const hint = k?.undone ? t("XXMI has put its own d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
-    : k?.fixed && !on ? t("GIMI's d3d11.dll isn't XXMI's own, so the fix looks done and gachamod doesn't warn")
-    : t("Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts its own d3d11.dll back");
+  const hint = k?.undone ? t("XXMI has put its stock d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
+    : k?.fixed && !on ? t("GIMI's d3d11.dll isn't XXMI's stock one, so the fix looks done and gachamod doesn't warn")
+    : t("Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts its stock d3d11.dll back");
   return (
     <div className="tools-kick">
       <p className="hint row">

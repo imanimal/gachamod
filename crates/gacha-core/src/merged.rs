@@ -281,7 +281,7 @@ fn plan(dir: &Path) -> Option<Plan> {
             continue;
         };
         if folder == dir || *folder == base {
-            block(&mut blocked, format!("{name} sits in the mod's main folder, so it can't be a mod of its own"));
+            block(&mut blocked, format!("{name} sits in the mod's main folder, so it can't be a separate mod"));
             continue;
         }
         for (j, other) in found.iter().enumerate().skip(i + 1) {
@@ -551,7 +551,7 @@ mod tests {
         write(&r.join("DISABLEDA.ini"), BODY);
         write(&r.join("B").join("DISABLEDB.ini"), BODY);
         write(&r.join("merged.ini"), "; Merged Mod: .\\A.ini, .\\B\\B.ini\n[Constants]\nglobal persist $swapvar = 0\n");
-        assert_eq!(info(&r).unwrap().blocked.as_deref(), Some("A sits in the mod's main folder, so it can't be a mod of its own"));
+        assert_eq!(info(&r).unwrap().blocked.as_deref(), Some("A sits in the mod's main folder, so it can't be a separate mod"));
         let _ = fs::remove_dir_all(&d);
         let _ = fs::remove_dir_all(&r);
     }

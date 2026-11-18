@@ -512,7 +512,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
           ]} />
         {tab === "browse" && route.user !== undefined && <Button size="sm" variant="ghost" icon="left" onClick={leave} title={t("Back to the mods (Esc)")}>{t("Back")}</Button>}
         <span className="grow" />
-        <IconButton icon="expand" label={t("Open this page in gachamod's own window")} title={t("Open this page in gachamod's own window. The menu closes")}
+        <IconButton icon="expand" label={t("Open in gachamod")} title={t("Open this page in the main gachamod window. The menu closes")}
           onClick={() => { if (tab === "keys") openKeySettings(); else skinMenu.openInApp(game, route).catch((e) => toast(errorText(e), true)); }} />
         <IconButton icon="x" label={t("Close")} title={t("Close (Esc or {key})", { key })} onClick={close} />
       </header>
@@ -697,7 +697,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
             : <Button variant="primary" icon={m.enabled ? "block" : "check"} disabled={busy} onClick={() => onTurn(!m.enabled)}
                 title={t("The game shows the change after it reloads its mods ({key})", { key: reloadKeyOf(game) })}>{m.enabled ? t("Turn off") : t("Turn on")}</Button>}
           {!!m.source?.modId && <Button icon="browse" onClick={() => openGbMod(m.source!.modId)}
-            title={t("Its page on GameBanana: pictures, description, files and comments")}>{t("GameBanana page")}</Button>}
+            title={t("The mod's page on GameBanana: pictures, description, files and comments")}>{t("GameBanana page")}</Button>}
         </div>
       </div>
     </>

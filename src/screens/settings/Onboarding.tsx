@@ -213,7 +213,7 @@ export function SetupPage({ looking, error, retry }: { looking: boolean; error?:
       {managers.length > 0 && (
         <div className="setup-note">
           <span>{t("Found mods from {managers}. gachamod can bring them in with their on or off state, options and presets.", { managers: oxford(managers) })}</span>
-          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "others" })} title={t("Opens Tools, Sharing, with a button for each manager")}>{t("Bring them in")}</Button>
+          <Button size="sm" icon="swap" onClick={() => go({ view: "tools", section: "others" })} title={t("Opens Tools, Share and import, with a button for each manager")}>{t("Bring them in")}</Button>
         </div>
       )}
 

@@ -65,9 +65,9 @@ function subModItem(game: GameId, mod: ModEntry): MenuEntry {
   if (mod.parent) {
     const p = all.find((m) => m.id === mod.parent);
     return { label: p ? t("Unlink from {mod}", { mod: p.name }) : t("Unlink from its mod"), icon: "link",
-      title: t("Make it a mod of its own again, so turning it on asks about the character's other mods"), onClick: () => void setParent(game, mod, "", all) };
+      title: t("Make it a separate mod again, so turning it on asks about the character's other mods"), onClick: () => void setParent(game, mod, "", all) };
   }
-  if (all.some((m) => m.parent === mod.id)) return { label: t("Make sub-mod of"), icon: "link", disabled: true, title: t("It has sub-mods of its own") };
+  if (all.some((m) => m.parent === mod.id)) return { label: t("Make sub-mod of"), icon: "link", disabled: true, title: t("It already has sub-mods") };
   const same = (m: ModEntry) => !!mod.character && m.character?.toLowerCase() === mod.character.toLowerCase();
   const picks = all.filter((m) => m.id !== mod.id && !m.parent)
     .sort((a, b) => Number(same(b)) - Number(same(a)) || Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name))
@@ -131,7 +131,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
       onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
     !many && { label: t("Details"), icon: "info", keys: "Enter", onClick: () => openDetails(mod) },
     !many && (mod.parts ?? 0) > 0 && { label: t("Parts"), icon: "layers", title: t("Folders inside it that turn on and off by themselves"), onClick: () => openDetails(mod, "parts") },
-    !many && mod.hasKeys && { label: t("Toggles"), icon: "key", title: t("Its toggles, to change their keys or turn them off"), onClick: () => openDetails(mod, "keys") },
+    !many && mod.hasKeys && { label: t("Toggles"), icon: "key", title: t("Change the mod's toggle keys or turn them off"), onClick: () => openDetails(mod, "keys") },
     !many && mod.conflicts > 0 && { label: t("Conflicts"), icon: "warn", title: t("Mods that change the same parts as this one, to pick which one wins"), onClick: () => openDetails(mod, "conflicts") },
     !many && mod.iniCount > 0 && { label: t("View in 3D"), icon: "box", title: t("Turn the mod's model around, as its toggles are set now"), onClick: () => openDetails(mod, "model") },
     broken.length > 0 && { label: t("Attempt fix for the game update"), icon: "wand", title: stops(reasons.slice(0, 3)) || t("A game update broke it. Swaps its outdated hashes, or runs the fixer it needs"), onClick: () => void fixForUpdate(game, broken) },
@@ -146,7 +146,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
     heldList.length > 0 && { label: t("Show problems again"), icon: "eye",
       title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about its problems again"),
       onClick: () => void releaseMods(game, heldList) },
-    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("Its toggles only work while its character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
+    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("The mod's toggles only work while its character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
     !many && { label: t("Rename"), icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
     { label: t("Set character"), icon: "characters", onClick: () => askLib({ kind: "character", game, mods: list }) },

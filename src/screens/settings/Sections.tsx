@@ -168,7 +168,7 @@ export function AutomaticSection() {
         </SetRow>
         <SetRow id="set-rescan" label={t("Rescan mods when Mods opens")} hint={t("Finds mods you added to the folder by hand")}
           tip={t("While Mods folders are watched, this runs only the first time Mods opens after gachamod starts")}>
-          <Switch p={autoRescanPref} on={t("Rescanning mods on its own")} off={t("Stopped rescanning mods on its own")} />
+          <Switch p={autoRescanPref} on={t("Rescanning mods automatically")} off={t("Stopped rescanning mods automatically")} />
         </SetRow>
       </div>
     </Panel>

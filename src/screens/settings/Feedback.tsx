@@ -11,7 +11,7 @@ import { closeFeedback, openFeedback, openGameCheck, useFeedbackStart, type Feed
 import { currentGame, currentRoute } from "../../lib/store";
 import { SetRow } from "./parts";
 import { setTester, useTester } from "../ingame/data";
-import { t, tn } from "../../lib/i18n";
+import { t } from "../../lib/i18n";
 
 // ── the form ──
 
@@ -155,11 +155,8 @@ export function RenderLogRow({ id }: { id?: string }) {
   const on = renderLogPref.use();
   const [st, setSt] = useState<RenderState | null>(null);
   useEffect(() => { rendering.state().then(setSt).catch(() => {}); }, []);
-  const n = st?.incidents ?? 0;
   return (
-    <SetRow id={id} label={t("Rendering log")} tip={RENDER_TIP}
-      hint={n ? tn(n, "Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary. {n} problem noted so far", "Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary. {n} problems noted so far")
-        : t("Notes when the window goes black, stops drawing or the graphics process restarts. Crash reports include a summary")}>
+    <SetRow id={id} label={t("Rendering log")} tip={RENDER_TIP} hint={t("Writes graphics errors and GPU process restarts to a log file")}>
       <span className="set-admin">
         <Button size="sm" icon="folder" disabled={!st?.dir} title={st?.dir ?? undefined}
           onClick={() => { if (st?.dir) shell.openPath(st.dir).catch((e) => toast(errorText(e), true)); }}>{t("Open folder")}</Button>

@@ -439,7 +439,7 @@ export function registerLibraryDemo() {
         if (p.parent && !pick) throw err("That mod isn't in the library anymore");
         const root = pick ? rootOf(pick) : null;
         if (root === m.id) throw err(`${pick!.name} is already a sub-mod of ${m.name}`);
-        if (root && all.some((x) => x.parent === m.id)) throw err(`${m.name} has sub-mods of its own, so it can't be a sub-mod`);
+        if (root && all.some((x) => x.parent === m.id)) throw err(`${m.name} already has sub-mods, so it can't be a sub-mod`);
         m.parent = root;
         offWithParent.delete(m.id);
       }

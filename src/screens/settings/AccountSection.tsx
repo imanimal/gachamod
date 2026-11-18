@@ -6,7 +6,7 @@ import { Button, Panel, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
 import { t } from "../../lib/i18n";
 
-const TIP = t("You sign in on GameBanana's own page in a separate window, so gachamod never sees your password. It keeps the session encrypted for your Windows account");
+const TIP = t("You sign in on GameBanana's site in a separate window, so gachamod never sees your password. It keeps the session encrypted for your Windows account");
 const MATCH_TIP = t("Uses what you picked on GameBanana for skimpy attire, sexual themes and content, lewd poses, nudity and fetishes. GameBanana's defaults change nothing here, and a choice you make here stays until you change yours there");
 
 /** "Mods for adults" follows the content settings on GameBanana. Under Mods for adults and under the account, one state. */

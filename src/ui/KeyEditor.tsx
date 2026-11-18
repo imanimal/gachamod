@@ -220,7 +220,7 @@ export function KeyChip({ line, onBinding, disabled, title }:
   const tip = live !== null
     ? t("Press the new key, combination or controller buttons. Esc or B cancels")
     : title ?? (line.original
-      ? t("You changed this key. The mod's own key is {key}. Click to change it again", { key: line.originalLabel ?? line.original })
+      ? t("You changed this key. The mod's original key is {key}. Click to change it again", { key: line.originalLabel ?? line.original })
       : t("Change this key: click, then press the new key, combination or controller buttons"));
   return (
     <button type="button" className={`ke-chip${live !== null ? " capturing" : ""}${line.original ? " changed" : ""}${line.off ? " off" : ""}`}
@@ -341,7 +341,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   const onScreenRow = onScreen === "global" ? (
     <p className="ke-os ke-os-global hint">{keys.onScreenNote ?? t("This mod doesn't draw a character, so its toggles work everywhere.")}</p>
   ) : (
-    <div className="ke-os" title={onScreen === "own" ? t("The mod's own ini already checks that its character is drawn before a toggle does anything")
+    <div className="ke-os" title={onScreen === "own" ? t("The mod's ini already checks that its character is drawn before a toggle does anything")
       : offScreenTip}>
       <Toggle checked={onScreen === "on" || onScreen === "partial" || onScreen === "own"} disabled={busy !== null || onScreen === "own" || onScreen === "cant"}
         label={t("Toggles only while on screen")}
@@ -349,7 +349,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
           : onScreen === "cant" || onScreen === "partial" ? keys.onScreenNote ?? undefined
           : onScreen === "on" ? t("Added by gachamod. Turn it off if a toggle stops working in game")
           : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while its character isn't on screen")}
-        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("Its toggles already work only while on screen") : t("Nothing to take out"))} />
+        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"))} />
       {showAi && (
         <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot")}
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>{t("Ask the AI helper")}</Button>

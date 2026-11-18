@@ -74,7 +74,7 @@ export function seconds(s: number): string {
 
 export const HOLD = {
   disk: t("This reads and writes files on disk. A cloud-synced folder (OneDrive, Google Drive) still fetching files, an antivirus scan, or a sleeping external drive can hold it."),
-  db: t("This waits on gachamod's own database. Another task that is saving a lot (a mod scan, a big install) holds it until it's done."),
+  db: t("This waits on gachamod's database. Another task that is saving a lot (a mod scan, a big install) holds it until it's done."),
   gb: t("This waits on GameBanana. A slow or dropped connection, a VPN, or GameBanana being down can hold it. It gives up after 30 seconds without an answer."),
   github: t("This waits on GitHub. A slow or dropped connection or a VPN can hold it. It gives up after 30 seconds without an answer."),
   web: t("This waits on a website. A slow or dropped connection or a VPN can hold it. It gives up after 30 seconds without an answer."),
@@ -134,8 +134,8 @@ const EXACT: Record<string, Desc> = {
   extensions_install: [t("Installing an extension"), HOLD.github],
   fixers_download: [t("Downloading a fix tool"), HOLD.github],
   fixers_github: [t("Downloading a fix tool from GitHub"), HOLD.github],
-  fixers_run_all: [t("Watching what the fixer changes"), t("The fixer opened in its own window. Run it there. gachamod carries on a few seconds after it stops changing files, or when you choose Stop waiting. The window can stay open.")],
-  fixers_run: [t("Running the fixer on the mod"), t("A fixer with its own window waits until you close it. One that waits for a key press is stopped after 2 minutes.")],
+  fixers_run_all: [t("Watching what the fixer changes"), t("The fixer opened in a separate window. Run it there. gachamod carries on a few seconds after it stops changing files, or when you choose Stop waiting. The window can stay open.")],
+  fixers_run: [t("Running the fixer on the mod"), t("A fixer that opens a window waits until you close it. One that waits for a key press is stopped after 2 minutes.")],
   xxmi_uninstall: [t("Uninstalling the mod loaders"), t("This moves files to the Recycle Bin. A game or XXMI Launcher that has the files open can hold it.")],
   app_reset: [t("Getting ready to start over"), HOLD.disk],
   app_relaunch: [t("Restarting gachamod"), HOLD.disk],

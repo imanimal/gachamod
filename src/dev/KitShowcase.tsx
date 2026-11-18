@@ -225,7 +225,7 @@ function Showcase({ motion, setMotion }: { motion: boolean; setMotion: (v: boole
         <div className="stack">
           <TextField label="Name" value={name} onChange={setName} hint="Shown on the card. The folder keeps its name." />
           <TextField label="Hash" value="" onChange={() => {}} placeholder="e.g. 7f3a91c2" mono />
-          <Select label="Theme" value={sel} onChange={setSel} options={[{ value: "auto", label: "Game's own" }, { value: "default", label: "Default" }, { value: "zzz", label: "New Eridu" }]} />
+          <Select label="Theme" value={sel} onChange={setSel} options={[{ value: "auto", label: "Match the game" }, { value: "default", label: "Default" }, { value: "zzz", label: "New Eridu" }]} />
           <TextField label="Disabled" value="Read only" onChange={() => {}} disabled />
         </div>
         <div className="stack">
