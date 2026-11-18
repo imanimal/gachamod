@@ -77,7 +77,8 @@
 :root[data-season="lunar"] { --ss-r: #e9b949; --ss-m: #f0544a; --ss-t1: #e5483d; --ss-t2: #f2c14e;
   --ss-shape: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5.6h3v1.2h-3zM4.5 9.2h3v1.1h-3zM5.6 10.3h.8V12h-.8z'/%3E%3Cellipse cx='6' cy='5.8' rx='4.4' ry='3.6'/%3E%3C/svg%3E"); }
 /* a light title bar (Talos-II keeps a charcoal one unless the whole window is light) */
-:root[data-season="winter"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #5b8fc2; --ss-m: #3f7bb6; }
+:root[data-season][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-glint: color-mix(in srgb, var(--ss-m), #000 40%); }
+:root[data-season="winter"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #5b8fc2; --ss-m: #3f7bb6; --ss-t1: #5b8fc2; }
 :root[data-season="halloween"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #6a48b8; --ss-m: #d9650f; }
 :root[data-season="valentine"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #d6466f; --ss-m: #c93a63; }
 :root[data-season="lunar"][data-scheme="light"]:not([data-theme="ef"]:not([data-full])) { --ss-r: #b07e1f; --ss-m: #c4302a; }
@@ -99,7 +100,7 @@
 /* game themes: the light that passes along the shapes */
 :root[data-season]:is([data-theme="gi"], [data-theme="hsr"], [data-theme="ww"], [data-theme="ef"]) .titlebar::before {
   opacity: 1; animation: ssSweep 14s linear 2s 3;
-  background: linear-gradient(90deg, transparent calc(var(--ss-x) - 7%), rgb(255 255 255 / .9) var(--ss-x), transparent calc(var(--ss-x) + 7%)), var(--ss-m); }
+  background: linear-gradient(90deg, transparent calc(var(--ss-x) - 7%), var(--ss-glint, rgb(255 255 255 / .9)) var(--ss-x), transparent calc(var(--ss-x) + 7%)), var(--ss-m); }
 @keyframes ssSweep { 0% { --ss-x: -20%; } 30%, 100% { --ss-x: 120%; } }
 
 /* New Eridu: hazard tape in the season's pair, the light runs along the tape */

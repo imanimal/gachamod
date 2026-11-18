@@ -54,7 +54,8 @@ export function season(d = new Date()): Season | null {
   if (m === 2 && day === 14) return "valentine";
   const ny = LUNAR[d.getFullYear()];
   if (ny) {
-    const since = (new Date(d.getFullYear(), m - 1, day).getTime() - new Date(d.getFullYear(), ny[0] - 1, ny[1]).getTime()) / DAY;
+    // rounded, so a clock change in between doesn't add or drop a day
+    const since = Math.round((new Date(d.getFullYear(), m - 1, day).getTime() - new Date(d.getFullYear(), ny[0] - 1, ny[1]).getTime()) / DAY);
     if (since >= 0 && since < 15) return "lunar";
   }
   return null;
