@@ -44,13 +44,19 @@ export function upToField(e: KeyboardEvent, list: HTMLElement | null, selector: 
   return true;
 }
 
-export function SideSearch({ value, onChange, list, selector, placeholder, ref }: {
+export function SideSearch({ value, onChange, list, selector, pinned, placeholder, ref }: {
   value: string; onChange: (v: string) => void;
   /** The list it narrows, and its items, for the arrow keys. */
   list: RefObject<HTMLElement | null>; selector: string;
+  /** Items that stay whatever is typed ("All mods"): arrow down skips them while something is typed. */
+  pinned?: string;
   placeholder: string; ref?: Ref<HTMLInputElement>;
 }) {
-  const toFirst = () => { list.current?.querySelector<HTMLElement>(selector)?.focus(); };
+  const toFirst = () => {
+    const el = list.current;
+    const match = value && pinned ? el?.querySelector<HTMLElement>(`${selector}:not(${pinned})`) : null;
+    (match ?? el?.querySelector<HTMLElement>(selector))?.focus();
+  };
   return (
     <label className="search lib-side-search" title={t("Shows only the names that match. Arrow down goes to the first one, Esc clears")}>
       <Icon name="search" />

@@ -239,7 +239,7 @@
    keep one column each; a column that no row uses takes no room. The body and the foot hand their parts to the row.
    Every part names its column and row 1, and the offsets the cards use are reset, so a theme's card rules can't move
    them. Rows have one height and no content-visibility, which would cut them off the shared columns */
-.mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: minmax(0, 10rem); --dense-size: auto;
+.mod-grid.is-list.is-dense:not(.is-loading) { --dense-char: fit-content(10rem); --dense-size: auto;
   display: grid; column-gap: 0; align-content: start;
   grid-template-columns: [sw] auto [pic] auto [name] minmax(5rem, 1fr) [char] var(--dense-char) [size] var(--dense-size)
     [b-start hp] auto [fav] auto [upd] auto [cf] auto [ini] auto [parts] auto [sub] auto [keys] auto [live] auto [b-end more] auto; }
@@ -254,7 +254,7 @@
 .mod-grid.is-dense .mod-card.is-row .mod-card-char { grid-column: char; margin-left: var(--s-3); }
 .mod-grid.is-dense .mod-card.is-row .mod-card-meta { grid-column: size; margin-left: var(--s-3); text-align: right; font-variant-numeric: tabular-nums; }
 .mod-grid.is-dense .mod-card.is-row .mod-card-badges { grid-column: b-start / b-end; display: grid; grid-template-columns: subgrid; align-items: center;
-  position: relative; inset: auto; max-width: none; margin: 0; }
+  gap: 0; position: relative; inset: auto; max-width: none; margin: 0; }
 .mod-grid.is-dense .mod-card.is-row .mod-card-badges > * { grid-row: 1; justify-self: start; margin-left: var(--s-1); }
 .mod-grid.is-dense .mod-card-badges > .mb-hp { grid-column: hp; }
 .mod-grid.is-dense .mod-card-badges > .mb-fav { grid-column: fav; }

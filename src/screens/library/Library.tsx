@@ -390,7 +390,7 @@ function LibSide({ sideRef, deps, find, onFind, noun, children }: {
   useEffect(() => { ref.current?.querySelector<HTMLElement>(".chip.on")?.scrollIntoView({ block: "nearest" }); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div ref={sideRef} className="lib-side">
-      {find !== null && <SideSearch ref={field} value={find} onChange={onFind} list={ref} selector=".chip" placeholder={t("Search {noun}", { noun })} />}
+      {find !== null && <SideSearch ref={field} value={find} onChange={onFind} list={ref} selector=".chip" pinned=".all-chip" placeholder={t("Search {noun}", { noun })} />}
       <nav ref={ref} className="lib-side-list" aria-label={t("Types and characters")}
         onKeyDown={(e) => { if (!upToField(e, ref.current, ".chip", field.current)) moveInGrid(e, ref.current, ".chip"); }}>
         {children}
