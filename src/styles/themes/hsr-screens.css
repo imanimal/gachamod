@@ -169,7 +169,7 @@
 
   /* ── settings and tools: rows are plates stacked 3 px apart ── */
   .set-rows, .set-games, .tools-dev { gap: 3px; }
-  .set-row, .tools-dev-row, .set-game { padding: .5rem .9rem; border-bottom: 0; border-radius: var(--cut-sm); background: var(--row); }
+  .set-row, .tools-dev-row, .set-game { padding: .5rem .9rem; border-bottom: 0; border-radius: var(--cut-sm); background: var(--row); --hit-x: 3px; --hit-r: var(--cut-sm); }
   .ext-src { border-radius: var(--cut-sm); }
   .set-game { padding: .65rem .9rem; }
   .set-row > span:first-child, .tools-dev-row > span:first-child { font-weight: 600; }

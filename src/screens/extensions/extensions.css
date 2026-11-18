@@ -29,7 +29,7 @@
 .ext-perms .i { margin-top: .15em; }
 .ext-link { color: var(--accent-ink); font-weight: 600; }
 .ext-link:hover { text-decoration: underline; text-underline-offset: 2px; }
-.ext-where { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.ext-where { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-2); }
 .ext-problem { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--bad); font-size: var(--t-small); }
 .ext-act { flex: none; display: flex; align-items: center; gap: var(--s-2); }
 
@@ -51,5 +51,6 @@
 .ext-src { display: flex; align-items: center; gap: var(--s-2); min-height: 2rem; margin: 0; padding: 0 var(--s-1) 0 var(--s-3); border-radius: var(--radius-sm); background: var(--surface-2); }
 .ext-src > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-small); }
 .ext-src:first-child > span { font-family: inherit; font-size: inherit; color: var(--text-2); }
-.ext-src-add { display: flex; align-items: flex-end; gap: var(--s-2); }
+/* the field to add a list sits clear of the lists above it, which are boxes in some themes */
+.ext-src-add { display: flex; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-2); }
 .ext-src-add .field { flex: 1; }

@@ -126,15 +126,23 @@
   .pe-emoji.on, .pe-portrait.on, .pe-banner-tile.on { box-shadow: 0 0 0 2px var(--ink); }
   .portrait.on { outline: 2px solid var(--ink); }
 
-  /* ── settings: rows are paper bars, like the game's option rows. Every box on a page shares one fixed corner:
-     a one-line row reads as a pill, and a taller one (a game card, a field, a wrapped hint) keeps its corners clear ── */
-  .set-game, .set-row, .set-pergame-r, .ext-src { --set-r: 1.4rem; }
+  /* ── settings: rows are paper bars, like the game's option rows. Every box on a page shares one corner, made from
+     the controls in it: a control is a pill --set-ctl tall with --set-pad around it, so the row's corner is the
+     pill's radius plus that gap and the two curves stay parallel. A one-line row reads as a pill ── */
+  .set-game, .set-row, .set-pergame-r, .ext-src { --set-pad: .45rem; --set-ctl: calc(1.55rem + 6px); --set-r: calc(var(--set-ctl) / 2 + var(--set-pad));
+    --hit-x: 3px; --hit-r: calc(var(--set-r) - 3px); }
   .set-game { padding: .6rem .9rem; margin-bottom: .4rem; border: 0; border-radius: var(--set-r); background: var(--weave), var(--paper); box-shadow: inset 0 0 0 1px var(--tan); }
   .set-game:last-child { border: 0; }
   .set-game-h b, .set-game-h strong { font-weight: 700; }
-  .set-row { padding: .45rem .7rem .45rem 1.2rem; margin-bottom: 5px; border: 0; border-radius: var(--set-r);
+  .set-row { padding: var(--set-pad) var(--set-pad) var(--set-pad) 1.2rem; margin-bottom: 5px; border: 0; border-radius: var(--set-r);
     background: linear-gradient(90deg, var(--paper) 0 60%, #ece3d2 68%); box-shadow: inset 0 0 0 1px #ddd1bd; }
-  .set-row:last-child { border: 0; }
+  .set-row:last-child { border: 0; margin-bottom: 0; }
+  /* every control in a row is the same height (a small switch's: 1.55rem plus its 3px ring), so each sits the same
+     distance from the row's edge */
+  .set-row .seg-o { height: 1.55rem; }
+  .set-row .select select { height: var(--set-ctl); padding-block: 0; }
+  .set-row .btn:not(.ibtn) { height: var(--set-ctl); }
+  .set-row .ibtn { width: var(--set-ctl); height: var(--set-ctl); }
   .set-row b { font-weight: 700; }
   .set-importer { border-radius: 999px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--tan); font-weight: 600; }
   .theme-card .theme-preview { border-radius: 3px 3px 1.2rem 3px; }

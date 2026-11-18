@@ -384,6 +384,11 @@
 [data-theme="ef"][data-accent="orange"] { --acc: #ff8a1f; --acc-lo: #e86e00; --acc-wash: #f6dcc2; --acc-ink: #8a3d00; }
 [data-theme="ef"][data-accent="lime"] { --acc: #c5e03a; --acc-lo: #a8c21c; --acc-wash: #e6efc0; --acc-ink: #4d5c00; }
 [data-theme="ef"][data-accent="cyan"] { --acc: #3fd0f0; --acc-lo: #19b2d6; --acc-wash: #c9ecf4; --acc-ink: #005c73; }
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+[data-theme="ef"][data-accent^="#"] {
+  --acc: var(--accent-pick); --acc-lo: color-mix(in srgb, var(--accent-pick) 86%, #000); --acc-wash: color-mix(in srgb, var(--accent-pick) 28%, #fff);
+  --acc-ink: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
+}
 
 /* ── the dark scheme: charcoal sheets, light ink, the stage a step darker. Controls stay light pills. ── */
 [data-theme="ef"][data-scheme="dark"] {

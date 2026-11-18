@@ -349,6 +349,10 @@
 [data-theme="gi"][data-accent="electro"] { --acc: #af8ef3; --acc-hi: #c9b3f7; --acc-ink: #6445ad; }
 [data-theme="gi"][data-accent="dendro"] { --acc: #a5c83b; --acc-hi: #c1dc72; --acc-ink: #4d6210; }
 [data-theme="gi"][data-accent="cryo"] { --acc: #9fd6e3; --acc-hi: #c4e7ef; --acc-ink: #255d6a; }
+/* any colour from the picker (lib/theme.ts sets --accent-pick, text that reads on it and a darker shade) */
+[data-theme="gi"][data-accent^="#"] {
+  --acc: var(--accent-pick); --acc-hi: color-mix(in srgb, var(--accent-pick) 70%, #fff); --acc-ink: var(--accent-pick-dk); --on-accent: var(--accent-pick-on);
+}
 
 /* ── light: the game's own menus. The window is cream paper, controls are slate pills, headings are slate ink and
    rules are gold. Drawers turn to paper too; pop-up menus, tips and toasts stay slate. ── */

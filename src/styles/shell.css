@@ -172,10 +172,12 @@
 .nv-b.t-run:empty { position: relative; width: .6rem; min-width: 0; height: .6rem; padding: 0; margin-right: .35rem; }
 /* the grid: fixed-height tiles, icon over the name, names sized to fit half the sidebar */
 :root[data-nav="grid"] .side-nav { grid-template-columns: 1fr 1fr; grid-auto-rows: var(--nv-h); gap: var(--s-1); }
-:root[data-nav="grid"] .nv { flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--s-1); padding: 0 var(--s-2); font-size: var(--t-small);
-  background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
-:root[data-nav="grid"] .nv:hover:not(:disabled) { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
-:root[data-nav="grid"] .nv.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+:root[data-nav="grid"] .nv { flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--s-1); padding: 0 var(--s-2); font-size: var(--t-small); }
+:root[data-nav="grid"] .nv:where(:not(.on)) { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+:root[data-nav="grid"] .nv:hover:not(:disabled, .on) { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+/* the open view weighs less than a theme's own .nv.on, so a theme's dark text always sits on its own light fill */
+:where(:root[data-nav="grid"]) .nv.on, :where(:root[data-nav="grid"]) .nv.on:hover:not(:disabled) {
+  background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 :root[data-nav="grid"] .nv-t { flex: none; max-width: 100%; }
 :root[data-nav="grid"] .nv-b { position: absolute; top: .35rem; right: .35rem; }
 :root[data-nav="grid"] .nv-b.t-run:empty { top: .55rem; right: .55rem; margin: 0; }
@@ -198,6 +200,9 @@
 .side-p { display: flex; align-items: center; gap: var(--s-2); flex: none; min-width: 0; height: var(--p-h); padding: 0 .5rem 0 .3rem; border-radius: var(--radius-sm); color: var(--text-2); text-align: left;
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .side-p:hover { background: var(--hover); color: var(--text); }
+/* the profile list scrolls and clips 3px out, so the focus ring sits inside the row */
+.side-prof-list .side-p:focus-visible, html.kbd .side-prof-list .side-p:focus { outline-offset: -2px; }
+html.pad .side-prof-list .side-p:focus { outline-offset: -3px; box-shadow: none; }
 .side-p.on { background: var(--surface); color: var(--text); font-weight: 650; box-shadow: inset 3px 0 0 var(--p-color, var(--accent)); }
 /* the picture sits the same distance (--p-in) from the row's top, bottom and left edge, so it stays clear of the
    row's ring or stripe in every theme, round rows included */
@@ -266,6 +271,9 @@
   :root:root .app .side[data-collapsed] .nv { width: 2.3rem; }
   /* profiles shrink a thousand times faster, so the nav only scrolls once the profile list is down to its smallest */
   .side > .side-nav { flex-shrink: 1; min-height: 0; overflow: hidden auto; scrollbar-width: none; }
+  /* scrolling, the nav clips at its edges: the focus ring goes inside the button */
+  .side > .side-nav .nv:focus-visible, html.kbd .side > .side-nav .nv:focus { outline-offset: -2px; }
+  html.pad .side > .side-nav .nv:focus { outline-offset: -3px; box-shadow: none; }
   .side > .side-prof { flex-shrink: 1000; }
 }
 @container app (max-height: 40rem) {
