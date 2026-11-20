@@ -9,7 +9,8 @@ const GB = 1024 * MB;
 
 const CATEGORY: Record<string, StorageCategory> = {
   "mods-on": "on", "mods-off": "off", trash: "trash", archives: "downloads", parts: "downloads", backups: "backups",
-  "shader-cache": "loader", "frame-dumps": "loader", log: "loader", loader: "loader", xxmi: "loader", others: "others",
+  "shader-cache": "loader", "frame-dumps": "loader", log: "loader", "live-menu": "loader", loader: "loader", xxmi: "loader", others: "others",
+  originals: "backups",
 };
 const item = (key: string, bytes: number, count: number, path: string | null, name: string | null = null): StorageItem =>
   ({ key, category: CATEGORY[key] ?? "app", bytes: Math.round(bytes), count, path, name });
@@ -23,6 +24,11 @@ const EXTRA: Record<string, [number, number, number, number, number, number]> = 
   ww: [0, 190 * MB, 1 * MB, 4 * MB, 0, 88 * MB],
   ef: [0, 60 * MB, 0, 0, 0, 72 * MB],
 };
+
+/** Things Clear deletes, so the demo's rows go when cleared: the shared ones by key, a game's copies and menu pictures by game. */
+const APP: Record<string, number> = { thumbs: 48 * MB, cache: 22 * MB, staging: 36 * MB, icons: 480 * 1024, media: 1.2 * MB, "extension-data": 24 * 1024, webview: 210 * MB, "logs-old": 1.2 * MB, "nrmm-trash": 85 * MB };
+const ORIGINALS: Record<string, number> = { zzz: 180 * 1024, gi: 40 * 1024 };
+const MENU: Record<string, number> = { zzz: 38 * MB };
 
 let cancelled = false;
 
@@ -66,15 +72,21 @@ async function report(full: boolean): Promise<StorageReport> {
         item("frame-dumps", dumps, Math.round(dumps / (2 * MB)), g.importerDir), item("loader", loader, 140, g.importerDir));
       if (g.id === "gi") items.push(item("others", 2.1 * GB, 31, "C:\\Users\\Player\\Documents\\XXMM\\GIMI", "XX Mod Manager"));
       if (g.id === "zzz") items.push(item("trash", 340 * MB, 3, `${DATA}\\trash\\zzz`), item("parts", 46 * MB, 1, `${DATA}\\downloads\\zzz`));
+      items.push(item("originals", ORIGINALS[g.id] ?? 0, Math.round((ORIGINALS[g.id] ?? 0) / 8192), `${DATA}\\originals\\${g.id}`),
+        item("live-menu", MENU[g.id] ?? 0, Math.round((MENU[g.id] ?? 0) / (4 * MB)), `${g.modsDir}\\gachamod live`));
     }
     const kept = items.filter((i) => i.bytes > 0).sort((a, b) => b.bytes - a.bytes);
     games.push({ game: g.id, bytes: kept.reduce((s, i) => s + i.bytes, 0), items: kept });
   }
   games.sort((a, b) => b.bytes - a.bytes);
   const app = full ? [
-    item("xxmi", 312 * MB, 1840, "C:\\Users\\Player\\AppData\\Roaming\\XXMI Launcher"), item("thumbs", 48 * MB, 212, `${DATA}\\cache\\thumbs`),
-    item("cache", 22 * MB, 40, `${DATA}\\cache`), item("database", 6.4 * MB, 2, `${DATA}\\gachamod.sqlite`), item("backups", 31 * MB, 6, `${DATA}\\backups`),
-    item("logs", 3.1 * MB, 9, `${DATA}\\logs`), item("archive", 9 * MB, 18, `${DATA}\\archive`), item("staging", 0, 0, `${DATA}\\staging`),
+    item("xxmi", 312 * MB, 1840, "C:\\Users\\Player\\AppData\\Roaming\\XXMI Launcher"), item("thumbs", APP.thumbs!, 212, `${DATA}\\cache\\thumbs`),
+    item("cache", APP.cache!, 40, `${DATA}\\cache`), item("database", 6.4 * MB, 2, `${DATA}\\gachamod.sqlite`), item("backups", 31 * MB, 6, `${DATA}\\backups`),
+    item("logs", 3.1 * MB, 9, `${DATA}\\logs`), item("archive", 9 * MB, 18, `${DATA}\\archive`), item("staging", APP.staging!, 6, `${DATA}\\staging`),
+    item("icons", APP.icons!, 4, `${DATA}\\icons`), item("media", APP.media!, 3, `${DATA}\\media`), item("extension-data", APP["extension-data"]!, 2, `${DATA}\\extension-data`),
+    item("webview", APP.webview!, 1900, "C:\\Users\\Player\\AppData\\Local\\app.gachamod.desktop\\EBWebView"),
+    item("login", 38 * MB, 410, `${DATA}\\gb-login`), item("ai", 1024, 1, `${DATA}\\ai`), item("extensions-trash", 2 * MB, 12, `${DATA}\\trash\\extensions`),
+    item("nrmm-trash", APP["nrmm-trash"]!, 96, `${DATA}\\trash\\nrmm`), item("other", 2 * 1024, 1, `${DATA}\\look.json`, "look.json"),
   ].filter((i) => i.bytes > 0).sort((a, b) => b.bytes - a.bytes) : [];
 
   const out: StorageMod[] = mods.map((m) => ({ id: m.id, game: m.game, name: m.name, character: m.character, enabled: m.enabled, bytes: m.sizeBytes, files: m.fileCount,
@@ -125,6 +137,21 @@ export function registerStorageDemo() {
       const moved = backupList().filter((e) => gone.has(e.id)).reduce((s, e) => s + e.bytes, 0);
       demoBackups = backupList().filter((e) => !gone.has(e.id));
       return moved;
+    },
+    storage_clear: async ({ kind, game }) => {
+      await demoWait(300);
+      // "webview" is deleted at the next start, so its row stays
+      const part = String(kind).endsWith("-gone") || kind === "media-unused" ? 0.3 : 1;
+      const take = (table: Record<string, number>, key: string) => { const n = Math.round((table[key] ?? 0) * part); table[key] = (table[key] ?? 0) - n; return n; };
+      const keyOf = String(kind).replace(/-gone$/, "").replace("media-unused", "media");
+      if (kind === "webview") return APP.webview!;
+      if (kind === "log") { const x = EXTRA[String(game)]; const n = x?.[2] ?? 0; if (x) x[2] = 0; return n; }
+      if (keyOf === "originals") {
+        let n = 0;
+        for (const id of game ? [String(game)] : Object.keys(ORIGINALS)) n += take(ORIGINALS, id);
+        return n;
+      }
+      return take(APP, keyOf);
     },
     storage_remove_copies: ({ game, ids }) => call<ModChange>("mods_remove", { game, ids }),
     storage_recycle_archives: async ({ game }) => {

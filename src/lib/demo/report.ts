@@ -1,12 +1,14 @@
 // Demo handlers for logs, crash reports, usage counts, feedback and administrator (lib/api/report.ts). Nothing leaves
 // the browser. Owner: SYSTEM area.
 import type { LiveInfo } from "../api";
+import type { GameState } from "../api/types";
 import { call, registerDemo } from "../tauri";
-import { demoDb, demoWait } from "./db";
+import { demoDb, demoId, demoWait } from "./db";
 
 export function registerReportDemo() {
   const on = (k: string) => demoDb.settings.get(k) !== "0";
-  const state = () => ({ usage: on("telemetry.usage"), crashes: on("telemetry.crashes"), configured: true, logsDir: "%APPDATA%\\app.gachamod.desktop\\logs" });
+  const state = () => ({ usage: on("telemetry.usage"), crashes: on("telemetry.crashes"), configured: true, logsDir: "%APPDATA%\\app.gachamod.desktop\\logs", installId: demoDb.settings.get("telemetry.id") ?? null });
+  if (!demoDb.settings.has("telemetry.id")) demoDb.settings.set("telemetry.id", demoId());
   let always = false;
   const links = { app: true, quickstart: false, games: [] as string[] };
   const linkState = () => ({ ...links, games: [...links.games] });
@@ -17,6 +19,7 @@ export function registerReportDemo() {
       if (typeof crashes === "boolean") demoDb.settings.set("telemetry.crashes", crashes ? "1" : "0");
       return state();
     },
+    report_reset_id: () => { demoDb.settings.delete("telemetry.id"); return state(); },
     telemetry_events: () => undefined,
     log_write: () => undefined,
     log_tail: () => [
@@ -49,7 +52,7 @@ export function registerReportDemo() {
       const g = demoDb.games.find((x) => x.id === game);
       if (!g) throw { kind: "invalid", message: `gachamod doesn't know the game ${String(game)}` };
       const info = await call<LiveInfo>("live_info", { game });
-      const running = await call<boolean>("game_running", { game });
+      const running = (await call<GameState[]>("games_list")).some((x) => x.id === game && x.running);
       return {
         game: g.id, name: g.name, importer: g.importer, viaXxmi: g.viaXxmi, loaderVersion: g.importerVersion ?? null, xxmiVersion: g.viaXxmi ? "0.9.3" : null,
         windowMode: g.viaXxmi ? "borderless" : null, running, gameAdmin: running ? g.id === "zzz" : null, appAdmin: false,

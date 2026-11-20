@@ -22,7 +22,7 @@ import "./downloads.css";
 import { LazyImg } from "../../ui/LazyImg";
 import { notesText } from "../../lib/notes";
 import { record } from "../../lib/history";
-import { BatchHead, InstalledList, ModSwitch, ModsToggle, batches, modsOf, useInstalledState } from "./Batches";
+import { BatchHead, InstalledList, ModSwitch, ModsToggle, batches, dropsFile, modsOf, useInstalledState } from "./Batches";
 import { isNotice, isSeen, markSeen, unseen, useSeen } from "./seen";
 import { gameName as gameTitle, gameShort as shortName } from "../../lib/games";
 import { t, tb, tn } from "../../lib/i18n";
@@ -295,7 +295,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
       "-",
       !finished(i) && i.state !== "installing" && { label: t("Cancel"), icon: "x", keys: "Del", onClick: cancel },
       i.state === "installing" && { label: t("Cancel"), icon: "x", disabled: true, title: t("It's being installed right now and will be done in a moment") },
-      finished(i) && { label: t("Clear from list"), icon: "x", keys: "Del", title: t("The mod stays installed"), onClick: clear },
+      finished(i) && { label: t("Clear from list"), icon: "x", keys: "Del", title: dropsFile(i) ? t("Also deletes the unfinished download file") : t("The mod stays installed"), onClick: clear },
     ];
     // a finished one-mod row also gets that mod's own menu
     if (i.state === "done" && mods.length === 1) list.push("-", { header: mods[0]!.name }, ...menuFor("mod", { game: i.req.game, mod: mods[0]! }));
@@ -376,7 +376,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
         {i.state === "installing" && (
           <span title={t("It's being installed right now and will be done in a moment")}><IconButton icon="x" label={t("Cancel")} title="" disabled /></span>
         )}
-        {finished(i) && <IconButton icon="x" label={t("Clear from list")} title={t("Clear from list (Delete). The mod stays installed")} onClick={clear} />}
+        {finished(i) && <IconButton icon="x" label={t("Clear from list")} title={dropsFile(i) ? t("Clear from list (Delete). Also deletes the unfinished download file") : t("Clear from list (Delete). The mod stays installed")} onClick={clear} />}
       </div>
     </li>
   );
@@ -438,7 +438,10 @@ export function Downloads() {
     const sep = dir.includes("\\") ? "\\" : "/";
     const base = `${dir}${sep}downloads`;
     const tries = [...(game && !all ? [`${base}${sep}${game.id}`] : []), base, dir];
-    for (const p of tries) { try { await shell.openPath(p); return; } catch { /* not made yet, try the one above */ } }
+    // a folder that isn't made yet fails, so the next one up is tried; when none opens, the last error is shown
+    let last: unknown = null;
+    for (const p of tries) { try { await shell.openPath(p); return; } catch (e) { last = e; } }
+    throw last;
   });
 
   const gameName = (id: string) => { const g = games.find((x) => x.id === id); return g ? shortName(g) : id; };
@@ -530,7 +533,7 @@ export function Downloads() {
           {game && <span title={t("Show the downloads of every game, grouped by game")}><Toggle size="sm" checked={all} onChange={setAll} label={t("All games")} /></span>}
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title={t("Install .zip, .7z or .rar files from this PC (or drop them on the window)")}>{t("Install from files")}</Button>
           {toRetry > 0 && <Button icon="refresh" onClick={() => retryAll(done)} title={t("Try every failed download on this page again")}>{t("Retry failed ({n})", { n: toRetry })}</Button>}
-          <Button variant="ghost" icon="trash" disabled={!done.length} title={all || !game ? t("Clear every finished download from the list. The mods stay installed") : t("Clear {game}'s finished downloads from the list. The mods stay installed", { game: shortName(game) })}
+          <Button variant="ghost" icon="trash" disabled={!done.length} title={(all || !game ? t("Clear every finished download from the list. The mods stay installed") : t("Clear {game}'s finished downloads from the list. The mods stay installed", { game: shortName(game) })) + (done.some(dropsFile) ? " " + t("Failed and cancelled downloads lose their unfinished files.") : "")}
             onClick={() => clearRows(done)}>{t("Clear finished")}</Button>
           <IconButton icon="folder" label={t("Open the downloads folder")}
             title={keepArchives ? t("Open the downloads folder. Downloaded archives stay there after installing") : t("Open the downloads folder. Archives are deleted once they install, so it holds the ones that didn't")}

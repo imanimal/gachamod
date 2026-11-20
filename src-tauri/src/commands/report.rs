@@ -23,6 +23,13 @@ pub async fn report_set(st: State<'_, AppState>, usage: Option<bool>, crashes: O
     blocking(move || telemetry::set(&*lock(&db)?, usage, crashes)).await
 }
 
+/// Forget the install id usage counts and crash reports carry; the next one gets a new random id.
+#[tauri::command]
+pub async fn report_reset_id(st: State<'_, AppState>) -> Result<telemetry::State> {
+    let db = st.db.clone();
+    blocking(move || telemetry::reset_id(&*lock(&db)?)).await
+}
+
 /// Usage events from the window, sent with the next batch.
 #[tauri::command]
 pub async fn telemetry_events(st: State<'_, AppState>, events: Vec<UiEvent>) -> Result<()> {

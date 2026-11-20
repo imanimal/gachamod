@@ -95,6 +95,9 @@ const uidKey = (game: GameId) => `${game}.uid`;
 /** The UID last read for a game, to fill the field next time. */
 export const savedUid = (game: GameId) => settings.get(uidKey(game)).then((v) => v ?? "").catch(() => "");
 
+/** Forget the UID last read, so the field starts empty next time. */
+export const forgetUid = (game: GameId) => settings.set(uidKey(game), "").catch(() => {});
+
 export type OwnedSource = { text: string } | { path: string } | { uid: string };
 
 /** Read an export file, its text, a pasted list or the player's profile and mark everything in it as owned, with Undo. */

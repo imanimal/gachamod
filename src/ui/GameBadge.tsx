@@ -1,11 +1,13 @@
 // A game's icon, sharp at any size and rounded like an app icon. Where it comes from, in order:
 //   1. the game's own exe icon (games.icon, a 256 px PNG the backend keeps; null until the game folder is known)
-//   2. the App Store's 512 px icon (gameMeta(id).appStore, looked up once and kept for 30 days)
+//   2. the App Store's 512 px icon (gameMeta(id).appStore, looked up once and kept for 30 days; Settings, Online
+//      lookups can turn the lookup off, and a saved icon still shows then)
 //   3. a lettered badge in the game's accent ("ZZZ", "WuWa", or the id like "HSR" when the short name is long)
 // GameBanana's own game icons are 32 px, so they are never used here. Owner: SHELL area.
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { fileUrl, games, type GameId, type GameState } from "../lib/api";
 import { gameMeta } from "../lib/games";
+import { onlinePicturesPref } from "../lib/prefs";
 import { onColor } from "../lib/theme";
 
 const MONTH = 30 * 24 * 3600 * 1000;
@@ -14,6 +16,8 @@ const DAY = 24 * 3600 * 1000;
 // what is known per game: undefined = still looking, null = no picture
 const known = new Map<GameId, string | null>();
 const looking = new Set<GameId>();
+// games that had no icon because the lookup was switched off: asked again when it is switched on
+const skipped = new Set<GameId>();
 const subs = new Set<() => void>();
 let version = 0;
 const changed = () => { version++; subs.forEach((f) => f()); };
@@ -32,9 +36,12 @@ function writeStore(id: number, url: string | null) {
   try { localStorage.setItem(`gm.appicon.${id}`, JSON.stringify({ url, at: Date.now() })); } catch { /* storage unavailable */ }
 }
 
-async function appStoreIcon(id: number): Promise<string | null> {
+/** The icon URL, null when the App Store has none, undefined when the lookup is switched off and nothing is saved. */
+async function appStoreIcon(id: number): Promise<string | null | undefined> {
   const stored = readStore(id);
   if (stored !== undefined) return stored;
+  await onlinePicturesPref.ready;
+  if (!onlinePicturesPref.get()) return undefined;
   try {
     const r = await fetch(`https://itunes.apple.com/lookup?id=${id}`);
     if (!r.ok) return null; // offline or refused: try again next session
@@ -50,7 +57,11 @@ async function look(id: GameId) {
   looking.add(id);
   let url: string | null = null;
   try { url = fileUrl(await games.icon(id)) ?? null; } catch { /* no exe icon command or no folder */ }
-  if (!url) { const app = gameMeta(id).appStore; if (app) url = await appStoreIcon(app); }
+  if (!url) {
+    const app = gameMeta(id).appStore;
+    const got = app ? await appStoreIcon(app) : null;
+    if (got === undefined) skipped.add(id); else url = got;
+  }
   known.set(id, url);
   looking.delete(id);
   changed();
@@ -59,12 +70,16 @@ async function look(id: GameId) {
 /** The sharp icon URL for a game, or null for the lettered badge. Starts the lookup on first use. */
 export function useGameIcon(id: GameId): string | null {
   useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => version);
-  useEffect(() => { if (!known.has(id)) void look(id); }, [id]);
+  const online = onlinePicturesPref.use();
+  useEffect(() => {
+    if (online && skipped.delete(id)) known.delete(id);
+    if (!known.has(id)) void look(id);
+  }, [id, online]);
   return known.get(id) ?? null;
 }
 
 /** Forget a game's icon (its folder changed) so the next render looks again. */
-export function refreshGameIcon(id: GameId) { known.delete(id); changed(); }
+export function refreshGameIcon(id: GameId) { known.delete(id); skipped.delete(id); changed(); }
 
 export function GameBadge({ game, size = 40, className }: { game: Pick<GameState, "id" | "short" | "name" | "accent"> & { gamebananaId?: number }; size?: number; className?: string }) {
   const icon = useGameIcon(game.id);

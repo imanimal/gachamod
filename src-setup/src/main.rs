@@ -188,7 +188,7 @@ fn run(s: Setup) {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(s)
-        .invoke_handler(tauri::generate_handler![info, data_size, install, repair, update, apply, latest, uninstall, stop, open_app, open_page, plain_installer])
+        .invoke_handler(tauri::generate_handler![info, data_size, install, repair, update, apply, latest, uninstall, stop, open_app, open_page, open_folder, open_recycle_bin, plain_installer])
         .setup(move |app| {
             let init = format!("window.__GM_SETUP__ = {};", json!({ "look": look }));
             let w = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("setup.html".into()))
@@ -386,6 +386,21 @@ fn open_app(s: State<'_, Setup>, dir: Option<String>) -> Result<(), String> {
 fn open_page(url: String) -> Result<(), String> {
     if !url.starts_with("https://") { return Err("Only web pages open from here.".into()); }
     if sys::open_url(&url) { Ok(()) } else { Err("Windows couldn't open the page.".into()) }
+}
+
+/// Show one of gachamod's data folders in Explorer (the uninstall page lists them before offering to delete them).
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    let path = PathBuf::from(path);
+    if !sys::data_dirs().iter().any(|d| *d == path) { return Err("Only gachamod's data folders open from here.".into()); }
+    if !path.is_dir() { return Err("That folder isn't there.".into()); }
+    if sys::open_url(&path.to_string_lossy()) { Ok(()) } else { Err("Windows couldn't open the folder.".into()) }
+}
+
+/// The Recycle Bin, where "delete gachamod's data" put the folders.
+#[tauri::command]
+fn open_recycle_bin() -> Result<(), String> {
+    if sys::open_url("shell:RecycleBinFolder") { Ok(()) } else { Err("Windows couldn't open the Recycle Bin.".into()) }
 }
 
 /// NSIS's own installer window, for someone who'd rather use it (or when this one fails). Setup closes once it ends.

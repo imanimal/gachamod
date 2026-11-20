@@ -6,7 +6,7 @@
 // "trash.unsourced": ask (Recycle Bin or delete for good, with Remember my choice), or do one without asking.
 // Owner: LIBRARY area.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { errorText, library, type ArchiveEntry, type GameId } from "../../lib/api";
+import { errorText, library, shell, type ArchiveEntry, type GameId } from "../../lib/api";
 import { queueLatest } from "../../lib/gamebanana";
 import { record } from "../../lib/history";
 import { useNsfw } from "../../lib/prefs";
@@ -146,9 +146,12 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
     finally { setBusy(null); }
   };
 
+  const showFiles = (e: ArchiveEntry) => { if (e.path) shell.openPath(e.path).catch((err) => toast(errorText(err), true)); };
+
   const menu = (e: ArchiveEntry): MenuEntry[] => [
     { header: e.name },
     { label: e.trashId !== null ? t("Put back") : t("Download again"), icon: "undo", disabled: e.trashId === null && !e.source, onClick: () => void reinstall(e) },
+    e.trashId !== null && !!e.path && { label: t("Open folder"), icon: "folder", title: t("Shows the removed mod's files in File Explorer"), onClick: () => showFiles(e) },
     !!e.character && { label: t("Open {name}'s page", { name: e.character! }), icon: "characters", onClick: () => go({ view: "characters", character: e.character! }) },
     e.source && { label: t("View on GameBanana"), icon: "browse", onClick: () => go({ view: "browse", modId: e.source!.modId }) },
     "-",
@@ -220,7 +223,9 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
                   </span>
                   <span className="tile-meta">
                     <span title={new Date(e.removedAt * 1000).toLocaleString()}><Icon name="clock" />{e.reason === "replaced" ? t("Replaced {when}", { when: timeAgo(e.removedAt) }) : t("Removed {when}", { when: timeAgo(e.removedAt) })}</span>
-                    {files && e.sizeBytes > 0 && <span title={t("Space the files take on your PC")}>{formatBytes(e.sizeBytes)}</span>}
+                    {files && e.sizeBytes > 0 && (e.path
+                      ? <button type="button" className="link-btn" title={t("Space the files take on your PC. Click to open the folder")} onClick={() => showFiles(e)}>{formatBytes(e.sizeBytes)}</button>
+                      : <span title={t("Space the files take on your PC")}>{formatBytes(e.sizeBytes)}</span>)}
                     {e.hasOptions && <span title={t("The mod's option values are saved")}><Icon name="sliders" /></span>}
                   </span>
                   <span className="archive-a">

@@ -103,6 +103,13 @@ pub async fn fixers_list(st: State<'_, AppState>, game: String) -> Result<Vec<Fi
     blocking(move || fixers::list(&data, &game)).await
 }
 
+/// Delete a downloaded fixer and its folder. It is downloaded again the next time a mod needs it.
+#[tauri::command]
+pub async fn fixers_remove(st: State<'_, AppState>, game: String, file_id: u64) -> Result<()> {
+    let data = st.data_dir.clone();
+    blocking(move || fixers::remove(&data, &game, file_id)).await
+}
+
 /// Download one file of a GameBanana fixer into the app's fixers folder. Nothing in it is run.
 #[tauri::command]
 pub async fn fixers_download(st: State<'_, AppState>, game: String, req: FixerRequest) -> Result<FixerFile> {

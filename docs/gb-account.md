@@ -117,7 +117,7 @@ Mapping to the app:
 - The mod drawer's stats row does the mod actions (`screens/browse/ModStats.tsx`): the heart likes, the bell subscribes
   and the gift opens a small box with the cost and one Thank button.
 - Subscribing is gachamod's own list (`lib/subscriptions.ts`, setting `gb.modSubs`), so it works signed out and the
-  app, not GameBanana, tells the user about updates: an hourly `Mod/Multi` check, a toast with View, and Home's
+  app, not GameBanana, tells the user about updates: an hourly `Mod/Multi` check (`gb.subCheck`, on by default; off, nothing is asked), a toast with View (`gb.subToast`), and Home's
   Subscribed mods row. Signed in, the bell also sends `Mod/{id}/Subscription/Add` (row from the apiv13
   `Mod/{id}/ProfilePage`), and `Member/{id}/Subscriptions?_sModelName=Content` (public, records carry `_sModelName`,
   `_tsDateUpdated` and `_aGame`) brings the member's GameBanana subscriptions in at sign-in. `gb_mod_me` reads the accessor flags and `UiConfig` points once per opened mod, in the

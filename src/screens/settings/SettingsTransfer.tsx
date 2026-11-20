@@ -7,7 +7,7 @@ import { Steps, type StepItem } from "../../ui/Steps";
 import { toast } from "../../ui/toast";
 import { appUpdate, dialogs, errorText, settingsFile, shell, type ImportSummary, type UpdateCheck } from "../../lib/api";
 import { record, undo } from "../../lib/history";
-import { currentGame, refreshGames } from "../../lib/store";
+import { currentGame, go, refreshGames } from "../../lib/store";
 import { applyGameTheme } from "../../lib/theme";
 import { getTextSize, getZoom, setTextSize, setZoom } from "../../lib/zoom";
 import { appUpdateModePref, type AppUpdateMode } from "./automatic";
@@ -91,7 +91,8 @@ export function TransferSection() {
     // counts only: the import window already listed the paths and mods by name
     if (r.skippedPaths.length) said.push(tn(r.skippedPaths.length, "Skipped {n} file or folder not on this PC.", "Skipped {n} files or folders not on this PC."));
     if (r.missingMods) said.push(tn(r.missingMods, "{n} mod in the profiles isn't on this PC.", "{n} mods in the profiles aren't on this PC."));
-    const id: number = toast(sentences(said), false, { label: t("Undo import"), run: () => void undo(entry, id) });
+    const id: number = toast(sentences(said), false, { label: t("Undo import"), run: () => void undo(entry, id) },
+      { label: t("View backups"), run: () => go({ view: "settings", section: "disk-backups" }) });
   };
 
   return (

@@ -10,6 +10,7 @@ import { Checkbox } from "../../ui/kit";
 import { KeyRows } from "../../shell/Shortcuts";
 import { HotkeyField } from "../profiles/HotkeyField";
 import { useSetting } from "../settings/parts";
+import { KeptKeys } from "./KeyClash";
 import { MenuKeys } from "./MenuKeys";
 import { patchMenu } from "./data";
 import "./ingame.css";
@@ -29,6 +30,7 @@ export function MenuKeyFields({ game, menu, open }: { game: GameId; menu: MenuSe
         <Checkbox checked={menu.pad} onChange={(pad) => set({ pad })} label={t("Use a controller in the menu")}
           title={t("Both sticks pressed in open it, the D-pad moves, A shows a skin and B closes it. Menu keys changes the buttons")} />
       </div>
+      <KeptKeys />
       <MenuKeys menu={menu} open={open} onChange={(update, label, say) => void patchMenu(game, menu, (m) => ({ binds: update(m.binds) }), label, say)} />
       <details className="live-binds">
         <summary title={t("Keys in gachamod's menu over the game that stay the same, and the game's reload key")}>{t("Other keys")}</summary>

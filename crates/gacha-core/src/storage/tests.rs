@@ -52,8 +52,10 @@ fn the_data_folder_is_sorted_by_game_and_kind() {
     assert_eq!(key(&out.app, "thumbs").unwrap().bytes, 30);
     assert_eq!(key(&out.app, "cache").unwrap().bytes, 40, "the thumbnails aren't counted twice");
     assert_eq!(key(&out.app, "logs").unwrap().bytes, 12);
-    assert_eq!(key(&out.app, "other").unwrap().bytes, 3);
-    assert_eq!(key(&out.app, "extensions").unwrap().bytes, 8, "removed extensions count with the extensions");
+    let other = key(&out.app, "other").unwrap();
+    assert_eq!((other.bytes, other.name.as_deref()), (3, Some("look.json")));
+    assert!(other.path.as_deref().is_some_and(|x| x.ends_with("look.json")), "an unknown file opens by itself, not the data folder");
+    assert_eq!(key(&out.app, "extensions-trash").unwrap().bytes, 8, "removed extensions have a row of their own");
     assert!(key(&out.app, "trash").is_none());
     let app_backups = key(&out.app, "backups").unwrap();
     assert!(app_backups.bytes >= 100 && app_backups.count == 1);
@@ -252,4 +254,153 @@ fn a_measure_reads_the_library_and_trashed_copies_can_come_back() {
     assert_eq!(trash[0].reason, "replaced");
     library::trash_restore(&db.lock().unwrap(), trash[0].id).unwrap();
     assert_eq!(library::list(&db.lock().unwrap(), "zzz").unwrap().len(), 3);
+}
+
+fn age(p: &Path, days: u64) {
+    let f = fs::File::options().write(true).open(p).unwrap();
+    f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400)).unwrap();
+}
+
+#[test]
+fn the_new_items_are_sorted_out() {
+    assert_eq!(category_of("originals"), "backups");
+    assert_eq!(category_of("live-menu"), "loader");
+    let d = temp("new-items");
+    let p = d.path();
+    write(&p.join("originals/zzz/abc/files/mod.ini"), 20);
+    write(&p.join("originals/zzz/abc/manifest.json"), 5);
+    write(&p.join("extension-data/notes.json"), 7);
+    write(&p.join("media/banners/a.png"), 9);
+    write(&p.join("icons/zzz.png"), 11);
+    write(&p.join(WEBVIEW_CLEAR), 0);
+    let out = data_items(p, Stop::Never);
+    let o = key(&out.games["zzz"], "originals").unwrap();
+    assert_eq!((o.bytes, o.count), (25, 2));
+    assert_eq!(key(&out.app, "extension-data").unwrap().bytes, 7);
+    assert_eq!(key(&out.app, "media").unwrap().bytes, 9);
+    assert_eq!(key(&out.app, "icons").unwrap().bytes, 11);
+    assert!(key(&out.app, "other").is_none(), "the clear note isn't counted as another file");
+
+    let imp = p.join("ZZMI");
+    write(&imp.join("Mods/gachamod live/menu.dds"), 4000);
+    let v = loader_items(&imp, Some(&imp.join("Mods")), None, Stop::Never);
+    assert_eq!(key(&v, "live-menu").unwrap().bytes, 4000);
+}
+
+#[test]
+fn what_other_files_held_has_rows_of_its_own() {
+    let d = temp("named");
+    let p = d.path();
+    write(&p.join("gb-login/EBWebView/x.bin"), 30);
+    write(&p.join("gb-session.bin"), 4);
+    write(&p.join("ai/gemini.key"), 6);
+    write(&p.join("xxmi-setup/launcher.zip"), 50);
+    write(&p.join("trash/nrmm/zzz~1/Mods/a/mod.ini"), 70);
+    write(&p.join("trash/odd/x.bin"), 2);
+    write(&p.join("setup-game.json"), 1);
+    let out = data_items(p, Stop::Never);
+    let login = key(&out.app, "login").unwrap();
+    assert_eq!(login.bytes, 34);
+    assert!(login.path.as_deref().is_some_and(|x| x.ends_with("gb-login")));
+    assert_eq!(key(&out.app, "ai").unwrap().bytes, 6);
+    assert_eq!(key(&out.app, "setup").unwrap().bytes, 50);
+    assert_eq!(key(&out.app, "nrmm-trash").unwrap().bytes, 70);
+    let names: Vec<_> = out.app.iter().filter(|i| i.key == "other").filter_map(|i| i.name.clone()).collect();
+    assert!(names.contains(&"setup-game.json".to_string()) && names.contains(&"trash/odd".to_string()), "{names:?}");
+
+    let db = Db::memory().unwrap();
+    assert_eq!(clear(&db, p, "nrmm-trash", None, false).unwrap(), 70);
+    assert!(!p.join("trash/nrmm/zzz~1").exists());
+    assert_eq!(clear(&db, p, "nrmm-trash", None, false).unwrap(), 0);
+}
+
+#[test]
+fn old_logs_go_and_the_live_ones_stay() {
+    let d = temp("logs");
+    let p = d.path();
+    let db = Db::memory().unwrap();
+    write(&p.join("logs/gachamod.log"), 10);
+    write(&p.join("logs/gachamod.old.log"), 20);
+    write(&p.join("logs/crash-1.sent.json"), 3);
+    write(&p.join("logs/crash-2.json"), 4);
+    write(&p.join("logs/running"), 0);
+    write(&p.join("logs/rendering/rendering.log"), 5);
+    write(&p.join("logs/rendering/rendering.old.log"), 6);
+    write(&p.join("logs/rendering/incident-1.txt"), 7);
+    write(&p.join("logs/rendering/system.txt"), 8);
+    assert_eq!(clear(&db, p, "logs-old", None, false).unwrap(), 36);
+    for kept in ["gachamod.log", "crash-2.json", "running", "rendering/rendering.log", "rendering/system.txt"] {
+        assert!(p.join("logs").join(kept).exists(), "{kept} stays");
+    }
+    assert!(!p.join("logs/gachamod.old.log").exists() && !p.join("logs/rendering/incident-1.txt").exists());
+}
+
+#[test]
+fn caches_are_cleared_and_old_ones_age_out() {
+    let d = temp("clear");
+    let p = d.path();
+    let db = Db::memory().unwrap();
+    write(&p.join("cache/thumbs/a.jpg"), 30);
+    write(&p.join("cache/packs/x/y.bin"), 40);
+    assert_eq!(clear(&db, p, "cache", None, false).unwrap(), 40, "the thumbnails stay");
+    assert!(p.join("cache/thumbs/a.jpg").is_file());
+    assert_eq!(clear(&db, p, "thumbs", None, false).unwrap(), 30);
+
+    // unpacked downloads: not while an install runs, and not what was just written
+    write(&p.join("staging/old.bin"), 50);
+    write(&p.join("staging/new.bin"), 60);
+    age(&p.join("staging/old.bin"), 1);
+    assert_eq!(clear(&db, p, "staging", None, true).unwrap(), 0);
+    assert_eq!(clear(&db, p, "staging", None, false).unwrap(), 50);
+    assert!(p.join("staging/new.bin").is_file());
+
+    // the start drops pictures nobody has used for a long time
+    write(&p.join("cache/thumbs/old.jpg"), 5);
+    write(&p.join("cache/thumbs/new.jpg"), 5);
+    write(&p.join("cache/packs/old.bin"), 5);
+    age(&p.join("cache/thumbs/old.jpg"), 90);
+    age(&p.join("cache/packs/old.bin"), 40);
+    prune_caches(p);
+    assert!(!p.join("cache/thumbs/old.jpg").exists() && !p.join("cache/packs/old.bin").exists());
+    assert!(p.join("cache/thumbs/new.jpg").is_file());
+    assert!(clear(&db, p, "nonsense", None, false).is_err());
+}
+
+#[test]
+fn clearing_game_icons_keeps_the_quickstart_shortcut_icons() {
+    let d = temp("icons");
+    let p = d.path();
+    let db = Db::memory().unwrap();
+    write(&p.join("icons/zzz.png"), 11);
+    write(&p.join("icons/quickstart-zzz-1-99.ico"), 20);
+    assert_eq!(clear(&db, p, "icons", None, false).unwrap(), 11);
+    assert!(!p.join("icons/zzz.png").exists());
+    assert!(p.join("icons/quickstart-zzz-1-99.ico").is_file(), "a desktop shortcut still points at it");
+}
+
+#[test]
+fn the_window_cache_clear_uses_the_queued_folder_and_stays_queued_until_it_is_done() {
+    let d = temp("webview");
+    let p = d.path();
+    let db = Db::memory().unwrap();
+    let profile = p.join("elsewhere/EBWebView");
+    write(&profile.join("Default/Cache/a.bin"), 30);
+    write(&profile.join("GrShaderCache/b.bin"), 20);
+    write(&profile.join("chrome_debug.log"), 5);
+    write(&profile.join("Default/Local Storage/keep.bin"), 7);
+    fs::write(p.join(WEBVIEW_CLEAR), profile.to_string_lossy().as_bytes()).unwrap();
+    on_start(&db, p);
+    assert!(!profile.join("Default/Cache").exists() && !profile.join("GrShaderCache").exists() && !profile.join("chrome_debug.log").exists());
+    assert!(profile.join("Default/Local Storage/keep.bin").is_file(), "saved page data stays");
+    assert!(profile.is_dir(), "the profile itself stays");
+    assert!(!p.join(WEBVIEW_CLEAR).exists(), "everything is gone, so the note goes");
+
+    // a note that names a folder that is still in the way stays for the next start
+    write(&profile.join("Default/Cache/a.bin"), 30);
+    fs::write(p.join(WEBVIEW_CLEAR), profile.to_string_lossy().as_bytes()).unwrap();
+    // a folder where the log should be can't be removed as a file, so the clear is not finished
+    write(&profile.join("chrome_debug.log/inner.bin"), 1);
+    on_start(&db, p);
+    assert!(!profile.join("Default/Cache").exists());
+    assert!(p.join(WEBVIEW_CLEAR).is_file(), "the log could not be deleted, so the request is kept");
 }

@@ -4,8 +4,9 @@
 //! folder (under `files/`), plus `manifest.json` with a fingerprint of each version gachamod wrote since.
 //!
 //! A copy only counts while the file is one of those versions, or the copy itself. When the mod was updated or edited
-//! by hand since, the copy is out of date: nothing uses it, and the next write keeps a new one. Copies are never
-//! pruned (they are small inis). Writers call `keep` before every write. keys.rs puts the copy back when a file it
+//! by hand since, the copy is out of date: nothing uses it, and the next write keeps a new one. A mod's copies go
+//! when its record is forgotten for good (`forget`); otherwise they stay, since they are what puts a mod back as the
+//! author made it. Settings, Storage lists them and clears them (`clear`). Writers call `keep` before every write. keys.rs puts the copy back when a file it
 //! writes has none of gachamod's markers left, so a writer that changes a file without leaving a marker must not
 //! share a file with it. Another program's copy (IMM's, taken over by `adopt`) is used only by "Put back original
 //! files" (`author`), since that program's changes carry no markers. Owner: skeleton (used by KEYBINDS).
@@ -136,9 +137,68 @@ fn adopt_in(root: &Path, game: &str, mod_id: &str, rel: &str, copy: &[u8], curre
     Ok(true)
 }
 
+// ── cleaning up ──
+
+fn dir_bytes(dir: &Path) -> u64 {
+    walkdir::WalkDir::new(dir).follow_links(false).into_iter().flatten()
+        .filter(|e| e.file_type().is_file()).map(|e| e.metadata().map(|m| m.len()).unwrap_or(0)).sum()
+}
+
+/// Forget the copies of one mod, in every game. For a mod whose record is gone for good.
+pub fn forget(db: &Db, mod_id: &str) {
+    if !safe_id(mod_id) { return; }
+    for e in std::fs::read_dir(root(db)).into_iter().flatten().flatten() {
+        let dir = e.path().join(mod_id);
+        if dir.is_dir() { let _ = std::fs::remove_dir_all(dir); }
+    }
+}
+
+/// Delete copies, one game's or every game's (`game` None). With `only_gone`, only the copies of mods that are in
+/// neither the library nor the trash, which nothing can put back. Returns the bytes freed.
+pub fn clear(db: &Db, game: Option<&str>, only_gone: bool) -> Result<u64> {
+    let exists = |id: &str| db.conn.query_row("SELECT 1 FROM mods WHERE id = ?1", [id], |_| Ok(())).is_ok() || crate::library::in_trash(db, id);
+    clear_in(&root(db), game, only_gone.then_some(&exists as &dyn Fn(&str) -> bool))
+}
+
+/// `exists` tells which mod ids still exist; copies of those stay. None deletes every copy.
+fn clear_in(root: &Path, game: Option<&str>, exists: Option<&dyn Fn(&str) -> bool>) -> Result<u64> {
+    let mut freed = 0;
+    for g in std::fs::read_dir(root).into_iter().flatten().flatten() {
+        let gp = g.path();
+        if !gp.is_dir() || game.is_some_and(|x| !g.file_name().to_string_lossy().eq_ignore_ascii_case(x)) { continue; }
+        for m in std::fs::read_dir(&gp).into_iter().flatten().flatten() {
+            let mp = m.path();
+            if !mp.is_dir() || exists.is_some_and(|f| f(&m.file_name().to_string_lossy())) { continue; }
+            let n = dir_bytes(&mp);
+            std::fs::remove_dir_all(&mp)?;
+            freed += n;
+        }
+        // a game's folder left empty goes too
+        let _ = std::fs::remove_dir(&gp);
+    }
+    Ok(freed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clearing_keeps_what_still_exists() {
+        let root = temp("clear");
+        keep_in(&root, "gi", "alive", &[w(b"author", b"edit")]).unwrap();
+        keep_in(&root, "gi", "gone", &[w(b"author", b"edit")]).unwrap();
+        keep_in(&root, "zzz", "other", &[w(b"author", b"edit")]).unwrap();
+        let alive = |id: &str| id == "alive";
+        assert!(clear_in(&root, Some("gi"), Some(&alive)).unwrap() > 0);
+        assert!(original_in(&root, "gi", "alive", "sub/a.ini", b"edit").is_some());
+        assert!(original_in(&root, "gi", "gone", "sub/a.ini", b"edit").is_none());
+        assert!(original_in(&root, "zzz", "other", "sub/a.ini", b"edit").is_some(), "another game's copies stay");
+        assert!(clear_in(&root, None, None).unwrap() > 0);
+        assert!(original_in(&root, "gi", "alive", "sub/a.ini", b"edit").is_none());
+        assert!(!root.join("gi").exists(), "an empty game folder goes");
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     fn temp(name: &str) -> PathBuf {
         let p = std::env::temp_dir().join(format!("gm-originals-{name}-{}", crate::library::new_id()));

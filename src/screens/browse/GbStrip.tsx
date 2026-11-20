@@ -15,7 +15,7 @@ import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { openWithFilters, useLibIndex } from "./state";
 import "./browse.css";
 import "./gb-inline.css";
-import { english, t, tx } from "../../lib/i18n";
+import { english, t, tn, tx } from "../../lib/i18n";
 
 export interface GbStripQuery {
   /** "foryou": mods that suit the library (lib/recommend.ts). */
@@ -86,7 +86,26 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gs?.gamebananaId, sort, charId, query.character, query.followed, query.hq, query.subscribed, subKey, modKey, waitChars, attempt]);
 
-  const shown = (items ?? []).filter((m) => !(m.submitter && creators[String(m.submitter.id)]?.blocked) && !hidden.includes(m.id) && !(nsfw === "hide" && m.nsfw)).slice(0, COUNT);
+  // what the settings leave out, counted by reason
+  const out = { blocked: 0, hid: 0, adults: 0 };
+  const kept = (items ?? []).filter((m) => {
+    if (m.submitter && creators[String(m.submitter.id)]?.blocked) { out.blocked++; return false; }
+    if (hidden.includes(m.id)) { out.hid++; return false; }
+    if (nsfw === "hide" && m.nsfw) { out.adults++; return false; }
+    return true;
+  });
+  const shown = kept.slice(0, COUNT);
+  const leftOut = out.blocked + out.hid + out.adults;
+  const why = leftOut > 0 && (
+    <>
+      {tn(leftOut, "{n} mod is left out:", "{n} mods are left out:")}{" "}
+      {[
+        out.blocked > 0 && <span key="b">{tn(out.blocked, "{n} from creators you blocked", "{n} from creators you blocked")} <button type="button" className="link-btn" title={t("Settings, Creators")} onClick={() => go({ view: "settings", section: "set-creators-blocked" })}>{t("Blocked creators")}</button></span>,
+        out.hid > 0 && <span key="h">{tn(out.hid, "{n} you hid", "{n} you hid")} <button type="button" className="link-btn" title={t("Browse, Filters, View hidden mods")} onClick={() => go({ view: "browse" })}>{t("Browse")}</button></span>,
+        out.adults > 0 && <span key="a">{tn(out.adults, "{n} for adults", "{n} for adults")} <button type="button" className="link-btn" title={t("Settings, GameBanana")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</button></span>,
+      ].filter(Boolean).flatMap((x, i) => (i ? [", ", x] : [x]))}
+    </>
+  );
   const row = useRef<HTMLDivElement>(null);
   const [all, toggleAll] = useRowOpen(`strip.${english(title)}`);
   const { left, right, page } = useSideScroll(row, [shown.length, all, !!error]);
@@ -114,6 +133,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
       ) : items && !shown.length ? (
         <div className="gb-strip-msg hint">
           {query.followed && !subIds.length ? t("Follow creators (right-click a creator's name) and their new mods show here.") : t("Nothing new here right now.")}
+          {why && <> {why}</>}
         </div>
       ) : !items ? (
         <Waiting what={t("Asking GameBanana for mods")}>
@@ -124,6 +144,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
           {shown.map((m) => <ModCard key={m.id} game={game} mod={m} lib={lib} nsfw={nsfw} prio={!!(m.submitter && prio.has(m.submitter.id))} />)}
         </div>
       )}
+      {why && !error && shown.length > 0 && <div className="gb-strip-msg hint">{why}</div>}
     </section>
   );
 }

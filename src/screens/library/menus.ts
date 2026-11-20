@@ -15,7 +15,7 @@ import { menuFor, registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { isOwned, toggleOwned } from "../characters/owned";
 import { characterNames, isCharHidden, rosterViewPref, setCharHidden } from "../characters/roster";
 import {
-  cachedProfiles, checkForUpdates, combineMods, exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails,
+  cachedProfiles, checkForUpdates, combineMods, exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, openDetails,
   openFolder, openOnGb, previewFromGb, resetPreview, setFavourite, setInProfile, setOn, setParent, trashMods, warmProfiles,
 } from "./actions";
 import { askLib } from "./LibDialogs";
@@ -105,7 +105,6 @@ registerMenu("mod", ({ game, mod, selection }) => {
   const broken = list.filter((m) => isBroken(healthOf(game, m.id)));
   const fromGb = list.filter((m) => m.source);
   const due = fromGb.filter((m) => m.updateAvailable);
-  const onScreen = onlyOnScreenFn();
   const reasons = [...new Set(broken.flatMap((m) => healthOf(game, m.id)?.reasons ?? []))];
   // problems the user can set aside, and mods whose problems were set aside already (lib/holds)
   const holds = holdsNow(game);
@@ -150,7 +149,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
     heldList.length > 0 && { label: t("Show problems again"), icon: "eye",
       title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about the problems again"),
       onClick: () => void releaseMods(game, heldList) },
-    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("The mod's toggles only work while the character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
+    list.some((m) => m.hasKeys) && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("The mod's toggles only work while the character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list.filter((m) => m.hasKeys)) },
     "-",
     !many && { label: t("Rename"), icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
     { label: t("Set character"), icon: "characters", onClick: () => askLib({ kind: "character", game, mods: list }) },

@@ -12,7 +12,7 @@ import { menuFor, menuHandler, openMenu } from "../../ui/ContextMenu";
 import { moveInGrid } from "../library/gridNav";
 import { Preview } from "../library/Preview";
 import { deleteProfile, renameProfile, startNewProfile, switchTo, takeEditRequest, useEditRequest, type EditFocus } from "./actions";
-import { useCharacters, useProfiles, useSwitching } from "./data";
+import { openHotkeySettings, useCharacters, useHotkeysOn, useProfiles, useSwitching } from "./data";
 import { ProfileEditor } from "./ProfileEditor";
 import { ProfileIcon } from "./ProfileIcon";
 import { ProfilePage } from "./ProfilePage";
@@ -149,6 +149,7 @@ function ProfileCard({ game, p, chars, busy, held, renaming, onPick, onOpen, onK
   onPick: () => void; onOpen: () => void; onKey: (e: KeyboardEvent) => void; onRenamed: () => void; onEdit: (focus?: EditFocus) => void;
 }) {
   const [name, setName] = useState(p.name);
+  const keysOn = useHotkeysOn();
   const mainRef = useRef<HTMLButtonElement>(null);
   const ended = useRef(false);
   useEffect(() => { if (renaming) { setName(p.name); ended.current = false; } }, [renaming, p.name]);
@@ -196,6 +197,8 @@ function ProfileCard({ game, p, chars, busy, held, renaming, onPick, onOpen, onK
           </button>}
       <span className="profile-card-a">
         {busy ? <span className="hint">{t("Switching")}</span>
+          : p.hotkey && !keysOn ? <button type="button" className="link-btn hint" onClick={openHotkeySettings}
+              title={t("Profile hotkeys are turned off, so {key} does nothing. Click to open the setting", { key: p.hotkey })}>{t("{key} (off)", { key: p.hotkey })}</button>
           : p.hotkey ? <kbd className="kbd" title={t("Switches to this profile while the game runs")}>{p.hotkey}</kbd>
           : <button type="button" className="link-btn hint" onClick={() => onEdit("hotkey")} title={t("A key combo that switches to it in game, like Ctrl+Alt+1")}>{t("No hotkey")}</button>}
         <span className="grow" />

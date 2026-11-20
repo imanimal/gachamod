@@ -3,10 +3,11 @@
 // gachamod. Both copies call the same backend, so they always agree. Owner: MODTOOLS area.
 // IMM and No Reload Mod Manager rewrite or hide mods, so taking over moves them (after a question). The rest keep
 // mods gachamod can already see, or a folder outside Mods: those are copied in by default (one click, Undo in the
-// toast), and moving instead is an option.
+// toast and in the Undo history, Ctrl+Z), and moving instead is an option.
 import { useEffect, useRef, useState } from "react";
-import { dialogs, errorKind, errorText, imm, migrate, nrmm, type ImmInfo, type MigrateMode, type NrmmInfo, type OtherManager } from "../../lib/api";
+import { dialogs, errorKind, errorText, imm, migrate, nrmm, shell, type ImmInfo, type MigrateMode, type NrmmInfo, type OtherManager } from "../../lib/api";
 import { emitApp, useGame } from "../../lib/store";
+import { record, undo as undoOp } from "../../lib/history";
 import { gameShort } from "../../lib/games";
 import { notesText } from "../../lib/notes";
 import { t, tn } from "../../lib/i18n";
@@ -41,10 +42,13 @@ export function MovePanel() {
 
   if (!g || !game) return null;
   const again = () => { if (live.current) setTick((n) => n + 1); };
-  const done = (notes: string[], fallback: string, undo?: () => Promise<void>) => {
+  /** `openMods`: the message also has a button that opens the game's Mods folder, where moved mods went. */
+  const done = (notes: string[], fallback: string, undo?: () => Promise<void>, openMods = false) => {
     const bad = notes.filter((n) => /couldn't|can't/i.test(n));
     const good = notes.filter((n) => !bad.includes(n));
-    toast(good.length ? notesText(good) : fallback, false, undo ? { label: t("Undo"), run: undo } : undefined);
+    const dir = g.modsDir;
+    const open = openMods && dir ? { label: t("Open folder"), run: () => { void shell.openPath(dir).catch((e) => toast(errorText(e), true)); } } : undefined;
+    toast(good.length ? notesText(good) : fallback, false, undo ? { label: t("Undo"), run: undo } : open, undo ? open : undefined);
     if (bad.length) toast(notesText(bad), true);
     emitApp({ type: "library-refresh", game });
     again();
@@ -59,14 +63,26 @@ export function MovePanel() {
   const list = (others ?? []).filter((m) => m.id !== "imm" && m.inside + m.outside + m.presets > 0);
 
   const bringIn = (m: OtherManager, mode: MigrateMode) => job(m.id, async () => {
-    const r = await migrate.import(game, m.id, { mode, picked });
+    let r = await migrate.import(game, m.id, { mode, picked });
     const fallback = r.profiles.length
       ? tn(r.profiles.length, "Brought in the mods from {name} and made {n} profile from the presets", "Brought in the mods from {name} and made {n} profiles from the presets", { name: m.name })
       : t("Brought in the mods from {name}", { name: m.name });
-    done(r.notes, fallback, () => job(m.id, async () => {
-      const left = await migrate.undo(r.undo);
-      done(left, t("Put {name}'s mods back as they were", { name: m.name }));
-    }));
+    // recorded for Ctrl+Z and the title bar's list too, so Undo is still there after the message closes
+    const entry = record({
+      label: t("Brought in the mods from {name}", { name: m.name }),
+      undo: async () => {
+        const left = await migrate.undo(r.undo);
+        if (left.length) toast(notesText(left));
+        emitApp({ type: "library-refresh", game });
+        again();
+      },
+      redo: async () => {
+        r = await migrate.import(game, m.id, { mode, picked });
+        emitApp({ type: "library-refresh", game });
+        again();
+      },
+    }, true);
+    done(r.notes, fallback, async () => { await undoOp(entry); });
   });
 
   const choose = (file: boolean) => job("pick", async () => {
@@ -105,9 +121,9 @@ export function MovePanel() {
             </span>
             <Button icon="swap" busy={busy === "imm"} onClick={() => setAsk({
               title: tn(immGame.mods, "Move {n} mod from IMM?", "Move {n} mods from IMM?"),
-              body: t("The mods move out of IMM's folders, so IMM won't list them any more. Nothing is deleted."),
+              body: t("The mods move out of IMM's folders into the Mods folder, so IMM won't list them any more. Nothing is deleted."),
               yes: t("Move them"),
-              run: () => job("imm", async () => { const r = await imm.takeover(game); done(r.notes, t("Moved the mods from Integrated Mod Manager")); }),
+              run: () => job("imm", async () => { const r = await imm.takeover(game); done(r.notes, t("Moved the mods from Integrated Mod Manager"), undefined, true); }),
             })} title={t("Move them into the normal Mods folder, keeping their options and GameBanana links")}>{t("Move mods")}</Button>
           </li>
         )}
@@ -121,7 +137,7 @@ export function MovePanel() {
               title: tn(nrmmGame.mods, "Move {n} mod from No Reload Mod Manager?", "Move {n} mods from No Reload Mod Manager?"),
               body: t("Each mod gets a separate ini again and moves to Mods/Character/Mod name. The mod showing in each group stays on. NRMM's files go to gachamod's trash."),
               yes: t("Move them"),
-              run: () => job("nrmm", async () => { const r = await nrmm.takeover(game); done(r.notes, t("Moved the mods from No Reload Mod Manager")); }),
+              run: () => job("nrmm", async () => { const r = await nrmm.takeover(game); done(r.notes, t("Moved the mods from No Reload Mod Manager"), undefined, true); }),
             })} title={t("Close No Reload Mod Manager first. Key changes you made there carry over")}>{t("Move mods")}</Button>
           </li>
         )}
@@ -136,7 +152,7 @@ export function MovePanel() {
               ? <Button icon="refresh" onClick={again} title={t("{name} is open. Close it, then check again", { name: m.name })}>{t("Check again")}</Button>
               : <>
                 <Button icon="swap" busy={busy === m.id} onClick={() => void bringIn(m, "copy")}
-                  title={m.outside ? t("Copies the mods into Mods, so {name} keeps working. Undo is in the message after", { name: m.name }) : t("Reads the details and presets. Undo is in the message after")}>{t("Bring in")}</Button>
+                  title={m.outside ? t("Copies the mods into Mods, so {name} keeps working. Undo is in the message after and in the Undo history (Ctrl+Z)", { name: m.name }) : t("Reads the details and presets. Undo is in the message after and in the Undo history (Ctrl+Z)")}>{t("Bring in")}</Button>
                 {m.outside > 0 && (
                   <Button variant="ghost" size="sm" disabled={busy === m.id} onClick={() => setAsk({
                     title: t("Move the mods out of {name}?", { name: m.name }),

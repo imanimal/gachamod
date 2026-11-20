@@ -136,7 +136,6 @@ export function registerSystemDemo() {
       return gamesNow();
     },
     game_set_shown: ({ game, shown }) => { demoDb.games = demoDb.games.map((g) => (g.id === game ? { ...g, shown: !!shown } : g)); return gamesNow(); },
-    game_running: ({ game }) => running.has(String(game)),
     // the demo's GIMI has XXMI's own d3d11.dll
     game_kick_check: ({ game, vanilla }) => {
       const said = game === "gi" && !!demoDb.settings.get("gi.kickFixDll");
@@ -193,7 +192,7 @@ export function registerSystemDemo() {
         shaderCache: { path: `${dir}\\ShaderCache`, files: shaderCache ? 1840 : 0, bytes: shaderCache },
         shaderFixes: { path: `${dir}\\ShaderFixes`, files: 12, bytes: 96_400 },
         frameDumps: { path: dir, files: frameDumps ? 3200 : 0, bytes: frameDumps },
-        d3dxIni: `${dir}\\d3dx.ini`, d3dxUserIni: `${dir}\\d3dx_user.ini`,
+        d3dxIni: `${dir}\\d3dx.ini`, d3dxUserIni: `${dir}\\d3dx_user.ini`, wipedBak: `${dir}\\d3dx_user.ini.wiped.bak`,
       };
     },
     dev_log_tail: ({ lines }) => LOG.slice(-Number(lines || 400)).join("\n"),

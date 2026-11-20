@@ -379,6 +379,7 @@ export const BACKEND: string[] = [
   "XXMI Launcher now starts {game} through Steam, since the Steam copy only starts from there. Steam restarted first to set the game's launch options",
   "XXMI Launcher now starts {game} through Steam, since the Steam copy only starts from there",
   "Steam restarted first to set {game}'s launch options",
+  "{game} only starts from Steam, and Play leaves Steam and XXMI Launcher as they are, so XXMI Launcher may not start it. Turn on Restart Steam when Play needs it in Settings, Launch options",
   "{name} is still running, so it can load mods into {game}. Close it to play without mods",
   "Started {game} without a mod loader. gachamod found no loader exe in {dir}, so start yours first if mods don't show",
   "The pre-launch command didn't start: {error}",

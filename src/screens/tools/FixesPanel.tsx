@@ -1,14 +1,15 @@
 // Tools > Fixes: which installed mods a game update broke, one click to fix them, the fixers gachamod takes its data
 // from, and new fixers posted on GameBanana. Owner: FIXES area.
 import { useEffect, useRef, useState } from "react";
-import { fixes, type FixInfo, type GameId, type ModHealthRow } from "../../lib/api";
-import { autoMutePref, downloadNewestFixer, fixLabel, fixMods, fixWarningsPref, fixerName, checkHealth, isDeadEnd, stopWaiting, triedNote, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
+import { errorText, fixes, shell, type FixInfo, type FixerFile, type GameId, type ModHealthRow } from "../../lib/api";
+import { autoMutePref, downloadNewestFixer, fixLabel, fixMods, fixWarningsPref, fixerName, checkHealth, isDeadEnd, removeFixer, stopWaiting, triedNote, useFixerBusy, useFixerFiles, useHealthRows } from "../../lib/fixes";
 import { useHolds } from "../../lib/holds";
 import { gameTools, gbToolId, type GbTool } from "../../lib/gamebanana";
 import { openGbTool } from "../browse/state";
 import { jsonPref } from "../../lib/prefs";
 import { go, useGames } from "../../lib/store";
-import { Badge, Button, Checkbox, Panel, Skeleton, timeAgo } from "../../ui/kit";
+import { Badge, Button, Checkbox, Panel, Skeleton, formatBytes, timeAgo } from "../../ui/kit";
+import { toast } from "../../ui/toast";
 import { fixesAutoUpdatePref } from "../settings/automatic";
 import { muteDeadEnds, unmute } from "./deadEnds";
 import "../modtools/modtools.css";
@@ -152,7 +153,35 @@ export function FixesPanel({ game }: { game: GameId }) {
           </ul>
         </details>
       )}
+      <DownloadedFixers game={game} />
     </Panel>
+  );
+}
+
+/** The fixer programs gachamod downloaded for the game: what they are, how big, where they are, and a way to delete them. */
+function DownloadedFixers({ game }: { game: GameId }) {
+  const files = useFixerFiles(game);
+  const busy = useFixerBusy();
+  if (!files.length) return null;
+  const open = (f: FixerFile) => shell.openPath(f.dir).catch((e) => toast(errorText(e), true));
+  const total = files.reduce((n, f) => n + (f.size ?? 0), 0);
+  return (
+    <details className="tp-ignored fx-sources">
+      <summary className="hint" title={t("Programs gachamod downloaded to fix mods. They only run when you choose a fix")}>{t("Downloaded fixers ({n})", { n: files.length })}</summary>
+      <p className="hint">{t("{size} on disk. A deleted fixer is downloaded again the next time a mod needs it.", { size: formatBytes(total) })}</p>
+      <ul className="tp-list">
+        {files.map((f) => (
+          <li key={f.fileId} className="fx-source">
+            <div className="row">
+              <span className="grow">{f.tool}</span>
+              <Button size="sm" variant="ghost" icon="folder" title={t("Open the folder in File Explorer")} onClick={() => void open(f)}>{t("Open folder")}</Button>
+              <Button size="sm" variant="ghost" icon="trash" busy={busy.has(`remove:${f.fileId}`)} title={t("Delete this fixer's folder")} onClick={() => void removeFixer(game, f)}>{t("Delete")}</Button>
+            </div>
+            <span className="hint">{stops([f.file, f.size ? formatBytes(f.size) : "", timeAgo(f.at)].filter(Boolean))}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

@@ -1,8 +1,10 @@
 // The first time a game is opened in a session: refresh its character list from GameBanana (at most once a day) and
 // scan its Mods folder, so every screen (Home included) shows real mods and mods get their characters from their
-// folders before anything else asks. Runs quietly in the background. Owner: skeleton.
+// folders before anything else asks. Runs quietly in the background. Settings, Online lookups can turn the character
+// list refresh off (onlineCharactersPref). Owner: skeleton.
 import { characters, library, settings, type GameState } from "./api";
 import { characterList } from "./gamebanana";
+import { onlineCharactersPref } from "./prefs";
 import { emitApp } from "./store";
 
 const done = new Set<string>();
@@ -19,7 +21,8 @@ export async function warmUp(game: GameState): Promise<void> {
   if (!game.modsDir || done.has(game.id)) return;
   done.add(game.id);
   try {
-    if (game.gbCharacterCategory && Date.now() - lastSync(game.id) > DAY) {
+    await onlineCharactersPref.ready;
+    if (game.gbCharacterCategory && onlineCharactersPref.get() && Date.now() - lastSync(game.id) > DAY) {
       const have = await characters.list(game.id).catch(() => []);
       const refs = await characterList(game.id);
       if (refs.length) {

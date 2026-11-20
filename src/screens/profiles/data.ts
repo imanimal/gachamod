@@ -2,10 +2,11 @@
 // last list per game (for menus and search, which are built at once), the game's character portraits for
 // "char:<Name>" icons, and switching with Undo. Owner: HOME/PROFILES area.
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { characters, errorText, library, profiles, type Character, type GameId, type Profile } from "../../lib/api";
+import { characters, errorText, library, profiles, settings, type Character, type GameId, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
 import { stops, t, tb } from "../../lib/i18n";
 import { held } from "../../lib/tauri";
+import { go } from "../../lib/store";
 import { toast } from "../../ui/toast";
 import { briefNotes, publish, summarize } from "../library/data";
 import { sayF10 } from "../../lib/elevation";
@@ -23,10 +24,30 @@ export function knownProfiles(game: GameId): Profile[] | null {
   return l ?? null;
 }
 export async function loadProfiles(game: GameId): Promise<Profile[]> {
-  const l = await profiles.list(game);
+  const [l] = await Promise.all([profiles.list(game), readHotkeysOn()]);
   lastLists.set(game, l);
   return l;
 }
+
+// Settings > Hotkeys > "Switch profiles with hotkeys". When it is off a profile's key does nothing, so every place
+// that shows the key says so. Read again whenever a profile list loads, so menus (built at once) know it too.
+let hotkeysOnNow = true;
+const hotkeySubs = new Set<() => void>();
+async function readHotkeysOn(): Promise<void> {
+  try {
+    const on = (await settings.get("hotkeys.enabled")) !== "0";
+    if (on !== hotkeysOnNow) { hotkeysOnNow = on; hotkeySubs.forEach((f) => f()); }
+  } catch { /* keep the last value */ }
+}
+/** Whether the profile hotkeys are switched on (as last read). */
+export const hotkeysOn = () => hotkeysOnNow;
+/** The same, for a component: updates when the switch changes. */
+export function useHotkeysOn(): boolean {
+  useEffect(() => { void readHotkeysOn(); }, []);
+  return useSyncExternalStore((f) => { hotkeySubs.add(f); return () => { hotkeySubs.delete(f); }; }, hotkeysOn);
+}
+/** Open Settings at the hotkey switch. */
+export const openHotkeySettings = () => go({ view: "settings", section: "hotkeys" });
 
 export function useProfiles(game: GameId | undefined) {
   const [list, setList] = useState<Profile[] | null>(null);

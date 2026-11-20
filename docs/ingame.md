@@ -404,8 +404,9 @@ The loaders save only when a value changed, and then at most once per `settings_
 shipped), so a pick made in the game's menu reached the app up to a minute late. While a game has live characters,
 `live::fast_saves` (from `menu_sync`, so at app start, game start and after a scan) sets it to 1 in d3dx.ini, after a
 backup (`d3dx.ini.gachamod.bak`), and keeps the old value in `<game>.saveIntervalWas`. The value goes back when the
-game has no live characters left or the player turns off "Show skins picked in the game right away"
-(`<game>.liveFastSave`). The game reads it at its next load.
+game has no live characters left, the game can't use the menu it draws (`allowed`: no tester options in a game that
+needs them), or the player turns off "Show skins picked in the game right away" (`<game>.liveFastSave`, shown wherever
+the menu the game draws is allowed). The game reads it at its next load.
 
 Automatic reload presses are capped in `devtools::watch` (`may_press`): one every 10 seconds and three a minute for each
 game at most. A change made meanwhile stays pending and goes in with the next press, so nothing can make the app press
@@ -481,8 +482,8 @@ and `<game>.liveMenuPad` beside it (Tools > Switch skins in game, `MenuOptions`)
 
 An older `off` reads as `window`: the panel's one switch turns the menu off along with everything else.
 
-The window over the game is the menu in every game. Players who had picked `game` were set back to `window` once
-(`live::window_menu_once`, setting `live.windowMenuSet`), on 2026-11-16. The drawn menu opens only when the game holds
+The window over the game is the menu in every game. A one-time reset of `game` to `window` ran in 0.1.1-beta.9 and is
+gone: a pick of `game` is never changed by the app. The drawn menu opens only when the game holds
 the screen in exclusive fullscreen, or when gachamod can't hear the key (the game runs as administrator and gachamod
 doesn't; the panel then shows Run as administrator, the same row as in Settings, with Always).
 

@@ -230,6 +230,39 @@ fn keeps_storage() {
     assert!(storage_get(tmp.path(), "../x").is_err());
 }
 
+fn age_file(p: &Path, days: u64) {
+    let f = fs::File::options().write(true).open(p).unwrap();
+    f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400)).unwrap();
+}
+
+#[test]
+fn saved_data_goes_with_the_removed_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db = Db::memory().unwrap();
+    write_pkg(&root(tmp.path()).join("kept-one"), "kept-one");
+    for id in ["kept-one", "gone-one", "back-one"] { storage_set(tmp.path(), id, "k", Some(serde_json::json!(1))).unwrap(); }
+    fs::create_dir_all(trash_root(tmp.path()).join("back-one~1")).unwrap();
+    // fresh data stays even when nothing owns it, so Undo of an unlink still finds it
+    forget_stale_data(&db, tmp.path());
+    assert!(storage_path(tmp.path(), "gone-one").is_file(), "data written lately stays");
+    for id in ["kept-one", "gone-one", "back-one"] { age_file(&storage_path(tmp.path(), id), 20); }
+    // a state that can't be read makes nothing look removed
+    db.set_setting(STATE_SETTING, "not json").unwrap();
+    forget_stale_data(&db, tmp.path());
+    assert!(storage_path(tmp.path(), "gone-one").is_file());
+    db.set_setting(STATE_SETTING, "{}").unwrap();
+    forget_stale_data(&db, tmp.path());
+    assert!(storage_path(tmp.path(), "kept-one").is_file());
+    assert!(storage_path(tmp.path(), "back-one").is_file(), "a package in the trash can still come back with its data");
+    assert!(!storage_path(tmp.path(), "gone-one").is_file());
+    // clearing the data of removed packages leaves the installed one's
+    assert!(clear_data(&db, tmp.path(), true).unwrap() > 0);
+    assert!(storage_path(tmp.path(), "kept-one").is_file());
+    assert!(!storage_path(tmp.path(), "back-one").is_file());
+    assert!(clear_data(&db, tmp.path(), false).unwrap() > 0);
+    assert!(!storage_path(tmp.path(), "kept-one").is_file());
+}
+
 /// The example packages and index in extensions-repo/ (the seed of the public repo) must pass the same checks.
 #[test]
 fn repo_examples_check_out() {

@@ -1,14 +1,19 @@
 // Settings › Storage: where disk space goes. The total, a breakdown by category, game or character, the biggest mods,
 // mods installed twice, the backups, and a few cleaning suggestions that show only when they would free a fair amount
-// and stay hidden once dismissed. Mod sizes come from the library at once; the rest is measured off the UI thread
+// and stay hidden once dismissed (a button brings them back). Mod sizes come from the library at once; the rest is measured off the UI thread
 // (gacha-core storage.rs) and can be skipped, starting when the page first shows (or a search draws a panel), not when
 // Settings opens. The report lives for the session, and mod changes anywhere update it.
+// Everything gachamod keeps has a row here with a size, what it is and a button that opens it; what gachamod can
+// make again has a Clear, and the author's copies of changed mod files can be cleared after a question.
 // Owner: SYSTEM area.
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { Badge, Button, IconButton, Panel, Segmented, Select, Waiting, formatBytes, timeAgo } from "../../ui/kit";
+import { Badge, Button, Confirm, IconButton, Panel, Segmented, Select, Toggle, Waiting, formatBytes, timeAgo } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Preview, useNsfwMode } from "../library/Preview";
-import { backups, dev, errorText, library, shell, storage, type BackupEntry, type GameId, type ModEntry, type StorageCategory, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
+import { about, backups, dev, errorText, library, shell, storage, type BackupEntry, type GameId, type ModEntry, type StorageCategory, type StorageClearKind, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
+import { cacheBytes, cacheCount, clearCaches } from "../../lib/cacheKeys";
+import { pref } from "../../lib/prefs";
+import { SetRow } from "./parts";
 import { held } from "../../lib/tauri";
 import { allGames, emitApp, go, goIn, useGames } from "../../lib/store";
 import { record } from "../../lib/history";
@@ -34,11 +39,22 @@ const useScope = () => useSyncExternalStore((f) => { scopeSubs.add(f); return ()
 
 let skipped = false;
 
+// what the window keeps in saved page data (lib/cacheKeys.ts), shown as a row
+let browserBytes = -1;
+const browserSubs = new Set<() => void>();
+const browserSnapshot = () => (browserBytes < 0 ? (browserBytes = cacheBytes()) : browserBytes);
+const refreshBrowser = () => { browserBytes = cacheBytes(); browserSubs.forEach((f) => f()); };
+const useBrowserBytes = () => useSyncExternalStore((f) => { browserSubs.add(f); return () => browserSubs.delete(f); }, browserSnapshot);
+
+/** Thumbnails and .gachamod previews that were made a long time ago go at start (backend setting "storage.trim"). */
+const trimPref = pref<boolean>("storage.trim", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
+
 /** Read the library's sizes at once, then measure everything else. One measure runs at a time. */
 async function measure() {
   if (state.measuring) return;
   skipped = false;
   setState({ measuring: true, step: null });
+  refreshBrowser();
   void loadBackups();
   const off = held(storage.onProgress((step) => setState({ step })));
   try {
@@ -119,10 +135,10 @@ function categoryTip(c: StorageCategory): string {
     case "off": return t("Mod folders that are turned off. The game skips them, but they stay on disk");
     case "trash": return t("Removed mods whose files are kept for a while, so Put back works without downloading");
     case "downloads": return t("Archives kept after installing, and downloads that didn't finish");
-    case "backups": return t("Copies gachamod keeps so a change can be undone: mod files from before a fix, key change or in-game switch, daily copies of the database, and settings from before an import");
-    case "loader": return t("XXMI Launcher, each game's mod loader folder, the shader cache, frame dumps and 3DMigoto log");
+    case "backups": return t("Copies gachamod keeps so a change can be undone: mod files from before a fix, key change or in-game switch, the author's copy of each mod file it changed, daily copies of the database, and settings from before an import");
+    case "loader": return t("XXMI Launcher, each game's mod loader folder, the shader cache, frame dumps, 3DMigoto log and the in-game menu's pictures");
     case "others": return t("Mods another mod manager keeps outside the Mods folder, which gachamod doesn't list");
-    case "app": return t("The database, picture thumbnails, logs, extensions and fix tools");
+    case "app": return t("The database, picture thumbnails and other caches, logs, extensions and the data they save, fix tools, game icons, profile pictures, the GameBanana sign-in, AI helper files, what No Reload Mod Manager left and the window's cache");
   }
 }
 
@@ -138,6 +154,8 @@ function itemLabel(i: StorageItem): string {
     case "shader-cache": return t("Shader cache");
     case "frame-dumps": return t("Frame dumps");
     case "log": return t("3DMigoto log");
+    case "live-menu": return t("In-game menu pictures");
+    case "originals": return t("Original mod files");
     case "loader": return t("Loader files");
     case "others": return i.name ?? t("Another mod manager");
     case "database": return t("Database");
@@ -146,9 +164,19 @@ function itemLabel(i: StorageItem): string {
     case "logs": return t("gachamod logs");
     case "staging": return t("Unpacked downloads");
     case "extensions": return t("Extensions");
+    case "extensions-trash": return t("Removed extensions");
+    case "extension-data": return t("Extension data");
     case "archive": return t("Pictures of removed mods");
+    case "media": return t("Profile pictures");
+    case "icons": return t("Game icons");
+    case "ai": return t("AI helper files");
+    case "login": return t("GameBanana sign-in");
+    case "setup": return t("XXMI install downloads");
+    case "nrmm-trash": return t("No Reload Mod Manager leftovers");
+    case "webview": return t("Window cache");
+    case "browser-cache": return t("Saved online data");
     case "xxmi": return t("XXMI Launcher");
-    default: return t("Other files");
+    default: return i.name ?? t("Other files");
   }
 }
 
@@ -163,9 +191,29 @@ function itemTip(i: StorageItem, game: GameId | null): string | undefined {
     case "shader-cache": return t("The game rebuilds it on the next start");
     case "frame-dumps": return t("FrameAnalysis folders a frame dump made while making a mod");
     case "log": return t("A high log level makes this file grow on every start");
+    case "live-menu": return t("The pictures of the skin menu over the game, drawn by gachamod while Switch skins in game is on. They're drawn again when the list changes");
+    case "originals": return t("The author's copy of each mod file gachamod changed. Put back original files uses them. They stay until the mod's record is deleted for good, or you clear them");
     case "loader": return t("ShaderFixes, d3dx.ini and the loader's dll files. The game needs these");
     case "others": return t("Mods this manager keeps outside the Mods folder");
-    case "staging": return t("Files unpacked from an archive while it installs");
+    case "staging": return t("Files unpacked from an archive while it installs. Left over when an install stopped part way");
+    case "thumbs": return t("Small copies of mod pictures, so lists load fast. They're made again when a mod shows. Ones older than 60 days are deleted at start");
+    case "cache": return t("Pictures taken out of .gachamod files for their preview. They're taken out again when a file is opened. Ones older than 30 days are deleted at start");
+    case "database": return t("Your library, settings and profiles. Daily copies are under Backups");
+    case "logs": return t("gachamod's log files, crash files and the rendering log. Clear deletes the old log, crash files already sent and rendering incident files. The logs in use stay");
+    case "extensions": return t("The extensions you installed");
+    case "extensions-trash": return t("A removed or replaced extension waits here for 14 days, so Undo in Extensions can bring it back");
+    case "extension-data": return t("What extensions saved, like their settings. It goes with a removed extension once the copy in the trash is gone");
+    case "ai": return t("The Gemini key you pasted and the working files of AI runs. Settings, AI helper can remove the key");
+    case "login": return t("The saved GameBanana sign-in and the window it signs in through. Signing out in Settings, GameBanana deletes both");
+    case "setup": return t("Files the XXMI Launcher install downloads while it runs. The install deletes them when it finishes");
+    case "nrmm-trash": return t("Everything No Reload Mod Manager made, moved here when gachamod took over the mods from it. Kept in case you want the files back");
+    case "archive": return t("A small copy of each removed mod's picture, kept with the mod's record in Mods, Trash");
+    case "media": return t("Banner pictures that profiles brought in from .gachamod files");
+    case "icons": return t("Each game's icon, taken from the game's exe. It's taken again when needed. The icons of desktop quickstart shortcuts stay");
+    case "fixers": return t("Fix tools gachamod downloaded to repair mods. They download again when a mod needs one");
+    case "webview": return t("Pictures and pages the window keeps so they load faster, plus saved settings. Clear deletes the cached copies the next time gachamod starts. Saved settings stay");
+    case "browser-cache": return t("Character portraits, game icons, creator stats and recent searches the window keeps. They load again when needed");
+    case "other": return t("A file or folder in gachamod's data folder that has no row, like the saved look or the game list that gachamod setup reads. Show in Explorer opens it");
     case "xxmi": return t("The launcher and the loaders of games gachamod doesn't manage");
     default: return undefined;
   }
@@ -193,7 +241,8 @@ const reveal = (p: string | null | undefined) => { if (p) shell.revealPath(p).ca
 async function recycleArchives(game: GameId | null) {
   try {
     const b = await storage.recycleArchives(game);
-    toast(b ? t("Moved {size} of archives to the Recycle Bin", { size: formatBytes(b) }) : t("No archive to move. Downloads in progress keep theirs"));
+    if (b) toast(t("Moved {size} of archives to the Recycle Bin", { size: formatBytes(b) }));
+    else toast(t("No archive to move. Downloads in progress keep theirs"), false, { label: t("Downloads"), run: () => go("downloads") });
     patchReport((r) => ({ ...r, games: r.games.map((g) => (game && g.game !== game ? g : { ...g, items: g.items.filter((i) => i.key !== "archives") })) }));
   } catch (e) { toast(errorText(e), true); }
 }
@@ -221,13 +270,71 @@ async function purgeOverdue() {
     const n = await library.trashPurge(null);
     if (n) toast(tn(n, "Deleted the files of {n} removed mod. Mods, Trash keeps the record", "Deleted the files of {n} removed mods. Mods, Trash keeps their records"), false,
       { label: t("View trash"), run: () => go({ view: "library", tab: "archive" }) });
-    else toast(t("Nothing in the trash was older than the set days"));
+    else toast(t("Nothing in the trash was older than the set days"), false,
+      { label: t("Trash settings"), run: () => go({ view: "settings", section: "set-trash-days" }) });
     patchReport((r) => ({ ...r, trashOverdue: 0 }));
   } catch (e) { toast(errorText(e), true); }
 }
 
 function dropItem(game: GameId, key: string) {
   patchReport((r) => ({ ...r, games: r.games.map((g) => (g.game === game ? { ...g, items: g.items.filter((i) => i.key !== key) } : g)) }));
+}
+
+/** An item's size after `freed` bytes went (all of it when `all`), in one game's list or the shared one. */
+function shrinkItem(game: GameId | null, key: string, freed: number, all: boolean) {
+  const less = (items: StorageItem[]) => items
+    .map((i) => (i.key !== key ? i : { ...i, bytes: all ? 0 : Math.max(0, i.bytes - freed), count: all ? 0 : i.count }))
+    .filter((i) => i.key !== key || i.bytes > 0);
+  patchReport((r) => (game
+    ? { ...r, games: r.games.map((g) => (g.game === game ? { ...g, items: less(g.items) } : g)) }
+    : { ...r, app: less(r.app) }));
+}
+
+/** Delete something gachamod can make again, or an unused copy. `all`: the whole row goes (not just part of it). */
+async function clearStored(kind: StorageClearKind, game: GameId | null, key: string, all: boolean, none = t("Nothing to clear")) {
+  try {
+    const freed = await storage.clear(kind, game);
+    if (!freed) { toast(none); return; }
+    toast(t("Freed {size}", { size: formatBytes(freed) }));
+    shrinkItem(game, key, freed, all);
+    // a clear with no game can reach several games' folders, so the sizes are measured again
+    if (!game && kind.startsWith("originals")) void measure();
+  } catch (e) { toast(errorText(e), true); }
+}
+
+/** What No Reload Mod Manager made, kept after a takeover, goes to the Recycle Bin. */
+async function recycleNrmm() {
+  try {
+    const b = await storage.clear("nrmm-trash", null);
+    if (!b) { toast(t("Nothing to move")); return; }
+    toast(t("Moved {size} to the Recycle Bin", { size: formatBytes(b) }));
+    shrinkItem(null, "nrmm-trash", b, true);
+  } catch (e) { toast(errorText(e), true); }
+}
+
+/** The window's cache is deleted at the next start, since the window holds its files open until then. */
+async function clearWindowCache() {
+  try {
+    const freed = await storage.clear("webview", null);
+    if (!freed) { toast(t("The window has no cache to clear")); return; }
+    toast(t("{size} of the window's cache is deleted when gachamod restarts", { size: formatBytes(freed) }), false,
+      { label: t("Restart"), run: () => void about.relaunch().catch((e) => toast(errorText(e), true)) });
+  } catch (e) { toast(errorText(e), true); }
+}
+
+function clearBrowserCache() {
+  const freed = clearCaches();
+  refreshBrowser();
+  toast(freed ? t("Freed {size}", { size: formatBytes(freed) }) : t("Nothing to clear"));
+}
+
+/** A Clear that asks first, for copies that can't be made again. */
+function ClearAsk({ label, title, heading, what, onYes }: { label: string; title: string; heading: string; what: string; onYes: () => Promise<void> }) {
+  const [ask, setAsk] = useState(false);
+  return <>
+    <Button size="sm" variant="ghost" onClick={() => setAsk(true)} title={title}>{label}</Button>
+    {ask && <Confirm title={heading} yes={label} danger onYes={onYes} onClose={() => setAsk(false)}><p>{what}</p></Confirm>}
+  </>;
 }
 
 /** Send copies to the trash (kept at least 10 minutes), with Undo. */
@@ -336,17 +443,38 @@ function tipsFor(r: StorageReport): Tip[] {
   return out;
 }
 
+/** The one automatic cleanup: pictures gachamod can make again, when they haven't been used for a long time. */
+function TrimRow() {
+  const on = trimPref.use();
+  return (
+    <div className="set-rows st-auto">
+      <SetRow id="set-cache-trim" label={t("Delete old pictures at start")} hint={t("Thumbnails older than 60 days and .gachamod previews older than 30")}
+        tip={t("These are copies gachamod makes again when a mod or a file shows. Nothing you made is deleted")}>
+        <Toggle checked={on} onChange={(v) => void trimPref.set(v, v ? t("Deleting old pictures at start") : t("Keeping old pictures"))} />
+      </SetRow>
+    </div>
+  );
+}
+
 function Tips({ report }: { report: StorageReport }) {
   const [dismissed, setDismissed] = useState(readDismissed);
-  const tips = tipsFor(report).filter((tip) => !(dismissed[tip.id] && tip.bytes < dismissed[tip.id]! * 2));
-  if (!tips.length) return null;
-  const hide = (tip: Tip) => {
-    const next = { ...dismissed, [tip.id]: tip.bytes };
+  const all = tipsFor(report);
+  const isHidden = (tip: Tip) => !!dismissed[tip.id] && tip.bytes < dismissed[tip.id]! * 2;
+  const tips = all.filter((tip) => !isHidden(tip));
+  const hidden = all.filter(isHidden);
+  const save = (next: Record<string, number>) => {
     setDismissed(next);
     try { localStorage.setItem(TIPS_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
   };
-  return (
-    <ul className="st-tips" aria-label={t("Cleaning suggestions")}>
+  const hide = (tip: Tip) => save({ ...dismissed, [tip.id]: tip.bytes });
+  const restore = () => {
+    const next = { ...dismissed };
+    for (const tip of hidden) delete next[tip.id];
+    save(next);
+  };
+  if (!tips.length && !hidden.length) return null;
+  return <>
+    {tips.length > 0 && <ul className="st-tips" aria-label={t("Cleaning suggestions")}>
       {tips.map((tip) => (
         <li key={tip.id} className="st-tip">
           <span className="st-tip-t">{tip.text}</span>
@@ -355,8 +483,10 @@ function Tips({ report }: { report: StorageReport }) {
           <IconButton size="sm" icon="x" label={t("Hide this suggestion")} onClick={() => hide(tip)} />
         </li>
       ))}
-    </ul>
-  );
+    </ul>}
+    {hidden.length > 0 && <Button size="sm" variant="ghost" className="st-more st-restore" onClick={restore}
+      title={t("Brings back the cleaning suggestions you hid")}>{tn(hidden.length, "Show {n} hidden suggestion", "Show {n} hidden suggestions")}</Button>}
+  </>;
 }
 
 // ── the overview ──
@@ -381,7 +511,51 @@ function ItemActions({ game, item }: { game: GameId | null; item: StorageItem })
     case "backups": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "disk-backups" })} title={t("Shows each backup: what it is, when it was made and the size")}>{t("View backups")}</Button>;
     case "shader-cache": return game ? <Button size="sm" variant="ghost" disabled={running} onClick={() => void clearCache(game)} title={running ? t("Close the game first") : t("Deletes the shader cache. The game rebuilds it on the next start")}>{t("Clear")}</Button> : null;
     case "frame-dumps": return game ? <Button size="sm" variant="ghost" onClick={() => void clearDumps(game)} title={t("Moves the FrameAnalysis folders to the Recycle Bin")}>{t("Move to Recycle Bin")}</Button> : null;
-    case "log": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "settings", section: "migoto" })} title={t("Opens Settings, Mod maker switches, where the log level is")}>{t("Log settings")}</Button> : null;
+    case "log": return game ? <>
+      <Button size="sm" variant="ghost" disabled={running} onClick={() => void clearStored("log", game, "log", true)} title={running ? t("Close the game first") : t("Deletes the log. The game starts a new one")}>{t("Clear")}</Button>
+      <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "settings", section: "migoto" })} title={t("Opens Settings, Mod maker switches, where the log level is")}>{t("Log settings")}</Button>
+    </> : null;
+    case "live-menu": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "tools", section: "ingame" })} title={t("Opens Switch skins in game")}>{t("Switch skins in game")}</Button> : null;
+    case "originals": return <>
+      <Button size="sm" variant="ghost" onClick={() => void clearStored("originals-gone", game, "originals", false, t("No removed mod has copies here"))}
+        title={t("Deletes the copies of mods that are no longer installed or in the trash")}>{t("Clear unused")}</Button>
+      {game && <ClearAsk label={t("Clear all")} title={t("Deletes every original copy, after asking")} heading={t("Delete the original mod files?")}
+        what={t("Put back original files can't bring the author's version back for these mods afterwards. A copy is kept again the next time gachamod changes a file.")}
+        onYes={() => clearStored("originals", game, "originals", true)} />}
+    </>;
+    case "thumbs": return <Button size="sm" variant="ghost" onClick={() => void clearStored("thumbs", null, "thumbs", true)} title={t("Deletes the thumbnails. They're made again when a mod shows")}>{t("Clear")}</Button>;
+    case "cache": return <Button size="sm" variant="ghost" onClick={() => void clearStored("cache", null, "cache", true)} title={t("Deletes the pictures taken out of .gachamod files. They're taken out again when a file is opened")}>{t("Clear")}</Button>;
+    case "staging": return <Button size="sm" variant="ghost" onClick={() => void clearStored("staging", null, "staging", false, t("Nothing to clear. Installs in progress keep their files"))}
+      title={t("Deletes files left from unpacking downloads. Installs in progress keep theirs")}>{t("Clear")}</Button>;
+    case "icons": return <Button size="sm" variant="ghost" onClick={() => void clearStored("icons", null, "icons", true)} title={t("Deletes the saved game icons. They're taken from the games again when needed. Desktop quickstart shortcuts keep their icons")}>{t("Clear")}</Button>;
+    case "media": return <Button size="sm" variant="ghost" onClick={() => void clearStored("media-unused", null, "media", false, t("Every picture here is used by a profile"))}
+      title={t("Deletes the pictures no profile uses")}>{t("Clear unused")}</Button>;
+    case "extensions":
+    case "extensions-trash": return <Button size="sm" variant="ghost" onClick={() => go({ view: "extensions" })} title={t("Opens Extensions")}>{t("View extensions")}</Button>;
+    case "database": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "disk-backups" })} title={t("Shows the daily copies of the database, with the size of each")}>{t("View backups")}</Button>;
+    case "logs": return <>
+      <Button size="sm" variant="ghost" onClick={() => void clearStored("logs-old", null, "logs", false, t("No old logs to clear. The logs in use stay"))}
+        title={t("Deletes the old log, crash files already sent and rendering incident files. The logs in use stay")}>{t("Clear old")}</Button>
+      <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "logs" })} title={t("Opens Settings, Feedback, privacy and logs: Log files")}>{t("Log settings")}</Button>
+    </>;
+    case "fixers": return <Button size="sm" variant="ghost" onClick={() => go({ view: "tools", section: "fixes" })} title={t("Opens Tools > Fixes")}>{t("Open Fixes")}</Button>;
+    case "ai": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "set-ai-key" })} title={t("Opens Settings, AI helper: the Gemini key")}>{t("AI helper settings")}</Button>;
+    case "login": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "account" })} title={t("Opens Settings, GameBanana: signing out deletes the sign-in")}>{t("GameBanana settings")}</Button>;
+    case "setup": return <Button size="sm" variant="ghost" onClick={() => void clearStored("setup", null, "setup", false, t("Nothing to clear. An install in progress keeps the files"))}
+      title={t("Deletes files left by an XXMI Launcher install that stopped part way")}>{t("Clear")}</Button>;
+    case "nrmm-trash": return <Button size="sm" variant="ghost" onClick={() => void recycleNrmm()}
+      title={t("Moves the leftovers to the Recycle Bin, where Windows can still put them back")}>{t("Move to Recycle Bin")}</Button>;
+    case "xxmi": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "xxmi" })} title={t("Opens Settings, Games: XXMI Launcher, where it can be uninstalled")}>{t("XXMI Launcher settings")}</Button>;
+    case "extension-data": return <>
+      <Button size="sm" variant="ghost" onClick={() => go({ view: "extensions" })} title={t("Opens Extensions")}>{t("View extensions")}</Button>
+      <Button size="sm" variant="ghost" onClick={() => void clearStored("extension-data-gone", null, "extension-data", false, t("No removed extension has saved data"))}
+        title={t("Deletes the saved data of extensions that are no longer installed")}>{t("Clear unused")}</Button>
+      <ClearAsk label={t("Clear all")} title={t("Deletes what every extension saved, after asking")} heading={t("Delete what extensions saved?")}
+        what={t("Extensions lose their saved settings and start fresh.")} onYes={() => clearStored("extension-data", null, "extension-data", true)} />
+    </>;
+    case "archive": return <Button size="sm" variant="ghost" onClick={() => go({ view: "library", tab: "archive" })} title={t("Opens Mods > Trash")}>{t("View trash")}</Button>;
+    case "webview": return <Button size="sm" variant="ghost" onClick={() => void clearWindowCache()} title={t("Deletes the window's cached pictures and pages the next time gachamod starts. Saved settings stay")}>{t("Clear")}</Button>;
+    case "browser-cache": return <Button size="sm" variant="ghost" onClick={clearBrowserCache} title={t("Deletes the saved portraits, icons, creator stats and recent searches. They load again when needed")}>{t("Clear")}</Button>;
     case "others": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "tools", section: "others" })} title={t("Opens Tools, Share and import: Mods from other managers")}>{t("Move them in")}</Button> : null;
     default: return null;
   }
@@ -418,9 +592,13 @@ export function StoragePanel({ onPage }: { onPage?: boolean }) {
   const [open, setOpen] = useState<StorageCategory | null>(null);
   const [allChars, setAllChars] = useState(false);
 
+  const browser = useBrowserBytes();
   const live = useMemo(() => (report ? liveGames(report) : []), [report]);
   const inScope = sc === "all" ? live : live.filter((g) => g.game === sc);
-  const app = sc === "all" ? report?.app ?? [] : [];
+  // the window's saved page data isn't a folder, so the report doesn't have it
+  const appItems = useMemo<StorageItem[]>(() => [...(report?.app ?? []),
+    ...(report && browser > 0 ? [{ key: "browser-cache", category: "app" as const, bytes: browser, count: cacheCount(), path: null, name: null }] : [])], [report, browser]);
+  const app = sc === "all" ? appItems : [];
   const total = inScope.reduce((s, g) => s + g.bytes, 0) + app.reduce((s, i) => s + i.bytes, 0);
 
   const cats = useMemo(() => {
@@ -445,7 +623,7 @@ export function StoragePanel({ onPage }: { onPage?: boolean }) {
   }, [report, sc]);
 
   const scopes = [{ value: "all", label: t("All games") }, ...live.map((g) => ({ value: g.game, label: gameName(games.find((x) => x.id === g.game)) || g.game }))];
-  const appBytes = report?.app.reduce((s, i) => s + i.bytes, 0) ?? 0;
+  const appBytes = appItems.reduce((s, i) => s + i.bytes, 0);
 
   return (
     <Panel title={t("Disk space")} icon="box" id="disk"
@@ -470,6 +648,7 @@ export function StoragePanel({ onPage }: { onPage?: boolean }) {
           </div>
           {measuring && <Waiting className="st-wait" what={stepText(step)}><Button size="sm" onClick={skip} title={t("Stop measuring and show what's measured so far")}>{t("Skip")}</Button></Waiting>}
           <Tips report={report} />
+          <TrimRow />
 
           {view === "category" && (
             <ul className="st-rows">

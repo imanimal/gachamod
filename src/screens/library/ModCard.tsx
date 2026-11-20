@@ -105,6 +105,10 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
             title={updating ? t("Finding the newer file on GameBanana") : t("A newer version is on GameBanana. Click to download it")}
             onClick={() => onUpdate(mod)}><Icon name={updating ? "clock" : "update"} />{updating ? t("Finding file") : t("Update")}</button>
         )}
+        {quiet && (
+          <Badge tone="muted" icon="hide" className="mb-cf" onClick={() => openDetails(mod)}
+            title={t("You turned off the warnings for this mod, so it shows no problems. Click to open the details, where Show problems again turns them back on")}>{t("Ignored")}</Badge>
+        )}
         {mod.conflicts > 0 && !quiet && (
           <Badge tone="bad" icon="warn" className="mb-cf" onClick={() => openDetails(mod, "conflicts")}
             title={mod.conflicts === 1 ? t("Changes the same parts as another mod that is on. Click to pick which one wins") : t("Changes the same parts as {n} other mods that are on. Click to pick which one wins", { n: mod.conflicts })}>{t("Conflict")}</Badge>

@@ -5,6 +5,7 @@
 .st-pick { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
 .st-pick .field { min-width: 11rem; }
 .st-wait { margin-bottom: var(--s-4); }
+.st-auto { margin-bottom: var(--s-4); }
 
 .st-tips { list-style: none; margin: 0 0 var(--s-4); padding: 0; display: grid; gap: var(--s-2); }
 .st-tip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
@@ -43,6 +44,7 @@
 .st-mod-t b, .st-mod-t .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-bottom: .1em; }
 .st-mod-t b { font-weight: 600; }
 .st-more { margin-top: var(--s-2); }
+.st-more.st-restore { margin: 0 0 var(--s-4); }
 
 .st-dupes { display: grid; gap: var(--s-3); }
 .st-dupe { padding-bottom: var(--s-3); border-bottom: 1px solid var(--line); }

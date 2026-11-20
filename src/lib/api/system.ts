@@ -44,6 +44,8 @@ export interface DllConfig { injectMode: string; injectLibraries: boolean; libra
 export interface FolderUse { path: string | null; files: number; bytes: number }
 export interface DevStatus {
   log: FolderUse; shaderCache: FolderUse; shaderFixes: FolderUse; frameDumps: FolderUse; d3dxIni: string | null; d3dxUserIni: string | null;
+  /** The copy of d3dx_user.ini the last wipe kept, when it is still there. */
+  wipedBak?: string | null;
 }
 
 export interface Integration { id: string; label: string; supported: boolean; ours: boolean; owner: string | null }
@@ -63,7 +65,6 @@ export const games = {
   kickCheck: (game: GameId, vanilla = false) => call<KickCheck>("game_kick_check", { game, vanilla }),
   /** The player did the fix from the community guide by hand (saves GIMI's d3d11.dll as it is), or takes it back. */
   kickFixDone: (done: boolean) => call<void>("game_kick_fix_done", { done }),
-  running: (game: GameId) => call<boolean>("game_running", { game }),
   /** The game's own icon at 256 px, taken from its exe and kept as a PNG in the app's data folder; null when the game
    *  folder isn't known. */
   icon: (game: GameId) => call<string | null>("game_icon", { game }),

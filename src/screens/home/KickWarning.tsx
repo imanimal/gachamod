@@ -10,8 +10,9 @@ import { KickSteps } from "../tools/KickSteps";
 import { gameName } from "../../lib/games";
 import { t } from "../../lib/i18n";
 
-/** play: start this once. done: the player did the fix, so start and stop warning. */
-export type KickAnswer = "play" | "done" | "cancel";
+/** play: start this once. done: the player did the fix, so start and stop warning. mute: start and stop warning
+ *  without saying the fix is done (Settings, Launch options turns the warning back on). */
+export type KickAnswer = "play" | "done" | "mute" | "cancel";
 
 let answer: ((a: KickAnswer) => void) | null = null;
 let undone = false;
@@ -42,6 +43,7 @@ function Host() {
   return (
     <Dialog title={t("Before you play {game}", { game: gi })} icon="warn" size="md" onClose={() => done("cancel")} footer={<>
       <Button variant="ghost" onClick={() => done("cancel")}>{t("Cancel")}</Button>
+      <Button variant="ghost" onClick={() => done("mute")} title={t("Start the game and never show this warning again. Settings, Launch options turns it back on")}>{t("Stop warning")}</Button>
       <Button onClick={() => done("done")} title={t("Start the game and stop warning, until XXMI puts the stock d3d11.dll back")}>{t("I did the fix")}</Button>
       <Button variant="primary" autoFocus onClick={() => done("play")} title={t("Start the game. gachamod warns again next time")}>{t("Play anyway")}</Button>
     </>}>

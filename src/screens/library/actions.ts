@@ -1,8 +1,8 @@
 // What can be done to installed mods, for every place that shows them (the grid, the bulk bar, the right-click menu,
 // the details drawer): each change goes to the backend, reaches every screen through publish(), and records an Undo
 // step. Owner: LIBRARY area.
-import { errorText, library, profiles, shell, type GameId, type ModEntry, type Profile } from "../../lib/api";
-import * as modtoolsApi from "../../lib/api/modtools";
+import { errorText, library, modKeys, profiles, shell, type Backup, type GameId, type ModEntry, type Profile } from "../../lib/api";
+import { keysChanged, recordBackups, recordEdit } from "../../ui/KeyEditor";
 import type { MetaPatch } from "../../lib/api/library";
 import { checkUpdates, modPage, queueLatest } from "../../lib/gamebanana";
 import { fixMods } from "../../lib/fixes";
@@ -16,12 +16,23 @@ import { changeStates, publish, removeMods, toggleMods } from "./data";
 import { previewChanged } from "./Preview";
 import { askOverlap } from "./overlap";
 import { notesText } from "../../lib/notes";
-import { t, tn } from "../../lib/i18n";
+import { english, t, tn } from "../../lib/i18n";
 
 /** "Ellen hoodie" or "3 mods". */
 export const modsName = (list: ModEntry[]) => (list.length === 1 ? list[0]!.name : tn(list.length, "{n} mod", "{n} mods"));
 
 const fail = (e: unknown) => toast(errorText(e), true);
+
+/** A failed turn on or off. When the message sends people to the mod's folder ("Open the folder to check it"), the
+ *  toast opens it: the mod whose name the message has, or the only one asked about. */
+export function failToggle(e: unknown, list: ModEntry[]) {
+  const text = errorText(e);
+  const mod = /Open the folder to check it|Check the mod's folder/i.test(english(text))
+    ? list.find((m) => text.includes(m.name)) ?? (list.length === 1 ? list[0] : undefined)
+    : undefined;
+  if (mod) toast(text, true, { label: t("Show folder"), run: () => { shell.openPath(mod.path).catch(fail); } });
+  else toast(text, true);
+}
 
 // ── on and off ──
 
@@ -46,7 +57,7 @@ export async function setOn(game: GameId, list: ModEntry[], on: boolean, prior?:
     }
     await toggleMods(game, ids, on, all, turnOffOthers);
     return true;
-  } catch (e) { fail(e); return false; }
+  } catch (e) { failToggle(e, list); return false; }
 }
 
 // ── sub-mods ──
@@ -307,17 +318,34 @@ export async function fixForUpdate(game: GameId, list: ModEntry[]) {
   try { await fixMods(game, list.map((m) => m.id)); } catch (e) { fail(e); }
 }
 
-type OnlyOnScreen = (game: GameId, ids: string[]) => Promise<unknown>;
-/** "Keys only while on screen" from the KEYBINDS area, once it exists (modKeys.onlyOnScreen). It writes the inis with
- *  a backup and records its own Undo. */
-export function onlyOnScreenFn(): OnlyOnScreen | null {
-  const mk = Reflect.get(modtoolsApi, "modKeys") as { onlyOnScreen?: OnlyOnScreen } | undefined;
-  return typeof mk?.onlyOnScreen === "function" ? mk.onlyOnScreen.bind(mk) : null;
-}
+/** Make the toggles of these mods work only while their character is on screen. Each ini is written with a backup,
+ *  and one Undo puts every one back. Mods that can't take the check stay as they were, and the toast says so. */
 export async function keysOnlyOnScreen(game: GameId, list: ModEntry[]) {
-  const fn = onlyOnScreenFn();
-  if (!fn) return;
-  try { await fn(game, list.map((m) => m.id)); } catch (e) { fail(e); }
+  if (!list.length) return;
+  const said = t("Made the mod's toggles work only while on screen");
+  if (list.length === 1) {
+    const id = list[0]!.id;
+    try { recordEdit(game, id, await modKeys.onScreen(game, id, true), t("The toggles already work only while on screen"), said); } catch (e) { fail(e); }
+    return;
+  }
+  const taken: Array<{ game: string; modId: string; backup: Backup }> = [];
+  let stayed = 0;
+  let failed: unknown = null;
+  for (const m of list) {
+    try {
+      const r = await modKeys.onScreen(game, m.id, true);
+      keysChanged(game, m.id);
+      if (r.backup) taken.push({ game, modId: m.id, backup: r.backup }); else stayed++;
+    } catch (e) { failed ??= e; stayed++; }
+  }
+  const left = stayed ? tn(stayed, "{n} mod stayed as it was", "{n} mods stayed as they were") : "";
+  if (!taken.length) {
+    if (failed) fail(failed); else toast(left || t("The toggles already work only while on screen"));
+    return;
+  }
+  const n = taken.length;
+  const label = tn(n, "Toggles of {n} mod work only while on screen", "Toggles of {n} mods work only while on screen");
+  recordBackups(label, taken, { brief: left ? `${label}. ${left}` : label });
 }
 
 // ── profiles ──

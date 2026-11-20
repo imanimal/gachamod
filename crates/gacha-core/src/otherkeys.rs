@@ -98,6 +98,23 @@ pub struct Changed {
     pub to: String,
     /// "Medal takes a screenshot on F9 now"
     pub text: String,
+    /// The copy of the app's settings made before the first change in this run, for a button that shows it.
+    pub backup: Option<String>,
+}
+
+/// A clash the player chose to keep, for the list that takes that back.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KeptKey {
+    /// "medal|F7"
+    pub id: String,
+    pub app: String,
+    pub app_id: String,
+    pub key: String,
+    /// "Medal takes a screenshot on F7." Where the app no longer has the key: "Medal used F7."
+    pub text: String,
+    /// The app has the key now and it is one of gachamod's, so taking the choice back brings the question back.
+    pub active: bool,
 }
 
 // ── key names ──
@@ -323,21 +340,50 @@ pub(crate) fn medal_found(dir: &Path) -> Vec<OtherKey> {
 static BACKED_UP: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 /// Copy Medal's database to `<name>.gachamod.bak` before gachamod's first write to it in this run. What Medal wrote
-/// last may still sit in its write-ahead file (`<name>-wal`), so that goes along as `<name>.gachamod.bak-wal`.
-fn medal_backup(path: &Path) -> Result<()> {
+/// last may still sit in its write-ahead file (`<name>-wal`), so that goes along as `<name>.gachamod.bak-wal`. Returns
+/// the copy of the database, for the button that shows it.
+fn medal_backup(path: &Path) -> Result<PathBuf> {
     let beside = |suffix: &str| {
         let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
         name.push(suffix);
         path.with_file_name(name)
     };
+    let bak = beside(".gachamod.bak");
     let mut done = BACKED_UP.lock().unwrap_or_else(|e| e.into_inner());
-    if done.iter().any(|p| p == path) { return Ok(()); }
-    std::fs::copy(path, beside(".gachamod.bak"))?;
+    if done.iter().any(|p| p == path) { return Ok(bak); }
+    std::fs::copy(path, &bak)?;
     let (wal, bak_wal) = (beside("-wal"), beside(".gachamod.bak-wal"));
     if std::fs::metadata(&wal).is_ok_and(|m| m.len() > 0) { std::fs::copy(&wal, &bak_wal)?; } else { let _ = std::fs::remove_file(&bak_wal); }
     done.push(path.to_path_buf());
-    Ok(())
+    Ok(bak)
 }
+
+/// The copies gachamod made of Medal's settings, for the row that shows them.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MedalCopy {
+    /// One of the copies, the file to show.
+    pub path: String,
+    /// The folder they are in.
+    pub folder: String,
+    /// Every copy together, in bytes.
+    pub bytes: u64,
+    /// How many files there are (a database and its write-ahead file).
+    pub files: u32,
+}
+
+/// The copies in Medal's folder: `<name>.gachamod.bak` and `<name>.gachamod.bak-wal`. None when there are none.
+fn medal_copies_in(dir: &Path) -> Option<MedalCopy> {
+    let mut found: Vec<(PathBuf, u64)> = std::fs::read_dir(dir).ok()?.filter_map(|e| e.ok())
+        .filter(|e| { let n = e.file_name().to_string_lossy().to_string(); n.ends_with(".gachamod.bak") || n.ends_with(".gachamod.bak-wal") })
+        .filter_map(|e| { let m = e.metadata().ok()?; m.is_file().then(|| (e.path(), m.len())) }).collect();
+    found.sort();
+    let (path, _) = found.first()?.clone();
+    Some(MedalCopy { path: path.to_string_lossy().into_owned(), folder: dir.to_string_lossy().into_owned(), bytes: found.iter().map(|f| f.1).sum(), files: found.len() as u32 })
+}
+
+/// The copies gachamod made of Medal's settings on this PC.
+pub fn medal_copies() -> Option<MedalCopy> { medal_copies_in(&env_dir("APPDATA")?.join("Medal")) }
 
 /// Give every key of Medal's list that is `from` the key `to`: one value each inside the `Hotkeys` row, set in
 /// place, so the rest of the row and every other row stay byte for byte. Read back afterwards.
@@ -702,6 +748,30 @@ pub fn clashes_with(db: &Db, others: &[OtherKey]) -> Vec<Clash> { clashes_in(&ou
 /// The clashes on this PC.
 pub fn clashes(db: &Db) -> Vec<Clash> { clashes_with(db, &found()) }
 
+fn app_name(app_id: &str) -> &str {
+    match app_id {
+        "medal" => "Medal", "obs" => "OBS", "steam" => "Steam", "amd" => "AMD Software",
+        "gamebar" => "Xbox Game Bar", "nvidia" => "NVIDIA App", "bandicam" => "Bandicam",
+        other => other,
+    }
+}
+
+fn kept_in(ours: &Ours, others: &[OtherKey], kept: &[String]) -> Vec<KeptKey> {
+    // the clashes as they would show without the player's choices
+    let live = clashes_in(ours, others, &[]);
+    kept.iter().filter_map(|id| {
+        let (app_id, key) = id.split_once('|')?;
+        let found = live.iter().find(|c| c.id == *id);
+        let app = found.map_or_else(|| app_name(app_id).to_string(), |c| c.app.clone());
+        let text = found.map_or_else(|| format!("{app} used {key}."), |c| c.text.clone());
+        Some(KeptKey { id: id.clone(), app, app_id: app_id.to_string(), key: key.to_string(), text, active: found.is_some() })
+    }).collect()
+}
+
+/// The clashes the player chose to keep, each with whether it still clashes, so a choice can be taken back from a
+/// list. `others` is from `found`.
+pub fn kept_with(db: &Db, others: &[OtherKey]) -> Vec<KeptKey> { kept_in(&ours(db), others, &kept(db)) }
+
 fn to_ask_in(db: &Db, all: Vec<Clash>) -> Vec<Clash> {
     if db.setting(ASK).ok().flatten().as_deref() == Some("0") { return vec![]; }
     let before: HashMap<String, u32> = db.setting_json(ASKED).ok().flatten().unwrap_or_default();
@@ -771,9 +841,12 @@ fn change_in(ours: &Ours, others: &[OtherKey], medal_dir: Option<&Path>, running
     // Medal reads its keys when it starts and writes the whole list back when one changes there
     if running { return Err(Error::Invalid("Medal is running. Quit it from the tray icon, then try again".into())); }
     let path = medal_dir.and_then(medal_db_path).ok_or_else(|| Error::Invalid("Medal's settings weren't found".into()))?;
-    medal_backup(&path)?;
+    let backup = medal_backup(&path)?;
     medal_change(&path, &from, &to)?;
-    Ok(Changed { app: theirs.app.to_string(), app_id: app_id.to_string(), text: format!("{} {} on {to} now", theirs.app, theirs.does), from, to })
+    Ok(Changed {
+        app: theirs.app.to_string(), app_id: app_id.to_string(), text: format!("{} {} on {to} now", theirs.app, theirs.does),
+        backup: Some(backup.to_string_lossy().into_owned()), from, to,
+    })
 }
 
 /// Give another app's key `from` the key `to`, so gachamod keeps its own. Only Medal, only while Medal is closed,
@@ -989,6 +1062,17 @@ mod tests {
     }
 
     #[test]
+    fn kept_choices_are_listed() {
+        let ours = ours_with(&[("zzz", "F7", true)], &[], &[]);
+        let kept = vec!["medal|F7".to_string(), "obs|F5".to_string(), "odd".to_string()];
+        let got = kept_in(&ours, &medal(MEDAL), &kept);
+        // an id that isn't "app|key" is left out; a choice for a clash that is gone stays listed so it can be cleared
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!((got[0].app.as_str(), got[0].text.as_str(), got[0].active), ("Medal", "Medal takes a screenshot on F7.", true));
+        assert_eq!((got[1].app.as_str(), got[1].text.as_str(), got[1].active), ("OBS", "OBS used F5.", false));
+    }
+
+    #[test]
     fn a_clash_is_asked_about_a_few_times() {
         let db = Db::memory().unwrap();
         let all = || clashes_in(&ours_with(&[("zzz", "F7", true)], &[], &[]), &medal(MEDAL), &[]);
@@ -1091,7 +1175,7 @@ mod tests {
         assert!(change("F5", "F9", false, false).is_err(), "Medal has no key on F5");
         assert!(change_in(&ours, &obs("[Hotkeys]\nOBSBasic.Screenshot={\"bindings\":[{\"key\":\"OBS_KEY_F7\"}]}\n"), Some(dir.as_path()), false, "obs", "F7", "F9", false).is_err());
         assert_eq!(std::fs::read(&db).unwrap(), before);
-        assert!(!dir.join("medal-guest.db.gachamod.bak").exists());
+        assert!(!dir.join("medal-guest.db.gachamod.bak").exists() && medal_copies_in(&dir).is_none());
 
         // one value changes; the list keeps its order and the other rows their bytes
         let others = [row(&db, "ScreenshotEnabled"), row(&db, "VolumeRoots")];
@@ -1103,6 +1187,10 @@ mod tests {
         assert_eq!([row(&db, "ScreenshotEnabled"), row(&db, "VolumeRoots")], others);
         // the copy from before the first write
         assert_eq!(std::fs::read(dir.join("medal-guest.db.gachamod.bak")).unwrap(), before);
+        // the copy is found and measured, and the change says where it is
+        let copies = medal_copies_in(&dir).unwrap();
+        assert!(copies.path.ends_with("medal-guest.db.gachamod.bak") && copies.bytes >= before.len() as u64 && copies.files >= 1);
+        assert_eq!(done.backup.as_deref(), Some(copies.path.as_str()));
         // gachamod keeps F7 and nothing clashes
         assert!(found().iter().any(|o| o.key == "F9" && o.does == "takes a screenshot"));
         assert!(clashes_in(&ours, &found(), &[]).is_empty());

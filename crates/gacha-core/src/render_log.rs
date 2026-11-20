@@ -129,6 +129,13 @@ pub fn webview_paths(data: Option<PathBuf>, reports: Option<PathBuf>) {
     if reports.is_some() { w.reports = reports; }
 }
 
+/// The folder WebView2 keeps the window's cache, saved page data and log in, once a window has said where it is.
+pub fn webview_folder() -> Option<PathBuf> {
+    let data = WEBVIEW.lock().ok()?.data.clone()?;
+    let inner = data.join("EBWebView");
+    Some(if inner.is_dir() { inner } else { data })
+}
+
 fn chromium_log() -> Option<PathBuf> {
     let data = WEBVIEW.lock().ok()?.data.clone()?;
     [data.join("EBWebView").join("chrome_debug.log"), data.join("chrome_debug.log")].into_iter().find(|p| p.is_file())

@@ -43,10 +43,21 @@ pub struct State {
     /// False in a build without the project key: the switches still work, nothing is sent.
     pub configured: bool,
     pub logs_dir: Option<String>,
+    /// The random id counts carry, or none while no count has been sent from this install.
+    pub install_id: Option<String>,
 }
 
 pub fn state(db: &Db) -> State {
-    State { usage: usage_on(db), crashes: crashes_on(db), configured: configured(), logs_dir: logs::dir().map(|d| d.to_string_lossy().into_owned()) }
+    State { usage: usage_on(db), crashes: crashes_on(db), configured: configured(), logs_dir: logs::dir().map(|d| d.to_string_lossy().into_owned()), install_id: saved_id(db) }
+}
+
+/// The install id when one was made, without making one.
+fn saved_id(db: &Db) -> Option<String> { db.setting(ID).ok().flatten().filter(|s| s.len() == 32) }
+
+/// Forget the install id. The next count gets a new random one, so it can't be tied to the ones sent before.
+pub fn reset_id(db: &Db) -> Result<State> {
+    db.clear_setting(ID)?;
+    Ok(state(db))
 }
 
 /// Turn usage counts or crash reports on or off. Off drops what was waiting to go.
@@ -61,7 +72,7 @@ pub fn set(db: &Db, usage: Option<bool>, crashes: Option<bool>) -> Result<State>
 
 /// A random id for this install, so counts can tell one player from many. Nothing ties it to the person.
 fn install_id(db: &Db) -> String {
-    if let Some(id) = db.setting(ID).ok().flatten().filter(|s| s.len() == 32) { return id; }
+    if let Some(id) = saved_id(db) { return id; }
     let id = random_id();
     let _ = db.set_setting(ID, &id);
     id
@@ -327,6 +338,16 @@ mod tests {
         set(&db, Some(false), None).unwrap();
         let b = feedback_body(&db, &f);
         assert_ne!(b["batch"][0]["properties"]["distinct_id"], json!(install_id(&db)));
+    }
+
+    #[test]
+    fn resetting_the_id_makes_a_new_one() {
+        let db = Db::memory().unwrap();
+        assert!(state(&db).install_id.is_none());
+        let first = install_id(&db);
+        assert_eq!(state(&db).install_id.as_deref(), Some(first.as_str()));
+        assert!(reset_id(&db).unwrap().install_id.is_none());
+        assert_ne!(install_id(&db), first);
     }
 
     #[test]

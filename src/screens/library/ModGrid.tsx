@@ -4,7 +4,7 @@
 // the selection. On a controller, X (or the right stick pressed in) opens the focused mod's menu, which can select
 // too. Every change records Undo. Owner: LIBRARY area.
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode, type SetStateAction } from "react";
-import { errorText, type GameId, type ModEntry } from "../../lib/api";
+import { type GameId, type ModEntry } from "../../lib/api";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import { useModHealth } from "../../lib/fixes";
 import { holdOn, settleHolds, useHolds } from "../../lib/holds";
@@ -13,9 +13,8 @@ import { useNsfw } from "../../lib/prefs";
 import { useTrashDays, useUnsourced } from "../settings/automatic";
 import { menuFor, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Button, IconButton, Skeleton, Waiting, behindLayer } from "../../ui/kit";
-import { toast } from "../../ui/toast";
 import {
-  fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails, setFavourite, setParent, trashMods, warmProfiles,
+  failToggle, fixForUpdate, getUpdate, keysOnlyOnScreen, openDetails, setFavourite, setParent, trashMods, warmProfiles,
 } from "./actions";
 import { anchorFor, askOverlap } from "./overlap";
 import { toggleMods } from "./data";
@@ -139,7 +138,7 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
       setMods?.((l) => l.map((m) => (want.has(m.id) && !done.has(m.id) && m.enabled !== before.get(m.id) ? { ...m, enabled: before.get(m.id)! } : m)));
     } catch (e) {
       setMods?.((l) => l.map((m) => (want.has(m.id) ? { ...m, enabled: before.get(m.id) ?? m.enabled } : m)));
-      toast(errorText(e), true);
+      failToggle(e, list);
     }
   }, [game, setMods]);
 
@@ -300,7 +299,6 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
   const broken = picked.filter((m) => isBroken(health.get(m.id)));
   const due = picked.filter((m) => m.updateAvailable && m.source);
   const allFav = picked.length > 0 && picked.every((m) => m.favorite);
-  const onScreen = onlyOnScreenFn();
   return (
     <div className="mod-grid-wrap">
       <div ref={gridRef} className={`mod-grid ${view === "list" ? "is-list" : "cards"}${dense ? " is-dense" : ""}`} onKeyDown={onKey} onContextMenu={onContextMenu}
@@ -333,7 +331,7 @@ export function ModGrid({ game, mods, all, setMods, view: asked = "grid", loadin
             <Button size="sm" variant="ghost" icon="downloads" title={due.length === 1 ? t("Download the newest version of {mod}", { mod: due[0]!.name }) : t("Download the newest version of each")}
               onClick={() => void getUpdates(game, due)}>{due.length === picked.length ? t("Update") : t("Update {n}", { n: due.length })}</Button>
           )}
-          {onScreen && picked.some((m) => m.hasKeys) && (
+          {picked.some((m) => m.hasKeys) && (
             <IconButton size="sm" icon="keyboard" label={t("Toggles only while on screen: their toggles only work while their character is on screen")}
               onClick={() => void keysOnlyOnScreen(game, picked.filter((m) => m.hasKeys))} />
           )}

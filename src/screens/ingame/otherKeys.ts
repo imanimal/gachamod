@@ -3,8 +3,8 @@
 // key moves, the other app's stays), "Change Medal's key" (the other way round, where gachamod can) and "Keep F7"
 // (stop asking). Owner: INGAME area.
 import { useMemo, useSyncExternalStore } from "react";
-import { errorText, games, otherKeys, type AppKeyClash, type GameId } from "../../lib/api";
-import { record } from "../../lib/history";
+import { errorText, games, otherKeys, shell, type AppKeyClash, type GameId, type KeptKey, type MedalCopy } from "../../lib/api";
+import { linkToast, record, undo } from "../../lib/history";
 import { t, tb } from "../../lib/i18n";
 import { go } from "../../lib/store";
 import { held, isMenuWindow } from "../../lib/tauri";
@@ -19,6 +19,21 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 export async function reloadKeyClashes() {
   try { list = await otherKeys.clashes(); } catch { list = []; }
   subs.forEach((f) => f());
+}
+
+/** The choices to keep a key and the copies made of Medal's settings, for the list under the key that opens the menu. */
+interface Kept { keys: KeptKey[]; copies: MedalCopy | null }
+let kept: Kept = { keys: [], copies: null };
+
+/** Read the kept choices and the copies again. */
+export async function reloadKeptKeys() {
+  const [keys, copies] = await Promise.all([otherKeys.kept().catch(() => [] as KeptKey[]), otherKeys.copies().catch(() => null)]);
+  kept = { keys, copies };
+  subs.forEach((f) => f());
+}
+
+export function useKeptKeys(): Kept {
+  return useSyncExternalStore(subscribe, () => kept);
 }
 
 /** The clashes that hit this game's skin menu key or key list key. */
@@ -56,25 +71,43 @@ export async function changeOtherKey(c: AppKeyClash) {
   if (!free) return;
   const put = async (from: string, to: string, undo: boolean) => {
     const done = await otherKeys.change(c.appId, from, to, undo);
-    await reloadKeyClashes();
+    await Promise.all([reloadKeyClashes(), reloadKeptKeys()]);
     return done;
   };
   try {
     const done = await put(c.key, free, false);
-    record({ label: t("{done}. gachamod keeps {key}", { done: tb(done.text), key: c.key }), undo: () => put(free, c.key, true), redo: () => put(c.key, free, false) });
+    const label = t("{done}. gachamod keeps {key}", { done: tb(done.text), key: c.key });
+    const entry = record({ label, undo: () => put(free, c.key, true), redo: () => put(c.key, free, false) }, true);
+    // the toast's Undo is the entry's, and its second button shows the copy of the app's settings made before the change
+    let tid = 0;
+    const backup = done.backup;
+    tid = toast(t("{label}.", { label }), false, { label: t("Undo"), run: () => { void undo(entry, tid); } },
+      backup ? { label: t("Show backup"), run: () => { shell.revealPath(backup).catch((e) => toast(errorText(e), true)); } } : undefined);
+    linkToast(entry, tid);
   } catch (e) {
     toast(errorText(e), true);
     void reloadKeyClashes();
   }
 }
 
-/** The "Keep F7" answer: both apps keep the key and gachamod stops asking. Undo brings the question back. */
+/** The "Keep F7" answer: both apps keep the key and gachamod stops asking. Undo brings the question back. The kept
+ *  choices are listed under the key that opens the menu, each with "Ask again" (`askAgain`). */
 export async function keepKey(c: AppKeyClash) {
-  const put = async (on: boolean) => { await otherKeys.keep(c.appId, c.key, on); await reloadKeyClashes(); };
+  const put = async (on: boolean) => { await otherKeys.keep(c.appId, c.key, on); await Promise.all([reloadKeyClashes(), reloadKeptKeys()]); };
   try {
     await put(true);
     record({ label: t("Kept {key}, which {app} uses too", { key: c.key, app: c.app }), undo: () => put(false), redo: () => put(true) });
   } catch (e) { toast(errorText(e), true); }
+}
+
+/** "Ask again" on a kept choice: the question comes back the next time the app has the key. The row goes, so the
+ *  change is recorded quietly (Ctrl+Z puts the choice back). */
+export async function askAgain(k: KeptKey) {
+  const put = async (on: boolean) => { await otherKeys.keep(k.appId, k.key, on); await Promise.all([reloadKeyClashes(), reloadKeptKeys()]); };
+  try {
+    await put(false);
+    record({ label: t("Asked again about {key}, which {app} uses too", { key: k.key, app: k.app }), brief: t("Asked again about a key another app uses"), undo: () => put(true), redo: () => put(false) }, true);
+  } catch (e) { toast(errorText(e), true); void reloadKeptKeys(); }
 }
 
 /** A profile hotkey is the player's pick, so that clash gets the way to its setting. */

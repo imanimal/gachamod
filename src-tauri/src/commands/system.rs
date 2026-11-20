@@ -207,11 +207,6 @@ pub async fn game_kick_fix_done(st: State<'_, AppState>, done: bool) -> Result<(
 }
 
 #[tauri::command]
-pub async fn game_running(game: String) -> Result<bool> {
-    blocking(move || Ok(launch::running(&game))).await
-}
-
-#[tauri::command]
 pub async fn dev_status(st: State<'_, AppState>, game: String) -> Result<DevStatus> {
     let db = st.db.clone();
     blocking(move || devtools::status_in(&importer(&db, &game)?)).await

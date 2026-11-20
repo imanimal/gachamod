@@ -55,6 +55,8 @@ export interface ArchiveEntry {
   removedAt: number;
   /** When the files leave the trash (unix seconds); null once only the details are kept. */
   filesUntil: number | null;
+  /** The folder holding the files while they are in the trash; null once only the details are kept. */
+  path: string | null;
   /** "removed" or "replaced" (an update kept the old copy). */
   reason: string;
   /** Saved option values are kept for it. */
@@ -82,7 +84,6 @@ export const library = {
   /** Of `others`, the mods that change the same parts as any of `ids` (a hash both override). */
   overlapping: (game: GameId, ids: string[], others: string[]) => call<string[]>("mods_overlapping", { game, ids, others }),
   updateMeta: (game: GameId, id: string, patch: MetaPatch) => call<ModEntry>("mod_update_meta", { game, id, patch }),
-  move: (game: GameId, id: string, group: string | null) => call<ModEntry>("mod_move", { game, id, group }),
   remove: (game: GameId, ids: string[]) => call<ModChange>("mods_remove", { game, ids }),
   trash: (game: GameId) => call<TrashEntry[]>("trash_list", { game }),
   trashRestore: (id: number) => call<ModChange>("trash_restore", { id }),

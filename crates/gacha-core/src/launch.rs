@@ -99,6 +99,16 @@ const CONFIGURES_GAME: &[&str] = &["GIMI", "WWMI", "ZZMI"];
 /// "Illegal tool detected" (10612-4001) or "Abnormal activity detected" (10310-4001).
 pub const GI_FPS_CAP: u64 = 120;
 
+/// Setting: "0" once the player turned the cap on Genshin Impact's FPS limit off (Settings, Launch options).
+pub const GI_FPS_CAP_SETTING: &str = "gi.fpsCap";
+
+/// Setting: "0" once the player told Play to leave Steam and XXMI Launcher alone (Settings, Launch options). Play then
+/// neither switches XXMI's Game Launch to Steam nor closes and starts Steam for the game's launch options.
+pub const STEAM_PREP_SETTING: &str = "launch.steamRestart";
+
+/// A setting that is on unless the player saved "0".
+fn setting_on(db: &Db, key: &str) -> bool { db.setting(key).ok().flatten().as_deref() != Some("0") }
+
 /// For gi, an `unlock_fps_value` above GI_FPS_CAP becomes GI_FPS_CAP. True when it changed.
 pub fn cap_fps(game: &str, extras: &mut BTreeMap<String, Value>) -> bool {
     if game != "gi" { return false; }
@@ -180,8 +190,8 @@ pub fn config(db: &Db, game: &str) -> Result<LaunchConfig> {
     let xxmi_cfg = if g.xxmi && paths.via_xxmi { crate::xxmi::importer_config(root.as_deref(), g.importer).ok() } else { None };
     let mut c = merge_config(own, xxmi_cfg.as_ref(), close_on_launch(db, game));
     if !CONFIGURES_GAME.contains(&g.importer) { c.extras.remove("configure_game"); }
-    // what the game will get: a launch lowers a higher one first
-    cap_fps(game, &mut c.extras);
+    // what the game will get: a launch lowers a higher one first (unless the player turned the cap off)
+    if setting_on(db, GI_FPS_CAP_SETTING) { cap_fps(game, &mut c.extras); }
     if !c.xxmi_available {
         let text = games::importer_dir(db, game).ok().and_then(|d| std::fs::read_to_string(d.join("d3dx.ini")).ok());
         match text {
@@ -331,7 +341,7 @@ pub fn xxmi_patch(cfg: &LaunchConfig, current: &Value) -> Value {
 pub fn set_config(db: &Db, game: &str, cfg: &LaunchConfig) -> Result<LaunchConfig> {
     let g = games::require_def(game)?;
     let mut capped = cfg.clone();
-    cap_fps(game, &mut capped.extras);
+    if setting_on(db, GI_FPS_CAP_SETTING) { cap_fps(game, &mut capped.extras); }
     let cfg = &capped;
     let paths = games::paths(db, game)?;
     let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
@@ -424,8 +434,10 @@ pub fn ini_set(text: &str, section: &str, key: &str, value: &str) -> String {
 #[derive(Debug, Clone)]
 pub enum Plan {
     /// `to_steam`: switch XXMI's Game Launch to Steam first (steam_only). `steam`: the Steam app id when XXMI starts
-    /// this copy through Steam, so Steam gets ready first.
-    Xxmi { root: Option<String>, importer: &'static str, game: &'static str, to_steam: bool, steam: Option<u32> },
+    /// this copy through Steam, so Steam gets ready first. `restart`: Steam may close and start again for the game's
+    /// launch options. `held`: this copy needs both of those but the player turned them off, so XXMI starts it as it
+    /// is. `cap`: Genshin Impact's FPS limit comes down to GI_FPS_CAP first when it is higher.
+    Xxmi { root: Option<String>, importer: &'static str, game: &'static str, to_steam: bool, steam: Option<u32>, restart: bool, held: bool, cap: bool },
     /// `steam`: the Steam app id when `exe` is steam.exe starting it.
     Direct { exe: PathBuf, args: String, dir: PathBuf, pre_launch: Option<(Hook, PathBuf)>, loader: Option<(PathBuf, PathBuf)>, steam: Option<u32> },
 }
@@ -458,10 +470,14 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
     if !vanilla && cfg.xxmi_available && cfg.via == "xxmi" {
         let root = db.setting("xxmi.root")?.filter(|s| !s.is_empty());
         let app = paths.game_dir.as_deref().and_then(|d| steam_only(g, Path::new(d)));
-        let to_steam = app.is_some() && crate::xxmi::starts_exe(root.as_deref(), g.importer);
+        // the player can leave Steam and XXMI Launcher alone: then a start never rewrites XXMI's config or restarts Steam
+        let restart = setting_on(db, STEAM_PREP_SETTING);
+        let needs_steam = app.is_some() && crate::xxmi::starts_exe(root.as_deref(), g.importer);
+        let to_steam = restart && needs_steam;
         let through_steam = || crate::xxmi::importer_setting(root.as_deref(), g.importer, "game_launch").as_deref() == Some("STEAM");
         let steam = app.filter(|_| to_steam || through_steam());
-        return Ok(Plan::Xxmi { root, importer: g.importer, game: g.id, to_steam, steam });
+        let cap = setting_on(db, GI_FPS_CAP_SETTING);
+        return Ok(Plan::Xxmi { root, importer: g.importer, game: g.id, to_steam, steam, restart, held: !restart && needs_steam, cap });
     }
     let game_dir = paths.game_dir.map(PathBuf::from)
         .ok_or_else(|| Error::NotSetUp(format!("{}'s game folder isn't set. Pick it in Settings", g.name)))?;
@@ -504,14 +520,15 @@ pub fn plan(db: &Db, game: &str, vanilla: bool) -> Result<Plan> {
 pub fn start(plan: Plan) -> Result<Started> {
     let mut started = Started::default();
     match plan {
-        Plan::Xxmi { root, importer, game, to_steam, steam } => {
+        Plan::Xxmi { root, importer, game, to_steam, steam, restart, cap, .. } => {
             let root = root.as_deref();
-            if game == "gi" { started.fps_was = cap_xxmi_fps(root, importer); }
+            if game == "gi" && cap { started.fps_was = cap_xxmi_fps(root, importer); }
             if to_steam { crate::xxmi::launch_through_steam(root, importer)?; }
             let Some(app) = steam else { crate::xxmi::launch(root, importer)?; return Ok(started) };
             // XXMI sends its -applaunch once, right after restarting Steam when the launch options differ: settle both
             // first, so it finds the options in place and a signed-in Steam
-            let options = crate::xxmi::steam_launch_options(root, importer, app);
+            // with options None Steam only starts when it isn't running: it never closes or gets its config written
+            let options = if restart { crate::xxmi::steam_launch_options(root, importer, app) } else { None };
             started.steam_restarted = crate::steam::get_ready(app, options.as_deref());
             crate::xxmi::launch(root, importer)?;
             crate::steam::watch_restart(app, game);
@@ -566,7 +583,10 @@ pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool, started: Start
     if let Some(old) = started.fps_was {
         return Some(format!("{}'s FPS limit was {old}, now {GI_FPS_CAP}. Above {GI_FPS_CAP} the game disconnects you with \"Illegal tool detected\"", g.name));
     }
-    if let Plan::Xxmi { to_steam, .. } = plan {
+    if let Plan::Xxmi { to_steam, held, .. } = plan {
+        if *held {
+            return Some(format!("{} only starts from Steam, and Play leaves Steam and XXMI Launcher as they are, so XXMI Launcher may not start it. Turn on Restart Steam when Play needs it in Settings, Launch options", g.name));
+        }
         let switched = format!("XXMI Launcher now starts {} through Steam, since the Steam copy only starts from there", g.name);
         match (*to_steam, started.steam_restarted) {
             (true, true) => return Some(format!("{switched}. Steam restarted first to set the game's launch options")),

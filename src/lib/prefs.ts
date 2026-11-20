@@ -114,6 +114,16 @@ export const useCreatorStyles = () => creatorStylesPref.use();
 export const uberstylesPref = boolPref("gb.uberstyles", true);
 export const useUberstyles = () => uberstylesPref.use();
 
+// ── online lookups gachamod makes by itself (Settings, Feedback and privacy, Online lookups) ──
+
+/** Sharp game icons from the App Store and character portraits from the games' wikis. Off, what is already saved still
+ *  shows and the rest falls back to a lettered badge or GameBanana's small icon. */
+export const onlinePicturesPref = boolPref("online.pictures", true);
+/** The daily refresh of each game's character list from GameBanana, when a game is opened (lib/warmup.ts). */
+export const onlineCharactersPref = boolPref("online.characters", true);
+/** Fetching the extension lists when Settings or Extensions opens (lib/extensions.ts useRepos). */
+export const onlineExtensionsPref = boolPref("online.extensions", true);
+
 /** The quickstart shortcut opens gachamod's window too. Off, only the game comes up (src-tauri background.rs reads
  *  "quickstart.open"). */
 export const quickstartOpensPref = boolPref("quickstart.open", false);
@@ -170,12 +180,29 @@ export function markCreatorsSeen(times: Record<string, number>) {
 
 export const hiddenModsPref = jsonPref<number[]>("browse.hidden", []);
 export const useHiddenMods = () => hiddenModsPref.use();
-export function hideMod(id: number, name: string, hide = true) {
+/** Names of the hidden mods by id, so the hidden list can say what they are. Mods hidden before names were kept have none. */
+export const hiddenNamesPref = jsonPref<Record<string, string>>("browse.hidden.names", {});
+export const useHiddenNames = () => hiddenNamesPref.use();
+export async function hideMod(id: number, name: string, hide = true) {
+  // the saved lists may still be loading, and setting one before then would replace what was saved
+  await Promise.all([hiddenModsPref.ready, hiddenNamesPref.ready]);
   const now = new Set(hiddenModsPref.get());
   if (hide) now.add(id); else now.delete(id);
+  // names stay when a mod is shown again, so Undo keeps them; they are pruned the next time something is hidden
+  if (hide) {
+    const names: Record<string, string> = {};
+    for (const [k, v] of Object.entries(hiddenNamesPref.get())) if (now.has(Number(k))) names[k] = v;
+    names[String(id)] = name;
+    void hiddenNamesPref.set(names);
+  }
   // hiding takes the card away, so it toasts with Undo; showing again is plain
   void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }), hide || undefined,
     hide ? t("Hid the mod from Browse") : t("Showing the mod in Browse again"));
+}
+/** Show every hidden mod in Browse again (Undo in the toast). */
+export function showAllHiddenMods() {
+  if (!hiddenModsPref.get().length) return;
+  void hiddenModsPref.set([], t("Showing every hidden mod in Browse again"), true);
 }
 
 // ── custom character portraits (a mod preview or an image the user picked), per game ──

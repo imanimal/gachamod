@@ -20,8 +20,17 @@ export interface AppKeyClash {
 /** What moving a key changed. `text`: "The skin menu opens with F9 now". */
 export interface AppKeyMove { from: string; to: string; menuGames: GameId[]; keyListGames: GameId[]; text: string }
 
-/** What changing the other app's key did. `text`: "Medal takes a screenshot on F9 now". */
-export interface AppKeyChange { app: string; appId: string; from: string; to: string; text: string }
+/** What changing the other app's key did. `text`: "Medal takes a screenshot on F9 now". `backup`: the copy of the
+ *  app's settings made before the change, the file to show. */
+export interface AppKeyChange { app: string; appId: string; from: string; to: string; text: string; backup: string | null }
+
+/** A clash the player chose to keep. `text`: "Medal takes a screenshot on F7." `active`: the app still has the key and
+ *  it is one of gachamod's, so taking the choice back brings the question back. */
+export interface KeptKey { id: string; app: string; appId: string; key: string; text: string; active: boolean }
+
+/** The copies gachamod made of Medal's settings: `path` is one file to show, `folder` where they are, `bytes` all of
+ *  them together, `files` how many (a database and its write-ahead file). */
+export interface MedalCopy { path: string; folder: string; bytes: number; files: number }
 
 export const otherKeys = {
   /** Every key of a known app on this PC that is also one of gachamod's, the ones the player keeps left out. */
@@ -37,4 +46,8 @@ export const otherKeys = {
   change: (appId: string, from: string, to: string, undo = false) => call<AppKeyChange>("otherkeys_change", { appId, from, to, undo }),
   /** Keep gachamod's key although the app uses it too, so it isn't asked about again (`on` false takes that back). */
   keep: (appId: string, key: string, on = true) => call<void>("otherkeys_keep", { appId, key, on }),
+  /** The clashes the player chose to keep, to review and take back. */
+  kept: () => call<KeptKey[]>("otherkeys_kept"),
+  /** The copies made of Medal's settings before gachamod changed a key there, null when there are none. */
+  copies: () => call<MedalCopy | null>("otherkeys_copies"),
 };

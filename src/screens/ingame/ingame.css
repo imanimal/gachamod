@@ -27,6 +27,10 @@
 .key-clash { flex-wrap: wrap; }
 .key-clash p { flex: 1 1 14rem; }
 .key-clash-b { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+/* the kept choices and the copy of Medal's settings under the menu key (KeyClash.tsx KeptKeys) */
+.kept-keys { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.kept-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); }
+.kept-key p { flex: 1 1 14rem; margin: 0; font-size: var(--t-small); color: var(--text-2); overflow-wrap: anywhere; }
 .live-all { margin: 0 0 var(--s-1); }
 .live-menu { display: flex; flex-direction: column; gap: var(--s-2); margin: var(--s-3) 0 var(--s-1); }
 .live-menu-row { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-2) var(--s-4); }

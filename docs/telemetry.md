@@ -20,7 +20,7 @@ own clicks don't count. Feedback goes from any build that has the key.
 ## What every event carries
 
 - `distinct_id`: a random id made for this install (`telemetry.id` in the app's settings). Feedback sent while usage
-  counts are off gets a new random id instead, so it can't be tied to the counts.
+  counts are off gets a new random id instead, so it can't be tied to the counts. Settings shows the id and can reset it (the next count makes a new one).
 - `$process_person_profile: false`, so PostHog keeps counts only and no profile of the player.
 - `app_version`, `$os` (always Windows), `elevated` (gachamod runs as administrator), `dev` (a debug build).
 

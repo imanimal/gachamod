@@ -283,7 +283,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const shown = useMemo(() => {
     if (!words) return everyone;
     const hit = (s: string) => s.toLowerCase().includes(words);
-    return everyone.filter((w) => hit(w.name) || w.mods.some((m) => hit(m.name)) || w.group?.mods.some((m) => hit(m.name)));
+    return everyone.filter((w) => hit(w.name) || w.mods.some((m) => hit(m.name) || m.tags.some(hit)) || w.group?.mods.some((m) => hit(m.name)));
   }, [everyone, words]);
   const who = shown.find((w) => w.name === sel) ?? shown[0] ?? null;
   const loading = info === null || mods === null;
@@ -651,7 +651,8 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
           <aside className="ov-detail" aria-label={t("Details")}>
             <IconButton icon="x" label={t("Back")} title={t("Back (Esc)")} className="ov-detail-x" onClick={() => setDetail(null)} />
             <ModDetail game={game} m={detail.mod} group={everyone.find((w) => w.group?.mods.some((x) => x.modId === detail.mod.id)) ?? null} busy={!!busy}
-              onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} onKeys={() => keysOf(detail.mod)} />
+              onShow={(w, slot) => void pick(w, slot)} onTurn={(on) => void turn(detail.mod, on)} onKeys={() => keysOf(detail.mod)}
+              onTag={(tag) => { setQ(tag); setDetail(null); }} />
           </aside>
         )}
       </div>
@@ -704,10 +705,12 @@ function Tile({ i, on, check, busy, name, src, icon = "mods", blur, fresh, shift
   );
 }
 
-function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
+function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys, onTag }: {
   game: GameId; m: ModEntry; group: Who | null; busy: boolean; onShow: (w: Who, slot: number) => void; onTurn: (on: boolean) => void;
   /** Its keys on the Keys tab. */
   onKeys: () => void;
+  /** A tag: the list shows every character with a mod that has it. */
+  onTag: (tag: string) => void;
 }) {
   const nsfw = useNsfw();
   const src = fileUrl(m.preview);
@@ -730,7 +733,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
           {m.hasKeys && <Badge title={t("It has keys that change parts of it while you play. Click to see them")} onClick={onKeys}>{t("Toggles")}</Badge>}
         </div>
         <p className="muted">{facts.join(", ")}</p>
-        {m.tags.length > 0 && <p className="ov-tags">{m.tags.map((tag) => <Badge key={tag}>{tag}</Badge>)}</p>}
+        {m.tags.length > 0 && <p className="ov-tags">{m.tags.map((tag) => <Badge key={tag} title={t("Show every character with a mod tagged \"{tag}\"", { tag })} onClick={() => onTag(tag)}>{tag}</Badge>)}</p>}
         {m.notes && <p className="ov-notes">{m.notes}</p>}
         <div className="ov-detail-a">
           {group?.group

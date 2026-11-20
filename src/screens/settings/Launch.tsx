@@ -13,7 +13,8 @@ import { saved } from "../../ui/motion";
 import { errorKind, errorText, launchConfig, type GameId, type GameState, type Hook, type LaunchConfig, type MigotoConfig } from "../../lib/api";
 import { currentGame, go, useGame, useGames } from "../../lib/store";
 import { registerCommands, type Command } from "../../lib/search";
-import { GI_KICK_GUIDE, openKickGuide, setKickFixDone, useKick } from "../../lib/kickFix";
+import { GI_KICK_GUIDE, KICK_WARN, openKickGuide, setKickFixDone, useKick } from "../../lib/kickFix";
+import { useSetting } from "./parts";
 import { XxmiDll, lockNote } from "../tools/XxmiDll";
 import { KickSteps } from "../tools/KickSteps";
 import { t } from "../../lib/i18n";
@@ -64,6 +65,10 @@ const LOG_LEVELS = ["DISABLED", "WARNING", "INFO", "DEBUG"];
 const LOG_LABEL: Record<string, string> = { DISABLED: t("Off"), WARNING: t("Warnings"), INFO: t("Info"), DEBUG: t("Debug") };
 
 const WHERE = t("Settings › Launch options");
+/** Settings: "0" once turned off. launch.rs keeps Play's hands off Steam and XXMI Launcher (STEAM_PREP_SETTING) and
+ *  leaves Genshin Impact's FPS limit alone (GI_FPS_CAP_SETTING) then. */
+const STEAM_PREP = "launch.steamRestart";
+const GI_FPS_CAP = "gi.fpsCap";
 
 // what only some games have, in the global search (the panels themselves are in settingsSearch.ts)
 registerCommands("settings.launch", () => {
@@ -261,6 +266,8 @@ function LoadError({ text }: { text: string }) {
 function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: ReactNode }) {
   const { cfg, update } = l;
   const background = backgroundPref.use();
+  const [steamPrep, setSteamPrep] = useSetting(STEAM_PREP, "1");
+  const [fpsCap, setFpsCap] = useSetting(GI_FPS_CAP, "1");
   if (l.loadError) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><LoadError text={l.loadError} /></Panel>;
   if (!cfg) return <Panel title={t("Launch options")} icon="play" id="launch" actions={picker}><Waiting what={t("Reading launch options")} /></Panel>;
 
@@ -270,6 +277,11 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
   const configureOff = cfg.extras.configure_game === false;
   const extraLock = (k: string) => configureOff && NEEDS_CONFIGURE.has(k) ? t("Turn on \"{option}\" first", { option: extraInfo(game.id, "configure_game").label }) : undefined;
   const viaXxmi = cfg.via === "xxmi";
+  // with the cap off the number isn't held at 120 any more, and its hint says what that risks
+  const capOff = game.id === "gi" && fpsCap === "0";
+  const infoOf = (k: string): ExtraInfo => capOff && k === "unlock_fps_value"
+    ? { label: extraInfo(game.id, k).label, hint: t("Above 120 Genshin Impact stops the game with \"Illegal tool detected\" (10612-4001). The cap is off, so the value stays as you set it") }
+    : extraInfo(game.id, k);
 
   return (
     <Panel title={t("Launch options")} icon="play" id="launch" actions={<>{picker}<SavedTag at={l.savedAt} /></>}>
@@ -297,7 +309,11 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
       {known.length > 0 && (
         <div className="tools-extras">
           <h3 className="sub-h">{t("{game} options", { game: gameShort(game) })}</h3>
-          {known.map(([k, v]) => <Extra key={k} k={k} v={v} info={extraInfo(game.id, k)} locked={extraLock(k)} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
+          {known.map(([k, v]) => <Extra key={k} k={k} v={v} info={infoOf(k)} locked={extraLock(k)} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
+          {game.id === "gi" && "unlock_fps_value" in cfg.extras && (
+            <Toggle checked={!capOff} onChange={(v) => { setFpsCap(v ? "1" : "0"); if (v) update({}); }} label={t("Keep the FPS limit at 120 or lower")}
+              hint={t("On: a higher limit is set back to 120 when you save it and before each start, in XXMI Launcher too. Off: the value stays as you set it")} />
+          )}
         </div>
       )}
       {game.id === "gi" && (
@@ -317,6 +333,10 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
           {other.map(([k, v]) => <Extra key={k} k={k} v={v} info={{ label: k }} onChange={(nv) => update({ extras: { ...cfg.extras, [k]: nv } })} />)}
         </details>
       )}
+      {game.id === "zzz" && viaXxmi && (
+        <Toggle checked={steamPrep !== "0"} onChange={(v) => setSteamPrep(v ? "1" : "0")} label={t("Restart Steam when Play needs it")}
+          hint={t("The Steam copy only starts from Steam. Play switches XXMI Launcher's Game Launch to Steam and, when Steam holds other launch options, closes Steam, sets them and starts it again. Off: Play leaves Steam and XXMI Launcher alone, and the game may not start")} />
+      )}
       <Toggle checked={cfg.closeOnLaunch} onChange={(v) => update({ closeOnLaunch: v })} label={t("Close gachamod when the game starts")}
         hint={background ? t("gachamod moves to the tray, so automatic reloads keep working") : t("Automatic reloads stop while gachamod is closed")} />
     </Panel>
@@ -327,6 +347,7 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
  *  each start (lib/kickFix.ts). gachamod only links the guide and reads the DLLs; it never changes them. */
 function KickFix({ name, children }: { name: string; children?: ReactNode }) {
   const k = useKick();
+  const [warn, setWarn] = useSetting(KICK_WARN, "1");
   const on = !!k?.said && !k.undone;
   const hint = k?.undone ? t("XXMI has put the stock d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
     : k?.fixed && !on ? t("GIMI's d3d11.dll isn't XXMI's stock one, so the fix looks done and gachamod doesn't warn")
@@ -339,6 +360,8 @@ function KickFix({ name, children }: { name: string; children?: ReactNode }) {
       </p>
       {children}
       <Toggle checked={on} onChange={(v) => void setKickFixDone(v)} label={t("I did this fix")} hint={hint} />
+      <Toggle checked={warn !== "0"} onChange={(v) => setWarn(v ? "1" : "0")} label={t("Warn before starting with mods")}
+        hint={t("Shows the warning before each start of {game} with mods while the fix isn't done. Off: Play starts the game straight away", { game: name })} />
     </div>
   );
 }

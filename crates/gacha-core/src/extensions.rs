@@ -9,8 +9,9 @@
 //!
 //! Installed packages live in `<data>/extensions/<id>/`. A folder linked for development (`link_folder`) is served
 //! from where it is. Removing or replacing a package moves its folder to `<data>/trash/extensions/<key>/`, so both
-//! can be undone; those copies go after 14 days. Each package's own saved data is `<data>/extension-data/<id>.json`
-//! and stays when the package is removed.
+//! can be undone; those copies go after 14 days. Each package's own saved data is `<data>/extension-data/<id>.json`.
+//! It stays while the package or its trash copy exists, and goes with the copy (`forget_stale_data`); Settings,
+//! Storage can clear it sooner (`clear_data`).
 
 use crate::app_update::{is_newer, parse_version};
 use crate::archive::safe_relative;
@@ -326,6 +327,7 @@ fn entry(data_dir: &Path, id: &str, st: Option<&State>) -> Installed {
 /// Every installed package, by name. Packages that can't be read are listed with `problem` so they can be removed.
 pub fn list(db: &Db, data_dir: &Path) -> Result<Vec<Installed>> {
     purge_trash(data_dir);
+    forget_stale_data(db, data_dir);
     let st = states(db);
     let mut ids: Vec<String> = Vec::new();
     if let Ok(rd) = fs::read_dir(root(data_dir)) {
@@ -575,6 +577,54 @@ pub fn storage_get(data_dir: &Path, id: &str) -> Result<serde_json::Map<String, 
     match fs::read_to_string(storage_path(data_dir, id)) {
         Ok(t) => Ok(serde_json::from_str(&t).unwrap_or_default()),
         Err(_) => Ok(Default::default()),
+    }
+}
+
+/// Saved data files as (id, path, bytes).
+fn data_files(data_dir: &Path) -> Vec<(String, PathBuf, u64)> {
+    let Ok(rd) = fs::read_dir(data_dir.join("extension-data")) else { return Vec::new() };
+    rd.flatten().filter_map(|e| {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let md = e.metadata().ok().filter(|m| m.is_file())?;
+        Some((name.split('.').next().unwrap_or("").to_string(), e.path(), md.len()))
+    }).collect()
+}
+
+/// Whether a package is installed or linked now.
+fn present(db: &Db, data_dir: &Path, id: &str) -> bool { root(data_dir).join(id).is_dir() || states(db).get(id).is_some_and(|s| s.path.is_some()) }
+
+/// Delete saved data. With `only_removed`, only the data of packages that aren't installed or linked now; otherwise
+/// every package's. Returns the bytes freed.
+pub fn clear_data(db: &Db, data_dir: &Path, only_removed: bool) -> Result<u64> {
+    let mut freed = 0;
+    for (id, path, bytes) in data_files(data_dir) {
+        if only_removed && present(db, data_dir, &id) { continue; }
+        fs::remove_file(&path)?;
+        freed += bytes;
+    }
+    Ok(freed)
+}
+
+/// Delete the saved data of packages that were removed, whose copy in the trash is gone too and whose data hasn't
+/// been written to for as long as the trash keeps a copy (a removed package can still be put back with its data, and
+/// an unlinked folder has no trash copy, so Undo needs the data for that long). Nothing is deleted when the saved
+/// state can't be read, since every linked package would look removed.
+fn forget_stale_data(db: &Db, data_dir: &Path) {
+    let files = data_files(data_dir);
+    if files.is_empty() { return; }
+    // a state that can't be read (a failed read or text that isn't JSON) must never make everything look removed
+    let Ok(raw) = db.setting(STATE_SETTING) else { return };
+    let known: BTreeMap<String, State> = match raw {
+        None => BTreeMap::new(),
+        Some(text) => match serde_json::from_str(&text) { Ok(m) => m, Err(_) => return },
+    };
+    let trashed: Vec<String> = fs::read_dir(trash_root(data_dir)).into_iter().flatten().flatten()
+        .filter_map(|e| e.file_name().to_string_lossy().rsplit_once('~').map(|(id, _)| id.to_string())).collect();
+    let cut = std::time::SystemTime::now() - std::time::Duration::from_secs(TRASH_DAYS as u64 * 86_400);
+    for (id, path, _) in files {
+        let linked = known.get(&id).is_some_and(|s| s.path.is_some());
+        if linked || root(data_dir).join(&id).is_dir() || trashed.contains(&id) { continue; }
+        if fs::metadata(&path).and_then(|m| m.modified()).is_ok_and(|t| t < cut) { let _ = fs::remove_file(path); }
     }
 }
 

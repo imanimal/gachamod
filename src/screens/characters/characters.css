@@ -28,7 +28,7 @@
 .own-import .hint { margin: 0; }
 .own-uid { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: var(--s-1) var(--s-2); }
 .own-uid .hint { grid-column: 1 / -1; }
-.own-save { display: flex; justify-content: flex-end; padding-top: var(--s-2); border-top: 1px solid var(--line); }
+.own-save { display: flex; justify-content: flex-end; gap: var(--s-2); flex-wrap: wrap; padding-top: var(--s-2); border-top: 1px solid var(--line); }
 .own-unknown { padding: var(--s-2); }
 .own-unknown .hint { margin: 0 0 var(--s-2); }
 .own-unknown ul { margin: 0; padding-left: var(--s-4); max-height: 16rem; overflow: auto; color: var(--text-2); }

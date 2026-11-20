@@ -28,9 +28,12 @@ pub struct DevStatus {
     pub frame_dumps: FolderUse,
     pub d3dx_ini: Option<String>,
     pub d3dx_user_ini: Option<String>,
+    /// The copy of d3dx_user.ini the last wipe kept, when it is still there.
+    pub wiped_bak: Option<String>,
 }
 
 const LOG_FILE: &str = "d3d11_log.txt";
+const WIPED_BAK: &str = "d3dx_user.ini.wiped.bak";
 
 fn usage(paths: &[PathBuf]) -> (u32, u64) {
     let mut files = 0u32;
@@ -71,6 +74,7 @@ pub fn status_in(importer: &Path) -> Result<DevStatus> {
         frame_dumps: FolderUse { path: Some(importer.to_string_lossy().into_owned()), files, bytes },
         d3dx_ini: existing(importer.join("d3dx.ini")),
         d3dx_user_ini: existing(importer.join("d3dx_user.ini")),
+        wiped_bak: existing(importer.join(WIPED_BAK)),
     })
 }
 
@@ -146,16 +150,23 @@ pub fn wipe_user_config_in(importer: &Path, game: &str) -> Result<bool> {
     let Ok(text) = std::fs::read_to_string(&path) else { return Ok(false) };
     let out = without_mod_values(&text);
     if out == text { return Ok(false); }
-    std::fs::copy(&path, importer.join("d3dx_user.ini.wiped.bak"))?;
+    std::fs::copy(&path, importer.join(WIPED_BAK))?;
     crate::xxmi::write_atomic(&path, out.as_bytes())?;
     Ok(true)
 }
 
-/// Put back the d3dx_user.ini that the last wipe saved as d3dx_user.ini.wiped.bak.
+/// Swap d3dx_user.ini with the copy kept as d3dx_user.ini.wiped.bak. The file in place now becomes the copy, so
+/// nothing saved since the wipe is lost, and doing it again swaps back.
 pub fn unwipe_user_config_in(importer: &Path, game: &str) -> Result<()> {
     refuse_while_running(game)?;
-    let saved = std::fs::read(importer.join("d3dx_user.ini.wiped.bak"))?;
-    crate::xxmi::write_atomic(&importer.join("d3dx_user.ini"), &saved)
+    let path = importer.join("d3dx_user.ini");
+    let bak = importer.join(WIPED_BAK);
+    let saved = std::fs::read(&bak)?;
+    if let Ok(current) = std::fs::read(&path) {
+        if current == saved { return Ok(()); }
+        crate::xxmi::write_atomic(&bak, &current)?;
+    }
+    crate::xxmi::write_atomic(&path, &saved)
 }
 
 /// d3dx_user.ini without the `$\mods\...` lines; comments and the importer's own values stay.
@@ -847,6 +858,30 @@ mod tests {
         assert_eq!(clear_shader_cache_in(&dir, "gi").unwrap(), 100);
         assert_eq!(clear_frame_dumps_in(&dir).unwrap(), 50);
         assert!(dir.join("ShaderCache").exists() && !dir.join("FrameAnalysis-2026-11-13-101010").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn putting_back_options_swaps_and_loses_nothing() {
+        let dir = std::env::temp_dir().join(format!("gachamod-unwipe-test-{}-{}", std::process::id(), crate::db::now()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ini = dir.join("d3dx_user.ini");
+        let bak = dir.join(WIPED_BAK);
+        std::fs::write(&ini, "[Constants]\n$\\mods\\a\\a.ini\\v = 1\n").unwrap();
+        assert!(wipe_user_config_in(&dir, "gi").unwrap());
+        // options saved after the wipe
+        std::fs::write(&ini, "[Constants]\n$\\mods\\a\\a.ini\\v = 9\n").unwrap();
+        unwipe_user_config_in(&dir, "gi").unwrap();
+        assert!(std::fs::read_to_string(&ini).unwrap().contains("v = 1"));
+        assert!(std::fs::read_to_string(&bak).unwrap().contains("v = 9"), "the file that was replaced is kept");
+        // again: back to what was there
+        unwipe_user_config_in(&dir, "gi").unwrap();
+        assert!(std::fs::read_to_string(&ini).unwrap().contains("v = 9"));
+        assert!(std::fs::read_to_string(&bak).unwrap().contains("v = 1"));
+        // no file in place: the copy is just put back
+        std::fs::remove_file(&ini).unwrap();
+        unwipe_user_config_in(&dir, "gi").unwrap();
+        assert!(std::fs::read_to_string(&ini).unwrap().contains("v = 1"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

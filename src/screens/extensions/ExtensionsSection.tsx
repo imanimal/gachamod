@@ -8,6 +8,7 @@ import { shell } from "../../lib/api";
 import { Button, IconButton, Panel, TextField } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { SetRow } from "../settings/parts";
+import { ExtensionListsRow } from "../settings/OnlineLookups";
 import { DOCS_URL } from "./Extensions";
 import { t } from "../../lib/i18n";
 
@@ -29,6 +30,7 @@ export function ExtensionsSection() {
           </span>
         </SetRow>
         <Sources />
+        <ExtensionListsRow id="set-ext-auto" />
         <SetRow id="set-ext-make" label={t("Make your own")} hint={t("A folder with extension.json and an HTML page. Link it to see your edits as you go, then share it to get it listed")}>
           <span className="set-btns">
             <Button variant="ghost" icon="help" onClick={() => void shell.openUrl(DOCS_URL)}>{t("How to")}</Button>

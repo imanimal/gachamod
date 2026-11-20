@@ -15,6 +15,7 @@ import { Icon } from "../../ui/Icon";
 import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
 import { CharRow, charsOpenAtStart } from "./CharRow";
+import { HiddenMods } from "./HiddenMods";
 import { usePull } from "./Pull";
 import { CardSkeleton, ModCard } from "./ModCard";
 import { moveInGrid } from "../library/gridNav";
@@ -545,6 +546,7 @@ function FiltersPanel({ game, f, set, cats, nsfw, following, hiddenCount, showHi
   hiddenCount: number; showHidden: boolean; onShowHidden: (v: boolean) => void;
   onFollowed: () => void; onClear: (() => void) | null; onPick: () => void;
 }) {
+  const [listOpen, setListOpen] = useState(false);
   return (
     <div className="gbb-fp">
       <div className="gbb-fp-s" role="group" aria-label={t("Type")}>
@@ -573,6 +575,13 @@ function FiltersPanel({ game, f, set, cats, nsfw, following, hiddenCount, showHi
         {(hiddenCount > 0 || showHidden) && (
           <Toggle size="sm" checked={showHidden} onChange={onShowHidden} label={t("Show mods you hid ({n})", { n: hiddenCount })}
             hint={t("Mods you picked Not interested on. Right-click one and pick Show in Browse again to keep it")} />
+        )}
+        {hiddenCount > 0 && (
+          <>
+            <Button size="sm" variant="ghost" icon="hide" iconRight={listOpen ? "up" : "down"} className="gbb-fp-hid" aria-expanded={listOpen}
+              title={t("See which mods you hid with Not interested, and show them again")} onClick={() => setListOpen((v) => !v)}>{t("View hidden mods")}</Button>
+            {listOpen && <HiddenMods onPick={onPick} />}
+          </>
         )}
       </div>
       <div className="gbb-fp-s gbb-fp-row">

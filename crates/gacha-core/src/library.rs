@@ -1364,58 +1364,6 @@ pub fn clear_preview(db: &Db, game: &str, id: &str) -> Result<ModEntry> {
     save_preview(db, game, e, &dir, &sc)
 }
 
-/// A group path from the UI cleaned for Windows: parts trimmed, characters Windows forbids dropped, no "..".
-fn clean_group(g: &str) -> Option<String> {
-    let parts: Vec<String> = g.split(['/', '\\']).map(|p| {
-        let s: String = p.chars().filter(|c| !matches!(c, '<' | '>' | ':' | '"' | '|' | '?' | '*') && !c.is_control()).collect();
-        s.trim().trim_end_matches(['.', ' ']).to_string()
-    }).filter(|p| !p.is_empty() && p != "." && p != "..").collect();
-    (!parts.is_empty()).then(|| parts.join("/"))
-}
-
-/// Move a mod into a group folder under Mods (a character's folder), or to the top level with `None`.
-pub fn move_to_group(db: &Db, game: &str, id: &str, group: Option<&str>) -> Result<ModEntry> {
-    let _hold = crate::watch::hold(game);
-    let cx = ctx(db, game)?;
-    let mut e = get(db, game, id)?;
-    if is_imm_rel(&e.rel_path) { return Err(imm_error()); }
-    let group = group.and_then(clean_group);
-    if group.as_deref().is_some_and(is_imm_rel) { return Err(imm_error()); }
-    if group.as_deref().map(str::to_lowercase) == e.group.as_deref().map(str::to_lowercase) { return Ok(e); }
-    let old = cx.root.join(safe_rel(&e.rel_path).ok_or_else(|| Error::Invalid("That mod's folder path looks wrong. Rescan to refresh the list".into()))?);
-    if !old.is_dir() { return Err(Error::Invalid(format!("{}'s folder is gone. Rescan to refresh the list", e.name))); }
-    let parent = match &group { Some(g) => cx.root.join(safe_rel(g).unwrap_or_default()), None => cx.root.clone() };
-    fs::create_dir_all(&parent)?;
-    let new = unique_child(&parent, &e.folder);
-    let was_on = e.loaded();
-    if was_on && cx.running { stash_from_ini(db, &cx, &e); }
-    rename_dir(&old, &new)?;
-
-    let old_rel = e.rel_path.clone();
-    let folder = name_of(&new);
-    e.rel_path = match &group { Some(g) => format!("{g}/{folder}"), None => folder.clone() };
-    if was_on && !cx.running {
-        if let Some(imp) = &cx.importer { let _ = ini::move_user_vars(imp, &old_rel, &e.rel_path); }
-    }
-    // an empty group folder left behind goes too
-    if let Some(op) = old.parent() {
-        if op != cx.root && fs::read_dir(op).is_ok_and(|mut r| r.next().is_none()) { let _ = fs::remove_dir(op); }
-    }
-    if let Some(p) = &e.preview {
-        if let Ok(r) = Path::new(p).strip_prefix(&old) { e.preview = Some(new.join(r).to_string_lossy().into_owned()); }
-    }
-    e.path = new.to_string_lossy().into_owned();
-    e.folder = folder;
-    e.group = group;
-    let on = !rel_disabled(&e.rel_path) && !only_off_inis(&new);
-    (e.enabled, e.standby) = (on && !e.standby, on && e.standby);
-    if !was_on && e.loaded() && !cx.running { write_kept(db, &cx, &e); }
-    if was_on && !e.loaded() { stash_from_ini(db, &cx, &e); }
-    save_row(db, &e)?;
-    finish(db, game, &ModChange { changed: vec![e.clone()], ..Default::default() });
-    Ok(e)
-}
-
 /// Register a folder that another area just placed under the Mods folder (an install, an import). Writes or keeps
 /// its sidecar (`sidecar` wins over one already in the folder, except for the id when `sidecar.id` is empty), adds
 /// it to the `mods` table and returns it.

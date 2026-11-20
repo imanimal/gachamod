@@ -13,7 +13,7 @@ import { allGames, go, useGame } from "../../lib/store";
 import { showsPage } from "../../lib/here";
 import { HOLD, STUCK_MS } from "../../lib/activity";
 import { shuffleBeforePlay } from "../library/shuffle";
-import { setKickFixDone } from "../../lib/kickFix";
+import { KICK_WARN, setKickFixDone } from "../../lib/kickFix";
 import { askKick } from "./KickWarning";
 import { gameName, gameShort } from "../../lib/games";
 import { t, tn } from "../../lib/i18n";
@@ -53,11 +53,17 @@ export async function play(game: GameState, vanilla = false, needsYou?: () => vo
     asking = true;
     try {
       const k = await games.kickCheck(game.id).catch(() => null);
-      if (k?.warn) {
+      // "Stop warning" (or the switch in Settings, Launch options) saves "0"
+      const muted = await settings.get(KICK_WARN).catch(() => null) === "0";
+      if (k?.warn && !muted) {
         needsYou?.();
         const a = await askKick(k.undone);
         if (a === "cancel") return;
         if (a === "done") await setKickFixDone(true);
+        if (a === "mute") {
+          await settings.set(KICK_WARN, "0").catch((e) => { toast(errorText(e), true); });
+          toast(t("{game} will start without the anti-cheat warning", { game: gameName(game) }), "info", { label: t("Launch options"), run: () => go({ view: "settings", section: "launch" }) });
+        }
       }
     } finally { asking = false; }
   }

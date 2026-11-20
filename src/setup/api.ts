@@ -53,6 +53,9 @@ export const api = {
   stop: () => call<void>("stop"),
   openApp: (dir?: string) => call<void>("open_app", { dir: dir ?? null }),
   openPage: (url: string) => (inTauri() ? call<void>("open_page", { url }) : Promise.resolve(void window.open(url, "_blank"))),
+  /** Show one of the folders in `dataDirs` in Explorer. */
+  openFolder: (path: string) => call<void>("open_folder", { path }),
+  openRecycleBin: () => call<void>("open_recycle_bin"),
   plainInstaller: () => call<void>("plain_installer"),
   async onStep(f: (s: Step) => void): Promise<() => void> {
     if (!inTauri()) { demoListeners.add(f); return () => demoListeners.delete(f); }

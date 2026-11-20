@@ -621,24 +621,7 @@ pub fn on_start(db: &Db) {
     for g in CHECKED {
         if let Err(e) = start_on(db, g) { crate::logs::warn(format!("Couldn't turn on switching skins in game for {g}: {e}")); }
     }
-    window_menu_once(db);
     for g in crate::games::GAMES { menu_sync(db, g.id); }
-}
-
-/// Once: every game opens the window over the game again. That is the default since 0.1.1-beta.9; the menu the game
-/// draws only opens in exclusive fullscreen, or when gachamod can't hear the key. Earlier versions offered "Inside
-/// the game" as the everyday choice, and players who picked it while it was new kept a plainer menu.
-fn window_menu_once(db: &Db) {
-    const DONE: &str = "live.windowMenuSet";
-    if db.setting(DONE).ok().flatten().is_some() { return; }
-    for g in crate::games::GAMES {
-        let key = format!("{}.liveMenu", g.id);
-        if db.setting(&key).ok().flatten().as_deref() == Some("game") {
-            let _ = db.set_setting(&key, "window");
-            crate::logs::info(format!("{}: the skin menu opens over the game again", g.id));
-        }
-    }
-    let _ = db.set_setting(DONE, "1");
 }
 
 /// Once per game, the first time this version starts: switching in game goes on, also where it was off. It is on by
@@ -855,7 +838,9 @@ pub(crate) fn menu_sync(db: &Db, game: &str) {
 /// The loaders save the game's values (a pick made in its own menu among them) a minute after one changed, so the
 /// app would show that pick a minute late. While a game has live characters and `fast_save` is on, d3dx.ini's
 /// `settings_auto_save_interval` is 1 instead: the game saves within a second of a change (and only then). The
-/// value it had goes back when that ends. The game reads it at its next load. d3dx.ini gets a backup first.
+/// value it had goes back when that ends. It only happens where the menu the game draws can be used (`allowed`),
+/// because that is where a pick can be made in the game; elsewhere d3dx.ini stays as it is. The game reads it at its
+/// next load. d3dx.ini gets a backup first.
 pub(crate) fn fast_saves(db: &Db, game: &str) {
     const FAST: &str = "1";
     let Ok(imp) = crate::games::importer_dir(db, game) else { return };
@@ -866,7 +851,7 @@ pub(crate) fn fast_saves(db: &Db, game: &str) {
     let now = now.trim().to_string();
     let was_key = format!("{game}.saveIntervalWas");
     let was = db.setting(&was_key).ok().flatten();
-    let want = if !load(db, game).groups.is_empty() && menu_settings(db, game).fast_save {
+    let want = if allowed(db, game) && !load(db, game).groups.is_empty() && menu_settings(db, game).fast_save {
         if now != FAST && was.as_deref() != Some(now.as_str()) { let _ = db.set_setting(&was_key, &now); }
         FAST.to_string()
     } else {

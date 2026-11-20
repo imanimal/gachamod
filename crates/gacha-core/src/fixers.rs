@@ -30,6 +30,9 @@ pub struct FixerFile {
     /// that needs it. Worked out when listed, not saved.
     #[serde(skip_deserializing)]
     pub window: bool,
+    /// Bytes the fixer takes on disk. Measured when listed, not saved.
+    #[serde(skip_deserializing)]
+    pub size: u64,
 }
 
 /// One file of a GameBanana tool to download.
@@ -67,8 +70,35 @@ fn folder_name(name: &str, fallback: &str) -> String {
 pub fn list(data_dir: &Path, game: &str) -> Result<Vec<FixerFile>> {
     let path = root(data_dir, game)?.join(LIST);
     let all: Vec<FixerFile> = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-    Ok(all.into_iter().filter(|f| Path::new(&f.main).exists()).map(|mut f| { f.window = is_window_exe(Path::new(&f.main)); f }).collect())
+    Ok(all.into_iter().filter(|f| Path::new(&f.main).exists()).map(|mut f| { f.window = is_window_exe(Path::new(&f.main)); f.size = dir_size(Path::new(&f.dir)); f }).collect())
 }
+
+/// Bytes in a folder.
+fn dir_size(dir: &Path) -> u64 {
+    walkdir::WalkDir::new(dir).into_iter().flatten().filter(|e| e.file_type().is_file()).filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum()
+}
+
+/// Delete a downloaded fixer: its folder and its line in the list. The next time a mod needs it, it is downloaded
+/// again. Only a folder of its own inside the game's fixers folder is deleted. An id that matches nothing is an error,
+/// so nobody is told something was deleted when it wasn't.
+pub fn remove(data_dir: &Path, game: &str, file_id: u64) -> Result<()> {
+    let base = root(data_dir, game)?;
+    let path = base.join(LIST);
+    let mut all: Vec<FixerFile> = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let Some(at) = all.iter().position(|f| same_id(f.file_id, file_id)) else {
+        return Err(Error::Invalid("That fixer isn't downloaded any more".into()));
+    };
+    let gone = all.remove(at);
+    let dir = PathBuf::from(&gone.dir);
+    if dir.starts_with(&base) && dir != base && dir.exists() { std::fs::remove_dir_all(&dir)?; }
+    if let Some(up) = dir.parent().filter(|p| *p != base && p.starts_with(&base)) { let _ = std::fs::remove_dir(up); }
+    std::fs::write(&path, serde_json::to_string_pretty(&all).map_err(|e| Error::Invalid(e.to_string()))?)?;
+    Ok(())
+}
+
+/// Two file ids that are the same once a JavaScript number has rounded one of them: the screen only ever holds the
+/// ids as doubles, and a link's id uses all 64 bits.
+fn same_id(a: u64, b: u64) -> bool { a == b || (a as f64) == (b as f64) }
 
 /// The same fixer: the same GameBanana tool, or the same link in the fix data.
 fn same_fixer(a: &FixerFile, b: &FixerFile) -> bool {
@@ -147,7 +177,7 @@ pub fn place(data_dir: &Path, game: &str, req: &FixerRequest, downloaded: &Path)
     let entry = FixerFile {
         tool_id: req.tool_id, file_id: req.file_id, tool: req.tool.clone(), file: req.file.clone(),
         dir: dir.to_string_lossy().into_owned(), main: main_of(&dir).to_string_lossy().into_owned(), at: crate::db::now(),
-        source: req.source.clone(), window: false,
+        source: req.source.clone(), window: false, size: dir_size(&dir),
     };
     remember(data_dir, game, &entry)?;
     Ok(entry)
@@ -349,7 +379,7 @@ fn lock(shared: &crate::db::Shared) -> Result<std::sync::MutexGuard<'_, crate::d
 }
 
 fn fixer_of(data_dir: &Path, game: &str, file_id: u64) -> Result<FixerFile> {
-    list(data_dir, game)?.into_iter().find(|f| f.file_id == file_id)
+    list(data_dir, game)?.into_iter().find(|f| same_id(f.file_id, file_id))
         .ok_or_else(|| Error::Invalid("That fixer isn't downloaded any more. Try again".into()))
 }
 
@@ -570,6 +600,36 @@ mod tests {
         // deleted by hand: no longer listed
         std::fs::remove_dir_all(&f.dir).unwrap();
         assert!(list(d.path(), "gi").unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_fixer_can_be_removed() {
+        let d = tempfile::tempdir().unwrap();
+        let dl = d.path().join("fix.exe");
+        std::fs::write(&dl, b"MZ not really").unwrap();
+        let f = place(d.path(), "gi", &req("fix.exe", 7), &dl).unwrap();
+        assert_eq!(f.size, 13);
+        assert!(remove(d.path(), "gi", 99).is_err(), "an id that matches nothing is not a delete");
+        assert_eq!(list(d.path(), "gi").unwrap().len(), 1);
+        remove(d.path(), "gi", 7).unwrap();
+        assert!(list(d.path(), "gi").unwrap().is_empty());
+        assert!(!Path::new(&f.dir).exists());
+        assert!(!Path::new(&f.dir).parent().unwrap().exists(), "the tool's folder goes too");
+    }
+
+    #[test]
+    fn an_id_rounded_by_javascript_still_matches() {
+        let d = tempfile::tempdir().unwrap();
+        let dl = d.path().join("fix.py");
+        std::fs::write(&dl, b"print()").unwrap();
+        let big = 0xF123_4567_89AB_CDEFu64;
+        let f = place(d.path(), "gi", &req("fix.py", big), &dl).unwrap();
+        let rounded = (big as f64) as u64;
+        assert_ne!(rounded, big, "the id doesn't survive a JavaScript number");
+        assert!(fixer_of(d.path(), "gi", rounded).is_ok());
+        remove(d.path(), "gi", rounded).unwrap();
+        assert!(list(d.path(), "gi").unwrap().is_empty());
+        assert!(!Path::new(&f.dir).exists());
     }
 
     #[test]

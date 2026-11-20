@@ -476,18 +476,6 @@ export function registerLibraryDemo() {
       }
       return { ...m };
     },
-    mod_move: ({ game, id, group }) => {
-      const g = String(game);
-      const m = findMod(g, String(id));
-      const target = group ? tidy(String(group)) : null;
-      if ((target ?? "").toLowerCase() === (m.group ?? "").toLowerCase()) return { ...m };
-      const modsDir = demoDb.games.find((x) => x.id === g)?.modsDir ?? "";
-      m.group = target;
-      m.relPath = target ? `${target}/${m.folder}` : m.folder;
-      m.path = `${modsDir}\\${m.relPath.replace(/\//g, "\\")}`;
-      onChange(g, { changed: [{ ...m }], removed: [], notes: [] });
-      return { ...m };
-    },
     mods_remove: async ({ game, ids }) => {
       await demoWait(160);
       const g = String(game);
@@ -528,6 +516,7 @@ export function registerLibraryDemo() {
       const until = trashDays() * 86400;
       const fromTrash: ArchiveEntry[] = trash.filter((t) => g === null || t.game === g).map((t) => ({
         ...archiveFields(t), key: `t${t.id}`, trashId: t.id, archiveId: null, filesUntil: t.removedAt + until,
+        path: `%APPDATA%\\gachamod\\trash\\${t.game}\\${t.id}\\${t.mod.folder}`,
       }));
       return [...fromTrash, ...archived.filter((a) => g === null || a.game === g)].sort((a, b) => b.removedAt - a.removedAt);
     },
@@ -700,7 +689,7 @@ function archiveFields(t: TrashEntry & { mod: ModEntry }) {
 
 function toArchive(t: TrashEntry & { mod: ModEntry }): ArchiveEntry {
   const id = nextArchive++;
-  return { ...archiveFields(t), key: `a${id}`, trashId: null, archiveId: id, filesUntil: null };
+  return { ...archiveFields(t), key: `a${id}`, trashId: null, archiveId: id, filesUntil: null, path: null };
 }
 
 /** Files leave the trash; the details move to the archive unless the mod is in the library again. */

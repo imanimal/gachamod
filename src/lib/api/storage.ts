@@ -3,7 +3,8 @@
 import { call, listen } from "../tauri";
 import type { GameId, ModChange } from "./types";
 
-/** Something on disk. Keys and categories are listed in gacha-core storage.rs (`Item`, `category_of`). */
+/** Something on disk. Keys and categories are listed in gacha-core storage.rs (`Item`, `category_of`). The page adds one
+ *  of its own, "browser-cache" (what the window keeps in its saved page data, lib/cacheKeys.ts). */
 export interface StorageItem {
   key: string;
   /** "on", "off", "trash", "downloads", "backups", "loader", "others" or "app". */
@@ -65,6 +66,10 @@ export interface StorageReport {
 /** What a measure is reading now. */
 export interface StorageStep { step: "mods" | "data" | "loader" | "copies" | "others" | "xxmi"; game: GameId | null }
 
+/** What `storage.clear` deletes (gacha-core storage.rs `clear`). "webview" is deleted at the next start. */
+export type StorageClearKind = "thumbs" | "cache" | "staging" | "icons" | "log" | "originals" | "originals-gone"
+  | "extension-data" | "extension-data-gone" | "media-unused" | "logs-old" | "setup" | "nrmm-trash" | "webview";
+
 export const storage = {
   /** `full` false reads the library only (instant); true measures every folder and compares copies. */
   measure: (full: boolean) => call<StorageReport>("storage_measure", { full }),
@@ -74,5 +79,8 @@ export const storage = {
   removeCopies: (game: GameId, ids: string[]) => call<ModChange>("storage_remove_copies", { game, ids }),
   /** Kept archives of one game (or every game with null) go to the Recycle Bin. Returns the bytes moved. */
   recycleArchives: (game: GameId | null) => call<number>("storage_recycle_archives", { game }),
+  /** Delete something gachamod can make again, or a copy with no use. Returns the bytes freed (for "webview", the bytes the
+   *  next start frees). `game` scopes "log", "originals" and "originals-gone"; null means every game. */
+  clear: (kind: StorageClearKind, game: GameId | null) => call<number>("storage_clear", { kind, game }),
   onProgress: (cb: (s: StorageStep) => void) => listen<StorageStep>("storage-progress", cb),
 };

@@ -149,11 +149,15 @@ export function InstalledList({ mods, all, gone }: { mods: ModEntry[]; all: Map<
   );
 }
 
+/** Clearing a failed or cancelled download also deletes what was downloaded of it (never a file picked on this PC). */
+export const dropsFile = (i: QueueItem) => (i.state === "failed" || i.state === "cancelled") && !i.req.localPath;
+
 /** A batch's heading: when it ran, what it holds, and switches for all of it. */
 export function BatchHead({ items, all, onClear, onRetry }: { items: QueueItem[]; all: Map<string, ModEntry>; onClear: () => void; onRetry?: () => void }) {
   const mods = useMemo(() => items.flatMap((i) => modsOf(i, all)), [items, all]);
   const when = Math.max(...items.map((i) => i.finishedAt ?? i.addedAt));
   const failed = items.filter((i) => i.state === "failed").length;
+  const drops = items.some(dropsFile);
   const parts = [
     tn(items.length, "{n} download", "{n} downloads"),
     mods.length ? tn(mods.length, "{n} mod, {on} on", "{n} mods, {on} on", { on: onCount(mods) }) : "",
@@ -166,7 +170,7 @@ export function BatchHead({ items, all, onClear, onRetry }: { items: QueueItem[]
       <span className="dl-batch-act">
         {failed > 0 && onRetry && <Button size="sm" icon="refresh" onClick={onRetry} title={tn(failed, "Try the {n} failed download in this batch again", "Try the {n} failed downloads in this batch again")}>{t("Retry failed")}</Button>}
         {mods.length > 1 && <AllSwitches mods={mods} all={all} from="batch" />}
-        <IconButton icon="x" size="sm" label={t("Clear this batch from the list. The mods stay installed")} onClick={onClear} />
+        <IconButton icon="x" size="sm" label={drops ? t("Clear this batch from the list. The mods stay installed. Failed and cancelled downloads lose their unfinished files") : t("Clear this batch from the list. The mods stay installed")} onClick={onClear} />
       </span>
     </div>
   );

@@ -13,7 +13,7 @@ import { about, app, dialogs, errorText, games, integrations, settings, shell, x
 import { gameMeta, gameName, gameShort } from "../../lib/games";
 import { t, tb, tn } from "../../lib/i18n";
 import { oxford } from "../../lib/notes";
-import { refreshGames, setGames, useGames, useOnlyGame } from "../../lib/store";
+import { go, refreshGames, setGames, useGames, useOnlyGame } from "../../lib/store";
 import { focusGame } from "../../shell/commands";
 import { openKofi } from "../../lib/support";
 import { Paged } from "./Paged";
@@ -32,6 +32,7 @@ import { SetRow, openXxmi, useSetting } from "./parts";
 import { FunSection } from "./FunSection";
 import { BackgroundSection, DesktopShortcutsSection } from "./DesktopShortcuts";
 import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
+import { OnlineLookupsSection } from "./OnlineLookups";
 import { Installing, SetupError } from "./Onboarding";
 import { MovePanel } from "../modtools/MovePanel";
 import { BackupsPanel, BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel, storageShown } from "./Storage";
@@ -54,7 +55,7 @@ registerPanels("settings", {
   fun: FunSection,
   account: AccountSection, integrations: IntegrationsSection, ai: AiSection,
   extensions: ExtensionsSection,
-  feedback: FeedbackSection, privacy: PrivacySection, logs: LogsSection,
+  feedback: FeedbackSection, privacy: PrivacySection, lookups: OnlineLookupsSection, logs: LogsSection,
   about: AboutSection, updates: UpdatesSection, transfer: TransferSection, repair: RepairSection,
 });
 
@@ -77,7 +78,7 @@ export function Settings() {
           gamebanana: <><AccountSection /><IntegrationsSection /><CreatorsSection /><AdultSection /></>,
           ai: <AiSection />,
           extensions: <ExtensionsSection />,
-          feedback: <><FeedbackSection /><PrivacySection /><LogsSection /></>,
+          feedback: <><FeedbackSection /><PrivacySection /><OnlineLookupsSection /><LogsSection /></>,
           about: <><AboutSection /><UpdatesSection /><TransferSection /><RepairSection /></>,
         }}
       </Paged>
@@ -332,7 +333,9 @@ function XxmiSection() {
             <span className="muted">{t("Version")}</span>
             <span>{st.version ?? t("Unknown")}{update && <> <Badge tone="info" onClick={openXxmi} title={t("Opens XXMI Launcher, which installs the update")}>{t("{version} available", { version: st.latest ?? "" })}</Badge></>}{st.running && <> <Badge tone="ok">{t("Open")}</Badge></>}</span>
             <span className="muted">{t("Folder")}</span>
-            <span className="mono set-path">{st.root}</span>
+            {st.root
+              ? <span><button type="button" className="set-folder-p mono" title={t("Open {path}", { path: st.root })} onClick={() => shell.openPath(st.root ?? "").catch((e) => toast(errorText(e), true))}>{st.root}</button></span>
+              : <span className="hint">{t("Not set")}</span>}
           </div>
           <div className="set-importers">
             {st.importers.filter((i) => i.deployedVersion || i.importerDir && i.enabled).map((i) => (
@@ -463,9 +466,11 @@ function RepairSection() {
       {asking && (
         <Confirm title={t("Reset gachamod?")} yes={t("Reset and restart")} danger onClose={() => setAsking(false)} onYes={resetApp}>
           <p>{t("gachamod restarts with nothing set up: no settings, profiles, tags, favourites or GameBanana sign-in.")}</p>
-          <p className="hint">{dir
-            ? t("Your mods, games and XXMI Launcher aren't touched. The old data moves to a backup folder in {folder}, and downloads and caches are deleted.", { folder: dir })
-            : t("Your mods, games and XXMI Launcher aren't touched. The old data moves to a backup folder, and downloads and caches are deleted.")}</p>
+          <p className="hint">{t("Your mods, games and XXMI Launcher aren't touched. The old data moves to a backup folder, and downloads and caches are deleted. Logs and earlier backups stay until you delete them.")}</p>
+          <div className="row">
+            {dir && <Button size="sm" variant="ghost" icon="folder" onClick={() => shell.openPath(dir).catch((e) => toast(errorText(e), true))} title={t("Open {path}", { path: dir })}>{t("Show data folder")}</Button>}
+            <Button size="sm" variant="ghost" icon="history" onClick={() => { setAsking(false); go({ view: "settings", section: "disk-backups" }); }} title={t("Shows each backup: what it is, when it was made and the size")}>{t("View backups")}</Button>
+          </div>
         </Confirm>
       )}
     </Panel>

@@ -251,7 +251,10 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
           <Button variant="primary" autoFocus onClick={onClose}>{t("Done")}</Button>
         </>}>
         <p><Icon name="check" /> {tn(done.length, "{n} change made. Ctrl+Z undoes all of it.", "{n} changes made. Ctrl+Z undoes all of it.")}</p>
-        <ul className="ai-done selectable">{done.map((l, i) => <li key={i}>{l}</li>)}</ul>
+        <ul className="ai-done selectable">{done.map((l, i) => {
+          const place = placeFor(l);
+          return <li key={i}>{l}{place && <> <Button size="sm" variant="ghost" onClick={() => { onClose(); place.run(); }}>{place.label}</Button></>}</li>;
+        })}</ul>
       </Dialog>
     );
   }

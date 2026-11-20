@@ -14,6 +14,7 @@ import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, S
 import { ExtensionFrame, NeedsNote } from "./ExtensionFrame";
 import { lang, stops, t, tb, tn } from "../../lib/i18n";
 import { gameShort } from "../../lib/games";
+import { onlineExtensionsPref } from "../../lib/prefs";
 import "./extensions.css";
 
 export const DOCS_URL = "https://github.com/imanimal/gachamod-extensions/blob/main/docs/extensions.md";
@@ -35,6 +36,7 @@ function Catalog() {
   const [q, setQ] = useState("");
   const list = useExtensions();
   const { repos, loading } = useRepos();
+  const auto = onlineExtensionsPref.use();
   const listed = useMemo(() => listedPackages(repos), [repos]);
   const updates = (list ?? []).flatMap((e) => updateFor(e, listed) ?? []);
   const [updatingAll, setUpdatingAll] = useState(false);
@@ -96,6 +98,15 @@ function Catalog() {
               <div className="ext-grid">{[0, 1, 2].map((i) => <Skeleton key={i} h="9.5rem" />)}</div>
             </Waiting>
           )
+            : !repos && !auto ? (
+              <Empty icon="puzzle" title={t("The lists aren't checked on their own")}
+                actions={<>
+                  <Button variant="primary" icon="refresh" onClick={() => void loadRepos(true)}>{t("Check the lists")}</Button>
+                  <Button variant="ghost" icon="settings" onClick={() => go({ view: "settings", section: "set-ext-auto" })} title={t("Opens the switch in Settings, Extensions")}>{t("Open settings")}</Button>
+                </>}>
+                {t("You turned off checking the extension lists when this page opens. Check them now to see what's available.")}
+              </Empty>
+            )
             : shownListed.length ? (
               <div className="ext-grid">
                 {shownListed.map((p) => <ListedCard key={`${p.source}:${p.id}`} p={p} have={list?.find((e) => e.id === p.id) ?? null} />)}

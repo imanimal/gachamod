@@ -178,6 +178,8 @@ function CreatorMods({ id, game, name, onName }: { id: number; game: GameState; 
   const [error, setError] = useState<string | null>(null);
   const [sort, setSort] = useState<CreatorSort>(creatorSort);
   const [attempt, setAttempt] = useState(0);
+  // mods hidden with Not interested show again while this is on
+  const [showHidden, setShowHidden] = useState(false);
   const pickSort = (s: CreatorSort) => { creatorSort = s; setSort(s); };
   const nameFrom = (list: GbCard[]) => { const n = list.find((m) => m.submitter?.id === id)?.submitter?.name; if (n) onName(n); };
 
@@ -209,14 +211,18 @@ function CreatorMods({ id, game, name, onName }: { id: number; game: GameState; 
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
 
-  const keep = (m: GbCard) => !hidden.includes(m.id) && !(nsfw === "hide" && m.nsfw);
+  const youHid = (m: GbCard) => !showHidden && hidden.includes(m.id);
+  const keep = (m: GbCard) => !youHid(m) && !(nsfw === "hide" && m.nsfw);
   const groups = useMemo(() => {
     const by = new Map<string, GbCard[]>();
     for (const m of elsewhere ?? []) if (keep(m)) { const g = m.game?.name || t("Other games"); by.set(g, [...(by.get(g) ?? []), m]); }
     return [...by.entries()].sort((a, b) => b[1].length - a[1].length);
-  }, [elsewhere, hidden, nsfw]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [elsewhere, hidden, showHidden, nsfw]); // eslint-disable-line react-hooks/exhaustive-deps
   const mine = (here ?? []).filter(keep);
-  const hiddenHere = (here?.length ?? 0) - mine.length;
+  // what the list leaves out, and why: mods the user hid, and mods for adults
+  const all = [...(here ?? []), ...(elsewhere ?? [])];
+  const hid = all.filter(youHid).length;
+  const adults = all.filter((m) => !youHid(m) && nsfw === "hide" && m.nsfw).length;
 
   return (
     <>
@@ -234,12 +240,23 @@ function CreatorMods({ id, game, name, onName }: { id: number; game: GameState; 
               <div className="cards gb-grid" aria-hidden="true">{Array.from({ length: 8 }, (_, i) => <CardSkeleton key={i} />)}</div>
             </Waiting>
           )
-          : here && !mine.length ? <p className="muted">{hiddenHere ? <>{tn(hiddenHere, "{n} mod for adults is hidden.", "{n} mods for adults are hidden.")} <Button size="sm" variant="ghost" icon="eye" title={t("Settings, GameBanana")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</Button></> : t("No mods for {game} yet.", { game: gameShort(game) })}</p>
+          : here && !mine.length ? <p className="muted">{here.length ? t("Every mod for {game} is left out.", { game: gameShort(game) }) : t("No mods for {game} yet.", { game: gameShort(game) })}</p>
           : (
             <div className="cards gb-grid" onKeyDown={(e) => moveInGrid(e, e.currentTarget, ".gb-card")}>
               {mine.map((m) => <ModCard key={m.id} game={game.id} mod={m} lib={lib} nsfw={nsfw} />)}
             </div>
           )}
+        {(hid > 0 || adults > 0) && (
+          <p className="hint">
+            {tn(hid + adults, "{n} mod is left out:", "{n} mods are left out:")}{" "}
+            {hid > 0 && <>{tn(hid, "{n} you hid", "{n} you hid")} <button type="button" className="link-btn" title={t("Show the mods you picked Not interested on")} onClick={() => setShowHidden(true)}>{t("Show them")}</button></>}
+            {hid > 0 && adults > 0 && ", "}
+            {adults > 0 && <>{tn(adults, "{n} for adults", "{n} for adults")} <button type="button" className="link-btn" title={t("Settings, GameBanana")} onClick={() => go({ view: "settings", section: "set-nsfw" })}>{t("Mods for adults")}</button></>}
+          </p>
+        )}
+        {showHidden && (
+          <p className="hint">{t("Showing the mods you hid.")} <button type="button" className="link-btn" title={t("Hide the mods you picked Not interested on again")} onClick={() => setShowHidden(false)}>{t("Hide them again")}</button></p>
+        )}
         {here && !hereDone && (
           <div className="gb-more">
             {error && !busy ? <Button icon="refresh" title={error} onClick={() => void loadMore()}>{t("Couldn't load more. Try again")}</Button>

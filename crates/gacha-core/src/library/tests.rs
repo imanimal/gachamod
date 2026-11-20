@@ -52,8 +52,6 @@ fn names_and_prefixes() {
     assert!(rel_disabled("Ellen/DISABLED x/y"));
     assert_eq!(disabled_parent("DISABLED Ellen/x"), Some("DISABLED Ellen"));
     assert_eq!(disabled_parent("Ellen/DISABLED x"), None);
-    assert_eq!(clean_group(" Ellen Joe / ../x?* "), Some("Ellen Joe/x".into()));
-    assert_eq!(clean_group(".."), None);
 }
 
 #[test]
@@ -465,17 +463,10 @@ fn move_meta_and_add_folder() {
     let list = scan(&db, "zzz").unwrap();
     let d = db.lock().unwrap();
     let id = list[0].id.clone();
-    let e = move_to_group(&d, "zzz", &id, Some("Ellen Joe")).unwrap();
-    assert_eq!(e.rel_path, "Ellen Joe/Coca Cola");
-    assert_eq!(e.group.as_deref(), Some("Ellen Joe"));
     let e = update_meta(&d, "zzz", &id, &MetaPatch { name: Some("Coke".into()), character: Some("Ellen Joe".into()), tags: Some(vec!["red".into(), "Red".into()]), ..Default::default() }).unwrap();
     assert_eq!(e.name, "Coke");
     assert_eq!(e.tags, vec!["red".to_string()]);
     assert_eq!(read_sidecar(Path::new(&e.path)).unwrap().name, "Coke");
-    let e = move_to_group(&d, "zzz", &id, None).unwrap();
-    assert_eq!(e.rel_path, "Coca Cola");
-    // the empty character folder went away
-    assert!(!t.mods.join("Ellen Joe").exists());
 
     let placed = t.add("Jane Doe/Office");
     let e = add_folder(&d, "zzz", &placed, None).unwrap();

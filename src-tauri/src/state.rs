@@ -21,6 +21,8 @@ impl AppState {
     pub fn new(data_dir: PathBuf) -> gacha_core::Result<Self> {
         let db = Db::open(&data_dir.join("gachamod.sqlite"))?;
         let _ = db.cache_prune(gacha_core::db::now() - 7 * 86400);
+        // SYSTEM: the window's cache clear asked for in Storage, and old thumbnails and pack pictures (before the window opens)
+        gacha_core::storage::on_start(&db, &data_dir);
         Ok(AppState {
             data_dir,
             db: Arc::new(Mutex::new(db)),

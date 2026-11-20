@@ -2,7 +2,7 @@
 // export-mods, export-profile, export-pack), and the "tools" nav badge. Owner: MODTOOLS area.
 import { useEffect, useRef, useState } from "react";
 import { held, inTauri } from "../../lib/tauri";
-import { emitApp, go, onApp, useGameId, useGames, useRoute } from "../../lib/store";
+import { emitApp, go, goIn, onApp, useGameId, useGames, useRoute } from "../../lib/store";
 import {
   dialogs, errorText, fileUrl, library, modtools, packs, shell,
   type ExportPlan, type GameId, type PackFiles, type PackPreview, type PackPreviewMod, type PackScope,
@@ -312,7 +312,7 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
           label: t("Undo"),
           run: () => {
             library.remove(target, added)
-              .then(() => { emitApp({ type: "library-refresh", game: target }); toast(tn(added.length, "Removed the imported mod. It's in the trash.", "Removed the imported mods. They're in the trash.")); })
+              .then(() => { emitApp({ type: "library-refresh", game: target }); toast(tn(added.length, "Removed the imported mod. It's in the trash.", "Removed the imported mods. They're in the trash."), false, { label: t("View trash"), run: () => goIn(target, { view: "library", tab: "archive" }) }); })
               .catch((e) => toast(errorText(e), true));
           },
         });

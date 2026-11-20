@@ -29,8 +29,9 @@ const PLACES: Array<[RegExp, ToastAction]> = [
   [/can't switch profiles\. Pick another key/i, { label: t("Hotkey settings"), run: settings("hotkeys") }],
   [/Tester options in Settings/i, { label: t("Tester options"), run: settings("set-tester") }],
   [/exclusive fullscreen.*window mode/i, { label: t("Launch options"), run: settings("launch") }],
+  [/Restart Steam when Play needs it|Steam restarted first|through Steam, since the Steam copy|FPS limit was .+, now /i, { label: t("Launch options"), run: settings("launch") }],
   [/Settings, Appearance/i, { label: t("Appearance"), run: settings("appearance") }],
-  [/import it in Settings, Custom themes/i, { label: t("Custom themes"), run: settings("themes") }],
+  [/Settings, Custom themes/i, { label: t("Custom themes"), run: settings("themes") }],
 ];
 
 /** The button for a message that names a setting or a place, if it names one. */

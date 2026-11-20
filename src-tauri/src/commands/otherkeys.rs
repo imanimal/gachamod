@@ -1,7 +1,7 @@
 //! Keys of other apps that are also gachamod's (gacha-core otherkeys.rs, docs/other-app-keys.md). The other apps'
 //! settings are only read, except Medal's key when the player asks for that. Owner: INGAME area.
 use crate::state::{blocking, AppState};
-use gacha_core::otherkeys::{self, Changed, Clash, Moved};
+use gacha_core::otherkeys::{self, Changed, Clash, KeptKey, MedalCopy, Moved};
 use gacha_core::Result;
 use tauri::State;
 
@@ -50,6 +50,22 @@ pub async fn otherkeys_change(st: State<'_, AppState>, app_id: String, from: Str
     blocking(move || {
         let others = otherkeys::found();
         otherkeys::change_other_with(&*lock(&db)?, &others, &app_id, &from, &to, undo)
+    }).await
+}
+
+/// The copies made of Medal's settings before gachamod changed a key there: where they are and how big.
+#[tauri::command]
+pub async fn otherkeys_copies() -> Result<Option<MedalCopy>> {
+    blocking(move || Ok(otherkeys::medal_copies())).await
+}
+
+/// The clashes the player chose to keep, to review and take back.
+#[tauri::command]
+pub async fn otherkeys_kept(st: State<'_, AppState>) -> Result<Vec<KeptKey>> {
+    let db = st.db.clone();
+    blocking(move || {
+        let others = otherkeys::found();
+        Ok(otherkeys::kept_with(&*lock(&db)?, &others))
     }).await
 }
 

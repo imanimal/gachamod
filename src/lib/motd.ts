@@ -23,9 +23,12 @@ let loading: Promise<Feed | null> | null = null;
 export function motdFeed(): Promise<Feed | null> {
   const c = cached();
   if (c && Date.now() - c.at < TTL) return Promise.resolve(c.feed);
-  return loading ??= fetch(MOTD_URL, { headers: { Accept: "application/json" } })
-    .then((r) => (r.ok ? r.json() : null))
+  // hidden in Settings (Fun extras or Online lookups): the list isn't asked for, the saved one is all there is
+  return loading ??= motdPref.ready
+    .then(() => (motdPref.get() ? fetch(MOTD_URL, { headers: { Accept: "application/json" } }) : null))
+    .then((r) => (r ? (r.ok ? r.json() : null) : undefined))
     .then((raw: unknown) => {
+      if (raw === undefined) return c?.feed ?? null;
       const o = raw as Partial<Feed> | null;
       const feed: Feed | null = o && typeof o.enabled === "boolean" && Array.isArray(o.picks)
         ? { enabled: o.enabled, picks: o.picks.filter((p) => p && typeof p.date === "string" && typeof p.game === "string" && Number.isInteger(p.modId)) }

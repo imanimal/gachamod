@@ -14,7 +14,7 @@ import { Popover } from "../../ui/Popover";
 import { toast } from "../../ui/toast";
 import { Preview } from "../library/Preview";
 import { closeNewProfile, makeProfile, patchProfile, useNewProfileRequest, type NewStart } from "./actions";
-import { knownProfiles, useCharacters } from "./data";
+import { knownProfiles, openHotkeySettings, useCharacters, useHotkeysOn } from "./data";
 import { HotkeyField } from "./HotkeyField";
 import { PROFILE_GLYPHS, ProfileIcon } from "./ProfileIcon";
 import { LazyImg } from "../../ui/LazyImg";
@@ -87,6 +87,7 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState<Open>(null);
   const keyRef = useRef<HTMLDivElement>(null);
+  const keysOn = useHotkeysOn();
   const fieldsRef = useRef<HTMLDivElement>(null);
   const iconBtn = useRef<HTMLButtonElement>(null);
   const bannerBtn = useRef<HTMLButtonElement>(null);
@@ -184,7 +185,8 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
         <TextField label={t("Description")} multiline rows={2} value={description} onChange={setDescription} placeholder={t("What this loadout is for")} />
         <div ref={keyRef}><HotkeyField label={t("In-game hotkey")} value={hotkey} onChange={(v) => { setHotkey(v); setTaken(null); }} taken={taken}
           hint={holder ? (making ? t("{name} uses {key}. Creating moves it here", { name: holder.name, key: hotkey }) : t("{name} uses {key}. Saving moves it here", { name: holder.name, key: hotkey }))
-            : t("Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1")} /></div>
+            : keysOn ? t("Switches to this profile while the game runs and reloads mods, like Ctrl+Alt+1")
+            : <>{t("Profile hotkeys are turned off, so this key does nothing.")} <button type="button" className="link-btn" onClick={() => { onClose(); openHotkeySettings(); }}>{t("Hotkey settings")}</button></>} /></div>
       </div>
 
       {open === "icon" && (

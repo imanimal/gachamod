@@ -1,7 +1,7 @@
 // Demo handlers for other apps' keys (lib/api/otherkeys.ts): a made-up Medal that takes a screenshot on F7 and saves
 // a clip on F8, checked against the demo's skin menu keys. Its keys can be changed like the real Medal's, and it
 // counts as closed. Owner: INGAME area.
-import type { AppKeyChange, AppKeyClash, AppKeyMove, LiveInfo } from "../api";
+import type { AppKeyChange, AppKeyClash, AppKeyMove, KeptKey, LiveInfo } from "../api";
 import { call, registerDemo } from "../tauri";
 import { demoDb, demoWait } from "./db";
 
@@ -15,6 +15,8 @@ const LOADER_KEYS = ["F6", "F10", "F12"];
 const FREE = ["F9", "F11", "F8", "Ctrl+F9", "Ctrl+F8", "Ctrl+F7", "Ctrl+Alt+F9", "Ctrl+Alt+F8", "Ctrl+Alt+F7"];
 const NEEDS = "Medal has to be closed first. Quit it from the tray icon";
 const kept = new Set<string>();
+/** Medal's key was changed once, so the demo has a copy of its settings. */
+let changedKeys = false;
 /** How often a toast asked about each clash (three times at most). */
 const asked = new Map<string, number>();
 
@@ -70,8 +72,19 @@ export function registerOtherKeysDemo() {
       if (!theirs) return fail(`No app uses ${String(from)} any more`);
       if (!undo && (!/^F\d+$/.test(String(to)) || usedKeys(await menus()).has(String(to)))) fail(`${String(to)} is already in use. Pick another key`);
       theirs.key = String(to);
-      return { app: theirs.app, appId: theirs.appId, from: String(from), to: theirs.key, text: `${theirs.app} ${theirs.does} on ${theirs.key} now` };
+      changedKeys = true;
+      return { app: theirs.app, appId: theirs.appId, from: String(from), to: theirs.key, text: `${theirs.app} ${theirs.does} on ${theirs.key} now`, backup: "C:\\Demo\\Medal\\medal-guest.db.gachamod.bak" };
     },
+    otherkeys_kept: async (): Promise<KeptKey[]> => {
+      const games = await menus();
+      return [...kept].map((id) => {
+        const [appId = "", key = ""] = id.split("|");
+        const theirs = OTHERS.find((o) => o.appId === appId && o.key === key);
+        const active = !!theirs && games.some((g) => g.info.groups.length > 0 && g.info.menu.key === key);
+        return { id, app: theirs?.app ?? "Medal", appId, key, active, text: theirs && active ? `${theirs.app} ${theirs.does} on ${key}.` : `${theirs?.app ?? "Medal"} used ${key}.` };
+      });
+    },
+    otherkeys_copies: () => (changedKeys ? { path: "C:\\Demo\\Medal\\medal-guest.db.gachamod.bak", folder: "C:\\Demo\\Medal", bytes: 18_400_000, files: 2 } : null),
     otherkeys_keep: ({ appId, key, on }) => {
       const id = `${String(appId)}|${String(key)}`;
       if (on) kept.add(id); else kept.delete(id);

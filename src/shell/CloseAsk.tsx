@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { app as appApi, errorText } from "../lib/api";
 import { backgroundPref } from "../lib/prefs";
+import { go } from "../lib/store";
 import { held } from "../lib/tauri";
 import { t } from "../lib/i18n";
 import { Button, Dialog } from "../ui/kit";
@@ -23,11 +24,12 @@ export function CloseAsk() {
   };
   return (
     <Dialog icon="power" title={t("Keep gachamod running in the background?")} size="sm" onClose={() => setOpen(false)} footer={<>
+      <Button variant="ghost" icon="settings" onClick={() => { setOpen(false); go({ view: "settings", section: "set-background" }); }} title={t("Opens Settings, Running in the background. Closing the window asks again until you choose")}>{t("Open setting")}</Button>
       <Button variant="ghost" onClick={() => void choose(false)} title={t("Close gachamod completely when you close the window")}>{t("Quit")}</Button>
       <Button variant="primary" autoFocus onClick={() => void choose(true)} title={t("Close the window and leave gachamod in the tray")}>{t("Keep running")}</Button>
     </>}>
       <p>{t("With the window closed, gachamod waits in the tray and uses almost no memory. Quickstart starts your game from there without opening gachamod, and updates install while it waits.")}</p>
-      <p>{t("You won't be asked again, and you can change it later.")}</p>
+      <p>{t("You won't be asked again. You can change this in Settings, Running in the background.")}</p>
     </Dialog>
   );
 }

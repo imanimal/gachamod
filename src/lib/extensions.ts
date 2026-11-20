@@ -7,6 +7,7 @@ import { DEFAULT_EXT_SOURCE } from "./api/extensions";
 import { linkToast, record, undo } from "./history";
 import { currentGame } from "./store";
 import { accountState } from "./account";
+import { onlineExtensionsPref } from "./prefs";
 import { applyCustomTheme, customThemesPref, setThemePick, themePick, validateCustomTheme, type CustomTheme } from "./theme";
 import { toast } from "../ui/toast";
 import { gameName } from "./games";
@@ -69,8 +70,16 @@ export async function loadRepos(refresh = false) {
   try { repoStore.set({ repos: await api.repos(refresh), loading: false }); }
   catch (e) { repoStore.set({ repos: repoStore.get().repos ?? [], loading: false }); toast(errorText(e), true); }
 }
+/** The repos' lists. They load when a screen first asks, unless Settings, Online lookups turned that off: then only
+ *  "Check the lists again" (loadRepos(true)) reaches the network. */
 export function useRepos(): RepoState {
-  useEffect(() => { if (!repoStore.get().repos) void loadRepos(); }, []);
+  const auto = onlineExtensionsPref.use();
+  useEffect(() => {
+    let live = true;
+    // the saved switch is read first, so a screen opening at start-up can't slip past it
+    void onlineExtensionsPref.ready.then(() => { if (live && onlineExtensionsPref.get() && !repoStore.get().repos) void loadRepos(); });
+    return () => { live = false; };
+  }, [auto]);
   return useSyncExternalStore(repoStore.sub, repoStore.get);
 }
 

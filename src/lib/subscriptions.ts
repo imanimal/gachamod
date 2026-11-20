@@ -36,6 +36,10 @@ export const isNew = (s: ModSub) => s.updated > s.seen;
 /** The toast when a subscribed mod updates (Settings, GameBanana account). */
 export const subToastPref = pref<boolean>("gb.subToast", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
+/** The hourly look at GameBanana for updates to subscribed mods (Settings, GameBanana account). Off: gachamod asks
+ *  nothing, so Home marks nothing as Updated and no message comes either. */
+export const subCheckPref = pref<boolean>("gb.subCheck", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
+
 /** The mod ids GameBanana subscriptions were marked with before gachamod kept its own list. */
 const oldPref = jsonPref<number[]>("gb.subscribed", []);
 
@@ -134,12 +138,13 @@ const FIRST_MS = 90_000;
 const EVERY_MS = 3_600_000;
 let checking = false;
 
-/** Look for updates to every subscribed mod. New ones get a toast (unless turned off). */
+/** Look for updates to every subscribed mod, unless the check is turned off. New ones get a toast (unless that is off). */
 export async function checkModSubs() {
   if (checking) return;
   checking = true;
   try {
-    await Promise.all([modSubsPref.ready, subToastPref.ready, oldPref.ready]);
+    await Promise.all([modSubsPref.ready, subToastPref.ready, subCheckPref.ready, oldPref.ready]);
+    if (!subCheckPref.get()) return;
     await migrate();
     const subs = modSubsPref.get();
     const ids = Object.values(subs).map((s) => s.id);

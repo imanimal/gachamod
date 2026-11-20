@@ -7,7 +7,7 @@
 // are in toolsSearch.ts. Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels. Every page and panel is
 // a route: go({ view: "tools", section: "fixes" }) or section: "dev".
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Badge, Button, PageHeader, Panel, formatBytes } from "../../ui/kit";
+import { Badge, Button, PageHeader, Panel, Toggle, formatBytes } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { dev, dialogs, errorText, shell, type DevStatus, type GameState } from "../../lib/api";
 import { allGames, currentGame, emitApp, go, useGame } from "../../lib/store";
@@ -17,6 +17,7 @@ import { FixesPanel } from "./FixesPanel";
 import { InGamePanel } from "../ingame/InGamePanel";
 import { KeyListPanel } from "../ingame/KeyListPanel";
 import { Paged } from "../settings/Paged";
+import { useSetting } from "../settings/parts";
 import { registerPanels } from "../settings/menuSearch";
 import { MOVE_KEYWORDS, TOOL_PAGES, toolsPageOf, toolsWhere } from "./toolsSearch";
 import { ConflictsPanel, HashLookupPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
@@ -112,6 +113,13 @@ function ToolsAi() {
 
 // ── dev ──
 
+/** The switch for automatic reloads: the same setting as Settings, Mods (a per-game row there), so they agree. */
+function AutoReload({ game }: { game: GameState }) {
+  const [auto, setAuto] = useSetting(`${game.id}.autoReload`, "1");
+  return <Toggle size="sm" label={t("Automatic")} checked={auto !== "0"} onChange={(v) => setAuto(v ? "1" : "0")}
+    title={t("Presses the reload key for you when you switch back to {game} after a change, so 3DMigoto loads the mods again", { game: gameName(game) })} />;
+}
+
 function DevSection({ game }: { game: GameState }) {
   const [st, setSt] = useState<DevStatus | null>(null);
   const [log, setLog] = useState<string | null>(null);
@@ -137,7 +145,16 @@ function DevSection({ game }: { game: GameState }) {
     if (!await dev.wipeUserConfig(id)) { toast(t("No mod has saved options to reset")); return; }
     record({ label: t("Reset every mod's saved options"), undo: () => dev.unwipeUserConfig(id).finally(load), redo: () => dev.wipeUserConfig(id).finally(load) });
   };
+  // swaps the options in place with the copy in d3dx_user.ini.wiped.bak. The options that were in place become the
+  // copy, so each press (and Undo, and Redo) can be reversed by another swap and nothing newer is lost
+  const putBackOptions = async () => {
+    const id = game.id;
+    await dev.unwipeUserConfig(id);
+    const swap = () => dev.unwipeUserConfig(id).finally(load);
+    record({ label: t("Put back every mod's saved options"), undo: swap, redo: swap });
+  };
   const open = (p: string | null | undefined) => { if (p) shell.openPath(p).catch((e) => toast(errorText(e), true)); };
+  const show = (p: string | null | undefined) => { if (p) shell.revealPath(p).catch((e) => toast(errorText(e), true)); };
   const noImporter = !game.importerDir && !game.modsDir;
 
   return (
@@ -153,23 +170,31 @@ function DevSection({ game }: { game: GameState }) {
           </div>
           <div className="tools-dev">
             <div className="tools-dev-row">
-              <span><b>{t("Reload mods in game")}</b><span className="hint">{t("Brings {game} to the front and presses {key}, the reload key in d3dx.ini", { game: gameShort(game), key: game.reloadKey || "F10" })}</span></span>
+              <span><b>{t("Reload mods in game")}</b><span className="hint">{t("Brings {game} to the front and presses {key}, the reload key in d3dx.ini. With Automatic on it also presses {key} by itself when you switch back to the game after a mod changed", { game: gameShort(game), key: game.reloadKey || "F10" })}</span></span>
+              <AutoReload key={game.id} game={game} />
               <Button icon="refresh" busy={busy === "reload"} disabled={!game.running} title={game.running ? t("Press {key} in the game", { key: game.reloadKey || "F10" }) : t("{game} isn't running", { game: gameName(game) })}
                 onClick={() => void run("reload", () => dev.reload(game.id))}>{t("Reload")}</Button>
             </div>
             <div className="tools-dev-row">
               <span><b>{t("Shader cache")}</b><span className="hint">{st ? tn(st.shaderCache.files, "{size}, {n} file. It rebuilds on the next start", "{size}, {n} files. It rebuilds on the next start", { size: formatBytes(st.shaderCache.bytes) }) : "…"}</span></span>
+              <Button icon="folder" onClick={() => open(st?.shaderCache.path)} disabled={!st?.shaderCache.files} title={t("Open the ShaderCache folder")}>{t("Open")}</Button>
               <Button icon="trash" busy={busy === "cache"} disabled={!st?.shaderCache.bytes || game.running} title={game.running ? t("Close the game first") : t("Delete the shader cache. The game rebuilds it on the next start")}
                 onClick={() => void run("cache", () => dev.clearShaderCache(game.id))}>{t("Clear")}</Button>
             </div>
             <div className="tools-dev-row">
-              <span><b>{t("Frame dumps")}</b><span className="hint">{st ? t("{size} in FrameAnalysis folders", { size: formatBytes(st.frameDumps.bytes) }) : "…"}</span></span>
+              <span><b>{t("Frame dumps")}</b><span className="hint">{st ? t("{size} in FrameAnalysis folders in the loader folder", { size: formatBytes(st.frameDumps.bytes) }) : "…"}</span></span>
+              <Button icon="folder" onClick={() => open(st?.frameDumps.path)} disabled={!st?.frameDumps.bytes} title={t("Open the loader folder. The FrameAnalysis folders are in it")}>{t("Open")}</Button>
               <Button icon="trash" busy={busy === "dumps"} disabled={!st?.frameDumps.bytes} title={t("Move the FrameAnalysis folders to the Recycle Bin")}
                 onClick={() => void run("dumps", async () => { const b = await dev.clearFrameDumps(game.id); toast(t("Moved {size} of frame dumps to the Recycle Bin", { size: formatBytes(b) })); })}>{t("Delete")}</Button>
             </div>
             <div className="tools-dev-row">
-              <span><b>{t("Saved mod options")}</b><span className="hint">{t("Resets every mod's options. A copy of d3dx_user.ini is kept")}</span></span>
-              <Button variant="danger" icon="trash" busy={busy === "wipe"} disabled={!st?.d3dxUserIni || game.running} title={game.running ? t("Close the game first") : t("Reset every mod's options. A copy of d3dx_user.ini is kept, and Undo (Ctrl+Z) puts it back")}
+              <span><b>{t("Saved mod options")}</b><span className="hint">{t("Resets every mod's options. A copy is kept as d3dx_user.ini.wiped.bak in the loader folder")}</span></span>
+              {st?.wipedBak && <>
+                <Button icon="folder" onClick={() => show(st.wipedBak)} title={t("Show the copy in File Explorer")}>{t("Show copy")}</Button>
+                <Button icon="undo" busy={busy === "putback"} disabled={game.running} title={game.running ? t("Close the game first") : t("Swap the options now saved with the copy. The current options are kept as the copy, so Put back again (or Undo, Ctrl+Z) brings them back")}
+                  onClick={() => void run("putback", putBackOptions)}>{t("Put back")}</Button>
+              </>}
+              <Button variant="danger" icon="trash" busy={busy === "wipe"} disabled={!st?.d3dxUserIni || game.running} title={game.running ? t("Close the game first") : t("Reset every mod's options. A copy is kept as d3dx_user.ini.wiped.bak, and Undo (Ctrl+Z) puts it back")}
                 onClick={() => void run("wipe", wipeOptions)}>{t("Wipe")}</Button>
             </div>
           </div>

@@ -19,7 +19,7 @@
 .gbb-fp-row .gbb-fp-h { white-space: nowrap; }
 .gbb-fp-row .seg { flex: none; }
 .gbb-fp .gbb-saved { padding: 0; }
-.gbb-fp-clear { align-self: flex-start; }
+.gbb-fp-clear, .gbb-fp-hid { align-self: flex-start; }
 .gbb-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 .gbb-fchip { padding-right: var(--s-1); cursor: default; }
 .gbb-fchip-x { display: grid; place-items: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; color: inherit; opacity: .8; }

@@ -9,6 +9,8 @@ import { toast } from "../ui/toast";
 export const GI_KICK_GUIDE = "https://gamebanana.com/tuts/19132";
 /** The guide's first step: GIMI's last release, with 3dmigoto-GIMI-for-playing-mods.zip. Only opened in the browser. */
 export const GIMI_DOWNLOAD = "https://github.com/SilentNightSound/GI-Model-Importer/releases/tag/v7.0";
+/** Setting: "0" once the player turned the warning before a Genshin Impact start with mods off. */
+export const KICK_WARN = "gi.kickWarn";
 export const openKickGuide = () => void shell.openUrl(GI_KICK_GUIDE).catch((e) => toast(errorText(e), true));
 
 let check: KickCheck | null = null;

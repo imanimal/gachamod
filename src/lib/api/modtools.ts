@@ -192,6 +192,8 @@ export interface FixerFile {
   /** It opens a window of its own and works through the whole Mods folder there, so it runs once for every mod that
    *  needs it (fixers.runAll). */
   window?: boolean;
+  /** Bytes it takes on disk. */
+  size?: number;
 }
 export interface FixerRequest { toolId: number; fileId: number; tool: string; file: string; url: string; md5?: string | null; source?: string }
 /** What running a fixer on one mod did. Restoring `backup` undoes it; null when it changed nothing. */
@@ -206,6 +208,8 @@ export interface FixerRun {
 
 export const fixers = {
   list: (game: GameId) => call<FixerFile[]>("fixers_list", { game }),
+  /** Delete a downloaded fixer and its folder. It is downloaded again when a mod needs it. */
+  remove: (game: GameId, fileId: number) => call<void>("fixers_remove", { game, fileId }),
   /** Only GameBanana links. */
   download: (game: GameId, req: FixerRequest) => call<FixerFile>("fixers_download", { game, req }),
   /** A fixer from GitHub: the newest release's Windows program, or one script file. */

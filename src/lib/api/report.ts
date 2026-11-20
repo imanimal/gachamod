@@ -10,6 +10,8 @@ export interface ReportState {
   /** False in a build made without the PostHog key: the switches still work, nothing is sent. */
   configured: boolean;
   logsDir: string | null;
+  /** The random id counts carry, or null while none was made. */
+  installId: string | null;
 }
 
 export type FeedbackKind = "problem" | "idea" | "other";
@@ -66,6 +68,8 @@ export const gameCheck = {
 export const report = {
   state: () => call<ReportState>("report_state"),
   set: (p: { usage?: boolean; crashes?: boolean }) => call<ReportState>("report_set", p),
+  /** Forget the install id; the next count gets a new one. */
+  resetId: () => call<ReportState>("report_reset_id"),
   events: (events: UsageEvent[]) => call<void>("telemetry_events", { events }),
   feedback: (feedback: Feedback) => call<void>("feedback_send", { feedback }),
   log: (lines: Array<{ level: "info" | "warn" | "error"; text: string }>) => call<void>("log_write", { lines }),

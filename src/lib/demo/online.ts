@@ -187,11 +187,6 @@ export function registerOnlineDemo() {
       emit();
       return snapshot();
     },
-    queue_clear_finished: () => {
-      items = items.filter((i) => !finished(i));
-      emit();
-      return snapshot();
-    },
     queue_choose: ({ id, keys }) => {
       const i = items.find((x) => x.id === Number(id));
       const k = (keys as string[]) ?? [];

@@ -305,7 +305,7 @@ async function swapHashes(game: GameId, ids: string[], out: FixOutcome) {
 const NO_FILES: FixerFile[] = [];
 const fixerLists = new Map<GameId, FixerFile[]>();
 const fixerLoading = new Set<GameId>();
-/** "tool:<id>" and "file:<id>" while a download runs. */
+/** "tool:<id>" and "file:<id>" while a download runs, "remove:<id>" while one is deleted. */
 let fixerBusy: ReadonlySet<string> = new Set();
 const setBusy = (key: string, on: boolean) => {
   const next = new Set(fixerBusy);
@@ -345,6 +345,23 @@ export async function downloadFixer(game: GameId, tool: { id: number; name: stri
   } catch (e) {
     toast(errorText(e), true);
     return null;
+  } finally {
+    setBusy(key, false);
+  }
+}
+
+/** Delete a downloaded fixer's folder, and say so in a toast. A mod that needs it downloads it again. */
+export async function removeFixer(game: GameId, f: FixerFile): Promise<void> {
+  const key = `remove:${f.fileId}`;
+  if (fixerBusy.has(key)) return;
+  setBusy(key, true);
+  try {
+    await fixersApi.remove(game, f.fileId);
+    fixerLists.set(game, (fixerLists.get(game) ?? []).filter((x) => x.fileId !== f.fileId));
+    notify();
+    toast(t("Deleted {tool}. It's downloaded again when a mod needs it", { tool: f.tool }));
+  } catch (e) {
+    toast(errorText(e), true);
   } finally {
     setBusy(key, false);
   }

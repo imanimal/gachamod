@@ -1,11 +1,14 @@
 //! Where disk space goes, for Settings › Storage: each game's mods (on and off, per character and per mod), the app's
-//! trash, downloaded archives, backups, fix tools, the loader's shader cache, frame dumps and log, mods another
-//! manager keeps outside Mods, XXMI Launcher and gachamod's data folder. It also finds mods installed twice.
+//! trash, downloaded archives, backups, the author's copies of changed mod files, fix tools, the loader's shader
+//! cache, frame dumps and log, the in-game menu's pictures, mods another manager keeps outside Mods, XXMI Launcher,
+//! gachamod's data folder and the window's own browser cache. It also finds mods installed twice.
 //!
 //! Measuring only reads. Mod sizes come from the library's last scan; everything else is walked on the caller's
 //! (blocking) thread, and `cancel` stops a walk that runs long, so the report comes back with `complete` false.
 //! Cleanup uses the paths that already keep files safe: a copy goes to the app's trash (`remove_copies`), downloaded
-//! archives to the Recycle Bin (`recycle_archives`), and the shader cache and frame dumps through devtools.
+//! archives to the Recycle Bin (`recycle_archives`), and the shader cache and frame dumps through devtools. Things
+//! gachamod can make again (thumbnails, pack pictures, unpacked downloads, game icons, the log) are deleted by `clear`.
+//! Thumbnails and pack pictures also age out at start (`prune_caches`) unless "storage.trim" is "0".
 //! Owner: SYSTEM area (docs/spec.md, "Storage").
 
 use crate::db::{now, Db, Shared};
@@ -26,9 +29,14 @@ pub const PROGRESS_EVENT: &str = "storage-progress";
 #[serde(rename_all = "camelCase")]
 pub struct Item {
     /// What it is. A game's: "mods-on", "mods-off", "trash", "archives", "parts" (unfinished downloads), "backups",
-    /// "fixers", "shader-cache", "frame-dumps", "log", "loader" (the rest of the loader folder), "others" (another
+    /// "fixers", "originals" (the author's copies of changed mod files), "shader-cache", "frame-dumps", "log",
+    /// "live-menu" (the in-game menu's pictures), "loader" (the rest of the loader folder), "others" (another
     /// manager's mods outside Mods). gachamod's data: "database", "thumbs", "cache", "logs", "staging",
-    /// "extensions", "archive" (removed mods' pictures), "backups", "fixers", "other", and "xxmi".
+    /// "extensions", "extensions-trash" (removed ones kept 14 days), "extension-data", "archive" (removed mods'
+    /// pictures), "media" (profile pictures), "icons", "ai" (the Gemini key and AI run files), "login" (the GameBanana
+    /// sign-in), "setup" (XXMI install downloads), "nrmm-trash" (what No Reload Mod Manager made, kept after a
+    /// takeover), "backups", "originals", "fixers", "other" (a file or folder in the data folder with no row of its
+    /// own, named in `name`), "webview" (the window's browser profile) and "xxmi".
     pub key: String,
     /// The group it counts toward (`category_of`).
     pub category: String,
@@ -37,7 +45,7 @@ pub struct Item {
     pub count: u32,
     /// The folder or file, for "Show in Explorer".
     pub path: Option<String>,
-    /// The other manager's name, for "others".
+    /// The other manager's name for "others"; the file or folder's name for "other".
     pub name: Option<String>,
 }
 
@@ -141,16 +149,16 @@ pub struct Options {
     pub outside: bool,
 }
 
-/// The group an item counts toward in the "by category" view: "on", "off", "trash", "downloads", "backups",
-/// "loader", "others" or "app".
+/// The group an item counts toward in the "by category" view: "on", "off", "trash", "downloads", "backups" (with the
+/// author's copies), "loader", "others" or "app".
 pub fn category_of(key: &str) -> &'static str {
     match key {
         "mods-on" => "on",
         "mods-off" => "off",
         "trash" => "trash",
         "archives" | "parts" => "downloads",
-        "backups" => "backups",
-        "shader-cache" | "frame-dumps" | "log" | "loader" | "xxmi" => "loader",
+        "backups" | "originals" => "backups",
+        "shader-cache" | "frame-dumps" | "log" | "live-menu" | "loader" | "xxmi" => "loader",
         "others" => "others",
         _ => "app",
     }
@@ -257,7 +265,8 @@ fn backup_game(dir: &Path) -> Option<String> {
     known_game(v.get("game")?.as_str()?)
 }
 
-/// Sort the data folder into items: each game's trash, downloads, backups and fix tools, and gachamod's other files.
+/// Sort the data folder into items: each game's trash, downloads, backups, original copies and fix tools, and
+/// gachamod's other files.
 fn data_items(data: &Path, stop: Stop) -> DataUse {
     let mut out = DataUse::default();
     let Ok(rd) = std::fs::read_dir(data) else { return out };
@@ -272,9 +281,26 @@ fn data_items(data: &Path, stop: Stop) -> DataUse {
                 push(&mut out.app, item("thumbs", walk(&thumbs, &no_skip, stop), Some(&thumbs)));
                 push(&mut out.app, item("cache", walk(&p, &|x| same_path(x, &thumbs), stop), Some(&p)));
             }
-            "logs" | "staging" | "extensions" | "archive" => push(&mut out.app, item(&name, walk(&p, &no_skip, stop), Some(&p))),
+            "logs" | "staging" | "extensions" | "archive" | "extension-data" | "media" | "icons" | "ai" => push(&mut out.app, item(&name, walk(&p, &no_skip, stop), Some(&p))),
+            // the GameBanana sign-in: the sign-in window's profile folder and the sealed session cookie
+            "gb-login" | "gb-session.bin" => {
+                let dir = data.join("gb-login");
+                let at: &Path = if dir.exists() { &dir } else { &p };
+                push(&mut out.app, item("login", walk(&p, &no_skip, stop), Some(at)));
+            }
+            // what XXMI Launcher's install downloads while it runs
+            "xxmi-setup" => push(&mut out.app, item("setup", walk(&p, &no_skip, stop), Some(&p))),
+            // the note that the window's cache is cleared at the next start (`queue_webview_clear`)
+            WEBVIEW_CLEAR => {}
+            "originals" => for (n, dir) in child_dirs(&p) {
+                let it = item("originals", walk(&dir, &no_skip, stop), Some(&dir));
+                match known_game(&n) {
+                    Some(game) => push(out.games.entry(game).or_default(), it),
+                    None => push(&mut out.app, it),
+                }
+            },
             "downloads" => for (n, dir) in child_dirs(&p) {
-                let Some(game) = known_game(&n) else { push(&mut out.app, item("other", walk(&dir, &no_skip, stop), Some(&dir))); continue };
+                let Some(game) = known_game(&n) else { push(&mut out.app, named_other(&format!("downloads/{n}"), walk(&dir, &no_skip, stop), &dir)); continue };
                 let parts = walk(&dir, &|x| x.is_file() && !is_part(x), stop);
                 let mut all = walk(&dir, &no_skip, stop);
                 all.files -= parts.files.min(all.files);
@@ -291,8 +317,10 @@ fn data_items(data: &Path, stop: Stop) -> DataUse {
                         it.count = child_dirs(&dir).len() as u32;
                         push(out.games.entry(game).or_default(), it);
                     }
-                    // removed extensions count with the extensions; anything else is just other files
-                    None => push(&mut out.app, item(if n.eq_ignore_ascii_case("extensions") { "extensions" } else { "other" }, u, Some(&dir))),
+                    // removed extensions wait 14 days, and what No Reload Mod Manager made is kept after a takeover
+                    None if n.eq_ignore_ascii_case("extensions") => push(&mut out.app, item("extensions-trash", u, Some(&dir))),
+                    None if n.eq_ignore_ascii_case("nrmm") => push(&mut out.app, item("nrmm-trash", u, Some(&dir))),
+                    None => push(&mut out.app, named_other(&format!("trash/{n}"), u, &dir)),
                 }
             },
             "backups" => for b in std::fs::read_dir(&p).into_iter().flatten().flatten() {
@@ -311,10 +339,18 @@ fn data_items(data: &Path, stop: Stop) -> DataUse {
                     None => push(&mut out.app, it),
                 }
             },
-            _ => push(&mut out.app, item("other", walk(&p, &no_skip, stop), Some(data))),
+            // anything else (look.json, setup-game.json, a stray file) is named, and opens by itself
+            _ => push(&mut out.app, named_other(&e.file_name().to_string_lossy(), walk(&p, &no_skip, stop), &p)),
         }
     }
     out
+}
+
+/// An "other" item with the file or folder's own name and path, so each one is a row of its own.
+fn named_other(name: &str, u: Use, path: &Path) -> Item {
+    let mut it = item("other", u, Some(path));
+    it.name = Some(name.into());
+    it
 }
 
 fn is_part(p: &Path) -> bool { p.extension().is_some_and(|x| x.eq_ignore_ascii_case("part")) }
@@ -338,6 +374,10 @@ fn loader_items(importer: &Path, mods: Option<&Path>, game_dir: Option<&Path>, s
     push(&mut v, item("frame-dumps", d, Some(importer)));
     let log = importer.join("d3d11_log.txt");
     push(&mut v, item("log", walk(&log, &no_skip, stop), Some(&log)));
+    if let Some(m) = mods {
+        let live = m.join(crate::live::DIR);
+        push(&mut v, item("live-menu", walk(&live, &no_skip, stop), Some(&live)));
+    }
     let in_game = game_dir.is_some_and(|g| inside(importer, g) || inside(g, importer));
     if !in_game && importer.join("d3dx.ini").is_file() {
         let skip = |p: &Path| mods.is_some_and(|m| same_path(p, m)) || same_path(p, &cache) || same_path(p, &log) || dumps.iter().any(|x| same_path(p, x));
@@ -576,6 +616,7 @@ pub fn measure(db: &Shared, data_dir: &Path, opts: &Options, progress: &dyn Fn(&
             say("data", None);
             let data = data_items(data_dir, stop);
             for it in data.app { push(&mut app, it); }
+            if let Some(w) = webview_dir(data_dir) { push(&mut app, item("webview", walk(&w, &no_skip, stop), Some(&w))); }
             for (game, items) in data.games {
                 let list = per_game.entry(game).or_default();
                 for it in items { push(list, it); }
@@ -669,6 +710,172 @@ pub fn recycle_archives(data_dir: &Path, game: Option<&str>, busy: &[PathBuf]) -
     // tests delete for good, so they don't fill the Recycle Bin
     if cfg!(test) { for p in &paths { std::fs::remove_file(p)?; } } else { crate::recycle::to_recycle_bin(&paths)?; }
     Ok(bytes)
+}
+
+// ── things gachamod makes again ──
+
+/// A note in the data folder: the window's cache is deleted at the next start, before the window opens.
+const WEBVIEW_CLEAR: &str = "webview-clear.pending";
+/// Folders of the window's browser profile (WebView2's) that only hold cached copies. Saved page data (localStorage,
+/// cookies) isn't in them.
+const WEBVIEW_CACHES: [&str; 10] = [
+    "Default/Cache", "Default/Code Cache", "Default/GPUCache", "Default/DawnGraphiteCache", "Default/DawnWebGPUCache",
+    "Default/Service Worker/CacheStorage", "Default/Service Worker/ScriptCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache",
+];
+/// Pictures taken out of a .gachamod file for its preview go after this many days (they are extracted again).
+const PACK_DAYS: u64 = 30;
+/// Thumbnails go after this many days (they are made again when a mod shows).
+const THUMB_DAYS: u64 = 60;
+/// Unpacked downloads written to this recently are left alone.
+const STAGING_RECENT_SECS: u64 = 600;
+
+/// The window's browser profile folder, when it can be found: where WebView2 said it is, else the app's folder under
+/// the local app data folder.
+pub fn webview_dir(data_dir: &Path) -> Option<PathBuf> {
+    if let Some(p) = crate::render_log::webview_folder().filter(|p| p.is_dir()) { return Some(p); }
+    let p = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join(data_dir.file_name()?).join("EBWebView");
+    p.is_dir().then_some(p)
+}
+
+fn webview_cache_dirs(profile: &Path) -> Vec<PathBuf> {
+    WEBVIEW_CACHES.iter().map(|r| r.split('/').fold(profile.to_path_buf(), |p, c| p.join(c))).filter(|p| p.exists()).collect()
+}
+
+/// Ask for the window's cache to be deleted at the next start (the window holds its files open until then). The note
+/// holds the profile folder the window really uses, which the start can't find out itself before a window exists.
+/// Returns the bytes that start will free.
+fn queue_webview_clear(data_dir: &Path) -> Result<u64> {
+    let Some(w) = webview_dir(data_dir) else { return Ok(0) };
+    let bytes: u64 = webview_cache_dirs(&w).iter().map(|d| walk(d, &no_skip, Stop::now()).bytes).sum();
+    if bytes > 0 { std::fs::write(data_dir.join(WEBVIEW_CLEAR), w.to_string_lossy().as_bytes())?; }
+    Ok(bytes)
+}
+
+/// Delete the cache folders (and the debug log) of a browser profile, never the profile itself. Returns whether every
+/// one is gone now. A folder that is locked stays, so the caller can try again at the next start.
+fn clear_webview_profile(profile: &Path) -> bool {
+    for d in webview_cache_dirs(profile) { let _ = std::fs::remove_dir_all(d); }
+    let log = profile.join("chrome_debug.log");
+    if log.exists() { let _ = std::fs::remove_file(&log); }
+    webview_cache_dirs(profile).is_empty() && !log.exists()
+}
+
+/// At start, before the window opens: finish a window cache clear, and drop thumbnails and pack pictures that
+/// weren't made lately (unless "storage.trim" is "0"). The note stays when something couldn't be deleted.
+pub fn on_start(db: &Db, data_dir: &Path) {
+    let note = data_dir.join(WEBVIEW_CLEAR);
+    if note.is_file() {
+        let queued = std::fs::read_to_string(&note).ok().map(|t| PathBuf::from(t.trim())).filter(|p| !p.as_os_str().is_empty() && p.is_dir());
+        // no window exists yet, so without the queued folder the usual place is a guess
+        let profile = queued.or_else(|| webview_dir(data_dir));
+        if profile.as_deref().is_none_or(clear_webview_profile) { let _ = std::fs::remove_file(&note); }
+    }
+    if db.setting("storage.trim").ok().flatten().as_deref() != Some("0") { prune_caches(data_dir); }
+}
+
+/// Delete pack pictures older than 30 days and thumbnails older than 60 days.
+pub fn prune_caches(data_dir: &Path) {
+    let cache = data_dir.join("cache");
+    remove_older(&cache.join("packs"), PACK_DAYS);
+    remove_older(&cache.join("thumbs"), THUMB_DAYS);
+}
+
+/// Delete what is directly inside `dir` and was last written more than `days` days ago.
+fn remove_older(dir: &Path, days: u64) {
+    let cut = std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400);
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        if !e.metadata().and_then(|m| m.modified()).is_ok_and(|t| t < cut) { continue; }
+        let p = e.path();
+        let _ = if e.file_type().is_ok_and(|t| t.is_dir()) { std::fs::remove_dir_all(&p) } else { std::fs::remove_file(&p) };
+    }
+}
+
+/// Delete what is directly inside `dir` except what `keep` names. What can't be deleted (a file in use) stays.
+/// Returns the bytes freed.
+fn empty(dir: &Path, keep: &dyn Fn(&Path) -> bool) -> u64 {
+    let mut freed = 0;
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let p = e.path();
+        if keep(&p) { continue; }
+        let bytes = walk(&p, &no_skip, Stop::now()).bytes;
+        let gone = if e.file_type().is_ok_and(|t| t.is_dir()) { std::fs::remove_dir_all(&p) } else { std::fs::remove_file(&p) };
+        if gone.is_ok() { freed += bytes; }
+    }
+    freed
+}
+
+fn changed_within(p: &Path, secs: u64) -> bool {
+    let recent = std::time::SystemTime::now() - std::time::Duration::from_secs(secs);
+    walkdir::WalkDir::new(p).follow_links(false).max_depth(4).into_iter().flatten()
+        .any(|e| e.metadata().ok().and_then(|m| m.modified().ok()).is_some_and(|t| t > recent))
+}
+
+/// Profile pictures under `<data>/media` that no profile uses.
+fn unused_media(db: &Db, data_dir: &Path) -> Result<u64> {
+    let mut st = db.conn.prepare("SELECT banner FROM profiles WHERE banner IS NOT NULL")?;
+    let used: HashSet<String> = st.query_map([], |r| r.get::<_, String>(0))?.flatten().map(|b| path_key(Path::new(&b))).collect();
+    Ok(empty(&data_dir.join("media").join("banners"), &|p| used.contains(&path_key(p))))
+}
+
+/// Old logs, crash files that were already sent and rendering incident files, in `<data>/logs`. The logs being
+/// written and crash files not sent yet stay. Returns the bytes freed.
+fn clear_old_logs(data_dir: &Path) -> u64 {
+    let logs = data_dir.join("logs");
+    let name = |p: &Path| p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let top = empty(&logs, &|p| { let n = name(p); !(n == "gachamod.old.log" || n.ends_with(".sent.json")) });
+    let rendering = empty(&logs.join("rendering"), &|p| { let n = name(p); !(n == "rendering.old.log" || n.starts_with("incident-")) });
+    top + rendering
+}
+
+/// Move what No Reload Mod Manager made, kept in `<data>/trash/nrmm` after a takeover, to the Recycle Bin.
+fn recycle_nrmm_trash(data_dir: &Path) -> Result<u64> {
+    let list: Vec<PathBuf> = child_dirs(&data_dir.join("trash").join("nrmm")).into_iter().map(|(_, p)| p).collect();
+    let bytes: u64 = list.iter().map(|p| walk(p, &no_skip, Stop::now()).bytes).sum();
+    // tests delete for good, so they don't fill the Recycle Bin
+    if cfg!(test) { for p in &list { std::fs::remove_dir_all(p)?; } } else { crate::recycle::to_recycle_bin(&list)?; }
+    Ok(bytes)
+}
+
+/// The loader folder of a game, where d3d11_log.txt is.
+fn importer_of(db: &Db, game: &str) -> Option<PathBuf> {
+    let p = games::paths(db, game).ok()?;
+    p.importer_dir.map(PathBuf::from).or_else(|| p.mods_dir.as_deref().and_then(|m| Path::new(m).parent().map(Path::to_path_buf)))
+}
+
+/// Delete something gachamod can make again, or a copy that has no use. `kind` is one of:
+/// "thumbs", "cache" (pack pictures and the rest of the cache folder), "staging" (unpacked downloads, left alone
+/// while `busy` or written to in the last 10 minutes), "icons" (the quickstart shortcut icons stay), "log" (a game's d3d11_log.txt), "originals" (one
+/// game's or every game's, with `game` None), "originals-gone" (only copies of mods that no longer exist),
+/// "extension-data", "extension-data-gone", "media-unused", "logs-old" (old logs, sent crash files and rendering
+/// incidents), "setup" (what an XXMI install left in `xxmi-setup`, unless written to lately), "nrmm-trash" (moved to
+/// the Recycle Bin) and "webview" (the window's cache, deleted at the next start). Returns the bytes freed, or for
+/// "webview" the bytes the next start frees.
+pub fn clear(db: &Db, data_dir: &Path, kind: &str, game: Option<&str>, busy: bool) -> Result<u64> {
+    let cache = data_dir.join("cache");
+    match kind {
+        "thumbs" => Ok(empty(&cache.join("thumbs"), &|_| false)),
+        "cache" => Ok(empty(&cache, &|p| same_path(p, &cache.join("thumbs")))),
+        "staging" if busy => Ok(0),
+        "staging" => Ok(empty(&data_dir.join("staging"), &|p| changed_within(p, STAGING_RECENT_SECS))),
+        // the desktop quickstart shortcuts point at the quickstart-* icons, so those stay
+        "icons" => Ok(empty(&data_dir.join("icons"), &|p| p.file_name().is_some_and(|n| n.to_string_lossy().to_lowercase().starts_with("quickstart-")))),
+        "log" => {
+            let Some(log) = game.and_then(|g| importer_of(db, g)).map(|d| d.join("d3d11_log.txt")) else { return Ok(0) };
+            let bytes = std::fs::metadata(&log).map(|m| m.len()).unwrap_or(0);
+            if bytes > 0 { std::fs::remove_file(&log)?; }
+            Ok(bytes)
+        }
+        "originals" => crate::originals::clear(db, game, false),
+        "originals-gone" => crate::originals::clear(db, game, true),
+        "extension-data" => crate::extensions::clear_data(db, data_dir, false),
+        "extension-data-gone" => crate::extensions::clear_data(db, data_dir, true),
+        "media-unused" => unused_media(db, data_dir),
+        "logs-old" => Ok(clear_old_logs(data_dir)),
+        "setup" => Ok(empty(&data_dir.join("xxmi-setup"), &|p| changed_within(p, STAGING_RECENT_SECS))),
+        "nrmm-trash" => recycle_nrmm_trash(data_dir),
+        "webview" => queue_webview_clear(data_dir),
+        _ => Err(Error::Invalid(format!("Don't know how to clear \"{kind}\""))),
+    }
 }
 
 #[cfg(test)]

@@ -79,6 +79,7 @@ export function Setup() {
   const [dataSize, setDataSize] = useState<number | null>(null);
   const [pick, setPick] = useState<{ theme?: string; scheme?: Scheme }>({});
   const [latest, setLatest] = useState<Latest>({ k: "off" });
+  const skipped = useRef(false);
 
   useEffect(() => {
     api.info().then((i) => {
@@ -94,9 +95,12 @@ export function Setup() {
   // over an installed copy, look on GitHub for a newer version than this setup has, so a copy of gachamod that
   // won't open can still be updated from here
   const checkLatest = useCallback(() => {
+    skipped.current = false;
     setLatest({ k: "checking" });
-    api.latest().then((version) => setLatest({ k: "ok", version })).catch((e) => setLatest({ k: "failed", message: String(e) }));
+    api.latest().then((version) => { if (!skipped.current) setLatest({ k: "ok", version }); }).catch((e) => { if (!skipped.current) setLatest({ k: "failed", message: String(e) }); });
   }, []);
+  /** Stop waiting on GitHub: the answer, when it comes, is dropped. */
+  const skipLatest = useCallback(() => { skipped.current = true; setLatest({ k: "off" }); }, []);
   useEffect(() => {
     if (info?.installed && (info.mode === "install" || info.mode === "maintain") && !carriesNewer(info)) checkLatest();
   }, [info, checkLatest]);
@@ -195,11 +199,11 @@ export function Setup() {
           <Uninstall info={info} deleteData={deleteData} setDeleteData={setDeleteData} dataSize={dataSize}
             go={() => void run("uninstall")} repair={() => void run("repair")} cancel={info.mode === "uninstall" ? close : () => setView({ k: "start" })} />
         ) : info.mode === "install" ? (
-          <Install info={info} latest={latest} checkLatest={checkLatest} open={open} setOpen={setOpen} go={(job) => void run(job)} uninstall={() => setView({ k: "uninstall" })}
+          <Install info={info} latest={latest} checkLatest={checkLatest} skipLatest={skipLatest} open={open} setOpen={setOpen} go={(job) => void run(job)} uninstall={() => setView({ k: "uninstall" })}
             dir={dir} setDir={setDir} desktop={desktop} setDesktop={setDesktop} quickstart={quickstart} setQuickstart={setQuickstart} admin={admin} setAdmin={setAdmin}
             openAfter={openAfter} setOpenAfter={setOpenAfter} pick={pick} setPick={setPick} />
         ) : (
-          <Maintain info={info} latest={latest} checkLatest={checkLatest} update={() => void run("update")} repair={() => void run("repair")} uninstall={() => setView({ k: "uninstall" })} />
+          <Maintain info={info} latest={latest} checkLatest={checkLatest} skipLatest={skipLatest} update={() => void run("update")} repair={() => void run("repair")} uninstall={() => setView({ k: "uninstall" })} />
         )}
       </main>
     </div>
@@ -228,7 +232,7 @@ const QUICKSTART_TIP = t("A second desktop icon that starts the game you played 
 const ADMIN_TIP = t("Lets it switch skins in games that run as administrator, like Zenless Zone Zero, without you pressing F10. Windows asks for permission each time it starts.");
 
 function Install(p: {
-  info: SetupInfo; latest: Latest; checkLatest: () => void; open: boolean; setOpen: (v: boolean) => void; go: (job: Job) => void; uninstall: () => void;
+  info: SetupInfo; latest: Latest; checkLatest: () => void; skipLatest: () => void; open: boolean; setOpen: (v: boolean) => void; go: (job: Job) => void; uninstall: () => void;
   dir: string | null; setDir: (v: string | null) => void; desktop: boolean; setDesktop: (v: boolean) => void;
   quickstart: boolean; setQuickstart: (v: boolean) => void;
   admin: boolean; setAdmin: (v: boolean) => void; openAfter: boolean; setOpenAfter: (v: boolean) => void;
@@ -253,7 +257,7 @@ function Install(p: {
           <Button icon="refresh" onClick={() => p.go("repair")} title={t("Put gachamod's files, shortcuts and Windows settings back. Your mods and settings stay")}>{t("Repair")}</Button>
           <Button variant="ghost" icon="trash" onClick={p.uninstall}>{t("Uninstall")}</Button>
         </div>
-        <LatestNote latest={p.latest} retry={p.checkLatest} />
+        <LatestNote latest={p.latest} retry={p.checkLatest} skip={p.skipLatest} />
       </Panel>
     );
   }
@@ -324,8 +328,8 @@ function Install(p: {
   );
 }
 
-function Maintain({ info, latest, checkLatest, update, repair, uninstall }:
-  { info: SetupInfo; latest: Latest; checkLatest: () => void; update: () => void; repair: () => void; uninstall: () => void }) {
+function Maintain({ info, latest, checkLatest, skipLatest, update, repair, uninstall }:
+  { info: SetupInfo; latest: Latest; checkLatest: () => void; skipLatest: () => void; update: () => void; repair: () => void; uninstall: () => void }) {
   const inst = info.installed;
   if (!inst) {
     return (
@@ -362,7 +366,7 @@ function Maintain({ info, latest, checkLatest, update, repair, uninstall }:
         {newer && <UpdateButton version={newer} go={update} />}
         <Button icon="play" disabled={!inst.ok} onClick={() => void api.openApp(inst.dir).then(() => api.win("close"))}>{t("Open gachamod")}</Button>
       </div>
-      <LatestNote latest={latest} retry={checkLatest} />
+      <LatestNote latest={latest} retry={checkLatest} skip={skipLatest} />
     </Panel>
   );
 }
@@ -375,8 +379,14 @@ function UpdateButton({ version, go }: { version: string; go: () => void }) {
 }
 
 /** What the look on GitHub is doing, while it isn't done or when it failed. */
-function LatestNote({ latest, retry }: { latest: Latest; retry: () => void }) {
-  if (latest.k === "checking") return <p className="setup-note"><Spinner /> {t("Looking on GitHub for a newer version")}</p>;
+function LatestNote({ latest, retry, skip }: { latest: Latest; retry: () => void; skip: () => void }) {
+  if (latest.k === "checking") {
+    return (
+      <p className="setup-note"><Spinner /> {t("Looking on GitHub for a newer version")}{" "}
+        <Button size="sm" variant="ghost" onClick={skip} title={t("Stop looking for a newer version")}>{t("Skip")}</Button>
+      </p>
+    );
+  }
   if (latest.k === "failed") {
     return (
       <p className="setup-note" title={latest.message}>
@@ -391,6 +401,7 @@ function Uninstall({ info, deleteData, setDeleteData, dataSize, go, repair, canc
   info: SetupInfo; deleteData: boolean; setDeleteData: (v: boolean) => void; dataSize: number | null; go: () => void; repair: () => void; cancel: () => void;
 }) {
   const inst = info.installed;
+  const [problem, setProblem] = useState("");
   if (!inst) {
     return (
       <Panel>
@@ -406,7 +417,16 @@ function Uninstall({ info, deleteData, setDeleteData, dataSize, go, repair, canc
       <p className="setup-p">{t("Your mods stay in their game folders and keep working with XXMI.")}</p>
       <div className="setup-check" title={info.dataDirs.join("\n")}>
         <Checkbox checked={deleteData} onChange={setDeleteData} label={t("Also delete gachamod's data ({size})", { size })} />
-        <span className="hint">{t("Settings, profiles, downloads, backups and gachamod's trash. They go to the Recycle Bin.")}</span>
+        <span className="hint">{t("Settings, profiles, downloads, backups and gachamod's trash. They go to the Recycle Bin. The size is both folders in full: Settings, Storage in gachamod lists the pieces.")}</span>
+        <span className="hint">
+          {info.dataDirs.map((d) => (
+            <Button key={d} size="sm" variant="ghost" icon="folder" title={t("Open {path}", { path: d })}
+              onClick={() => { api.openFolder(d).then(() => setProblem(""), (e) => setProblem(String(e))); }}>
+              {/roaming/i.test(d) ? t("Show Roaming folder") : t("Show Local folder")}
+            </Button>
+          ))}
+        </span>
+        {problem && <span className="hint" role="alert">{problem}</span>}
       </div>
       <div className="setup-actions">
         <Button variant="danger" size="lg" icon="trash" onClick={go}>{t("Uninstall")}</Button>
@@ -474,7 +494,10 @@ function Done({ view, opening, background, close }: { view: Extract<View, { k: "
       <Panel>
         <Hero title={t("gachamod is uninstalled")} icon="check" sub={t("Your mods are still in their game folders.")} />
         {view.dataGone && <p className="setup-p">{t("gachamod's data is in the Recycle Bin if you want it back.")}</p>}
-        <div className="setup-actions"><Button variant="primary" autoFocus onClick={close}>{t("Close")}</Button></div>
+        <div className="setup-actions">
+          <Button variant="primary" autoFocus onClick={close}>{t("Close")}</Button>
+          {view.dataGone && <Button icon="trash" onClick={() => { api.openRecycleBin().catch(() => {}); }} title={t("Opens the Recycle Bin, where the data folders are")}>{t("Show Recycle Bin")}</Button>}
+        </div>
       </Panel>
     );
   }

@@ -2,12 +2,13 @@
 // animal has it on) mod of the day. Everything here is off until turned on, except the mod of the day button.
 // Owner: SETTINGS/AI area.
 import { useEffect, useState } from "react";
-import { library, type ModEntry } from "../../lib/api";
+import { errorText, library, type ModEntry } from "../../lib/api";
 import { chillPref, PULL_PITY, pullPref, pullsSince, pullWord, seasonPref, type SeasonPick } from "../../lib/fun";
 import { motdPref, useMotdOn } from "../../lib/motd";
-import { playedIn } from "../../lib/playtime";
+import { clearPlayed, playedAll, playedIn, playtimePref, restorePlayed } from "../../lib/playtime";
 import { go, useGame, useGames } from "../../lib/store";
 import { Button, Dialog, Panel, Segmented, Select, Toggle, Waiting } from "../../ui/kit";
+import { toast } from "../../ui/toast";
 import { SetRow } from "./parts";
 import { lang, t, tn } from "../../lib/i18n";
 import { gameName, gameShort } from "../../lib/games";
@@ -58,9 +59,41 @@ export function FunSection() {
         <SetRow id="set-year" label={t("Your {year} in mods", { year: String(new Date().getFullYear()) })} hint={t("What you installed, who you installed it for and how long you played")}>
           <Button size="sm" icon="calendar" onClick={() => setYear(true)}>{t("See your year")}</Button>
         </SetRow>
+        <PlayTimeRow />
       </div>
       {year && <YearDialog onClose={() => setYear(false)} />}
     </Panel>
+  );
+}
+
+/** Counting play time: the switch, what is kept so far and a reset (gacha-core playtime.rs does the counting). */
+function PlayTimeRow() {
+  const on = playtimePref.use();
+  const games = useGames();
+  const [kept, setKept] = useState<{ games: Record<string, number>; since: number } | null>(null);
+  const reload = () => { playedAll().then(setKept).catch(() => {}); };
+  useEffect(reload, []);
+  const secs = kept ? Object.values(kept.games).reduce((a, b) => a + b, 0) : 0;
+  const hours = (n: number) => Math.round(n / 360) / 10;
+  const list = kept ? Object.entries(kept.games).sort((a, b) => b[1] - a[1]).map(([id, n]) => `${gameShort(games.find((g) => g.id === id)) || id} ${hours(n)} h`).join(", ") : "";
+  const since = kept?.since ? new Date(kept.since).toLocaleDateString(lang, { month: "long", day: "numeric", year: "numeric" }) : "";
+  const counted = !kept ? "" : !secs ? t("Nothing counted yet") : since ? t("Counted so far: {list}, since {date}", { list, date: since }) : t("Counted so far: {list}", { list });
+  const reset = async () => {
+    try {
+      const before = await clearPlayed();
+      reload();
+      toast(t("Cleared the play time"), false, { label: t("Undo"), run: async () => { await restorePlayed(before); reload(); } });
+    } catch (e) { toast(errorText(e), true); }
+  };
+  return (
+    <SetRow id="set-playtime" label={t("Count play time")}
+      hint={`${t("Adds up the hours each game is open, even while gachamod runs in the background. It stays on this PC and is never sent. Turning it off keeps what is already counted")}${counted ? `. ${counted}` : ""}`}>
+      <span className="set-btns">
+        <Button size="sm" variant="ghost" icon="trash" disabled={!secs} onClick={() => void reset()}
+          title={secs ? t("Erases the {hours} h counted so far", { hours: hours(secs) }) : t("Nothing is counted yet")}>{t("Reset play time")}</Button>
+        <Toggle checked={on} onChange={(v) => void playtimePref.set(v, v ? t("Turned on play time counting") : t("Turned off play time counting"))} />
+      </span>
+    </SetRow>
   );
 }
 
@@ -75,6 +108,7 @@ function YearDialog({ onClose }: { onClose: () => void }) {
   const games = useGames().filter((g) => g.modsDir);
   const y = new Date().getFullYear();
   const [data, setData] = useState<Year | null>(null);
+  const counting = playtimePref.use();
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -114,7 +148,7 @@ function YearDialog({ onClose }: { onClose: () => void }) {
           {data.topCreator && <div className="year-stat"><b className="motd-name">{data.topCreator.name}</b><span>{tn(data.topCreator.n, "made {n} of your mods", "made {n} of your mods")}</span></div>}
           <div className="year-stat">
             <b>{t("{hours} h", { hours: data.hours || 0 })}</b>
-            <span>{!data.hours ? t("played so far. gachamod counts it from when a game starts until it closes")
+            <span>{!data.hours ? (counting ? t("played so far. gachamod counts it from when a game starts until it closes") : t("played so far. Play time counting is turned off"))
               : data.topGame && games.length > 1
                 ? (sinceThisYear ? t("played, most of it in {game}. Counted since {date}", { game: data.topGame.name, date: sinceThisYear }) : t("played, most of it in {game}", { game: data.topGame.name }))
                 : (sinceThisYear ? t("played. Counted since {date}", { date: sinceThisYear }) : t("played"))}</span>

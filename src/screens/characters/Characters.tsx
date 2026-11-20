@@ -21,7 +21,7 @@ import { moveInGrid } from "../library/gridNav";
 import { ModDrawerHost } from "../library/ModDrawer";
 import { characterMenu, noteLibrary } from "../library/menus";
 import { CharacterPage } from "./CharacterPage";
-import { byUid, dismissForeign, forgetUnrecognised, importForeign, importOwned, looksLikeExport, saveOwned, savedUid, toggleOwned, useForeign, useOwned, useUnrecognised,
+import { byUid, dismissForeign, forgetUid, forgetUnrecognised, importForeign, importOwned, looksLikeExport, saveOwned, savedUid, setOwned, toggleOwned, useForeign, useOwned, useUnrecognised,
   type OwnedSource } from "./owned";
 import { rosterOrder, rosterViewPref, useRoster, type RosterChar, type RosterSort } from "./roster";
 import "../library/library.css";
@@ -197,12 +197,13 @@ function ImportOwned({ game, primary }: { game: GameId; primary?: boolean }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [text, setText] = useState("");
   const [uid, setUid] = useState("");
+  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState<"file" | "uid" | "text" | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const noun = charNoun(game).toLowerCase();
   const owned = useOwned(game);
   const enka = byUid(game);
-  useEffect(() => { if (anchor && enka) void savedUid(game).then((v) => setUid((u) => u || v)); }, [anchor, enka, game]);
+  useEffect(() => { if (anchor && enka) void savedUid(game).then((v) => { setSaved(!!v); setUid((u) => u || v); }); }, [anchor, enka, game]);
   const run = async (from: OwnedSource) => {
     setBusy("uid" in from ? "uid" : "text" in from ? "text" : "file");
     const r = await importOwned(game, from);
@@ -239,6 +240,8 @@ function ImportOwned({ game, primary }: { game: GameId; primary?: boolean }) {
                 <Button busy={busy === "uid"} disabled={!uidOk || !!busy} onClick={() => void run({ uid })}
                   title={t("Reads your public profile on Enka.Network (no sign-in). Enter")}>{t("Read profile")}</Button>
                 <span className="hint">{t("Marks the {noun} on your in-game showcase, so put the ones you have there first.", { noun })}</span>
+                {saved && <Button size="sm" variant="ghost" onClick={() => { void forgetUid(game); setSaved(false); setUid(""); }}
+                  title={t("gachamod keeps the UID you read last to fill this field. This removes it")}>{t("Forget my UID")}</Button>}
               </div>
             )}
             <TextField multiline rows={4} value={text} onChange={setText} placeholder={t("Or paste names, one per line, or the text of an export")} />
@@ -248,6 +251,10 @@ function ImportOwned({ game, primary }: { game: GameId; primary?: boolean }) {
                 title={owned?.size ? t("Saves the {count} you own as a JSON file. Import it here to get them back, on this PC or another", { count: charCount(game, owned.size) })
                   : t("Mark some {noun} as owned first", { noun })}>
                 {t("Save my list as a file")}
+              </Button>
+              <Button size="sm" variant="ghost" icon="x" disabled={!owned?.size} onClick={() => void setOwned(game, [...(owned?.values() ?? [])], false, true)}
+                title={owned?.size ? t("Marks all {count} as not owned. Undo brings them back", { count: charCount(game, owned.size) }) : t("Mark some {noun} as owned first", { noun })}>
+                {t("Clear owned list")}
               </Button>
             </div>
           </div>

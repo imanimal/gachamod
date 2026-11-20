@@ -239,7 +239,6 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
   rules. UI: "Make sub-mod of" / "Unlink from X" in the mod menu, a "Sub-mod" tag on the card that opens the parent,
   and in the details a "Sub-mod of X" line or the list of its sub-mods with switches.
 - update_meta writes the sidecar and the row. Changing `character` does not move the folder.
-- move_to_group moves the folder (and saved vars), creating the group folder; removes the old group folder if empty.
 - remove: move the folder to `<data>/trash/<game>/<trash id>/`; `trash` row; restore puts it back at its original
   relative path (or with " (2)"). What happens after that is in "Trash and archive" below.
 - characters_sync: replace the game's `characters` rows (keep order as `sort`). characters(): every character row
@@ -266,7 +265,7 @@ UI:
   bulk bar (Turn on, Turn off, Export, Remove). A mod's menu and its details set its problems aside (`lib/holds.ts`,
   setting "problems.held"): "Ignore problems" hides every warning (red marks, the Problems tab, Tools, the nav badge)
   and ignores its conflicts on both sides until "Show problems again"; "Wait for an update" hides the game update
-  warning until the mod's file, version or install time changes, and its card says "Waiting for update". Tools >
+  warning until the mod's file, version or install time changes, and its card says "Waiting for update". A mod set to "Ignore problems" shows an "Ignored" tag in the conflict spot of its card, which opens its details. Tools >
   Fixes lists both under Muted, and its "Turn off and mute" waits for an update. "Rescan" button and an automatic scan when the screen opens if the
   last scan is over 30 seconds old; while Mods folders are watched, only the session's first visit scans. Empty state explains where mods come from (Browse, or drop an archive).
 - Mod drawer (`Drawer` from the kit) on card click: big preview, name (editable inline), character picker (combobox
@@ -281,7 +280,8 @@ UI:
   Looking at the tab marks everything on the Tools badge as seen (`markProblemsSeen` in modtools/toolsBadge.ts), and
   the tab shows that badge's count in red: new broken things only, never warnings. `screens/library/Archive.tsx` lists removed mods from `library.archive`. A
   mod whose files are still on the PC says "Files on PC" with Put back and Delete; once "trash.days" passes it says
-  "Record only" (name, settings, GameBanana link, no files) with Download again and Forget. The page says plainly
+  "Record only" (name, settings, GameBanana link, no files) with Download again and Forget. A mod with files still here
+  has "Open folder" in its menu (and its size opens the same folder). The page says plainly
   that the files are what goes after the set days, and the record stays.
 - Update check: on open (and every 30 min while open) call `checkUpdates(mods)` from lib/gamebanana.ts (ONLINE
   provides it; until then it returns []), then `library.markUpdates`. An Update badge's button queues the newest file
@@ -310,7 +310,8 @@ UI:
   colour, banner, hotkey), save the mods on now into a profile, delete (snapshot, delete, Undo restores it whole).
   `menus.ts` registers the "profile" right-click menu (switch, edit, rename, duplicate, save the mods on now into it,
   hotkey, export, delete) and the search's profile commands ("Switch to Story mode", "New profile with no mods";
-  "loadout" and "preset" find them). `requestEdit(id, "all" | "rename" | "hotkey")` lets a menu anywhere open the
+  "loadout" and "preset" find them). While "hotkeys.enabled" is "0" (`useHotkeysOn` in `profiles/data.ts`) the card's key reads
+  "(off)" and opens Settings, Hotkeys; the editor's hint and the menu's tip say the key does nothing. `requestEdit(id, "all" | "rename" | "hotkey")` lets a menu anywhere open the
   editor: it goes to Profiles, which answers it. `ProfileIcon`'s `profileFace` picks the fallback picture (emoji,
   character portrait, the layers glyph for "Default", initials) for the cards and the sidebar's mini thumbnails.
 - Demo (`lib/demo/library.ts`): seed ~24 believable mods for "zzz" (Ellen Joe, Miyabi, Jane Doe, Zhu Yuan, Burnice,
@@ -539,7 +540,8 @@ manager made itself (GIMM, HoyoModManagerGo) are already real folders; their lib
 
 The result has the new mod ids, the profile names, notes and `undo`. `undo` deletes the profiles, puts details and
 on/off states back, sends copies to the app's trash, and moves moved folders back where they came from with a link in
-their place again.
+their place again. Bring in also records the undo in the Undo history (Ctrl+Z), so it works after the message closes.
+Moving from IMM or NRMM has no undo; its message has a button that opens the Mods folder.
 
 What is read, per manager:
 - JASM and JASM+: `%LOCALAPPDATA%\JASM\ApplicationData_<Genshin|Honkai|WuWa|ZZZ|Endfield>` (old Genshin:
@@ -612,7 +614,8 @@ UI:
 - `ui/KeyEditor.tsx` (in the mod drawer, above the options): the keys as rows (what it does, from the GameBanana
   description when one of its keys matches, else the section name), each key a chip: click, Enter or A, then press
   the new keys, mouse button or controller buttons (Esc or B alone cancels). A toggle per key turns it off; "Toggles
-  only while on screen" and "Put back original files" act on the whole mod. Each change records Undo with its backup.
+  only while on screen" and "Put back original files" act on the whole mod. Each change records Undo with its backup. The
+  Mods menu and bulk bar also have "Toggles only while on screen" for the selected mods with toggles (`keysOnlyOnScreen`).
 - `screens/modtools/ModInsides.tsx`: sections "Options" (each persist var as a Segmented or Select over its values, shown by `names`
   when given ("Raiden Kimono", not "2"), current value selected; a merged mod adds "Split into separate mods" with
   Undo, saying what copying shared files costs, or the `blocked` reason,
@@ -679,7 +682,7 @@ A queue row always says what it is doing (`QueueItem.progress`, filled through `
 move to another server and why, checking the file, each archive being unpacked with its count and the size out so
 far, and for a bundle the list of mods found with a tick for each one in place. A download with no new bytes for ten
 seconds says so. Finished rows come in batches (`downloads/Batches.tsx`): a download added before the last one of a
-batch finished, or within ten minutes of it, joins that batch. A batch has Turn all on, Turn all off and Clear. A row
+batch finished, or within ten minutes of it, joins that batch. A batch has Turn all on, Turn all off and Clear. Clearing a failed or cancelled row also deletes the unfinished download file (never a file picked on this PC), and the tips on the Clear buttons say so. A row
 that installed one mod has its switch; a row with several shows "3 of 18 on" and opens a list with a switch per mod,
 Turn all on and Turn all off (open by itself for a quarter hour after it finishes). All of these go through
 `toggleMods`, so the one-skin rule and Undo work as in Mods;
@@ -749,7 +752,7 @@ days), and Settings, Fun extras gets a switch to hide it (which also stops the r
 - Sort, type, High quality, Following and Hide installed are remembered per game in localStorage
   `gm.browse.filters.<game>` (`useFilters`, `setFilters`). The character, category and search last only while the
   browser stays open: a browser that mounts fresh drops them (`beginVisit`) unless something opened it to show them
-  (`openWithFilters`: a category link, See all, Expand). A saved filter set keeps them on purpose. Sorts: For you, New, Updated, Popular this week, Popular this month, Most downloaded, Most
+  (`openWithFilters`: a category link, See all, Expand). Mods hidden with Not interested (`browse.hidden`, names in `browse.hidden.names`) are listed under Filters, View hidden mods, with Show again for one or all. Home strips and creator pages say how many mods they left out (hidden, blocked creator, for adults), and a creator page can show the hidden ones. A saved filter set keeps them on purpose. Sorts: For you, New, Updated, Popular this week, Popular this month, Most downloaded, Most
   liked, Most viewed, and Relevance while searching: a new search switches to it (For you would only search its own
   picks) and clearing the search puts the earlier sort back. Week and month are worked out here from the newest pages (up to 10) ranked by likes + views/100 +
   comments/2, because Game/TopSubs only gives three. Picking a character clears the category and the other way
@@ -859,12 +862,17 @@ Rust:
   (`-shutdown`, 30 s), so it restarts once and the toast says so; XXMI then finds the options equal and only sends its
   `-applaunch`. If XXMI restarts Steam anyway, `steam::watch_restart` sends `-applaunch` once after that Steam signs
   in, while XXMI still runs and Steam's `Apps\<app>` Running is 0. Every wait carries on with the launch when it runs
-  out. Genshin Impact's FPS limit (`unlock_fps_value`) never goes above `GI_FPS_CAP` (120; above it the game
-  disconnects the player with "Illegal tool detected"): the form shows and saves at most 120, and a start through XXMI
-  lowers a higher value in XXMI's config first and says so in its toast. The same kick at 120 or lower usually means
+  out. The switch "Restart Steam when Play needs it" (ZZZ's Launch options, `launch.steamRestart`, on by default)
+  covers the XXMI Game Launch switch and the Steam restart: off, Play changes neither (a closed Steam still starts), and
+  a start that needed them says so in its toast with a button to the switch. Genshin Impact's FPS limit
+  (`unlock_fps_value`) never goes above `GI_FPS_CAP` (120; above it the game disconnects the player with "Illegal
+  tool detected"): the form shows and saves at most 120, and a start through XXMI lowers a higher value in XXMI's config
+  first and says so in its toast. "Keep the FPS limit at 120 or lower" (`gi.fpsCap`, on by default) turns all of that
+  off. The same kick at 120 or lower usually means
   the anti-cheat flags XXMI's d3d11.dll. Settings › Launch for Genshin Impact links the community guide
   (gamebanana.com/tuts/19132: an older GIMI d3d11.dll kept in place with XXMI's Unsafe Mode) with a ban warning, and the global search finds it under "Illegal tool detected".
-  Before a start with mods through XXMI, Play warns (home/KickWarning.tsx: Cancel, I did the fix, Play anyway) unless
+  Before a start with mods through XXMI, Play warns (home/KickWarning.tsx: Cancel, Stop warning, I did the fix, Play
+  anyway; "Stop warning" and the Launch options switch "Warn before starting with mods" save `gi.kickWarn` = 0) unless
   `launch::kick_check` finds the fix: GIMI's d3d11.dll differs from XXMI's own `Resources\Packages\XXMI\d3d11.dll`, or
   it equals the SHA-256 saved in `gi.kickFixDll` when the player said they did the fix (the Launch options panel's "I did this
   fix" switch, or the warning's button). An XXMI update that puts its own DLL back brings the warning back. gachamod
@@ -988,8 +996,15 @@ UI:
 - Logs, crash reports, usage counts and feedback (`logs.rs`, `telemetry.rs`, `commands/report.rs`,
   `lib/telemetry.ts`; docs/telemetry.md has every event). The log and crash files live in `<data folder>/logs`.
   Usage counts and crash reports go to PostHog when they're on (both are on by default, with switches in Settings,
-  Feedback, privacy and logs, and a line in onboarding). Feedback is sent from a form opened from Settings, the title bar's
+  Feedback, privacy and logs, and a line in onboarding). The panel shows the install id the counts carry and a "Reset id" button that clears it, so the next count gets a new one. Feedback is sent from a form opened from Settings, the title bar's
   Help menu, the search ("Send feedback") and a screen that hit an error.
+- Online lookups (Settings, Feedback and privacy; `screens/settings/OnlineLookups.tsx`): the requests gachamod makes by itself apart from
+  GameBanana's mod lists, each with a switch that is on by default and says who is asked and what is sent. Sharp icons and
+  portraits (`online.pictures`: App Store icons in `ui/GameBadge.tsx`, game wiki portraits in `lib/portraits.ts`; saved
+  answers still show when off), Refresh character lists (`online.characters`, `lib/warmup.ts`), Check extension lists when
+  Extensions opens (`online.extensions`, `lib/extensions.ts`; also under Settings, Extensions; off, only "Check the
+  lists again" fetches) and Mod of the day (`fun.motd`, shared with Fun extras). Saved answers live in localStorage
+  (`gm.appicon.<id>`, `gm.portraits.<game>`, `gm.charsync.<game>`, `gm.motd`) and the db cache (`ext-index:<source>`).
 - Running as administrator: Settings, Games has "Restart as administrator" and an "Always" switch (Windows'
   RUNASADMIN flag for gachamod.exe under HKCU AppCompatFlags\Layers, which the installer also sets when the player
   says yes; `src-tauri/windows/hooks.nsh`). The F10 note for a game that runs as administrator says why, and its toast
@@ -1021,7 +1036,7 @@ UI:
   no window on screen.
   - Closing the window (title bar, Alt+F4) goes through `background::close`: setting `app.background` "1" keeps
     running, "0" quits. Unset, the first close asks (Keep running or Quit, saved; Esc keeps the window and asks next
-    time). If the page doesn't take up the question within 2 s, gachamod quits as before. Close gachamod when the game
+    time; the dialog's Open setting button goes to the Background panel without choosing). If the page doesn't take up the question within 2 s, gachamod quits as before. Close gachamod when the game
     starts (`app_close` with `ask` false) never asks and counts unset as keep running.
   - Quickstart: a start (or a second start, or the tray's Quickstart) that only carries play links makes the main
     window hidden so its page can run Play, then destroys it 5 s after the game is up. A second start with one while
@@ -1091,7 +1106,9 @@ UI:
   - Repair runs the installer inside setup when it's at least the installed version, else downloads the newest
     `latest.json` installer and checks its signature with the updater key. Uninstall runs `uninstall.exe /S _?=<dir>`,
     then removes setup.exe and the empty folder; "Also delete gachamod's data" moves the data folders to the Recycle
-    Bin and clears HKCU\Software\gachamod.
+    Bin and clears HKCU\Software\gachamod. The uninstall page has a Show folder button per data folder (`open_folder`,
+    only the two data folders open), and the done page a Show Recycle Bin button. The look for a newer version on
+    GitHub has a Skip button.
   - `--apply` (an update from gachamod, above) opens straight into its steps: check the download, close gachamod,
     update gachamod. If it fails: Try again with the same file, the plain installer, or Open gachamod (the old copy).
     Without WebView2 it runs the installer passive, as the updater would.
@@ -1220,7 +1237,8 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
   storage and `app_relaunch` restarts. At the next start, before the database opens, `reset::finish` deletes what
   can be fetched again (downloads, staging, caches, fixers, the GameBanana sign-in), keeps logs and backups, and
   moves everything else (the database, trash, extensions) to `backups/before-reset-<time>/`. Mods folders, games
-  and XXMI Launcher are outside the data folder.
+  and XXMI Launcher are outside the data folder. The confirm says logs and earlier backups stay, and has Show data
+  folder and View backups (Settings, Storage, Backups) buttons.
 - "Turning mods on and reloading the game" also has "Shuffle outfits" (`screens/library/shuffle.ts`, pref "mods.shuffle": off, each Play, once a day at
   the first Play): every character with two or more mods gets one of them on at random and the others off, as one
   change with Undo. Mods hidden as for adults stay out. Also a dice button on Mods and "Shuffle outfits" in search.
@@ -1241,6 +1259,8 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
     times; it pauses while idle and stays still with Theme background motion or Interface animations off. Console: `season <name|off|setting>`.
   - Your year in mods: a dialog with mods installed this year, the character with the most mods, the creator of
     the most of them and hours played (`lib/playtime.ts` counts from game start to close, "stats.played").
+    A "Count play time" row beside it turns the counting off ("stats.playtime", on by default), says what is kept so far and
+    resets it with an Undo toast.
   - Mod of the day (`lib/motd.ts`): see Browse.
 - The Konami code (arrows, B, A; keyboard or controller) reveals a hidden theme, Clay ("fun.hiddenTheme"), and
   offers to use it. Hidden themes (`ThemeInfo.hidden`) stay out of Appearance until found. On the keyboard, B and A
@@ -1267,6 +1287,11 @@ panels too (see Library). The panel ids still work as routes. A panel that rende
 nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
 switches are in Settings › Launch (see Settings), and the search above the page list finds them from Tools too.
 
+Tools > Fixes lists the fixer programs downloaded for the game (`fixers_list`: tool, file, size, age) with a button
+that opens each folder and one that deletes it (`fixers_remove`; it is downloaded again when a mod needs it). Tools >
+Files and logs has Open buttons for the shader cache and the frame dumps' folder, and after a wipe of the saved mod
+options it shows Show copy and Put back for `d3dx_user.ini.wiped.bak`.
+
 The "ingame" panel sets up which characters switch skins without a reload and how the skin menu opens while playing
 (docs/ingame.md, section 11): gachamod's own window over the game (`src-tauri/src/overlay.rs`, `screens/ingame/Overlay.tsx`,
 window label `overlay`), or a plainer menu the game draws itself (`crates/gacha-core/src/live/menu.rs`), which is also
@@ -1289,7 +1314,10 @@ panel (`KeyClashNote`). "Use F9" moves gachamod's key in every game that used th
 question. For Medal the note also has "Change Medal's key": Medal gets the free key and gachamod keeps its own. That
 writes one value in Medal's database, only while Medal is closed, after a copy of the database
 (`medal-<user id>.db.gachamod.bak` next to it). No other app's settings are written. The setting `otherKeys.ask` =
-`0` turns the toasts off.
+`0` turns the toasts off. Under the key that opens the menu (`KeptKeys`, in Tools and Settings › Hotkeys) every kept
+choice is listed with "Ask again" (`otherkeys_kept`), and the copy of Medal's settings is listed with its folder, size
+and "Show backup" (`otherkeys_copies`). The toast after changing Medal's key has the same button. In the menu over the
+game the tags in a mod's details are buttons that fill the search box, which also matches tags.
 
 ### Storage
 
@@ -1304,9 +1332,30 @@ current.
 What it counts, per game: mods on and off (from the scan), the trash (`<data>/trash/<game>`), kept archives and
 unfinished downloads (`<data>/downloads/<game>`), backups of mod files (by their manifest's game), fix tools, the
 loader folder's ShaderCache, FrameAnalysis dumps, d3d11_log.txt and the rest of it without Mods (left out when the
-loader sits in the game folder), and mods another manager keeps outside Mods (`migrate::detect`). Shared by all
-games: the database, thumbnails, other caches, logs, unpacked downloads, extensions, removed mods' pictures, settings
-and database backups, anything else in the data folder, and XXMI Launcher without the importer and Mods folders.
+loader sits in the game folder), the "gachamod live" folder of menu pictures in Mods (`live-menu`), the author's copies of
+changed mod files (`originals`, counted with backups), and mods another manager keeps outside Mods (`migrate::detect`).
+Shared by all games: the database, thumbnails, other caches, logs, unpacked downloads, extensions and their saved data,
+removed mods' pictures, profile pictures (`media`), game icons, settings and database backups, the removed extensions
+(`extensions-trash`), the AI folder (`ai`), the GameBanana sign-in (`login`: `gb-login` and `gb-session.bin`), XXMI
+install downloads (`setup`), what No Reload Mod Manager left (`nrmm-trash`, `trash/nrmm`), and each other file or folder
+in the data folder as its own named `other` row that opens by itself, XXMI Launcher without the importer and Mods folders, the window's browser profile (`webview`, the
+`EBWebView` folder under the local app data folder), and one row the page adds itself, "Saved online data": the
+caches the window keeps in localStorage (`lib/cacheKeys.ts` lists the keys; Clear removes only those).
+
+What gachamod can make again has a Clear (`storage_clear`, gacha-core `storage::clear`): thumbnails, other caches (pack
+pictures), unpacked downloads (not while a download is in the queue, and not files written in the last 10 minutes), game
+icons, the 3DMigoto log (disabled while the game runs), old logs (`logs-old`: the old log, crash files already sent
+and rendering incidents; the logs in use and unsent crash files stay), what an XXMI install left in `xxmi-setup`
+(`setup`), what No Reload Mod Manager left (`nrmm-trash`, to the Recycle Bin), and the window cache. That one is a note
+(`<data>/webview-clear.pending`) that `storage::on_start` carries out at the next start, before the window opens, since
+the window holds its files open; the toast offers Restart. It deletes only cache folders of the profile, never saved page
+data. Copies that guard against data loss ask first: "Clear all" for the author's copies (Put back original files can't
+restore those mods afterwards) and for extension data. "Clear unused" deletes only the copies of mods that are in neither
+the library nor the trash, the saved data of extensions that aren't installed, and profile pictures no profile uses.
+A mod's original copies also go when its record is forgotten for good (`originals::forget`, from
+`forget_if_unused`), and an extension's saved data goes once the extension and its trash copy are gone.
+The setting `storage.trim` (default on, a row on the Storage page) deletes thumbnails not made in the last 60 days and
+pack pictures older than 30 days at start (`storage::prune_caches`); both are made again when needed.
 
 - Panel "disk": the total, a game picker, and a breakdown by category (rows open to their items, each with Show in
   Explorer and its cleanup), by game (a row picks that game) or by character (a row opens Mods on that character).
@@ -1325,15 +1374,16 @@ and database backups, anything else in the data folder, and XXMI Launcher withou
   and a button to the archive setting while archives are kept), trash past "trash.days" over 50 MB (Delete now, as
   the setting says), a shader cache over 1 GB, frame dumps over 200 MB, a 3DMigoto log over 100 MB (Log settings),
   another manager's mods over 500 MB (Move them in). Each hides with its x and comes back only once its size has
-  doubled (localStorage "gm.storage.tips").
+  doubled (localStorage "gm.storage.tips"). "Show n hidden suggestions" brings the hidden ones back. Every row has a
+  tip and a button to where it is managed (Extensions, Fixes, Log files, GameBanana, AI helper, XXMI Launcher).
 - Archives go to the Recycle Bin (`storage_recycle_archives`), never the ones a download in the queue uses, .part
   files, or files written in the last two minutes. The shader cache and frame dumps use the `dev_` commands.
 - Settings, Mods, Trash and removed mods has a "View storage" button here, and the trash rows here open Mods, Trash
   and the trash setting.
 
 Left out on purpose: "unused for a long time" (the library doesn't record when a mod was last on, and a guess from
-the install date would be wrong), deleting backups (they are what Undo restores), cleaning unpacked downloads (an
-install may be using them), and emptying the whole trash from here (Mods, Trash does that with each mod in view).
+the install date would be wrong), deleting backups from the cleanup suggestions (they are what Undo restores; the
+Backups panel moves them to the Recycle Bin one by one), and emptying the whole trash from here (Mods, Trash does that with each mod in view).
 
 ### The AI helper
 

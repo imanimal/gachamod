@@ -65,7 +65,6 @@ export const queue = {
   cancel: (id: number) => call<QueueSnapshot>("queue_cancel", { id }),
   retry: (id: number) => call<QueueSnapshot>("queue_retry", { id }),
   remove: (id: number) => call<QueueSnapshot>("queue_remove", { id }),
-  clearFinished: () => call<QueueSnapshot>("queue_clear_finished"),
   choose: (id: number, keys: string[]) => call<QueueSnapshot>("queue_choose", { id, keys }),
   onChange: (cb: (s: QueueSnapshot) => void) => listen<QueueSnapshot>(EVENTS.queue, cb),
   /** The running items that moved since the last snapshot or progress event. */

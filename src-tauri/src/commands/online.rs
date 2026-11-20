@@ -97,25 +97,6 @@ pub async fn queue_remove(app: tauri::AppHandle, st: State<'_, AppState>, id: u6
     Ok(done(&app, &st))
 }
 
-#[tauri::command]
-pub async fn queue_clear_finished(app: tauri::AppHandle, st: State<'_, AppState>) -> Result<QueueSnapshot> {
-    let keep = keep_archives(&st.db);
-    let gone = {
-        let mut q = lk(&st.queue);
-        let gone = q.clear_finished();
-        // failed items leave an archive or a .part with no row pointing at it (unless the file is queued again)
-        for i in gone.iter().filter(|i| matches!(i.state, ItemState::Failed { .. } | ItemState::Cancelled)) {
-            if !shares_file(&q, &st.data_dir, i) { discard_files(&st.data_dir, i, keep); }
-        }
-        gone
-    };
-    {
-        let db = lk(&st.db);
-        for i in &gone { let _ = queue::delete_item(&db, i.id); }
-    }
-    Ok(done(&app, &st))
-}
-
 /// Answer a NeedsChoice item with the candidate keys to install (empty cancels it).
 #[tauri::command]
 pub async fn queue_choose(app: tauri::AppHandle, st: State<'_, AppState>, id: u64, keys: Vec<String>) -> Result<QueueSnapshot> {

@@ -75,12 +75,6 @@ pub async fn mod_update_meta(st: State<'_, AppState>, game: String, id: String, 
 }
 
 #[tauri::command]
-pub async fn mod_move(st: State<'_, AppState>, game: String, id: String, group: Option<String>) -> Result<ModEntry> {
-    let db = st.db.clone();
-    blocking(move || library::move_to_group(&*lock(&db)?, &game, &id, group.as_deref())).await
-}
-
-#[tauri::command]
 pub async fn mods_remove(st: State<'_, AppState>, game: String, ids: Vec<String>) -> Result<ModChange> {
     let db = st.db.clone();
     let data = st.data_dir.clone();

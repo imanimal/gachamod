@@ -7,7 +7,7 @@ import { registerCommands, type Command } from "../../lib/search";
 import { currentGame, currentRoute, go } from "../../lib/store";
 import { menuFor, registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { deleteProfile, duplicateProfile, exportProfile, quickNewProfile, requestEdit, saveInto, startNewProfile, switchTo } from "./actions";
-import { knownProfiles, loadProfiles, switchingNow } from "./data";
+import { hotkeysOn, knownProfiles, loadProfiles, switchingNow } from "./data";
 
 registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[] => {
   const list = knownProfiles(game);
@@ -30,7 +30,7 @@ registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[
     { label: t("Duplicate"), icon: "copy", onClick: () => void duplicateProfile(game, p) },
     { label: t("Replace with the mods on now"), icon: "pin", disabled: p.active,
       title: p.active ? t("It's on now, so it follows your changes already") : t("Replaces {name}'s mods with the ones on now", { name: p.name }), onClick: () => void saveInto(game, p) },
-    { label: p.hotkey ? t("Hotkey: {key}", { key: p.hotkey }) : t("Set a hotkey"), icon: "keyboard", title: t("A key combo that switches to it while the game runs, like Ctrl+Alt+1"),
+    { label: p.hotkey ? t("Hotkey: {key}", { key: p.hotkey }) : t("Set a hotkey"), icon: "keyboard", title: hotkeysOn() ? t("A key combo that switches to it while the game runs, like Ctrl+Alt+1") : t("Profile hotkeys are turned off in Settings, so the key does nothing until you turn them on"),
       onClick: () => requestEdit(p.id, "hotkey") },
     { label: t("Share as .gachamod"), icon: "share", title: t("A small file with links to the mods and your settings, to send to a friend or another PC"), onClick: () => exportProfile(game, p) },
     "-",

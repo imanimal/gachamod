@@ -53,6 +53,8 @@ pub struct ArchiveEntry {
     pub removed_at: i64,
     /// When the files leave the trash; None in the archive.
     pub files_until: Option<i64>,
+    /// The folder the files are in while they are in the trash; None in the archive.
+    pub path: Option<String>,
     pub reason: String,
     pub has_options: bool,
 }
@@ -116,6 +118,7 @@ fn forget_if_unused(db: &Db, mod_id: &str) -> Result<()> {
         db.conn.execute("DELETE FROM mod_vars WHERE mod_id = ?1", [mod_id])?;
         db.conn.execute("DELETE FROM profile_mods WHERE mod_id = ?1", [mod_id])?;
         db.conn.execute("DELETE FROM profile_vars WHERE mod_id = ?1", [mod_id])?;
+        crate::originals::forget(db, mod_id);
     }
     Ok(())
 }
@@ -247,6 +250,7 @@ pub fn archive_list(db: &Db, game: Option<&str>) -> Result<Vec<ArchiveEntry>> {
             character: e.character.clone(), source: e.source.clone(), preview: trashed_preview(e, &r.kept), nsfw: e.nsfw, tags: e.tags.clone(),
             favorite: e.favorite, size_bytes: r.size, removed_at: r.removed_at, files_until: Some(r.removed_at + days * 86400), reason: r.reason.clone(),
             has_options: has_options(db, &r.game, &r.mod_id),
+            path: Some(r.kept.to_string_lossy().into_owned()),
         });
     }
     let rows: Vec<(i64, String, String, String, String, i64, Option<String>, String)> = {
@@ -262,7 +266,7 @@ pub fn archive_list(db: &Db, game: Option<&str>) -> Result<Vec<ArchiveEntry>> {
         out.push(ArchiveEntry {
             key: format!("a{id}"), trash_id: None, archive_id: Some(id), has_options: has_options(db, &g, &mod_id), game: g, mod_id, name,
             character: e.character, source: e.source, preview, nsfw: e.nsfw, tags: e.tags, favorite: e.favorite, size_bytes: e.size_bytes,
-            removed_at, files_until: None, reason,
+            removed_at, files_until: None, reason, path: None,
         });
     }
     out.sort_by(|a, b| b.removed_at.cmp(&a.removed_at).then_with(|| a.key.cmp(&b.key)));

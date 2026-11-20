@@ -4,11 +4,13 @@
 // the wiki name someone differently ("Yanagi Tsukishiro" is "Tsukishiro Yanagi" there, "Soldier 0 Anby" is "Soldier 0 -
 // Anby"), the wiki's search finds the page, kept only when its title has every word of the name. Lookups go in
 // batches of up to 50 names per request, answers are kept 30 days (misses 3 days), so new characters and new
-// pictures arrive on their own, and GameBanana's icon is the fallback. A picture the user picked for a character (lib/prefs.ts portraitPref) beats both. Owner: skeleton.
+// pictures arrive on their own, and GameBanana's icon is the fallback. A picture the user picked for a character (lib/prefs.ts portraitPref) beats both.
+// Settings, Online lookups can turn the lookups off (onlinePicturesPref): the saved answers (localStorage keys
+// gm.portraits.<game>) still show and nothing is asked. Owner: skeleton.
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import type { GameId } from "./api";
 import { gameMeta } from "./games";
-import { portraitKey, portraitPref } from "./prefs";
+import { onlinePicturesPref, portraitKey, portraitPref } from "./prefs";
 
 export interface PortraitHit {
   src: string;
@@ -58,7 +60,7 @@ export function cachedPortrait(game: GameId, name: string): PortraitHit | null |
 /** Ask for portraits; they arrive through usePortrait / subscribe. */
 export function requestPortraits(game: GameId, names: string[]) {
   const meta = gameMeta(game);
-  if (!meta.wiki) return;
+  if (!meta.wiki || !onlinePicturesPref.get()) return;
   const t = table(game);
   let set = pending.get(game);
   for (const n of names) {
@@ -75,11 +77,16 @@ function schedule() {
   if (timer) return;
   timer = window.setTimeout(() => {
     timer = 0;
-    for (const [game, names] of pending) {
-      pending.delete(game);
-      const list = [...names];
-      for (let i = 0; i < list.length; i += 25) void lookup(game, list.slice(i, i + 25));
-    }
+    // the saved switch is read first, so a lookup asked for at start-up can't slip past it
+    void onlinePicturesPref.ready.then(() => {
+      const on = onlinePicturesPref.get();
+      for (const [game, names] of pending) {
+        pending.delete(game);
+        if (!on) continue;
+        const list = [...names];
+        for (let i = 0; i < list.length; i += 25) void lookup(game, list.slice(i, i + 25));
+      }
+    });
   }, 40);
 }
 
@@ -256,7 +263,8 @@ function framing(hit: PortraitHit): CSSProperties | undefined {
 export function usePortrait(game: GameId | null | undefined, name: string | null | undefined, fallback?: string | null): { src: string | null; style?: CSSProperties; sharp: boolean } {
   usePortraitsVersion();
   const custom = portraitPref.use();
-  useEffect(() => { if (game && name) requestPortraits(game, [name]); }, [game, name]);
+  const online = onlinePicturesPref.use();
+  useEffect(() => { if (game && name && online) requestPortraits(game, [name]); }, [game, name, online]);
   if (!game || !name) return { src: fallback ?? null, sharp: false };
   const mine = custom[portraitKey(game, name)];
   if (mine) return { src: mine, sharp: true };
@@ -269,7 +277,8 @@ export function usePortrait(game: GameId | null | undefined, name: string | null
 export function usePortraitBatch(game: GameId | null | undefined, names: string[]) {
   const key = names.join("|");
   const [, set] = useState(0);
-  useEffect(() => { if (game && names.length) requestPortraits(game, names); set((n) => n + 1); }, [game, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const online = onlinePicturesPref.use();
+  useEffect(() => { if (game && names.length && online) requestPortraits(game, names); set((n) => n + 1); }, [game, key, online]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** The picture for a character outside React (menus, prompts). */

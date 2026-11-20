@@ -656,6 +656,7 @@ export function registerModtoolsDemo() {
       fixerFiles.set(String(game), [...(fixerFiles.get(String(game)) ?? []).filter((x) => x.fileId !== f.fileId), f]);
       return f;
     },
+    fixers_remove: async ({ game, fileId }) => { fixerFiles.set(String(game), (fixerFiles.get(String(game)) ?? []).filter((x) => x.fileId !== fileId)); },
     fixers_stop_waiting: async () => {},
     fixers_run: async ({ game, fileId, modId }) => demoFixerRun(game, fileId, modId),
     fixers_run_all: async ({ game, fileId, modIds }): Promise<FixerRun[]> => {

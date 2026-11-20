@@ -4,7 +4,7 @@ import { useState } from "react";
 import { importFollowing, matchGbAdultPref, setMatchGbAdult, signIn, signOut, useAccount } from "../../lib/account";
 import { Button, Panel, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
-import { subToastPref } from "../../lib/subscriptions";
+import { checkModSubs, subCheckPref, subToastPref } from "../../lib/subscriptions";
 import { t } from "../../lib/i18n";
 
 const TIP = t("You sign in on GameBanana's site in a separate window, so gachamod never sees your password. It keeps the session encrypted for your Windows account");
@@ -28,14 +28,22 @@ export function MatchGbAdultRow({ id }: { id?: string }) {
   );
 }
 
-/** The toast when a mod you subscribed to updates (lib/subscriptions.ts). Works signed out. */
+/** The hourly check for updates to subscribed mods, and the toast when one has one (lib/subscriptions.ts). Both work
+ *  signed out. */
 function SubToastRow() {
   const on = subToastPref.use();
+  const check = subCheckPref.use();
   return (
-    <SetRow id="set-gb-subtoast" label={t("Tell me when subscribed mods update")}
-      hint={t("gachamod checks the mods you subscribed to (the bell on a mod's page) every hour and says when one has an update")}>
-      <Toggle checked={on} onChange={(v) => void subToastPref.set(v, v ? t("Turned on update messages for subscribed mods") : t("Turned off update messages for subscribed mods"))} />
-    </SetRow>
+    <>
+      <SetRow id="set-gb-subcheck" label={t("Check subscribed mods every hour")}
+        hint={t("Asks GameBanana every hour whether a mod you subscribed to (the bell on a mod's page) has an update, and marks it Updated on Home. Off: gachamod asks nothing")}>
+        <Toggle checked={check} onChange={(v) => { void subCheckPref.set(v, v ? t("Turned on the hourly check for subscribed mods") : t("Turned off the hourly check for subscribed mods")).then(() => { if (v) void checkModSubs(); }); }} />
+      </SetRow>
+      <SetRow id="set-gb-subtoast" label={t("Tell me when subscribed mods update")}
+        hint={check ? t("Shows a message when the hourly check finds an update") : t("Needs the hourly check above")}>
+        <Toggle checked={on} disabled={!check} onChange={(v) => void subToastPref.set(v, v ? t("Turned on update messages for subscribed mods") : t("Turned off update messages for subscribed mods"))} />
+      </SetRow>
+    </>
   );
 }
 

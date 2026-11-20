@@ -46,3 +46,16 @@ pub async fn storage_recycle_archives(st: State<'_, AppState>, game: Option<Stri
     };
     blocking(move || storage::recycle_archives(&data, game.as_deref(), &busy)).await
 }
+
+/// Delete something gachamod can make again, or a copy that has no use (gacha-core storage.rs `clear` names the
+/// kinds). Unpacked downloads stay while any download is still in the queue. Returns the bytes freed.
+#[tauri::command]
+pub async fn storage_clear(st: State<'_, AppState>, kind: String, game: Option<String>) -> Result<u64> {
+    let db = st.db.clone();
+    let data = st.data_dir.clone();
+    let busy = if kind == "staging" {
+        let q = st.queue.lock().map_err(|_| Error::Invalid("The download list stopped responding. Restart gachamod".into()))?;
+        q.items.iter().any(|i| !i.state.finished())
+    } else { false };
+    blocking(move || storage::clear(&*lock(&db)?, &data, &kind, game.as_deref(), busy)).await
+}

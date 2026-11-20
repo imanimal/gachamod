@@ -112,6 +112,9 @@ export function PrivacySection() {
   const set = (p: { usage?: boolean; crashes?: boolean }) => {
     report.set(p).then(setReport).catch((e) => toast(errorText(e), true));
   };
+  const resetId = () => {
+    report.resetId().then((n) => { setReport(n); toast(t("Reset the install id")); }).catch((e) => toast(errorText(e), true));
+  };
   return (
     <Panel title={t("Usage counts and crash reports")} icon="eye" id="privacy">
       <div className="set-rows">
@@ -121,6 +124,13 @@ export function PrivacySection() {
             <Button size="sm" variant="ghost" icon="external" onClick={() => shell.openUrl(TELEMETRY_DOC).catch((e) => toast(errorText(e), true))}
               title={t("Opens docs/telemetry.md in gachamod's source, which lists every count")}>{t("List of counts")}</Button>
             <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
+          </span>
+        </SetRow>
+        <SetRow id="set-install-id" label={t("Install id")} hint={t("The random id every usage count and crash report carries. A new one means what is sent from now on can't be linked to what was sent before")}>
+          <span className="set-admin">
+            <span className="set-path mono" title={t("Made once for this install. It isn't tied to you or your account")}>{st ? st.installId ?? t("None made yet") : ""}</span>
+            <Button size="sm" variant="ghost" icon="refresh" disabled={!st?.installId} onClick={resetId}
+              title={t("Throws this id away. The next count gets a new one")}>{t("Reset id")}</Button>
           </span>
         </SetRow>
         <SetRow id="set-crashes" label={t("Crash reports")} hint={t("When gachamod crashes or the window goes black, sends what went wrong and the end of the log, with your user folder's name taken out")}>
