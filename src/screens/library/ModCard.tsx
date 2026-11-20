@@ -44,14 +44,14 @@ export function KindLink({ mod }: { mod: ModEntry }) {
   const kind = libKind(mod), label = kindName(kind);
   const open = (e: MouseEvent | KeyboardEvent) => { e.stopPropagation(); e.preventDefault(); go({ view: "library", kind }); };
   return (
-    <span role="link" tabIndex={0} className="qlink" title={t("Show every mod in {kind}. If it's for a character, set one in its details", { kind: label })}
+    <span role="link" tabIndex={0} className="qlink" title={t("Show every mod in {kind}. If it's for a character, set one in the mod's details", { kind: label })}
       onClick={open} onKeyDown={(e) => { if (e.key === "Enter") open(e); }} onMouseDown={(e) => e.stopPropagation()}>{label}</span>
   );
 }
 
 /** The broken-by-update mark's tip, with what the check found. */
 function brokenTip(health: ModHealth): string {
-  const text = health.needsAuthor ? t("Broken by a game update, and it needs an update from its author. Click for details")
+  const text = health.needsAuthor ? t("Broken by a game update, and it needs an update from the author. Click for details")
     : health.tried ? t("Broken by a game update, and the fixer didn't repair it. Click for details")
     : health.status === "broken" || health.tool ? t("Broken by a game update. Click to see what can be tried")
     : t("Broken by a game update, and gachamod can't fix it by itself. Click for details");
@@ -98,7 +98,7 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
         )}
         {held === "update" && !(mod.updateAvailable && mod.source) && (
           <Badge tone="muted" icon="bell-off" className="mb-upd" onClick={() => openDetails(mod)}
-            title={t("A game update broke it, and you're waiting for its author to post an update. The warnings show again once you install a newer version. Click for details")}>{t("Waiting for update")}</Badge>
+            title={t("A game update broke it, and you're waiting for the author to post an update. The warnings show again once you install a newer version. Click for details")}>{t("Waiting for update")}</Badge>
         )}
         {mod.updateAvailable && mod.source && (
           <button type="button" className="badge t-accent mod-card-update mb-upd" aria-busy={updating} disabled={updating}
@@ -109,15 +109,15 @@ export const ModCard = memo(function ModCard({ game, mod, index, row, selected, 
           <Badge tone="bad" icon="warn" className="mb-cf" onClick={() => openDetails(mod, "conflicts")}
             title={mod.conflicts === 1 ? t("Changes the same parts as another mod that is on. Click to pick which one wins") : t("Changes the same parts as {n} other mods that are on. Click to pick which one wins", { n: mod.conflicts })}>{t("Conflict")}</Badge>
         )}
-        {mod.iniCount === 0 && !quiet && <Badge tone="warn" icon="warn" className="mb-ini" onClick={() => openDetails(mod, "files")} title={t("No .ini file found, so the game won't load it. Click to see its files")}>{t("No ini")}</Badge>}
+        {mod.iniCount === 0 && !quiet && <Badge tone="warn" icon="warn" className="mb-ini" onClick={() => openDetails(mod, "files")} title={t("No .ini file found, so the game won't load it. Click to see the files")}>{t("No ini")}</Badge>}
         {(mod.parts ?? 0) > 0 && <Badge tone="muted" icon="layers" className="mb-parts" onClick={() => openDetails(mod, "parts")} title={t("Folders inside it that turn on and off by themselves. Click to switch them")}>{tn(mod.parts ?? 0, "{n} part", "{n} parts")}</Badge>}
         {mod.parent && parentName && <Badge tone="muted" icon="link" className="mb-sub" onClick={() => openDetails({ id: mod.parent! })}
           title={t("A sub-mod of {mod}: it turns off with it and never counts as another skin. Click to open {mod}", { mod: parentName })}>{t("Sub-mod")}</Badge>}
         {mod.hasKeys && <Badge tone="muted" icon="key" className="mb-keys" onClick={() => openDetails(mod, "keys")} title={t("Has toggles or options. Click to see them")}>{t("Toggles")}</Badge>}
         {live && !waiting && <Badge tone="muted" icon="swap" className="mb-live" onClick={() => openDetails(mod, "ingame")}
-          title={t("Turning it on switches {name}'s skin in game at once, without {key}. Click for its in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Live")}</Badge>}
+          title={t("Turning it on switches {name}'s skin in game at once, without {key}. Click for the in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Live")}</Badge>}
         {live && waiting && <Badge tone="warn" icon="swap" className="mb-live" onClick={() => openDetails(mod, "ingame")}
-          title={t("gachamod couldn't switch {name}'s skin in game, so it changes after the game reloads its mods ({key}). Click for its in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Next reload")}</Badge>}
+          title={t("gachamod couldn't switch {name}'s skin in game, so it changes after the game reloads mods ({key}). Click for the in-game options", { name: live, key: reloadKeyOf(game) })}>{t("Next reload")}</Badge>}
       </span>
       <span className="mod-card-foot">
         <Toggle size="sm" checked={mod.enabled} onChange={(v, shift) => onToggle(mod, v, shift)} ariaLabel={mod.name}

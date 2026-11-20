@@ -180,7 +180,7 @@ function ListedCard({ p, have }: { p: Listed; have: InstalledExt | null }) {
             {!have ? <Button variant="primary" icon="install" busy={busy} onClick={() => void run()} title={t("{size}. You can undo it", { size: formatBytes(p.size) })}>{t("Install")}</Button>
               : newer ? <Button variant="primary" icon="update" busy={busy} onClick={() => void run()} title={t("From {old} to {new}", { old: have.manifest!.version, new: p.version })}>{t("Update")}</Button>
               : <Badge tone="ok" icon="check" onClick={() => patchRoute({ tab: "installed" })} title={t("Installed. Click to see it under Installed")}>{t("Installed")}</Badge>}
-            {p.homepage && <IconButton icon="external" label={t("Open its homepage")} onClick={() => void shell.openUrl(p.homepage!)} size="sm" />}
+            {p.homepage && <IconButton icon="external" label={t("Open the homepage")} onClick={() => void shell.openUrl(p.homepage!)} size="sm" />}
           </div>
         </div>
         <p className="ext-by">{t("By {author}", { author: p.author })}<Games ids={p.games} />{p.updated ? <span title={new Date(p.updated * 1000).toLocaleString(lang)}>{t("Updated {when}", { when: timeAgo(p.updated) })}</span> : null}</p>
@@ -235,7 +235,7 @@ function InstalledCard({ e, update }: { e: InstalledExt; update: Listed | null }
         {m && (
           <div className="ext-where">
             {m.characterTab && <Badge tone="muted" icon="characters" onClick={() => go({ view: "characters" })} title={t("A tab on each character's page. Click to go to Characters")}>{t("Tab: {title}", { title: m.characterTab.title })}</Badge>}
-            {m.page && <Badge tone="muted" icon={extIcon(m.page.icon)} onClick={() => go({ view: "extensions", ext: e.id })} title={e.enabled ? t("Has a page, also in the sidebar. Click to open it") : t("Turn it on to open its page")}>{t("Page: {title}", { title: m.page.title })}</Badge>}
+            {m.page && <Badge tone="muted" icon={extIcon(m.page.icon)} onClick={() => go({ view: "extensions", ext: e.id })} title={e.enabled ? t("Has a page, also in the sidebar. Click to open it") : t("Turn it on to open the page")}>{t("Page: {title}", { title: m.page.title })}</Badge>}
             {m.themes.length > 0 && <Badge tone="muted" icon="palette" onClick={() => go({ view: "settings", section: "themes" })} title={t("Listed under Custom themes, where you pick one for a game")}>{tn(m.themes.length, "{n} theme", "{n} themes")}</Badge>}
           </div>
         )}

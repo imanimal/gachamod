@@ -102,11 +102,11 @@ type Kind = "one" | "mods" | "variants";
 /** An install note that names the mod, said without the name, or null for the others. */
 function plainNote(note: string): string | null {
   const n = note.replace(/\.$/, "");
-  if (/^.+ came back with its settings$/.test(n)) return t("The mod's settings came back");
+  if (/^.+ came back with the settings$/.test(n)) return t("The mod's settings came back");
   const parts = /^Turned off (\d+) parts? of .+ that change the same things as another part$/.exec(n);
   if (parts) return tn(Number(parts[1]), "Turned off {n} part that changes the same things as another part", "Turned off {n} parts that change the same things as another part");
-  if (n === "Switch parts in its details") return t("Switch parts in its details");
-  if (/^Toggles of .+ work only while its character is on screen$/.test(n)) return t("The mod's toggles work only while its character is on screen");
+  if (n === "Switch parts in the mod's details") return t("Switch parts in the mod's details");
+  if (/^Toggles of .+ work only while the character is on screen$/.test(n)) return t("The mod's toggles work only while the character is on screen");
   return null;
 }
 

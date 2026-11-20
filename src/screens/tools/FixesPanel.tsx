@@ -63,7 +63,7 @@ export function FixesPanel({ game }: { game: GameId }) {
         )}
         {warn && !noData && fixable.length > 0 && (
           <Button size="sm" variant="primary" icon="wand" busy={busy === "all"} disabled={!!busy}
-            title={t("Outdated hashes are swapped, and a mod that needs more gets its fixer run on it. A fix isn't certain: a mod the fixer can't repair says so afterwards. Each gets a backup, and Undo puts it back")}
+            title={t("Outdated hashes are swapped, and a mod that needs more gets the fixer run on it. A fix isn't certain: a mod the fixer can't repair says so afterwards. Each gets a backup, and Undo puts it back")}
             onClick={() => void run("all", () => fixMods(game, fixable.map((r) => r.modId)))}>{tn(fixable.length, "Attempt fix on {n} mod", "Attempt fix on {n} mods")}</Button>
         )}
         {warn && !noData && <Button size="sm" variant="ghost" icon="refresh" busy={busy === "check"} disabled={!!busy} title={t("Check every mod again")}
@@ -91,7 +91,7 @@ export function FixesPanel({ game }: { game: GameId }) {
       {rows && dead.length > 0 && (
         <div className="fx-dead">
           <div className="row">
-            <span className="grow">{dead.length === 1 ? t("{mod} needs an update from its author", { mod: dead[0]!.name }) : tn(dead.length, "{n} mod needs an update from their author", "{n} mods need an update from their author")}</span>
+            <span className="grow">{dead.length === 1 ? t("{mod} needs an update from the author", { mod: dead[0]!.name }) : tn(dead.length, "{n} mod needs an update from their author", "{n} mods need an update from their author")}</span>
             <Button size="sm" icon="bell-off" busy={busy === "mute"} disabled={!!busy}
               title={t("Turns them off and stops warning about them. Undo turns them back on. A newer version from the author shows up again if it's still broken")}
               onClick={() => void run("mute", () => muteDeadEnds(game, dead))}>{dead.some((r) => r.enabled) ? t("Turn off and mute") : t("Mute")}</Button>
@@ -190,10 +190,10 @@ function HealthRow({ game, r, busy, run }: { game: GameId; r: ModHealthRow; busy
             <li key={reason} className="tp-problem-item row">
               <Badge tone={r.status === "broken" ? "warn" : "bad"}
                 title={r.status === "broken" ? t("Click to swap in the new hashes")
-                  : author ? (can ? t("A fixer can't redo a changed model, so the mod needs an update from its author. Click to try the fixer anyway") : t("A fixer can't redo a changed model, so the mod needs an update from its author"))
+                  : author ? (can ? t("A fixer can't redo a changed model, so the mod needs an update from the author. Click to try the fixer anyway") : t("A fixer can't redo a changed model, so the mod needs an update from the author"))
                   : t("{tool} handles this kind of change. Click to get it and run it on this mod", { tool: r.tool!.name })}
                 onClick={busy || !can ? undefined : fix}>
-                {r.status === "broken" ? t("Outdated hashes") : author ? t("Needs its author") : t("Needs {tool}", { tool: fixerName(r.tool!.name) })}
+                {r.status === "broken" ? t("Outdated hashes") : author ? t("Needs an update") : t("Needs {tool}", { tool: fixerName(r.tool!.name) })}
               </Badge>
               <span className="grow tp-problem-t">{tb(reason)}</span>
             </li>
@@ -255,7 +255,7 @@ function NewFixers({ game }: { game: GameId }) {
       <ul className="tp-list">
         {fresh.slice(0, 6).map((tool) => (
           <li key={tool.id} className="row fx-new-item">
-            <button type="button" className="tp-link grow" title={t("Open its page")} onClick={() => openGbTool(tool.id)}>{tool.name}</button>
+            <button type="button" className="tp-link grow" title={t("Open the page")} onClick={() => openGbTool(tool.id)}>{tool.name}</button>
             <span className="hint">{[tool.submitter, timeAgo(tool.added)].filter(Boolean).join(", ")}</span>
             <GetFixer game={game} toolId={tool.id} />
           </li>
@@ -271,7 +271,7 @@ function GetFixer({ game, toolId }: { game: GameId; toolId: number }) {
   const busy = useFixerBusy();
   if (have.length) return <span className="hint">{t("Downloaded")}</span>;
   return (
-    <Button size="sm" icon="downloads" busy={busy.has(`tool:${toolId}`)} title={t("Download its newest file into gachamod's fixers folder")}
+    <Button size="sm" icon="downloads" busy={busy.has(`tool:${toolId}`)} title={t("Download the newest file into gachamod's fixers folder")}
       onClick={() => void downloadNewestFixer(game, toolId)}>{t("Download")}</Button>
   );
 }

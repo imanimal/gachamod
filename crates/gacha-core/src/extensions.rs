@@ -599,7 +599,7 @@ pub fn storage_set(data_dir: &Path, id: &str, key: &str, value: Option<serde_jso
 pub fn allowed_url(m: &Manifest, raw: &str) -> Result<url::Url> {
     let u = url::Url::parse(raw).map_err(|_| bad(format!("\"{raw}\" isn't a web address")))?;
     let o = origin_of(raw).ok_or_else(|| bad(format!("{} can't call {raw}", m.name)))?;
-    if !m.permissions.net.contains(&o) { return Err(bad(format!("{} doesn't ask for {o} in its permissions", m.name))); }
+    if !m.permissions.net.contains(&o) { return Err(bad(format!("{} doesn't ask for {o}", m.name))); }
     Ok(u)
 }
 

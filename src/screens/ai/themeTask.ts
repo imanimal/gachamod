@@ -129,7 +129,7 @@ export async function buildThemeTask(task: AiTask, input: TaskInput): Promise<Bu
     prompt,
     files,
     shares: files
-      ? [t("What you typed"), t("The theme settings gachamod supports and the colours of the theme showing now"), t("gachamod's stylesheets, and the screen showing now as HTML with its text"),
+      ? [t("What you typed"), t("The theme settings gachamod supports and the colours of the theme showing now"), t("gachamod's stylesheets, and the screen showing now as HTML with the text"),
           ...(editing ? [t("The theme {name} as it is now", { name: editing.name })] : showing ? [t("The custom theme showing now")] : [])]
       : [t("What you typed"), t("The theme settings gachamod supports, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)"),
           ...(editing ? [t("The theme {name} as it is now", { name: editing.name })] : [])],

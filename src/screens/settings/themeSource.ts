@@ -36,7 +36,7 @@ export function readThemeText(text: string): ThemeTextRead {
   const src = text.replace(/\r\n?/g, "\n").replace(/^\s*```(?:json)?[^\n]*\n/, "");
   const start = src.search(/\S/);
   if (start < 0) return { ok: false, error: t("Paste or type a theme here") };
-  if (src[start] !== "{") return { ok: false, error: t("A theme starts with {, then its name, base, tokens and layout") };
+  if (src[start] !== "{") return { ok: false, error: t("A theme starts with {, then the name, base, tokens and layout") };
   const end = objectEnd(src, start);
   if (end < 0) return { ok: false, error: t("The settings never close. A } is missing at the end, or a quote is left open") };
   let value: unknown;

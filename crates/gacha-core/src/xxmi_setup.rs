@@ -97,7 +97,7 @@ pub async fn install(http: &reqwest::Client, data_dir: &Path, custom: Option<&st
     progress: &mut (dyn FnMut(SetupProgress) + Send)) -> Result<PathBuf> {
     let root = root_for(custom)?;
     if crate::launch::process_running(EXE_NAME) {
-        return Err(Error::Conflict("Close XXMI Launcher first. It rewrites its settings when it closes".into()));
+        return Err(Error::Conflict("Close XXMI Launcher first. It rewrites the settings when it closes".into()));
     }
     let work = data_dir.join("xxmi-setup");
     let _ = std::fs::remove_dir_all(&work);
@@ -307,7 +307,7 @@ fn shortcuts_into(root: &Path) -> Vec<PathBuf> {
 pub fn uninstall(custom: Option<&str>, codes: &[String]) -> Result<Vec<PathBuf>> {
     let root = xxmi::find_root(custom).ok_or_else(|| Error::NotSetUp("XXMI Launcher isn't installed".into()))?;
     if crate::launch::process_running(EXE_NAME) {
-        return Err(Error::Conflict("Close XXMI Launcher first. It rewrites its settings when it closes".into()));
+        return Err(Error::Conflict("Close XXMI Launcher first. It rewrites the settings when it closes".into()));
     }
     for g in crate::games::GAMES.iter().filter(|g| g.xxmi) {
         let hit = codes.is_empty() || codes.iter().any(|c| c.eq_ignore_ascii_case(g.importer));

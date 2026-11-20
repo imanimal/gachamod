@@ -65,7 +65,7 @@ function subModItem(game: GameId, mod: ModEntry): MenuEntry {
   const all = lastMods.get(game) ?? [];
   if (mod.parent) {
     const p = all.find((m) => m.id === mod.parent);
-    return { label: p ? t("Unlink from {mod}", { mod: p.name }) : t("Unlink from its mod"), icon: "link",
+    return { label: p ? t("Unlink from {mod}", { mod: p.name }) : t("Unlink from the mod"), icon: "link",
       title: t("Make it a separate mod again, so turning it on asks about the character's other mods"), onClick: () => void setParent(game, mod, "", all) };
   }
   if (all.some((m) => m.parent === mod.id)) return { label: t("Make sub-mod of"), icon: "link", disabled: true, title: t("It already has sub-mods") };
@@ -121,7 +121,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
     many && { header: tn(list.length, "{n} mod selected", "{n} mods selected") },
     { label: allOn ? t("Turn off") : t("Turn on"), icon: "power", keys: "Space", onClick: () => void setOn(game, list, !allOn) },
     !many && !mod.enabled && !!shownInstead && { label: t("Show next to {mod}", { mod: shownInstead }), icon: "layers", keys: "Shift+Space",
-      title: t("Turns it on next to {mod} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods", { mod: shownInstead }),
+      title: t("Turns it on next to {mod} instead of replacing it. It stops switching in game, and the game shows it after it reloads mods", { mod: shownInstead }),
       onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
     beside.length > 0 && { label: t("Turn on with others"), icon: "layers", keys: "Shift+Space",
       title: beside.length === 1
@@ -137,20 +137,20 @@ registerMenu("mod", ({ game, mod, selection }) => {
     !many && (mod.parts ?? 0) > 0 && { label: t("Parts"), icon: "layers", title: t("Folders inside it that turn on and off by themselves"), onClick: () => openDetails(mod, "parts") },
     !many && mod.hasKeys && { label: t("Toggles"), icon: "key", title: t("Change the mod's toggle keys or turn them off"), onClick: () => openDetails(mod, "keys") },
     !many && mod.conflicts > 0 && { label: t("Conflicts"), icon: "warn", title: t("Mods that change the same parts as this one, to pick which one wins"), onClick: () => openDetails(mod, "conflicts") },
-    !many && mod.iniCount > 0 && { label: t("View in 3D"), icon: "box", title: t("Turn the mod's model around, as its toggles are set now"), onClick: () => openDetails(mod, "model") },
-    broken.length > 0 && { label: t("Attempt fix for the game update"), icon: "wand", title: stops(reasons.slice(0, 3)) || t("A game update broke it. Swaps its outdated hashes, or runs the fixer it needs"), onClick: () => void fixForUpdate(game, broken) },
+    !many && mod.iniCount > 0 && { label: t("View in 3D"), icon: "box", title: t("Turn the mod's model around, as the toggles are set now"), onClick: () => openDetails(mod, "model") },
+    broken.length > 0 && { label: t("Attempt fix for the game update"), icon: "wand", title: stops(reasons.slice(0, 3)) || t("A game update broke it. Swaps the outdated hashes, or runs the fixer it needs"), onClick: () => void fixForUpdate(game, broken) },
     canWait.length > 0 && { label: t("Wait for an update"), icon: "bell-off",
       title: many ? t("Stops the game update warning until you install a newer version of them from their author. If that one is still broken, it warns again")
-        : t("Stops the game update warning until you install a newer version of it from its author. If that one is still broken, it warns again"),
+        : t("Stops the game update warning until you install a newer version of it from the author. If that one is still broken, it warns again"),
       onClick: () => void holdMods(game, canWait, "update") },
     loud.length > 0 && { label: t("Ignore problems"), icon: "hide",
       title: many ? t("Stops every warning about them: the red marks, the Problems tab and Tools. Conflicts are ignored on both sides. Show problems again brings them back")
         : t("Stops every warning about it: the red marks, the Problems tab and Tools. Conflicts are ignored on both sides. Show problems again brings them back"),
       onClick: () => void holdMods(game, loud, "ignore") },
     heldList.length > 0 && { label: t("Show problems again"), icon: "eye",
-      title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about its problems again"),
+      title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about the problems again"),
       onClick: () => void releaseMods(game, heldList) },
-    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("The mod's toggles only work while its character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
+    onScreen && mod.hasKeys && { label: t("Toggles only while on screen"), icon: "keyboard", title: t("The mod's toggles only work while the character is on screen, so they stop taking keys meant for other mods"), onClick: () => void keysOnlyOnScreen(game, list) },
     "-",
     !many && { label: t("Rename"), icon: "edit", keys: "F2", onClick: () => askLib({ kind: "rename", game, mod }) },
     { label: t("Set character"), icon: "characters", onClick: () => askLib({ kind: "character", game, mods: list }) },
@@ -166,7 +166,7 @@ registerMenu("mod", ({ game, mod, selection }) => {
     due.length > 0 && { label: due.length === 1 ? t("Update") : t("Update ({n})", { n: due.length }), icon: "update",
       title: many && due.length === 1 ? t("Only {mod} has one", { mod: due[0]!.name }) : undefined, onClick: () => void getUpdates(game, due) },
     fromGb.length > 0 && { label: t("Check for updates"), icon: "refresh", onClick: () => void checkForUpdates(game, fromGb) },
-    many && { label: t("Combine into one mod"), icon: "layers", title: t("One mod with each of these as a part you can turn on or off in its details. For mods that came in the same download"), onClick: () => void combineMods(game, list) },
+    many && { label: t("Combine into one mod"), icon: "layers", title: t("One mod with each of these as a part you can turn on or off in the mod's details. For mods that came in the same download"), onClick: () => void combineMods(game, list) },
     { label: t("Share as .gachamod"), icon: "share", title: t("A small file with GameBanana links and your settings, to send to a friend or another PC"), onClick: () => exportMods(game, list) },
     "-",
     trashDaysPref.get() > 0

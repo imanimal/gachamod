@@ -210,7 +210,7 @@ struct MedalSet {
 }
 
 /// What changing Medal's key needs, for the button's tip.
-const MEDAL_NEEDS: &str = "Medal has to be closed first. Quit it from its tray icon";
+const MEDAL_NEEDS: &str = "Medal has to be closed first. Quit it from the tray icon";
 const MEDAL_EXES: [&str; 2] = ["Medal.exe", "MedalEncoder.exe"];
 
 /// The key of one entry of Medal's list, when it's a keyboard key gachamod can hold.
@@ -492,13 +492,13 @@ pub(crate) fn steam(text: &str) -> Vec<OtherKey> {
         }
         _ => out.push(other("steam", "Steam", "takes a screenshot", "F12".into(), true)),
     }
-    if let Some(k) = value("InGameOverlayShortcutKey").and_then(|v| combo(&v)) { out.push(other("steam", "Steam", "opens its overlay", k, false)); }
+    if let Some(k) = value("InGameOverlayShortcutKey").and_then(|v| combo(&v)) { out.push(other("steam", "Steam", "opens the overlay", k, false)); }
     out
 }
 
 /// Bandicam: its key names in the registry aren't known, so these are the keys it ships with.
 pub(crate) fn bandicam() -> Vec<OtherKey> {
-    [("starts or stops recording", "F12"), ("takes a screenshot", "F11"), ("shows or hides its FPS counter", "F9")]
+    [("starts or stops recording", "F12"), ("takes a screenshot", "F11"), ("shows or hides the FPS counter", "F9")]
         .into_iter().map(|(does, key)| other("bandicam", "Bandicam", does, key.to_string(), true)).collect()
 }
 
@@ -769,7 +769,7 @@ fn change_in(ours: &Ours, others: &[OtherKey], medal_dir: Option<&Path>, running
         }
     }
     // Medal reads its keys when it starts and writes the whole list back when one changes there
-    if running { return Err(Error::Invalid("Medal is running. Quit it from its tray icon, then try again".into())); }
+    if running { return Err(Error::Invalid("Medal is running. Quit it from the tray icon, then try again".into())); }
     let path = medal_dir.and_then(medal_db_path).ok_or_else(|| Error::Invalid("Medal's settings weren't found".into()))?;
     medal_backup(&path)?;
     medal_change(&path, &from, &to)?;
@@ -897,7 +897,7 @@ mod tests {
     #[test]
     fn steam_keys_are_read() {
         let vdf = "\"UserLocalConfigStore\"\n{\n\t\"system\"\n\t{\n\t\t\"InGameOverlayScreenshotHotKey\"\t\t\"KEY_F7\"\n\t\t\"InGameOverlayShortcutKey\"\t\t\"Shift\\tKEY_F1\"\n\t}\n}\n";
-        assert_eq!(keys(&steam(vdf)), vec![("F7", "takes a screenshot"), ("Shift+F1", "opens its overlay")]);
+        assert_eq!(keys(&steam(vdf)), vec![("F7", "takes a screenshot"), ("Shift+F1", "opens the overlay")]);
         // never changed: F12, the key it ships with
         let plain = steam("\"UserLocalConfigStore\"\n{\n}\n");
         assert_eq!(keys(&plain), vec![("F12", "takes a screenshot")]);
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(of("medal|F8").suggestion.as_deref(), Some("Ctrl+Alt+F9"));
         assert_eq!(of("medal|F8").ask, "Medal takes a screenshot on F8, the key that shows the key list in Zenless Zone Zero.");
         let by_default = of("bandicam|F9");
-        assert_eq!(by_default.text, "Bandicam shows or hides its FPS counter on F9 by default.");
+        assert_eq!(by_default.text, "Bandicam shows or hides the FPS counter on F9 by default.");
         assert_eq!(by_default.menu_games, vec!["gi".to_string()]);
         for c in &got {
             let s = c.suggestion.as_deref().unwrap();
@@ -1086,7 +1086,7 @@ mod tests {
         assert_eq!(clash.other_needs.as_deref(), Some(MEDAL_NEEDS));
 
         // refused while Medal runs, and for a key that isn't free: nothing is written, not even the copy
-        assert!(change("F7", "F9", true, false).unwrap_err().to_string().contains("Quit it from its tray icon"));
+        assert!(change("F7", "F9", true, false).unwrap_err().to_string().contains("Quit it from the tray icon"));
         for taken in ["F8", "F10", "F12", "F7", "Ctrl+Alt+1", "Ctrl+F9", "Alt+F7"] { assert!(change("F7", taken, false, false).is_err(), "{taken}"); }
         assert!(change("F5", "F9", false, false).is_err(), "Medal has no key on F5");
         assert!(change_in(&ours, &obs("[Hotkeys]\nOBSBasic.Screenshot={\"bindings\":[{\"key\":\"OBS_KEY_F7\"}]}\n"), Some(dir.as_path()), false, "obs", "F7", "F9", false).is_err());

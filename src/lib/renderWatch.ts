@@ -142,9 +142,9 @@ export function installRenderWatch(where: "main" | "overlay") {
   document.addEventListener("webglcontextlost", (e) => {
     const c = e.target as HTMLCanvasElement | null;
     if (c?.dataset?.closing) return;
-    send({ text: `A WebGL canvas lost its drawing context. ${state()}`, incident: "webgl", title: "A WebGL drawing context was lost" });
+    send({ text: `A WebGL canvas lost the drawing context. ${state()}`, incident: "webgl", title: "A WebGL drawing context was lost" });
   }, true);
-  document.addEventListener("webglcontextrestored", () => send({ text: "A WebGL canvas got its drawing context back" }), true);
+  document.addEventListener("webglcontextrestored", () => send({ text: "A WebGL canvas got the drawing context back" }), true);
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {

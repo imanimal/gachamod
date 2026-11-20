@@ -169,7 +169,7 @@ pub fn start<R: Runtime>(app: AppHandle<R>) {
                         *told = true;
                         rl::event("main: Windows says the window isn't answering");
                         let (check, png) = probe(&w);
-                        let (title, what) = ("The main window stopped answering Windows", "Windows marked gachamod's window as not answering (its main thread hasn't read messages for 5 s or more)");
+                        let (title, what) = ("The main window stopped answering Windows", "Windows marked gachamod's window as not answering (the main thread hasn't read messages for 5 s or more)");
                         if rl::incident("hung", title, what, &check, png.as_deref()).is_some() { rl::report(title, what, &check, ""); }
                     }
                 } else if let Some((since, _)) = hung.take() {

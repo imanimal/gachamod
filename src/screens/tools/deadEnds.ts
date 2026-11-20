@@ -27,11 +27,11 @@ export async function muteDeadEnds(game: GameId, rows: ModHealthRow[]) {
   } catch (e) { toast(errorText(e), true); return; }
   const one = rows.length === 1 ? rows[0]!.name : null;
   const label = changed.length
-    ? (one ? t("Turned off {mod} until its author posts an update", { mod: one }) : tn(rows.length, "Turned off {n} mod until their author posts an update", "Turned off {n} mods until their author posts an update"))
-    : (one ? t("Muted {mod} until its author posts an update", { mod: one }) : tn(rows.length, "Muted {n} mod until their author posts an update", "Muted {n} mods until their author posts an update"));
+    ? (one ? t("Turned off {mod} until the author posts an update", { mod: one }) : tn(rows.length, "Turned off {n} mod until their author posts an update", "Turned off {n} mods until their author posts an update"))
+    : (one ? t("Muted {mod} until the author posts an update", { mod: one }) : tn(rows.length, "Muted {n} mod until their author posts an update", "Muted {n} mods until their author posts an update"));
   record({
     label,
-    brief: one ? (changed.length ? t("Turned off the mod until its author posts an update") : t("Muted the mod until its author posts an update")) : undefined,
+    brief: one ? (changed.length ? t("Turned off the mod until the author posts an update") : t("Muted the mod until the author posts an update")) : undefined,
     undo: async () => { if (changed.length) await restoreStates(game, before, changed); await held?.undo(); },
     redo: async () => { if (offIds.length) publish(game, await library.setEnabled(game, offIds, false)); await held?.redo(); },
   });

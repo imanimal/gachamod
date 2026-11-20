@@ -30,7 +30,7 @@ export async function welcome(list: GameState[] = allGames()) {
   startHints();
   const ready = list.filter((g) => g.modsDir && g.shown);
   if (ready.length) {
-    toast(tn(ready.length, "Found {n} game. gachamod sends its developer anonymous usage counts and crash reports", "Found {n} games. gachamod sends its developer anonymous usage counts and crash reports"), false,
+    toast(tn(ready.length, "Found {n} game. gachamod sends anonymous usage counts and crash reports to the developer", "Found {n} games. gachamod sends anonymous usage counts and crash reports to the developer"), false,
       { label: t("Turn those off"), run: () => go({ view: "settings", section: "privacy" }) });
   }
   const more = list.filter(canInstallLoader);
@@ -170,7 +170,7 @@ export function SetupPage({ looking, error, retry }: { looking: boolean; error?:
       {error && can.length === 0 ? (
         <>
           <h1>{t("Couldn't read your games")}</h1>
-          <p>{t("gachamod couldn't read its list of games when it started. Your mods and files weren't touched.")}</p>
+          <p>{t("gachamod couldn't read the list of games when it started. Your mods and files weren't touched.")}</p>
           <pre className="crash-msg">{error}</pre>
           <div className="row setup-go">
             <Button variant="primary" size="lg" icon="refresh" busy={retrying} autoFocus onClick={() => void tryAgain()} title={t("Read the saved games again")}>{t("Try again")}</Button>
@@ -219,11 +219,11 @@ export function SetupPage({ looking, error, retry }: { looking: boolean; error?:
 
       <p className="hint setup-more">
         {tx("Add mods from a folder XXMI doesn't use, or a game it doesn't support like Punishing: Gray Raven, in {link}.", {
-          link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title={t("Settings, Games: every game with its folders")}>{t("Settings, Games")}</button>,
+          link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "games" })} title={t("Settings, Games: the folders for every game")}>{t("Settings, Games")}</button>,
         })}
       </p>
       <p className="hint setup-more">
-        {tx("gachamod sends its developer anonymous usage counts and crash reports. {link} any time.", {
+        {tx("gachamod sends anonymous usage counts and crash reports to the developer. {link} any time.", {
           link: <button type="button" className="qlink" onClick={() => go({ view: "settings", section: "privacy" })} title={t("Opens Settings, Feedback and privacy")}>{t("Turn them off")}</button>,
         })}
       </p>

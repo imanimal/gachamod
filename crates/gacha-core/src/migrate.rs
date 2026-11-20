@@ -839,7 +839,7 @@ pub fn import(db: &Shared, game: &str, manager: &str, opts: &MigrateOptions) -> 
     let src = read_all(&env).into_iter().find(|s| s.id == manager)
         .ok_or_else(|| Error::Invalid("That manager has nothing for this game anymore. Look again".into()))?;
     if src.running() {
-        return Err(Error::Conflict(format!("Close {} first. It could change its folders while gachamod reads them", src.name)));
+        return Err(Error::Conflict(format!("Close {} first. It could change the mod folders while gachamod reads them", src.name)));
     }
     if launch::running(game) {
         return Err(Error::Conflict("Close the game first. Mods can't move while it has them open".into()));
@@ -1048,7 +1048,7 @@ fn run(db: &Shared, env: &Env, src: Source, mode: Mode) -> Result<MigrateResult>
                 None => missing += 1,
             }
         }
-        if on.is_empty() && !p.entries.is_empty() { out.notes.push(format!("Skipped the preset {}: none of its mods are here", p.name)); continue; }
+        if on.is_empty() && !p.entries.is_empty() { out.notes.push(format!("Skipped the preset {}: none of the preset's mods are here", p.name)); continue; }
         let name = if taken.contains(&p.name.trim().to_lowercase()) { format!("{} ({})", p.name.trim(), src.name) } else { p.name.trim().to_string() };
         match make_profile(&d, game, &name, &on, &vals) {
             Ok(id) => { out.undo.profiles.push(id); out.profiles.push(name.clone()); }

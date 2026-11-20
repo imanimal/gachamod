@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 /** [pattern, why]. Patterns are matched case-insensitively against the text. */
 export const WORDING = [
   [/—/, "em dash: use a period, comma, colon or parentheses"],
+  [/\bits\b/, "\"its\": name the thing or say \"the\" (\"the mod's files\", not \"its files\")"],
   // dressing things up as people or clothes
   // (a character wears a skin, which is fine; an app, a file or a page wearing a theme isn't)
   [/\bwear(s|ing)?\b[^.]{0,30}\b(theme|look|style|colou?rs?|branding)\b/, "\"wears\": say what it shows (\"starts in that game's theme\")"],

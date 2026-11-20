@@ -34,7 +34,7 @@ export const SHORTCUTS: Array<[string, string]> = [
 
 /** Keys on a mod card or row, for the shortcuts list. */
 export const MOD_SHORTCUTS: Array<[string, string]> = [
-  ["Enter", t("Open its details")],
+  ["Enter", t("Open the details")],
   ["Space", t("Turn it on or off (the selected mods, when it's one of them)")],
   ["Shift+Space", t("Turn it on and keep the character's other mods on too")],
   [t("Ctrl+Space, Ctrl+click"), t("Select it, or take it out of the selection")],

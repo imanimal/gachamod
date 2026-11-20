@@ -690,8 +690,8 @@ fn state_of(a: &Analysis, docs: &[IniDoc]) -> (String, Option<String>) {
     if a.ours {
         return ("partial".into(), Some("Some toggles still work any time: gachamod couldn't find what draws the character in every file".into()));
     }
-    if a.own { return ("own".into(), Some("This mod already turns its toggles off while its character isn't on screen".into())); }
-    if !a.draws { return ("global".into(), Some("This mod doesn't draw a character, so its toggles work everywhere".into())); }
+    if a.own { return ("own".into(), Some("This mod's toggles already turn off while the character isn't on screen".into())); }
+    if !a.draws { return ("global".into(), Some("This mod doesn't draw a character, so the toggles work everywhere".into())); }
     let plan = plan(docs, a, None);
     if plan.is_empty() {
         return ("cant".into(), Some("gachamod couldn't tell which part of the mod draws the character".into()));
@@ -1362,8 +1362,8 @@ pub fn after_install(shared: &crate::db::Shared, game: &str, installed: &[ModEnt
     }
     match done.as_slice() {
         [] => {}
-        [_] if installed.len() == 1 => notes.push("The mod's toggles work only while its character is on screen".into()),
-        [one] => notes.push(format!("Toggles of {one} work only while its character is on screen")),
+        [_] if installed.len() == 1 => notes.push("The mod's toggles work only while the character is on screen".into()),
+        [one] => notes.push(format!("Toggles of {one} work only while the character is on screen")),
         _ => notes.push(format!("Toggles of {} work only while their characters are on screen", crate::ini::oxford(&done, 8))),
     }
 }

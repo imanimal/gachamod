@@ -66,7 +66,7 @@ export function ModDrawerHost({ game, mods, loaded, docked }: { game: GameId; mo
     return mod ? <ModDrawer key={mod.id} game={game} mod={mod} mods={mods} docked onClose={() => closeRoute(["modId"])} /> : (
       <aside className="drawer is-docked mod-pane is-empty" aria-label={t("Mod details")}>
         <Icon name="mods" />
-        <p className="hint">{t("Click a mod to see its details here: its picture, toggles, conflicts and files. Enter does it from the keyboard")}</p>
+        <p className="hint">{t("Click a mod to see the details here: the picture, toggles, conflicts and files. Enter does it from the keyboard")}</p>
       </aside>
     );
   }
@@ -197,10 +197,10 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
         <div className="mod-drawer-picact">
           {!blurred && mod.iniCount > 0 && (
             <Button size="sm" className="on-img" icon="box" onClick={() => setModel(true)}
-              title={t("Turn the mod's model around, as its toggles are set now")}>{t("View in 3D")}</Button>
+              title={t("Turn the mod's model around, as the toggles are set now")}>{t("View in 3D")}</Button>
           )}
           {!mod.preview && mod.source && (
-            <Button size="sm" className="on-img" icon="downloads" busy={fetching} onClick={() => void getPreview()} title={t("Download the first picture from its GameBanana page")}>
+            <Button size="sm" className="on-img" icon="downloads" busy={fetching} onClick={() => void getPreview()} title={t("Download the first picture from the GameBanana page")}>
               {t("Get preview from GameBanana")}
             </Button>
           )}
@@ -265,7 +265,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
             <span className="mod-drawer-health-a">
               {health.status === "broken" && (
                 <Button size="sm" variant="primary" icon="wand" onClick={() => void fixForUpdate(game, [mod])}
-                  title={t("Rewrites its .ini with the new hashes. A backup is kept and Undo puts it back")}>{fixLabel(health)}</Button>
+                  title={t("Rewrites the .ini with the new hashes. A backup is kept and Undo puts it back")}>{fixLabel(health)}</Button>
               )}
               {health.status === "unfixable" && health.tool && (
                 <Button size="sm" variant={health.tried || health.needsAuthor ? undefined : "primary"} icon="wand" busy={fixerBusy.has(`mod:${mod.id}`)} onClick={() => void fixForUpdate(game, [mod])}
@@ -292,7 +292,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
               )}
               <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "fixes" })} title={t("Open the mod fixers in Tools")}>{t("Mod fixers")}</Button>
               <Button size="sm" variant="ghost" icon="bell-off" onClick={() => void holdMods(game, [mod], "update")}
-                title={t("Stops this warning until you install a newer version from its author. If that one is still broken, it warns again")}>{t("Wait for an update")}</Button>
+                title={t("Stops this warning until you install a newer version from the author. If that one is still broken, it warns again")}>{t("Wait for an update")}</Button>
               <Button size="sm" variant="ghost" icon="hide" onClick={() => void holdMods(game, [mod], "ignore")}
                 title={t("Stops every warning about this mod: the red marks, the Problems tab and Tools. Conflicts with it are ignored too")}>{t("Ignore problems")}</Button>
             </span>
@@ -304,7 +304,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
         <div className="note mod-drawer-health" role="status">
           <Icon name={hold.kind === "update" ? "bell-off" : "hide"} />
           <div className="mod-drawer-health-t">
-            <strong>{hold.kind === "update" ? t("Waiting for an update from its author") : t("Ignoring this mod's problems")}</strong>
+            <strong>{hold.kind === "update" ? t("Waiting for an update from the author") : t("Ignoring this mod's problems")}</strong>
             <span>{hold.kind === "update"
               ? t("The game update warning is hidden until you install a newer version. If that one is still broken, it warns again.")
               : t("No red marks and nothing in Problems or Tools for this mod.")}</span>
@@ -316,7 +316,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
                   title={t("Open the mod's GameBanana page. The author or the comments often say when a fix is coming")}>{t("Open on GameBanana")}</Button>
               </>)}
               <Button size="sm" variant="ghost" icon="eye" onClick={() => void releaseMods(game, [mod])}
-                title={hold.kind === "update" ? t("Stop waiting and show the warning again now") : t("Warn about its problems again")}>{t("Show problems again")}</Button>
+                title={hold.kind === "update" ? t("Stop waiting and show the warning again now") : t("Warn about the problems again")}>{t("Show problems again")}</Button>
             </span>
           </div>
         </div>
@@ -379,14 +379,14 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
       <div className="mod-drawer-facts">
         {mod.source && (
           <Row label="GameBanana">
-            <button type="button" className="link-btn" onClick={() => openOnGb(mod)} title={t("Open its GameBanana page")}>{t("Mod {id}", { id: String(mod.source.modId) })} <Icon name="external" /></button>
+            <button type="button" className="link-btn" onClick={() => openOnGb(mod)} title={t("Open the GameBanana page")}>{t("Mod {id}", { id: String(mod.source.modId) })} <Icon name="external" /></button>
           </Row>
         )}
         <Row label={t("Size")}>{t("{size}, {files}, {inis}", { size: formatBytes(mod.sizeBytes), files: tn(mod.fileCount, "{n} file", "{n} files"), inis: tn(mod.iniCount, "{n} ini", "{n} inis") })}</Row>
         {mod.installedAt > 0 && <Row label={t("Added")}>{timeAgo(mod.installedAt)}</Row>}
         <Row label={t("Folder")}>
           <span className="mod-drawer-path mono selectable" title={mod.path}>{mod.relPath}</span>
-          <Button size="sm" icon="folder" onClick={() => openFolder(mod)} title={t("Open its folder in File Explorer")}>{t("Open")}</Button>
+          <Button size="sm" icon="folder" onClick={() => openFolder(mod)} title={t("Open the folder in File Explorer")}>{t("Open")}</Button>
         </Row>
       </div>
     </Drawer>
@@ -405,7 +405,7 @@ function GbStats({ mod, modId }: { mod: ModEntry; modId: number }) {
     return () => ask.abort();
   }, [modId]);
   if (page === null) return null;
-  if (!page) return <p className="mod-drawer-gb hint"><Spinner /> {t("Asking GameBanana for its likes")}</p>;
+  if (!page) return <p className="mod-drawer-gb hint"><Spinner /> {t("Asking GameBanana for the likes")}</p>;
   const old = mod.installedAt > 0 && Date.now() / 1000 - mod.installedAt > NUDGE_AFTER_S;
   return (
     <div className="mod-drawer-gb">

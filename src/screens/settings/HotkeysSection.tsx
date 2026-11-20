@@ -74,7 +74,7 @@ function ProfileKeys() {
         <span><b>{t("Profile keys")}</b><span className="hint">{list === null ? t("Reading {game}'s profiles", { game: gameShort(game) })
           : keyed.length ? keyed.map((p) => `${p.name}: ${p.hotkey}`).join(t(", "))
           : t("No {game} profile has a key yet. Set one in a profile's editor", { game: gameShort(game) })}</span></span>
-        <Button size="sm" icon="profiles" onClick={() => go({ view: "profiles" })} title={t("Opens Profiles, where each profile's editor sets its key (Ctrl+6)")}>{t("Manage profiles")}</Button>
+        <Button size="sm" icon="profiles" onClick={() => go({ view: "profiles" })} title={t("Opens Profiles, where each profile's editor sets the key (Ctrl+6)")}>{t("Manage profiles")}</Button>
       </div>
     </div>
   );
@@ -102,7 +102,7 @@ function MenuKeysPanel({ game, name }: { game: GameId; name: string }) {
       ) : !info ? <Waiting what={t("Reading {game}'s menu keys", { game: name })} /> : (
         <>
           <p className="hint row">
-            <span>{info.all ? t("The skin menu in {game}. Each game keeps its own keys.", { game: name })
+            <span>{info.all ? t("The skin menu in {game}. Each game has separate keys.", { game: name })
               : t("Switching skins in game is off in {game}, so these keys do nothing there until it's on.", { game: name })}</span>
             <Button size="sm" variant={info.all ? "ghost" : "secondary"} icon="swap" onClick={() => go({ view: "tools", section: "ingame" })}
               title={t("Opens Tools, Switch skins in game: the switch, how the menu opens and which characters are in it")}>{t("Switch skins in game")}</Button>
@@ -119,7 +119,7 @@ function MenuKeysPanel({ game, name }: { game: GameId; name: string }) {
             <HotkeyField label={t("Key that shows the key list")} value={s.key} bareF keep onChange={(key) => { if (key && key !== s.key) void saveKeyList(game, s, { ...s, key }, kl.settle); }}
               hint={s.on ? undefined : t("The key list is off, so this key does nothing.")} />
             <Button size="sm" variant="ghost" icon="keyboard" onClick={() => go({ view: "tools", section: "keylist" })}
-              title={t("Opens Key list in game: its key, where it shows and which mods it lists")}>{t("Key list settings")}</Button>
+              title={t("Opens Key list in game: the key, where it shows and which mods it lists")}>{t("Key list settings")}</Button>
           </div>
         ) : kl.error ? <p className="hint">{t("Couldn't read the key list: {error}", { error: kl.error })}</p>
           : <Waiting what={t("Reading the key list")} />}

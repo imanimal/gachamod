@@ -600,7 +600,7 @@ function SavedPanel({ game, f, onPick }: { game: GameId; f: BrowseFilters; onPic
       <Button size="sm" variant="secondary" icon="plus" disabled={isPlain(f) || !!cur} onClick={() => saveFilters(game)}
         title={cur ? t("These are saved as \"{name}\"", { name: cur.name }) : isPlain(f) ? t("Pick some filters first") : t("Save as \"{name}\"", { name: describe(f) })}>{t("Save these filters")}</Button>
       {list.length === 0
-        ? <p className="hint">{t("Saved sets show here. Picking one puts back its sort, type, character, search and the rest.")}</p>
+        ? <p className="hint">{t("Saved sets show here. Picking one puts back the sort, type, character, search and the rest.")}</p>
         : (
           <ul className="gbb-saved-l">
             {list.map((s) => (

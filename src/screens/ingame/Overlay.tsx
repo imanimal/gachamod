@@ -467,7 +467,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       const what = !on ? t("{name} is off.", p) : keep && m.character ? t("{name} is on, next to {character}'s other mods.", p)
         : off ? tn(off, "{name} is on, and another mod of {character} went off.", "{name} is on, and {n} other mods of {character} went off.", p)
         : t("{name} is on.", p);
-      say(t("{what} The game shows it after it reloads its mods ({key}).", { what, key: reloadKeyOf(game) }));
+      say(t("{what} The game shows it after it reloads mods ({key}).", { what, key: reloadKeyOf(game) }));
       // back in the game, the app presses the reload key itself
       if (closeAfter) close();
     } catch (e) { say(errorText(e), true); } finally { setBusy(null); }
@@ -484,7 +484,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
       await Promise.all([reloadLive(game), reloadMods()]);
       const key = reloadKeyOf(game);
       say(ch.notes[0] ? t("{note} ({key}).", { note: tb(ch.notes[0]), key })
-        : t("{name} is on next to {shown}. The game shows it after it reloads its mods ({key}).", { name: m.name, shown, key }));
+        : t("{name} is on next to {shown}. The game shows it after it reloads mods ({key}).", { name: m.name, shown, key }));
       if (closeAfter) close();
     } catch (e) { say(errorText(e), true); } finally { setBusy(null); }
   };
@@ -506,7 +506,7 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const skinMenuOf = (w: Who, slot: number, full: ModEntry | null): MenuEntry[] => [
     { label: t("Show in game"), icon: "play", keys: "Enter", onClick: () => void pick(w, slot) },
     !!full && !!w.showing && w.group?.active !== slot && { label: t("Show next to {name}", { name: w.showing }), icon: "layers", keys: "Shift+Enter",
-      title: t("Turns it on next to {name} instead of replacing it. It stops switching in game, and the game shows it after it reloads its mods", { name: w.showing }),
+      title: t("Turns it on next to {name} instead of replacing it. It stops switching in game, and the game shows it after it reloads mods", { name: w.showing }),
       onClick: () => void beside(full!, w.showing!) },
     full && { label: t("Details"), icon: "info", keys: "I", onClick: () => setDetail({ mod: full }) },
     !!full?.hasKeys && { label: t("Show keys"), icon: "keyboard", onClick: () => keysOf(full!) },
@@ -528,8 +528,8 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   const chips: Array<[string, string, string]> = tab === "keys" ? [["Enter", t("Rebind"), t("A click, Enter or A on a key rebinds it")], tabsChip, escChip]
     : tab === "mine" ? [["Enter", t("Pick"), t("Enter or A picks")],
       ...(shiftOk ? [["Shift+Enter", t("With others"), t("Shift+click or Shift+Enter turns it on next to the others")] as [string, string, string]] : []),
-      ["I", t("Details"), t("I shows its details")], menuChip, tabsChip, escChip]
-    : tab === "browse" ? [["Enter", t("Open"), t("Enter or A opens a mod's page with its files")], ["I", t("Install"), t("I or X installs the mod in focus")], menuChip, tabsChip, escChip]
+      ["I", t("Details"), t("I shows the details")], menuChip, tabsChip, escChip]
+    : tab === "browse" ? [["Enter", t("Open"), t("Enter or A opens a mod's page with the files")], ["I", t("Install"), t("I or X installs the mod in focus")], menuChip, tabsChip, escChip]
     : [tabsChip, escChip];
   const footText = hint ?? note?.text ?? (
     <span className="ov-kh-all">
@@ -616,8 +616,8 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
                 )}
                 {who.mods.length > 0 && (
                   <section>
-                    <h2 className="ov-h" title={who.name === OTHER ? t("Turning one on or off shows after the game reloads its mods ({key}).", { key: reloadKeyOf(game) })
-                      : t("Turning one on or off shows after the game reloads its mods ({key}). Turning one on turns {name}'s other mods off. Shift+click keeps them on", { key: reloadKeyOf(game), name: who.name })}>
+                    <h2 className="ov-h" title={who.name === OTHER ? t("Turning one on or off shows after the game reloads mods ({key}).", { key: reloadKeyOf(game) })
+                      : t("Turning one on or off shows after the game reloads mods ({key}). Turning one on turns {name}'s other mods off. Shift+click keeps them on", { key: reloadKeyOf(game), name: who.name })}>
                       {who.group ? t("Other mods") : t("Mods")}</h2>
                     <div className="ov-grid">
                       {who.mods.filter((m) => !words || who.name.toLowerCase().includes(words) || m.name.toLowerCase().includes(words)).map((m, i) => (
@@ -737,7 +737,7 @@ function ModDetail({ game, m, group, busy, onShow, onTurn, onKeys }: {
             ? <Button variant="primary" icon="play" disabled={busy || showing} onClick={() => onShow(group, slot)}
                 title={showing ? t("This is the skin showing now") : t("Shows it in the game now")}>{showing ? t("Showing") : t("Show in game")}</Button>
             : <Button variant="primary" icon={m.enabled ? "block" : "check"} disabled={busy} onClick={() => onTurn(!m.enabled)}
-                title={t("The game shows the change after it reloads its mods ({key})", { key: reloadKeyOf(game) })}>{m.enabled ? t("Turn off") : t("Turn on")}</Button>}
+                title={t("The game shows the change after it reloads mods ({key})", { key: reloadKeyOf(game) })}>{m.enabled ? t("Turn off") : t("Turn on")}</Button>}
           {!!m.source?.modId && <Button icon="browse" onClick={() => openGbMod(m.source!.modId)}
             title={t("The mod's page on GameBanana: pictures, description, files and comments")}>{t("GameBanana page")}</Button>}
         </div>

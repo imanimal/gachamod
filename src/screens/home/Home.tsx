@@ -221,7 +221,7 @@ function QuickBar({ game, mods }: { game: GameState; mods: ModEntry[] }) {
             {total
               ? <button type="button" className="home-quick-count" onClick={() => go("library")} title={t("Open your mods (Ctrl+3)")}>{tn(total, "{on} of {n} mod on", "{on} of {n} mods on", { on })}</button>
               : <button type="button" className="home-quick-count" onClick={() => go("browse")} title={t("Find mods on GameBanana (Ctrl+2)")}>{t("No mods yet")}</button>}
-            {importerUpdate && <Badge tone="info" icon="update" title={t("XXMI Launcher installs {loader} {version} when it next starts. Click for its settings", { loader: game.importer ?? "", version: game.importerLatest ?? "" })} onClick={() => go({ view: "settings", section: "xxmi" })}>{t("{version} available", { version: game.importerLatest ?? "" })}</Badge>}
+            {importerUpdate && <Badge tone="info" icon="update" title={t("XXMI Launcher installs {loader} {version} when it next starts. Click for the settings", { loader: game.importer ?? "", version: game.importerLatest ?? "" })} onClick={() => go({ view: "settings", section: "xxmi" })}>{t("{version} available", { version: game.importerLatest ?? "" })}</Badge>}
           </p>
         </div>
         <PlayButton big />
@@ -263,7 +263,7 @@ function ProfileRow({ game }: { game: GameState }) {
         <button key={p.id} type="button" className={`home-pchip${p.active ? " on" : ""}`} aria-pressed={p.active}
           style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
           title={busy === p.id ? t("Switching to {profile}", { profile: p.name })
-            : p.active ? (p.hotkey ? t("{profile} is on ({key} in game). Click to see its mods", { profile: p.name, key: p.hotkey }) : t("{profile} is on. Click to see its mods", { profile: p.name }))
+            : p.active ? (p.hotkey ? t("{profile} is on ({key} in game). Click to see the mods", { profile: p.name, key: p.hotkey }) : t("{profile} is on. Click to see the mods", { profile: p.name }))
             : p.hotkey ? t("Switch to {profile} ({key} in game)", { profile: p.name, key: p.hotkey }) : t("Switch to {profile}", { profile: p.name })}
           onClick={() => void pick(p)} onContextMenu={menuHandler(() => withoutKeys(menuFor("profile", { game: game.id, id: p.id })))}>
           <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={26} />
@@ -272,7 +272,7 @@ function ProfileRow({ game }: { game: GameState }) {
         </button>
       ))}
       <button type="button" className="home-pchip add" onClick={() => void quickNewProfile(game.id)} onContextMenu={menuHandler(() => newProfileMenu(game.id))}
-        title={t("Save the mods on now as a new profile. Right-click for one with no mods, or to pick its name and icon first")} aria-label={t("New profile")}>
+        title={t("Save the mods on now as a new profile. Right-click for one with no mods, or to pick the name and icon first")} aria-label={t("New profile")}>
         <Icon name="plus" />
       </button>
     </div>

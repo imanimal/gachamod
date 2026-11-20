@@ -623,12 +623,12 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
               <span id={`${textId}-note`} className="hint ctheme-err">{textErr}</span>
               <Button size="sm" variant="ghost" onClick={resetText} title={t("Puts back the text for the theme as it is now, without what you typed here")}>{t("Reset the text")}</Button>
             </span>
-          ) : <span id={`${textId}-note`} className="hint">{t("\"tokens\" takes any name from Tokens you can set, below. The stylesheet has its own box")}</span>}
+          ) : <span id={`${textId}-note`} className="hint">{t("\"tokens\" takes any name from Tokens you can set, below. The stylesheet has a separate box")}</span>}
         </div>
         <label className="field mono">
           <span className="field-l">{t("Stylesheet")}</span>
           <textarea value={draft.css ?? ""} rows={14} spellCheck={false} onChange={(e) => patch({ css: e.target.value })} />
-          <span className="hint">{t("Plain rules like .btn { } apply only while this theme is on and win over its base. :root is the window, for your own variables")}</span>
+          <span className="hint">{t("Plain rules like .btn { } apply only while this theme is on and win over the base. :root is the window, for your own variables")}</span>
         </label>
         <details>
           <summary>{t("Tokens you can set")}</summary>

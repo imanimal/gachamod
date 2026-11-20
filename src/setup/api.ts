@@ -85,7 +85,7 @@ async function steps(list: Array<[string, string, number]>) {
     if (ms > 600) for (let i = 0; i <= 10; i++) { emit(step, `${text} (${Math.round(31 * i / 10)} of 31 MB)`, i / 10, "Windows security may be checking the new files."); await sleep(ms / 10); }
     else { emit(step, text); await sleep(ms); }
   }
-  if (q().get("fail")) throw "The installer stopped partway. A newer gachamod may be installed, or a file in its folder is in use.";
+  if (q().get("fail")) throw "The installer stopped partway. A newer gachamod may be installed, or a file in the folder is in use.";
   emit("done", "Done", 1);
 }
 

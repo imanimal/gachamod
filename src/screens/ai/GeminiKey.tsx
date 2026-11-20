@@ -33,14 +33,14 @@ export function GeminiKey() {
         <span className="hint">{t("A free Gemini key is saved, so Gemini answers here in gachamod.")}</span>
         <div className="row">
           <Button size="sm" variant="ghost" icon="trash" onClick={() => void removeGeminiKey().catch((e) => toast(errorText(e), true))}
-            title={t("Forgets the key. Gemini opens its website again")}>{t("Remove key")}</Button>
+            title={t("Forgets the key. Gemini opens the website again")}>{t("Remove key")}</Button>
         </div>
       </div>
     );
   }
   return (
     <div className="ai-key">
-      <span className="hint">{t("Gemini can answer here with a free key from Google AI Studio. Click Create API key there, copy the key and paste it below. Free keys have a daily limit, and Google may use what you send to improve its models.")}</span>
+      <span className="hint">{t("Gemini can answer here with a free key from Google AI Studio. Click Create API key there, copy the key and paste it below. Free keys have a daily limit, and Google may use what you send to improve Google's models.")}</span>
       {/* Enter in the field saves: a form with one field submits on Enter */}
       <form className="row ai-key-row" onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <Button size="sm" icon="external" onClick={() => void shell.openUrl(GEMINI_KEY_URL)}

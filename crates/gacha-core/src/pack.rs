@@ -879,7 +879,7 @@ enum Outcome { Added(String), Replaced(String), Skipped }
 fn import_one(ctx: &Ctx, z: &mut zip::ZipArchive<File>, names: &[(usize, String)], n: usize, pm: &PackedMod, existing: Option<&ModEntry>,
     mode: &str, notes: &mut Vec<String>, t: &mut Throttle) -> Result<Outcome> {
     if existing.is_some() && !matches!(mode, "replace" | "keep_both") { return Ok(Outcome::Skipped); }
-    let prefix = dir_prefix(pm).ok_or_else(|| Error::Archive("its folder in the pack points outside the pack".into()))?;
+    let prefix = dir_prefix(pm).ok_or_else(|| Error::Archive("the folder in the pack points outside the pack".into()))?;
     let display = pm.name();
 
     // 1. extract to staging
@@ -897,7 +897,7 @@ fn import_one(ctx: &Ctx, z: &mut zip::ZipArchive<File>, names: &[(usize, String)
         copy_with(&mut f, &mut out, t).map_err(|e| if matches!(e.kind(), io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof) { Error::Archive("the pack is damaged. Ask for it again".into()) } else { e.into() })?;
     }
     if !refused.is_empty() {
-        notes.push(format!("Left out {} from {display}, which pointed outside its folder", crate::ini::oxford(&refused, 8)));
+        notes.push(format!("Left out {} from {display}, which pointed outside the mod folder", crate::ini::oxford(&refused, 8)));
     }
 
     // 2. its sidecar

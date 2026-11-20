@@ -322,14 +322,14 @@ function withFamily(game: string, ids: string[], on: boolean): { ids: string[]; 
       const p = m?.parent ? byId.get(m.parent) : undefined;
       if (!m || !p || p.enabled || p.standby || out.includes(p.id)) continue;
       out.push(p.id);
-      notes.push(`Turned on ${p.name} too, since ${m.name} is its sub-mod`);
+      notes.push(`Turned on ${p.name} too, since ${m.name} is a sub-mod`);
     }
     for (const m of list) {
-      if (m.parent && out.includes(m.parent) && !out.includes(m.id) && !m.enabled && offWithParent.has(m.id)) { out.push(m.id); offWithParent.delete(m.id); notes.push(`Turned its sub-mod ${m.name} back on`); }
+      if (m.parent && out.includes(m.parent) && !out.includes(m.id) && !m.enabled && offWithParent.has(m.id)) { out.push(m.id); offWithParent.delete(m.id); notes.push(`Turned the sub-mod ${m.name} back on`); }
     }
   } else {
     for (const m of list) {
-      if (m.parent && ids.includes(m.parent) && !out.includes(m.id) && m.enabled) { out.push(m.id); offWithParent.add(m.id); notes.push(`Turned off its sub-mod ${m.name} too`); }
+      if (m.parent && ids.includes(m.parent) && !out.includes(m.id) && m.enabled) { out.push(m.id); offWithParent.add(m.id); notes.push(`Turned off the sub-mod ${m.name} too`); }
     }
   }
   return { ids: out, notes };

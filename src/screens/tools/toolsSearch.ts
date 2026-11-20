@@ -20,7 +20,7 @@ export const TOOL_PAGES: PageInfo[] = [
     keywords: "share and move export import" },
   { id: "makers", label: t("Mod makers"), icon: "code", tip: t("Reloading mods in game, the shader cache, 3DMigoto's files, log and switches, and looking up a hash"),
     keywords: "developer dev tools modding 3dmigoto shaders hashes" },
-  { id: "ai", label: t("AI helper"), icon: "ai", tip: t("Which chatbot helps, what it may do, and whether its buttons show"),
+  { id: "ai", label: t("AI helper"), icon: "ai", tip: t("Which chatbot helps, what it may do, and whether the buttons show"),
     keywords: "ai chatbot assistant helper bot" },
 ];
 

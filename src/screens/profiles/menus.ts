@@ -32,7 +32,7 @@ registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[
       title: p.active ? t("It's on now, so it follows your changes already") : t("Replaces {name}'s mods with the ones on now", { name: p.name }), onClick: () => void saveInto(game, p) },
     { label: p.hotkey ? t("Hotkey: {key}", { key: p.hotkey }) : t("Set a hotkey"), icon: "keyboard", title: t("A key combo that switches to it while the game runs, like Ctrl+Alt+1"),
       onClick: () => requestEdit(p.id, "hotkey") },
-    { label: t("Share as .gachamod"), icon: "share", title: t("A small file with links to its mods and your settings, to send to a friend or another PC"), onClick: () => exportProfile(game, p) },
+    { label: t("Share as .gachamod"), icon: "share", title: t("A small file with links to the mods and your settings, to send to a friend or another PC"), onClick: () => exportProfile(game, p) },
     "-",
     { label: t("Delete"), icon: "trash", danger: true, keys: "Del", disabled: only, title: only ? t("The only profile can't be deleted") : t("Your mods stay installed. Undo brings it back"),
       onClick: () => void deleteProfile(game, p, list) },

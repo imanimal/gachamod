@@ -46,7 +46,7 @@ async function stopAsking(game: GameId, rule: "auto" | "0") {
   await settings.set(key, rule).catch(() => {});
   record({
     label: rule === "auto"
-      ? t("Turning on a mod turns off the other ones of its character without asking now. Settings changes it back")
+      ? t("Turning on a mod turns off the other ones of the same character without asking now. Settings changes it back")
       : t("Mods of one character turn on together without asking now. Settings changes it back"),
     undo: async () => { await settings.set(key, before ?? "ask"); },
     redo: async () => { await settings.set(key, rule); },
@@ -93,7 +93,7 @@ export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all:
       { header: who === null ? tn(others.length, "{n} other mod of their characters is on", "{n} other mods of their characters are on")
         : one ? t("Another {name} mod is on", { name: who }) : tn(others.length, "{n} other {name} mod is on", "{n} other {name} mods are on", { name: who }) },
       { label: one ? t("Turn off {mod}", { mod: one.name }) : t("Turn off the other {n}", { n: others.length }), icon: "power",
-        title: who === null ? (many ? t("Only the {n} you picked stay on for their characters", { n: going.length }) : t("Only {mod} stays on for its character", { mod: mod.name }))
+        title: who === null ? (many ? t("Only the {n} you picked stay on for their characters", { n: going.length }) : t("Only {mod} stays on for the character", { mod: mod.name }))
           : many ? t("Only the {n} you picked stay on for {name}", { n: going.length, name: who }) : t("Only {mod} stays on for {name}", { mod: mod.name, name: who }),
         onClick: () => pick({ turnOffOthers: true }) },
       { label: one ? t("Keep both on") : t("Keep them all on"), icon: "layers",
@@ -107,7 +107,7 @@ export async function askOverlap(game: GameId, mods: ModEntry | ModEntry[], all:
         title: t("From now on turning on a mod turns off the character's other mods that change the same parts, without this question. Settings has it as Another skin already on"),
         onClick: () => { void stopAsking(game, "auto"); pick({ turnOffOthers: true }); } },
       { label: one ? t("Keep both on and don't ask again") : t("Keep them all on and don't ask again"), icon: "check",
-        title: t("From now on a mod turns on next to the others of its character without this question. Settings has it as Another skin already on"),
+        title: t("From now on a mod turns on next to the others of the same character without this question. Settings has it as Another skin already on"),
         onClick: () => { void stopAsking(game, "0"); pick({ turnOffOthers: false }); } },
     ];
     // the menu closes before a picked item runs: wait a tick so the pick wins

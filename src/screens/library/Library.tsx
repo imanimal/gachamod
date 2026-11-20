@@ -253,7 +253,7 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   const failed = notSetUp || (!!error && !mods.length);
   const missingText = error?.kind === "not_set_up" ? error.text : game.modsDir
     ? t("{game} has no Mods folder there anymore. Pick it again, or install the mod loader again if it was removed", { game: name })
-    : t("{game} has no Mods folder yet. Install its mod loader or pick the folder", { game: name });
+    : t("{game} has no Mods folder yet. Install the mod loader or pick the folder", { game: name });
   const loader = canInstallLoader(game);
   const failure = !failed ? null : notSetUp ? (
     <Empty icon="folder" title={game.modsDir ? t("Mods folder not found") : t("No Mods folder yet")}

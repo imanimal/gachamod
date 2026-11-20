@@ -132,7 +132,7 @@ function GamesSection() {
       {community.length > 0 && <>
         <h3 className="sub-h" id="set-community">{t("Community games")}</h3>
         <p className="hint set-note" title={t("3DMigoto is the program that loads mods into the game. XXMI Launcher bundles one per game for the games above")}>
-          {t("XXMI Launcher doesn't support these. Each needs a separate 3DMigoto loader: get it from the link, then pick its folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.")}</p>
+          {t("XXMI Launcher doesn't support these. Each needs a separate 3DMigoto loader: get it from the link, then pick the folder (the one with d3dx.ini). Installing, turning mods on and off, profiles and Browse work the same.")}</p>
         <div className="set-games">{community.map((g) => <GameRow key={g.id} game={g} />)}</div>
       </>}
     </Panel>
@@ -207,7 +207,7 @@ function GameRow({ game }: { game: GameState }) {
   );
   // what's different for this game, said once and plainly
   const notes: string[] = [];
-  if (!game.gbCharacterCategory) notes.push(t("GameBanana has no character categories for {game}, so its mods aren't sorted by character. Set a mod's character yourself in its details.", { game: gameShort(game) }));
+  if (!game.gbCharacterCategory) notes.push(t("GameBanana has no character categories for {game}, so the mods aren't sorted by character. Set a mod's character yourself in the mod's details.", { game: gameShort(game) }));
   return (
     <div className={`set-game${game.shown ? " shown" : ""}`} style={{ "--g-accent": game.accent } as CSSProperties}>
       <GameBadge game={game} size={40} />
@@ -227,9 +227,9 @@ function GameRow({ game }: { game: GameState }) {
           <span className="row set-game-fix">
             {canInstallLoader(game)
               ? <Button size="sm" variant="primary" icon="install" busy={setup.running} onClick={() => void installLoaders([game.id])}
-                  title={t("Installs XXMI Launcher and {game}'s mod loader from their GitHub pages, then finds its Mods folder", { game: gameShort(game) })}>{t("Install mod loader")}</Button>
+                  title={t("Installs XXMI Launcher and {game}'s mod loader from their GitHub pages, then finds the Mods folder", { game: gameShort(game) })}>{t("Install mod loader")}</Button>
               : <Button size="sm" variant="primary" icon="search" busy={setup.running} onClick={() => void getReady(game.id)}
-                  title={t("Looks for {game} and its mod loader again", { game: gameShort(game) })}>{t("Find it")}</Button>}
+                  title={t("Looks for {game} and the mod loader again", { game: gameShort(game) })}>{t("Find it")}</Button>}
             <span className="hint">{canInstallLoader(game) ? t("No mod loader yet") : t("{game} wasn't found on this PC. Install it, or set the folders below", { game: gameShort(game) })}</span>
           </span>
         )}
@@ -261,7 +261,7 @@ function ModFoldersSection() {
   const pick = (g: GameState) => pickModsFolder(g.id);
   return (
     <Panel title={t("Mods folders")} icon="folder" id="mod-folders" actions={<Button icon="search" busy={busy} onClick={() => void detect()} title={t("Look for XXMI Launcher and each game's Mods folder again")}>{t("Detect again")}</Button>}>
-      <p className="hint set-note">{t("gachamod finds each game's Mods folder from its mod loader. Pick another one here when your mods are somewhere else.")}</p>
+      <p className="hint set-note">{t("gachamod finds each game's Mods folder from the mod loader. Pick another one here when your mods are somewhere else.")}</p>
       <div className="set-games">
         {list.map((g) => {
           const dir = g.modsDir;
@@ -276,8 +276,8 @@ function ModFoldersSection() {
               </div>
               {!dir && (canInstallLoader(g)
                 ? <Button size="sm" variant="primary" icon="install" busy={setup.running} onClick={() => void installLoaders([g.id])}
-                    title={t("Installs XXMI Launcher and {game}'s mod loader from their GitHub pages, then finds its Mods folder", { game: gameShort(g) })}>{t("Install mod loader")}</Button>
-                : <Button size="sm" variant="primary" icon="search" busy={setup.running} onClick={() => void getReady(g.id)} title={t("Looks for {game} and its mod loader again", { game: gameShort(g) })}>{t("Find it")}</Button>)}
+                    title={t("Installs XXMI Launcher and {game}'s mod loader from their GitHub pages, then finds the Mods folder", { game: gameShort(g) })}>{t("Install mod loader")}</Button>
+                : <Button size="sm" variant="primary" icon="search" busy={setup.running} onClick={() => void getReady(g.id)} title={t("Looks for {game} and the mod loader again", { game: gameShort(g) })}>{t("Find it")}</Button>)}
               <Button size="sm" variant="ghost" onClick={() => void pick(g)} title={t("Pick {game}'s Mods folder yourself", { game: gameShort(g) })}>{dir ? t("Change") : t("Pick folder")}</Button>
             </div>
           );
@@ -338,7 +338,7 @@ function XxmiSection() {
             {st.importers.filter((i) => i.deployedVersion || i.importerDir && i.enabled).map((i) => (
               <span key={i.code} className="set-importer" title={i.importerDir ?? ""}>
                 <b>{i.code}</b> {i.deployedVersion ?? t("not installed")}
-                {i.latestVersion && i.deployedVersion && i.latestVersion !== i.deployedVersion && <Badge tone="info" onClick={openXxmi} title={t("{loader} {version} is out. Opens XXMI Launcher, which updates its mod loaders", { loader: i.code, version: i.latestVersion })}>{i.latestVersion}</Badge>}
+                {i.latestVersion && i.deployedVersion && i.latestVersion !== i.deployedVersion && <Badge tone="info" onClick={openXxmi} title={t("{loader} {version} is out. Opens XXMI Launcher, which updates the mod loaders", { loader: i.code, version: i.latestVersion })}>{i.latestVersion}</Badge>}
               </span>
             ))}
           </div>
@@ -346,7 +346,7 @@ function XxmiSection() {
             <Button icon={loaderUpdate ? "update" : "external"} variant={loaderUpdate ? "primary" : undefined} onClick={openXxmi}
               title={loaderUpdate ? t("XXMI Launcher installs the updates when it opens") : undefined}>{loaderUpdate ? t("Update in XXMI Launcher") : t("Open XXMI Launcher")}</Button>
             <Button variant="ghost" onClick={() => void pick()} title={t("For a portable copy of XXMI Launcher")}>{t("Use another folder")}</Button>
-            {root && <Button variant="ghost" onClick={() => void reset()} title={t("Look for XXMI Launcher where its installer puts it")}>{t("Use the usual folder")}</Button>}
+            {root && <Button variant="ghost" onClick={() => void reset()} title={t("Look for XXMI Launcher where the installer puts it")}>{t("Use the usual folder")}</Button>}
             <Button id="set-xxmi-uninstall" variant="ghost" icon="trash" disabled={setup.running} onClick={() => setAsking(true)}
               title={t("Moves XXMI Launcher and every game's mod loader to the Recycle Bin. Mods folders stay")}>{t("Uninstall XXMI Launcher")}</Button>
           </div>

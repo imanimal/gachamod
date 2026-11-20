@@ -154,7 +154,7 @@ function demoHealth(game: string): ModHealthRow[] {
   const more = { needsAuthor: false, tried: null };
   if (broken) {
     out.push(fixDone.has(`${game}|${broken.id}`)
-      ? { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "fixed", reasons: ["gachamod swapped its outdated hashes"], since: null, tool: null, swaps: 0, ...more }
+      ? { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "fixed", reasons: ["gachamod swapped the outdated hashes"], since: null, tool: null, swaps: 0, ...more }
       : { modId: broken.id, name: broken.name, enabled: broken.enabled, status: "broken", reasons: [`Uses ${who(broken)}'s Body hash from before ${f.version}`, `Uses ${who(broken)}'s Hair hash from before ${f.version}`], since: f.version, tool: null, swaps: 3, ...more });
   }
   if (stuck) {
@@ -164,7 +164,7 @@ function demoHealth(game: string): ModHealthRow[] {
   }
   // one the fixer finds nothing in, and one whose model the game changed
   if (old) out.push({ modId: old.id, name: old.name, enabled: old.enabled, status: "unfixable", reasons: [`Needs ${f.tool.name} for ${who(old)}'s ${f.version} change`], since: f.version, tool: f.tool, swaps: 0, needsAuthor: false, tried: fixTried.get(`${game}|${old.id}`) ?? null });
-  if (remade) out.push({ modId: remade.id, name: remade.name, enabled: remade.enabled, status: "unfixable", reasons: [`The ${f.version} update changed ${who(remade)}'s model, so this mod needs an update from its author`], since: f.version, tool: f.tool, swaps: 0, needsAuthor: true, tried: fixTried.get(`${game}|${remade.id}`) ?? null });
+  if (remade) out.push({ modId: remade.id, name: remade.name, enabled: remade.enabled, status: "unfixable", reasons: [`The ${f.version} update changed ${who(remade)}'s model, so this mod needs an update from the author`], since: f.version, tool: f.tool, swaps: 0, needsAuthor: true, tried: fixTried.get(`${game}|${remade.id}`) ?? null });
   return out;
 }
 
@@ -358,9 +358,9 @@ function demoKeysOf(game: string, id: string): DemoKeys {
 }
 
 const NOTES: Record<string, string> = {
-  own: "This mod already turns its toggles off while its character isn't on screen",
+  own: "This mod's toggles already turn off while the character isn't on screen",
   cant: "gachamod couldn't tell which part of the mod draws the character",
-  global: "This mod doesn't draw a character, so its toggles work everywhere",
+  global: "This mod doesn't draw a character, so the toggles work everywhere",
 };
 
 /** A demo mod's keys as they are now (the demo key list shows the same ones, so a rebind there shows here too). */
@@ -700,7 +700,7 @@ export function registerModtoolsDemo() {
     imm_takeover: async ({ game }): Promise<ImportResult> => {
       await demoWait(1400);
       immMoved.add(String(game));
-      demoLog(`IMM takeover (${String(game)}): moved its mods to Mods/<Character>/<mod>, 2 restore points left`);
+      demoLog(`IMM takeover (${String(game)}): moved the mods to Mods/<Character>/<mod>, 2 restore points left`);
       const n = game === "gi" ? 7 : 23;
       return { added: Array.from({ length: n }, demoId), replaced: [], skipped: 0, profileId: null, profiles: [], queued: 0, missing: [], notes: [`Moved ${n} mods from Integrated Mod Manager`] };
     },

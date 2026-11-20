@@ -78,7 +78,7 @@ export const ModCard = memo(function ModCard({ game, mod, lib, nsfw, prio, noIns
                 ? noInstall ? t("In your mods, turned on") : t("In your mods, turned on. Click to see it there (I)")
                 : noInstall ? t("In your mods, turned off") : t("In your mods, turned off. Click to see it there (I)")}
               onClick={noInstall ? undefined : (e) => { e.stopPropagation(); showInMods(inst[0]!.id); }}>{inst.some((m) => m.enabled) ? t("Installed") : t("Installed, off")}</Badge>
-            : arch ? <Badge tone="info" icon="trash" title={noInstall ? t("You removed it before. Reinstalling brings back its settings") : t("You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash")}
+            : arch ? <Badge tone="info" icon="trash" title={noInstall ? t("You removed it before. Reinstalling brings back the settings") : t("You removed it before. Reinstalling brings back the settings. Click to see it in Mods, Trash")}
               onClick={noInstall ? undefined : (e) => { e.stopPropagation(); goIn(game, { view: "library", tab: "archive" }); }}>{t("Removed")}</Badge>
             : null}
         </span>

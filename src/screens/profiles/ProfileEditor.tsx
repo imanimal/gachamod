@@ -178,7 +178,7 @@ export function ProfileEditor({ game, profile, chars, onClose, focus, start: sta
             ]} />
             <span className="hint">{start !== "now" ? t("Switching to it turns every mod off, like a clean game.")
               : onNow === undefined ? t("Saves the mods on now and their options.")
-              : tn(onNow, "Saves {n} mod on now and its options.", "Saves {n} mods on now and their options.")}</span>
+              : tn(onNow, "Saves {n} mod on now, with the options.", "Saves {n} mods on now and their options.")}</span>
           </div>
         )}
         <TextField label={t("Description")} multiline rows={2} value={description} onChange={setDescription} placeholder={t("What this loadout is for")} />

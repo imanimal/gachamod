@@ -328,13 +328,13 @@ function LaunchPanel({ game, l, picker }: { game: GameState; l: Launch; picker: 
 function KickFix({ name, children }: { name: string; children?: ReactNode }) {
   const k = useKick();
   const on = !!k?.said && !k.undone;
-  const hint = k?.undone ? t("XXMI has put its stock d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
+  const hint = k?.undone ? t("XXMI has put the stock d3d11.dll back since, most likely in an update. Do the fix again, then turn this on")
     : k?.fixed && !on ? t("GIMI's d3d11.dll isn't XXMI's stock one, so the fix looks done and gachamod doesn't warn")
-    : t("Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts its stock d3d11.dll back");
+    : t("Until this is on, gachamod warns before each start with mods. It warns again if XXMI puts the stock d3d11.dll back");
   return (
     <div className="tools-kick">
       <p className="hint row">
-        <span>{t("If {game} stops with \"Illegal tool detected\" even with the FPS limit at 120, the usual cause is its anti-cheat flagging XXMI's d3d11.dll. A GameBanana guide shows a way around it by hand. It goes against the game's terms and can get your account banned.", { game: name })}</span>
+        <span>{t("If {game} stops with \"Illegal tool detected\" even with the FPS limit at 120, the usual cause is the game's anti-cheat flagging XXMI's d3d11.dll. A GameBanana guide shows a way around it by hand. It goes against the game's terms and can get your account banned.", { game: name })}</span>
         <Button size="sm" variant="ghost" icon="external" title={t("Open {url} in your browser", { url: GI_KICK_GUIDE })} onClick={openKickGuide}>{t("Open the guide")}</Button>
       </p>
       {children}
@@ -362,7 +362,7 @@ function MigotoPanel({ l, picker, inTools }: { l: Launch; picker: ReactNode; inT
         <Toggle checked={cfg.migoto.hunting} disabled={!!migLock("hunting")} onChange={(v) => setMig({ hunting: v })} label={t("Hunting mode")}
           hint={migLock("hunting") ?? t("Numpad 0 turns it on in game, then numpad keys step through shaders and buffers to find hashes")} />
         <Toggle checked={cfg.migoto.dumpShaders} disabled={!!migLock("dumpShaders")} onChange={(v) => setMig({ dumpShaders: v })} label={t("Dump shaders")}
-          hint={migLock("dumpShaders") ?? t("Marking a shader in hunting mode also saves its code to ShaderFixes")} />
+          hint={migLock("dumpShaders") ?? t("Marking a shader in hunting mode also saves the code to ShaderFixes")} />
         <Toggle checked={cfg.migoto.muteWarnings} disabled={!!migLock("muteWarnings")} onChange={(v) => setMig({ muteWarnings: v })} label={t("Hide warnings")}
           hint={migLock("muteWarnings") ?? t("No mod error text or beeps in game")} />
         {cfg.xxmiAvailable && <Toggle checked={cfg.migoto.enforceRendering} disabled={!!migLock("enforceRendering")} onChange={(v) => setMig({ enforceRendering: v })} label={t("Enforce rendering")}

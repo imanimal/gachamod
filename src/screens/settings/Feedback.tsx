@@ -123,7 +123,7 @@ export function PrivacySection() {
             <Toggle checked={st?.usage ?? true} disabled={!st} onChange={(v) => set({ usage: v })} />
           </span>
         </SetRow>
-        <SetRow id="set-crashes" label={t("Crash reports")} hint={t("When gachamod crashes or its window goes black, sends what went wrong and the end of its log, with your user folder's name taken out")}>
+        <SetRow id="set-crashes" label={t("Crash reports")} hint={t("When gachamod crashes or the window goes black, sends what went wrong and the end of the log, with your user folder's name taken out")}>
           <Toggle checked={st?.crashes ?? true} disabled={!st} onChange={(v) => set({ crashes: v })} />
         </SetRow>
       </div>
@@ -189,7 +189,7 @@ function TesterRow() {
   );
 }
 
-const ADMIN_TIP = t("Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. As administrator, gachamod switches skins without F10, its hotkeys work while you play and its menu opens over the game. Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way");
+const ADMIN_TIP = t("Zenless Zone Zero and some other games run as administrator, and Windows keeps keys from programs that don't away from them. As administrator, gachamod switches skins without F10, the hotkeys work while you play and the menu opens over the game. Windows asks for permission each time gachamod starts, and dragging files in from Explorer doesn't work while it runs this way");
 
 // the row shows on two pages (Games and mod loaders, In-game profile hotkeys), so its state is shared and both copies agree
 let adminNow: AdminState | null = null;

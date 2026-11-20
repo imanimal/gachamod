@@ -208,8 +208,8 @@ export function ProfilePage({ game, p, chars, busy, onSwitch, onEdit }: {
         </Waiting>
       ) : !shown.length ? (
         query ? <Empty icon="search" title={t("Nothing matches")}>{tab === "every"
-            ? t("No mod has \"{q}\" in its name, character or tags.", { q: query.trim() })
-            : t("No mod in {name} has \"{q}\" in its name, character or tags.", { name: p.name, q: query.trim() })}</Empty>
+            ? t("No mod has \"{q}\" in the name, character or tags.", { q: query.trim() })
+            : t("No mod in {name} has \"{q}\" in the name, character or tags.", { name: p.name, q: query.trim() })}</Empty>
         : tab === "every" ? <Empty icon="mods" title={t("No mods installed yet")}>{t("Mods you install show up here to add to {name}.", { name: p.name })}</Empty>
         : <Empty icon="profiles" title={t("Nothing in {name} yet", { name: p.name })}
             actions={<Button variant="primary" icon="plus" onClick={() => patchRoute({ tab: "every" })}>{t("Add mods")}</Button>}>

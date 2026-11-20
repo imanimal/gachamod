@@ -194,7 +194,7 @@ export const MODELS: Record<AppTool, ModelChoice[]> = {
     { value: "fable", label: "Fable", title: t("Claude's Fable model, when your plan has it") },
   ],
   codex: [{ value: "", label: t("Default"), title: t("The model Codex uses when none is named") }],
-  agy: [{ value: "", label: t("Default"), title: t("Antigravity picks its own model") }],
+  agy: [{ value: "", label: t("Default"), title: t("Antigravity chooses the model") }],
   gemini: [
     { value: "", label: "Auto", title: t("Gemini CLI picks Pro or Flash for each request") },
     { value: "pro", label: "Pro", title: t("Gemini's strongest model. Slower, with a smaller free limit") },
@@ -325,7 +325,7 @@ export function cliProblem(r: CliReply, name: string, tool: AppTool): { text: st
       };
     case "limit": {
       const at = r.resetsAt ? new Date(r.resetsAt * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : null;
-      return { text: at ? t("{name} hit its usage limit. It resets at {time}.", { name, time: at }) : t("{name} hit its usage limit.", { name }), hint: t("Pick another chatbot above to keep going.") };
+      return { text: at ? t("{name} hit the usage limit. It resets at {time}.", { name, time: at }) : t("{name} hit the usage limit.", { name }), hint: t("Pick another chatbot above to keep going.") };
     }
     case "key": return { text: t("Google didn't accept the Gemini key."), hint: t("Remove it and paste a new one from Google AI Studio.") };
     case "blocked":

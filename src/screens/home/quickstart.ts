@@ -26,7 +26,7 @@ export async function quickstart(url: string) {
   if (currentGame()?.id !== game.id) setGame(game.id);
   if (!canPlay(game)) {
     showWindow();
-    toast(t("Quickstart can't start the game until its folders are set"), true,
+    toast(t("Quickstart can't start the game until the game's folders are set"), true,
       { label: t("Game settings"), run: () => go({ view: "settings", section: "games" }) });
     return;
   }

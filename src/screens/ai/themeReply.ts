@@ -55,12 +55,12 @@ export function parseThemeReply(text: string): { theme: unknown; cut: boolean } 
   if (!blocks.length) return { theme: parseReply(text), cut: false };
   const json = blocks.find((b) => b.lang === "json") ?? blocks.find((b) => b.lang !== "css" && /^\s*\{/.test(b.body));
   if (!json) {
-    if (blocks.some((b) => b.cut)) throw new CutOff(t("The answer stops before its json code block (the chatbot ran out of room). Ask it to send the json block, copy that answer and press Paste the rest."));
-    throw new ReplyError(t("There's no json code block in that answer. Copy the chatbot's whole reply, including its code blocks."));
+    if (blocks.some((b) => b.cut)) throw new CutOff(t("The answer stops before the json code block (the chatbot ran out of room). Ask it to send the json block, copy that answer and press Paste the rest."));
+    throw new ReplyError(t("There's no json code block in that answer. Copy the chatbot's whole reply, including the code blocks."));
   }
   let theme: unknown;
   try { theme = JSON.parse(json.body); } catch {
-    if (json.cut) throw new CutOff(t("The answer stops inside its json code block. Ask the chatbot to send the json block again, copy that answer and press Paste the rest."));
+    if (json.cut) throw new CutOff(t("The answer stops inside the json code block. Ask the chatbot to send the json block again, copy that answer and press Paste the rest."));
     throw new ReplyError(t("The json code block isn't valid JSON. Ask the chatbot to send it again."));
   }
   if (!theme || typeof theme !== "object" || Array.isArray(theme)) throw new ReplyError(t("The json code block should be one theme object."));

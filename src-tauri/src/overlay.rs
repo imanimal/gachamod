@@ -110,7 +110,7 @@ fn drawn_menu<R: Runtime>(app: &AppHandle<R>, game: &str) -> bool {
 
 fn fullscreen_text(game: &str) -> String {
     let name = gacha_core::games::def(game).map_or("The game", |g| g.name);
-    format!("{name} runs in exclusive fullscreen, where no window can show over it. Set its window mode to borderless to use the skin menu")
+    format!("{name} runs in exclusive fullscreen, where no window can show over it. Set the window mode to borderless to use the skin menu")
 }
 
 /// Show the menu window over `game`, on `tab` ("keys") or where it was.

@@ -318,7 +318,7 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
             ? t("Reading the files and writing a long answer, like a whole theme, can take several minutes. Stop ends it.")
             : t("Long answers, like hundreds of mod names or a whole theme, take a minute or two. Stop ends it.")} />}
         <TextField value={reply} onChange={setReply} multiline rows={4} mono
-          placeholder={tool ? t("The answer shows here as it's written") : t("The chatbot's whole reply, with its code blocks")} />
+          placeholder={tool ? t("The answer shows here as it's written") : t("The chatbot's whole reply, with the code blocks")} />
         {!tool && (
           <div className="row">
             {read.cut
@@ -386,14 +386,14 @@ function RunDetails({ steps, thinking, usage, took, asking }: { steps: CliStatus
   const pct = usage?.context && usage.window ? Math.max(1, Math.round((usage.context / usage.window) * 100)) : null;
   return (
     <details className="ai-run" open={open} onToggle={(e) => { detailsOpen = e.currentTarget.open; setOpen(detailsOpen); }}>
-      <summary title={t("What the chatbot did: the files it read, its thinking and the tokens it used")}>
+      <summary title={t("What the chatbot did: the files it read, the thinking and the tokens it used")}>
         {summary.length ? summary.join(", ") : t("What it's doing")}
       </summary>
       {(usage || took !== null) && (
         <dl className="ai-run-facts">
           {usage?.model && <><dt>{t("Model")}</dt><dd className="selectable">{usage.model}</dd></>}
           {usage?.context != null && (
-            <><dt title={t("The most the model held in mind at once: the prompt, the files it read and its answer")}>{t("Context")}</dt>
+            <><dt title={t("The most the model held in mind at once: the prompt, the files it read and the answer")}>{t("Context")}</dt>
               <dd>{usage.window ? t("{used} of {max} tokens ({pct}%)", { used: n(usage.context), max: n(usage.window), pct: pct! }) : t("{n} tokens", { n: n(usage.context) })}</dd></>
           )}
           {usage?.input != null && (
@@ -438,7 +438,7 @@ function CliFailure({ r, name, tool, onGo }: { r: CliReply; name: string; tool: 
       {hint && <p className="hint">{hint}</p>}
       {r.problem === "signin" && tool !== "gemini-api" && (
         <Button size="sm" icon="external" onClick={() => void cliSignIn(tool as CliId).catch((e) => toast(errorText(e), true))}
-          title={t("Opens {name} in a window of its own to sign in", { name })}>{t("Sign in")}</Button>
+          title={t("Opens {name} in a separate window to sign in", { name })}>{t("Sign in")}</Button>
       )}
       {r.problem === "node" && <Button size="sm" icon="external" onClick={() => void shell.openUrl("https://nodejs.org/")}>{t("Get Node.js")}</Button>}
       {r.problem === "key" && <GeminiKey />}
@@ -531,11 +531,11 @@ function AiIntro() {
         <Icon name="ai" />
         <b>{t("Use a chatbot you already have")}</b>
       </div>
-      <p className="hint">{t("gachamod writes the prompt, opens the chatbot and applies its answer with Undo. No account or key. It can:")}</p>
+      <p className="hint">{t("gachamod writes the prompt, opens the chatbot and applies the answer with Undo. No account or key. It can:")}</p>
       <ul>
         <li>{t("Make a theme from \"navy and gold, sharp corners\"")}</li>
         <li>{t("Tidy 200 messy mod names at once")}</li>
-        <li>{t("Make a mod's toggles work only while its character is on screen")}</li>
+        <li>{t("Make a mod's toggles work only while the character is on screen")}</li>
       </ul>
       <span className="field-l">{t("Which one do you use?")}</span>
       <BotPicker value="" onPick={pick} />

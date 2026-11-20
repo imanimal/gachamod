@@ -30,7 +30,7 @@ export function registerMigrateDemo() {
     migrate_import: async ({ game, manager, options }): Promise<MigrateResult> => {
       const m = found(String(game), null).find((x) => x.id === manager);
       if (!m) throw { kind: "invalid", message: "That manager has nothing for this game anymore. Look again" };
-      if (m.running) throw { kind: "conflict", message: `Close ${m.name} first. It could change its folders while gachamod reads them` };
+      if (m.running) throw { kind: "conflict", message: `Close ${m.name} first. It could change the mod folders while gachamod reads them` };
       const mode = (options as MigrateOptions).mode;
       await demoWait(mode === "move" ? 900 : 1800);
       done.add(`${String(game)}|${m.id}`);

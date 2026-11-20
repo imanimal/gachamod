@@ -904,7 +904,7 @@ fn toggle_one(db: &Db, cx: &Ctx, e: &mut ModEntry, on: bool, notes: &mut Vec<Str
             }
             // Hestia's box: its files go back up into the mod's folder
             renamed += open_hestia_box(&old)?;
-            if renamed == 0 && !opened { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open its folder to check it", e.name))); }
+            if renamed == 0 && !opened { return Err(Error::Invalid(format!("{} has no ini that gachamod can turn on. Open the folder to check it", e.name))); }
             e.enabled = true;
             e.standby = false;
             save_row(db, e)?;
@@ -1030,7 +1030,7 @@ fn with_family(rows: &[ModEntry], ids: &[String], on: bool) -> (Vec<(String, boo
             let Some(m) = by_id.get(id.as_str()) else { continue };
             let Some(p) = m.parent.as_deref().and_then(|p| by_id.get(p)) else { continue };
             if p.loaded() || has(&targets, &p.id) || parents.contains(&p.id) { continue; }
-            notes.push(format!("Turned on {} too, since {} is its sub-mod", p.name, m.name));
+            notes.push(format!("Turned on {} too, since {} is a sub-mod", p.name, m.name));
             parents.push(p.id.clone());
         }
         targets.extend(parents.into_iter().map(|p| (p, true)));
@@ -1038,7 +1038,7 @@ fn with_family(rows: &[ModEntry], ids: &[String], on: bool) -> (Vec<(String, boo
         for m in rows {
             let Some(p) = m.parent.as_deref() else { continue };
             if !turning.iter().any(|t| t == p) || has(&targets, &m.id) || m.loaded() || !off_with_parent(m) { continue; }
-            notes.push(format!("Turned its sub-mod {} back on", m.name));
+            notes.push(format!("Turned the sub-mod {} back on", m.name));
             targets.push((m.id.clone(), true));
             flags.push((m.id.clone(), false));
         }
@@ -1046,7 +1046,7 @@ fn with_family(rows: &[ModEntry], ids: &[String], on: bool) -> (Vec<(String, boo
         for m in rows {
             let Some(p) = m.parent.as_deref() else { continue };
             if !ids.iter().any(|i| i == p) || has(&targets, &m.id) || !m.loaded() { continue; }
-            notes.push(format!("Turned off its sub-mod {} too", m.name));
+            notes.push(format!("Turned off the sub-mod {} too", m.name));
             targets.push((m.id.clone(), false));
             flags.push((m.id.clone(), true));
         }

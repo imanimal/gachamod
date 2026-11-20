@@ -71,7 +71,7 @@ fn exe_path(root: &Path) -> PathBuf { root.join("Resources").join("Bin").join(EX
 
 fn require_root(custom: Option<&str>) -> Result<PathBuf> {
     find_root(custom).ok_or_else(|| Error::NotSetUp(
-        "XXMI Launcher isn't installed. Get it from GitHub, or pick its folder in Settings".into()))
+        "XXMI Launcher isn't installed. Get it from GitHub, or pick the folder in Settings".into()))
 }
 
 // The parsed config, cached by file time: `games::list` asks for versions often.
@@ -161,7 +161,7 @@ pub fn importer_setting(custom_root: Option<&str>, code: &str, key: &str) -> Opt
 pub fn launch(custom_root: Option<&str>, importer: &str) -> Result<()> {
     let root = require_root(custom_root)?;
     let exe = exe_path(&root);
-    if !exe.is_file() { return Err(Error::NotSetUp("XXMI Launcher's exe is missing. Reinstall XXMI Launcher, or pick its folder in Settings".into())); }
+    if !exe.is_file() { return Err(Error::NotSetUp("XXMI Launcher's exe is missing. Reinstall XXMI Launcher, or pick the folder in Settings".into())); }
     let bin = root.join("Resources").join("Bin");
     crate::launch::shell_start(&exe, &format!("--nogui --xxmi {importer}"), &bin)
 }
@@ -282,7 +282,7 @@ pub fn importer_config(custom_root: Option<&str>, code: &str) -> Result<Value> {
 pub fn set_importer_config(custom_root: Option<&str>, code: &str, patch: &Value) -> Result<()> {
     let root = require_root(custom_root)?;
     if crate::launch::process_running(EXE_NAME) {
-        return Err(Error::Conflict("Close XXMI Launcher first, it saves its settings when it closes".into()));
+        return Err(Error::Conflict("Close XXMI Launcher first, it saves the settings when it closes".into()));
     }
     write_patch(&root.join(CONFIG_FILE), code, patch)
 }

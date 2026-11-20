@@ -194,7 +194,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             {installed.length > 0 && <Button variant="primary" icon="mods" title={switches ? t("Open your copy in Mods (switches to {game})", { game: switches }) : t("Open your copy in Mods")} onClick={() => showInMods()}>{t("Show in Mods")}</Button>}
             <Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</Button>
           </>}>
-            {installed.length > 0 ? t("GameBanana no longer has its page. Your installed copy stays in Mods.") : t("GameBanana no longer has its page.")}
+            {installed.length > 0 ? t("GameBanana no longer has this mod's page. Your installed copy stays in Mods.") : t("GameBanana no longer has this mod's page.")}
           </Empty>
         : <Empty icon="warn" title={tool ? t("Couldn't load this fixer") : t("Couldn't load this mod")} actions={<Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</Button>}>{error}</Empty>)}
       {!mod && !error && (
@@ -236,8 +236,8 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
               </>
               : <Badge tone="ok" icon="check" title={switches ? t("In your mods. Click to see it there (switches to {game})", { game: switches }) : t("In your mods. Click to see it there")} onClick={() => showInMods()}>{t("Installed")}</Badge>)}
             {archived && (target?.id === here.id
-              ? <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back its settings. Click to see it in Mods, Trash")} onClick={() => go({ view: "library", tab: "archive" })}>{t("Removed")}</Badge>
-              : <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back its settings")}>{t("Removed")}</Badge>)}
+              ? <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back the settings. Click to see it in Mods, Trash")} onClick={() => go({ view: "library", tab: "archive" })}>{t("Removed")}</Badge>
+              : <Badge tone="info" icon="trash" title={t("You removed it before. Reinstalling brings back the settings")}>{t("Removed")}</Badge>)}
           </div>
           {mod.summary && <p className="gb-summary">{mod.summary}</p>}
 
@@ -303,7 +303,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
             { label: t("Move to trash"), icon: "trash", danger: true, hint: t("Remove it from Mods. It stays in the trash, with Undo in the toast"), onClick: () => { const m = menu; setMenu(null); if (target) void trashMods(target.id, [m.same!]); } },
           ] : [
             { label: t("Install alongside"), icon: "plus", hint: t("Add this file as a separate mod and keep {name}", { name: menu.base.name }), onClick: () => { const m = menu; setMenu(null); void install(m.file); } },
-            { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Install this file in its place. Options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
+            { label: t("Replace {name}", { name: menu.base.name }), icon: "swap", hint: t("Replace the installed file with this one. Options, tags and on/off state stay"), onClick: () => { const m = menu; setMenu(null); void install(m.file, m.base.id); } },
           ]} />
         </Popover>
       )}

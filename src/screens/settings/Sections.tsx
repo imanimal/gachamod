@@ -61,7 +61,7 @@ export function ModsSection() {
   return (
     <Panel title={t("Turning mods on and reloading the game")} icon="mods" id="mods">
       <div className="set-rows">
-        <SetRow id="set-enable-new" label={t("Turn on new mods")} hint={t("A mod you install turns on right away, and its character's other skin turns off unless that game is set to Keep")}
+        <SetRow id="set-enable-new" label={t("Turn on new mods")} hint={t("A mod you install turns on right away, and the character's other skin turns off unless that game is set to Keep")}
           tip={t("Off, new mods wait in Mods, turned off, until you turn them on. Updates keep the mod on or off as it was")}>
           <EnableNewSwitch />
         </SetRow>
@@ -70,7 +70,7 @@ export function ModsSection() {
       {shown.length > 0 && (
         <div className="set-pergame" id="set-pergame">
           <div className="set-pergame-h"><span />
-            <span title={t("What happens when you turn on a mod and its character already has another one on. Sub-mods never count. A mod that just installed only follows Keep: otherwise the other skin goes off, and Ctrl+Z puts it back")}>{t("Another skin already on")}</span>
+            <span title={t("What happens when you turn on a mod and the character already has another one on. Sub-mods never count. A mod that just installed only follows Keep: otherwise the other skin goes off, and Ctrl+Z puts it back")}>{t("Another skin already on")}</span>
             <span title={t("Presses the game's reload key for you when you switch back to it after a change, so 3DMigoto loads the mods again. The key is F10 unless the game's d3dx.ini sets another")}>{t("Reload in game")}</span>
           </div>
           {shown.map((g) => <PerGame key={g.id} game={g} />)}
@@ -134,11 +134,11 @@ export function InstallingSection() {
           <Toggle checked={!keep} onChange={(v) => void keepArchivesPref.set(!v, v ? t("Deleting archives after installs") : t("Keeping archives after installs"))} />
         </SetRow>
         <SetRow id="set-all-parts" label={t("Install every mod in an archive")} hint={t("Skips the window that asks which ones to install")}
-          tip={t("Some downloads hold several mods, like a skin and its icons. They install as one mod, and its details let you turn each part on or off")}>
+          tip={t("Some downloads hold several mods, like a skin and the icons. They install as one mod, and the details let you turn each part on or off")}>
           <Switch p={installAllPartsPref} on={t("Archives with several mods install all of them")} off={t("Asking which mods to install from an archive")} />
         </SetRow>
         <SetRow id="set-other-servers" label={t("Move slow downloads to another server")} hint={t("When a GameBanana download stays under 1 MB/s")}
-          tip={t("GameBanana sends each file to one of its file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one")}>
+          tip={t("GameBanana sends each file to one of several file servers, and sometimes that server is slow while the others are fast. The download carries on from where it was on another one")}>
           <Switch p={otherServersPref} on={t("Slow downloads move to another server")} off={t("Downloads stay on the server GameBanana picks")} />
         </SetRow>
         <SetRow id="set-review-unsure" label={t("Ask me to check files gachamod can't place")} hint={t("Files with no .ini that nothing says where to put")}
@@ -146,7 +146,7 @@ export function InstallingSection() {
           <Switch p={reviewUnsurePref} on={t("Asking you to check files gachamod can't place")} off={t("Stopped asking about files gachamod can't place")} />
         </SetRow>
         <SetRow id="set-onscreen" label={t("Toggles only while on screen, for new mods")}
-          tip={t("A mod's toggles stop working when its character isn't on screen, so two mods can share a key")}>
+          tip={t("A mod's toggles stop working when the character isn't on screen, so two mods can share a key")}>
           <Switch p={onScreenOnInstallPref} on={t("New mods get toggles only while on screen")} off={t("New mods keep their toggles as they are")} />
         </SetRow>
       </div>
@@ -234,7 +234,7 @@ export function StorageSection() {
         <SetRow id="set-trash-days" label={t("Keep removed mods' files")}
           hint={days
             ? t("Removed mods stay on your PC for a while so Put back works without downloading. Mods, Trash keeps their GameBanana link either way")
-            : t("Off: removing a mod deletes its files. Mods, Trash keeps its GameBanana link and settings so you can download it again")}>
+            : t("Off: removing a mod deletes the files. Mods, Trash keeps the GameBanana link and settings so you can download it again")}>
           <span className="set-inline">
             <Button size="sm" variant="ghost" icon="trash" onClick={() => go({ view: "library", tab: "archive" })} title={t("Opens Mods > Trash")}>{t("Open Trash")}</Button>
             {days > 0 && <Select value={String(days)} onChange={(v) => void choose(Number(v))} options={opts} />}
@@ -252,7 +252,7 @@ export function StorageSection() {
       </div>
       {ask && (
         <Confirm title={t("Delete files now?")} yes={t("Delete files")} danger onClose={() => setAsk(null)} onYes={() => save(ask.days)}>
-          {tn(ask.count, "{n} removed mod is older than that, so its files go now. Each one's GameBanana link stays in Mods, Trash.", "{n} removed mods are older than that, so their files go now. Each one's GameBanana link stays in Mods, Trash.")}
+          {tn(ask.count, "{n} removed mod is older than that, so the files go now. Each one's GameBanana link stays in Mods, Trash.", "{n} removed mods are older than that, so their files go now. Each one's GameBanana link stays in Mods, Trash.")}
         </Confirm>
       )}
     </Panel>

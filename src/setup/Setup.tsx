@@ -29,7 +29,7 @@ const JOB_TITLE: Record<Job, string> = { install: t("Installing gachamod"), upda
 const JOB_FAILED: Record<Job, string> = { install: t("Couldn't install gachamod"), update: t("Couldn't update gachamod"), apply: t("Couldn't update gachamod"), repair: t("Couldn't repair gachamod"), uninstall: t("Couldn't uninstall gachamod") };
 const STEP_LABEL: Record<string, string> = {
   unpack: t("Unpack the installer"), download: t("Download gachamod"), verify: t("Check the download"), close: t("Close gachamod"),
-  copy: t("Copy gachamod"), remove: t("Remove gachamod"), data: t("Move its data to the Recycle Bin"),
+  copy: t("Copy gachamod"), remove: t("Remove gachamod"), data: t("Move the data to the Recycle Bin"),
 };
 
 /** -1, 0 or 1 for "1.2.3" style versions. */
@@ -262,7 +262,7 @@ function Install(p: {
   const fix = !!inst && !inst.ok && c <= 0;
   const job: Job = fix ? "repair" : update ? "update" : "install";
   const sub = !inst ? t("Version {version}", { version: info.version })
-    : fix ? t("gachamod.exe is missing from its folder. This puts it back.")
+    : fix ? t("gachamod.exe is missing from the folder. This puts it back.")
     : inst.version ? t("Version {version} is installed. This updates it to {setup}.", { version: inst.version, setup: info.version })
     : t("This installs version {version} over the copy you have.", { version: info.version });
   const where = p.dir ?? inst?.dir ?? info.defaultDir;

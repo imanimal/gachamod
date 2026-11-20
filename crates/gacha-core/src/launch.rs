@@ -186,7 +186,7 @@ pub fn config(db: &Db, game: &str) -> Result<LaunchConfig> {
         let text = games::importer_dir(db, game).ok().and_then(|d| std::fs::read_to_string(d.join("d3dx.ini")).ok());
         match text {
             Some(t) => c.migoto = migoto_from_d3dx(&t),
-            None => { c.locked.insert("migoto".into(), "No d3dx.ini found for this game yet. Set its loader folder in Settings".into()); }
+            None => { c.locked.insert("migoto".into(), "No d3dx.ini found for this game yet. Set the loader folder in Settings".into()); }
         }
     }
     Ok(c)
@@ -561,7 +561,7 @@ fn opens_launcher(game: &str, plan: &Plan) -> bool {
 pub fn plan_note(db: &Db, game: &str, plan: &Plan, vanilla: bool, started: Started) -> Option<String> {
     let g = games::def(game)?;
     if opens_launcher(game, plan) {
-        return Some(format!("Opened the GRYPHLINK launcher. Press Start there: outside Steam, {} starts from its launcher", g.name));
+        return Some(format!("Opened the GRYPHLINK launcher. Press Start there: outside Steam, {} starts from that launcher", g.name));
     }
     if let Some(old) = started.fps_was {
         return Some(format!("{}'s FPS limit was {old}, now {GI_FPS_CAP}. Above {GI_FPS_CAP} the game disconnects you with \"Illegal tool detected\"", g.name));

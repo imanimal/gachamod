@@ -65,7 +65,7 @@ export function DesktopShortcutsSection() {
         {row("quickstart", st?.quickstart ?? false, t("Quickstart"), game
           ? t("Starts the game you had open last, with mods. Now that's {game}", { game: gameName(game) })
           : t("Starts the game you had open last, with mods"), "set-shortcut-quickstart",
-        () => shortcuts.create("quickstart"), () => shortcuts.remove("quickstart"), t("Its icon is that game's icon, with quickstart's in the corner"))}
+        () => shortcuts.create("quickstart"), () => shortcuts.remove("quickstart"), t("The icon is that game's icon, with quickstart's in the corner"))}
         {shown.map((g) => row(g.id, st?.games.includes(g.id) ?? false, t("{game} quickstart", { game: gameName(g) }),
           t("Always starts {game}, with mods", { game: gameName(g) }), `set-shortcut-${g.id}`,
           () => shortcuts.createGame(g.id), () => shortcuts.removeGame(g.id)))}

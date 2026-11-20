@@ -56,7 +56,7 @@ export function AiSection() {
             <span><b>{t("Your chatbot")}</b><span className="hint">{tool === "gemini-api"
               ? t("Gemini answers in gachamod with your free key. Nothing to copy or paste")
               : tool
-              ? t("{name} runs on this PC with {plan}, and its answer shows in gachamod. Nothing to copy or paste", { name: CLI_NAME[tool], plan: cliPlan(tool) })
+              ? t("{name} runs on this PC with {plan}, and the answer shows in gachamod. Nothing to copy or paste", { name: CLI_NAME[tool], plan: cliPlan(tool) })
               : clis === null && info?.clis && useCli
               ? t("Looking for {name} on this PC", { name: CLI_NAME[info.clis[0]!] })
               : t("The helper writes the prompt and opens the website. You paste the answer back. No account or key")}</span></span>

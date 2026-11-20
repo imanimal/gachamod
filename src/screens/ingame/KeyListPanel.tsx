@@ -15,8 +15,8 @@ import { HotkeyField } from "../profiles/HotkeyField";
 import { keyHits, saveKeyList, useKeyList } from "./KeyListParts";
 
 const STYLE_HINT: Record<KeyListSettings["style"], (key: string) => string> = {
-  window: (key) => t("{key} opens gachamod's menu over the game on the Keys tab. In exclusive fullscreen the game draws the list in its top right corner instead. The game reloads once after a change here.", { key }),
-  game: (key) => t("The game draws the list in its top right corner, and it stays there while you play until you press {key} again. Works in exclusive fullscreen too. The game reloads once after a change here.", { key }),
+  window: (key) => t("{key} opens gachamod's menu over the game on the Keys tab. In exclusive fullscreen the game draws the list in the top right corner instead. The game reloads once after a change here.", { key }),
+  game: (key) => t("The game draws the list in the top right corner, and it stays there while you play until you press {key} again. Works in exclusive fullscreen too. The game reloads once after a change here.", { key }),
 };
 
 const MENUS_TIP = t("Stops listing every mod that shows a key menu in game, now and for mods added later");

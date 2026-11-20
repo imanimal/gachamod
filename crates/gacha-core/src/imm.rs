@@ -453,7 +453,7 @@ fn move_out(mods_dir: &Path, importer_dir: Option<&Path>, cfg: &Config, m: &Matc
         if fresh { if let Some(t) = s.info.installed { sc.installed_at = t; } }
         match library::write_sidecar(&s.to, &sc) {
             Ok(()) => out.moved.push(Moved { id: sc.id, key: s.key.clone(), name: s.name.clone(), dir: s.to.clone(), stash }),
-            Err(e) => out.notes.push(format!("Moved {}, but couldn't write its details: {e}", s.name)),
+            Err(e) => out.notes.push(format!("Moved {}, but couldn't write the details: {e}", s.name)),
         }
     }
     if is_real_dir(&prefs_dir) { out.prefs_dir = Some(prefs_dir); }
@@ -519,7 +519,7 @@ fn plural(n: usize, one: &str, many: &str) -> String { if n == 1 { format!("1 {o
 pub fn takeover(db: &crate::db::Shared, game: &str) -> Result<crate::pack::ImportResult> {
     let _hold = crate::watch::hold(game);
     if crate::launch::process_running(PROCESS) {
-        return Err(Error::Conflict("Close Integrated Mod Manager first. It would put its folders back while the mods move".into()));
+        return Err(Error::Conflict("Close Integrated Mod Manager first. It would put the folders back while the mods move".into()));
     }
     if crate::launch::running(game) {
         return Err(Error::Conflict("Close the game first. Mods can't move while it has them open".into()));

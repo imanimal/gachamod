@@ -92,7 +92,7 @@ export function OnlineOverlays() {
         announced.current.delete(i.id);
         announce(i.id, i.req.game, i.req.gbModId, i.candidates.length);
       } else if (waiting.length > 1) {
-        toast(tn(waiting.length, "{n} download waits for you to pick its parts", "{n} downloads wait for you to pick their parts"), false, { label: t("Show"), run: () => go("downloads") });
+        toast(tn(waiting.length, "{n} download waits for you to pick the parts", "{n} downloads wait for you to pick their parts"), false, { label: t("Show"), run: () => go("downloads") });
       }
       return;
     }
@@ -174,7 +174,7 @@ function BrowseCommands() {
 async function openLink(url: string, games: ReturnType<typeof useGames>) {
   const link = parseGbLink(url);
   if (!link) {
-    if (fileIdFromLink(url)) toast(t("That's a link to a file without its mod page. Open the mod's page on GameBanana and copy that link instead"), true);
+    if (fileIdFromLink(url)) toast(t("That's a link to a file without a mod page. Open the mod's page on GameBanana and copy that link instead"), true);
     else toast(t("That isn't a GameBanana mod link"), true);
     return;
   }
@@ -250,7 +250,7 @@ function VariantPicker({ item, candidates, onClose }: { item: QueueItem; candida
         </Button>
       </>}>
       <p className="hint gb-picker-hint">
-        {t("Pick the parts you want. They install as one mod, and you can turn each part on or off in its details.")}
+        {t("Pick the parts you want. They install as one mod, and you can turn each part on or off in the mod's details.")}
       </p>
       <div className="gb-picker-grid">
         {candidates.map((c) => {

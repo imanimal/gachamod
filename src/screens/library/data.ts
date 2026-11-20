@@ -179,11 +179,11 @@ export function summarize(change: ModChange, names = true): string {
 }
 
 // backend notes that name the mods a switch reached through sub-mod links: the count of other mods says it
-const FAMILY_NOTE = /^Turned (on .+ too, since .+ is its sub-mod|its sub-mod .+ back on|off its sub-mod .+ too)\.?$/;
+const FAMILY_NOTE = /^Turned (on .+ too, since .+ is a sub-mod|the sub-mod .+ back on|off the sub-mod .+ too)\.?$/;
 const OPTIONS_NOTE = /^Options for .+ come back after you close the game\.?$/;
 // live switching: a skin turned off that the game wasn't showing, and a mod left on beside the skin it shows
 const NOT_SHOWING_NOTE = /^.+ isn't showing\. .+ (wears .+|is vanilla) in the game\.?$/;
-const NEXT_TO_NOTE = /^.+ is on next to .+\. It doesn't switch in game any more, so the game shows it after it reloads its mods\.?$/;
+const NEXT_TO_NOTE = /^.+ is on next to .+\. It doesn't switch in game any more, so the game shows it after it reloads mods\.?$/;
 
 /** The backend's notes for a toast, which never lists names: the sub-mod notes go (the count of other mods says
  *  it), and the options and live switching notes are said without names and counted. Errors keep their names, since
@@ -196,8 +196,8 @@ export function briefNotes(notes: string[]): string[] {
   return [
     ...(options ? [tn(options, "The mod's options come back after you close the game", "Options for {n} mods come back after you close the game")] : []),
     ...(hidden ? [t("That skin isn't the one showing in the game")] : []),
-    ...(beside ? [tn(beside, "The mod is on next to the skin showing. It doesn't switch in game any more, so the game shows it after it reloads its mods",
-      "{n} mods are on next to the skins showing. They don't switch in game any more, so the game shows them after it reloads its mods")] : []),
+    ...(beside ? [tn(beside, "The mod is on next to the skin showing. It doesn't switch in game any more, so the game shows it after it reloads mods",
+      "{n} mods are on next to the skins showing. They don't switch in game any more, so the game shows them after it reloads mods")] : []),
     ...rest,
   ];
 }

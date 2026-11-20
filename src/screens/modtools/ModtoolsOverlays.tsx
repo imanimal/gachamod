@@ -319,7 +319,7 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
       } else toast(text);
       if (r.notes.length) toast(notesText(r.notes), true);
       if (r.missing.length) {
-        toast(tn(r.missing.length, "{n} mod wasn't in the file, only its name. Ask the sender for it.", "{n} mods weren't in the file, only their names. Ask the sender for those."));
+        toast(tn(r.missing.length, "{n} mod wasn't in the file, only the name. Ask the sender for it.", "{n} mods weren't in the file, only their names. Ask the sender for those."));
       }
       if (live.current) onClose();
     } catch (e) {
@@ -386,11 +386,11 @@ function PackImport({ path, onClose }: { path: string; onClose: () => void }) {
             </div>
           )}
           {canProfile && pack.profiles.length === 1 && (
-            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={t("Use its profile \"{name}\"", { name: pack.profiles[0]!.name })}
+            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={t("Use the profile \"{name}\"", { name: pack.profiles[0]!.name })}
               hint={t("Makes a profile with these mods and switches to it. Your other profiles stay as they are.")} />
           )}
           {canProfile && pack.profiles.length > 1 && (
-            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={tn(pack.profiles.length, "Add its {n} profile", "Add its {n} profiles")}
+            <Toggle checked={useProfile} onChange={setUseProfile} disabled={busy} label={tn(pack.profiles.length, "Add the {n} profile", "Add the {n} profiles")}
               hint={active ? t("Switches to \"{name}\", the one in use when the file was made. Your own profiles stay as they are.", { name: active.name }) : t("Your own profiles stay as they are.")} />
           )}
           {busy && <Progress value={progress} label={t("Importing")} />}
@@ -422,7 +422,7 @@ function PackRow({ m, heading, thumb, on, disabled, onChange }:
         } />
         <span className="pack-mod-tags">
           {m.how === "download" && <Badge tone="info" icon="downloads" title={t("Comes from GameBanana, then gets the sender's settings")}>{t("Download")}</Badge>}
-          {m.how === "missing" && <Badge tone="warn" title={t("The file only names this mod. It has no GameBanana link and its files aren't inside")}>{t("No link")}</Badge>}
+          {m.how === "missing" && <Badge tone="warn" title={t("The file only names this mod. It has no GameBanana link and the files aren't inside")}>{t("No link")}</Badge>}
           {!m.enabled && <Badge tone="muted" title={t("Comes in turned off")}>{t("Off")}</Badge>}
           {m.existing && <Badge tone="ok" title={t("The same mod is already in your library")}>{t("In library")}</Badge>}
         </span>

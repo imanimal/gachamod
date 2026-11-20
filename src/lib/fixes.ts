@@ -38,7 +38,7 @@ type Tried = Pick<ModHealth, "tried" | "needsAuthor">;
 export const fixerName = (tool: string) => tool.replace(/\s*\(.*$/, "").replace(/[\s!.?]+$/, "") || tool;
 const short = fixerName;
 /** What a mod most likely needs when a fixer didn't repair it. */
-const NEEDS = t("It likely needs an update from its author, or a fix posted for this mod");
+const NEEDS = t("It likely needs an update from the author, or a fix posted for this mod");
 
 /** The fix button's words. Nothing is promised, and after a run that didn't help it is a retry. */
 export const fixLabel = (h: Tried) => (h.tried ? t("Try again") : t("Attempt fix"));

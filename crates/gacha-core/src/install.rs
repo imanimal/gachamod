@@ -893,7 +893,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
     let combined = chosen.len() > 1 && setup_of.iter().all(|s| s.is_none());
     let (chosen, setup_of) = if combined {
         let (c, off) = combine(staging, &chosen)?;
-        if off > 0 { notes.push(format!("Turned off {} of {base_name} that change the same things as another part. Switch parts in its details", plural_parts(off))); }
+        if off > 0 { notes.push(format!("Turned off {} of {base_name} that change the same things as another part. Switch parts in the mod's details", plural_parts(off))); }
         (vec![c], vec![None])
     } else { (chosen, setup_of) };
     let preview_src = preview_in(staging);
@@ -1013,7 +1013,7 @@ fn place_inner(db: &crate::db::Shared, data_dir: &Path, game: &str, staging: &Pa
         if let Some(r) = &back {
             let d = lock(db)?;
             let _ = crate::library::drop_removed(&d, r);
-            notes.push(format!("{} came back with its settings", entry.name));
+            notes.push(format!("{} came back with the settings", entry.name));
         }
         if let Some(s) = setup { apply_setup(db, game, &entry, s, &mut notes); }
         installed.push(entry);

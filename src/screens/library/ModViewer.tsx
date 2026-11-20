@@ -231,7 +231,7 @@ export default function ModViewer({ game, modId, onClose, onSnapshot, saving }: 
       </div>
       {ready && (
         <p className="hint mod-viewer-note">
-          {t("The parts this mod replaces, as its toggles are set now ({n} triangles).", { n: ready.triangles })}
+          {t("The parts this mod replaces, as the toggles are set now ({n} triangles).", { n: ready.triangles })}
           {ready.notes.length > 0 && (lang === "zh-CN" ? "" : " ") + stops(ready.notes.map((n) => tb(n)), true)}
         </p>
       )}

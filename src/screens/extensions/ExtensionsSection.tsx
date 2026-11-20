@@ -55,7 +55,7 @@ function Sources() {
   };
   return (
     <div className="set-row set-row-col" id="set-ext-sources">
-      <span><b>{t("Extension lists")}</b><span className="hint">{t("Where Extensions finds packages. Add another repo's index.json link to list its packages too")}</span></span>
+      <span><b>{t("Extension lists")}</b><span className="hint">{t("Where Extensions finds packages. Add another repo's index.json link to list the packages too")}</span></span>
       <div className="ext-sources">
         <p className="ext-src" title={DEFAULT_EXT_SOURCE}><span>{t("gachamod's list")}</span></p>
         {(list ?? []).map((u) => (

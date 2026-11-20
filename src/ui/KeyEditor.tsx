@@ -341,24 +341,24 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   const who = mod?.character;
   const offScreenTip = who
     ? t("Toggles do nothing while {name} isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again", { name: who })
-    : t("Toggles do nothing while its character isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again");
+    : t("Toggles do nothing while the character isn't on screen, so mods for other characters can use the same keys. gachamod adds a check to the ini and can take it out again");
   const onScreen = keys.onScreen;
   const showAi = (onScreen === "cant" || onScreen === "partial") && aiShown("useful");
   const onScreenRow = onScreen === "global" ? (
-    <p className="ke-os ke-os-global hint">{keys.onScreenNote ?? t("This mod doesn't draw a character, so its toggles work everywhere.")}</p>
+    <p className="ke-os ke-os-global hint">{keys.onScreenNote ?? t("This mod doesn't draw a character, so the toggles work everywhere.")}</p>
   ) : (
-    <div className="ke-os" title={onScreen === "own" ? t("The mod's ini already checks that its character is drawn before a toggle does anything")
+    <div className="ke-os" title={onScreen === "own" ? t("The mod's ini already checks that the character is drawn before a toggle does anything")
       : offScreenTip}>
       <Toggle checked={onScreen === "on" || onScreen === "partial" || onScreen === "own"} disabled={busy !== null || onScreen === "own" || onScreen === "cant"}
         label={t("Toggles only while on screen")}
         hint={onScreen === "own" ? t("The mod does this itself")
           : onScreen === "cant" || onScreen === "partial" ? keys.onScreenNote ?? undefined
           : onScreen === "on" ? t("Added by gachamod. Turn it off if a toggle stops working in game")
-          : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while its character isn't on screen")}
+          : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while the character isn't on screen")}
         onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"),
           on ? t("Made the mod's toggles work only while on screen") : t("Made the mod's toggles work any time"), true)} />
       {showAi && (
-        <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot")}
+        <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply the answer here. Works best with a strong chatbot")}
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>{t("Ask the AI helper")}</Button>
       )}
     </div>
@@ -405,7 +405,7 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
   const ours =keys.changed || onScreen === "on" || onScreen === "partial";
   const reset = ours && (
     <Button size="sm" variant="ghost" icon="undo" busy={busy === "reset"} disabled={busy !== null && busy !== "reset"}
-      title={t("Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before its first change. Undo brings the changes back")}
+      title={t("Take out every change gachamod made to this mod: changed keys, toggles turned off and the on-screen check. Each ini goes back to the copy gachamod kept from before the first change. Undo brings the changes back")}
       onClick={() => run("reset", () => modKeys.putBack(game, modId), t("The files are already the author's"), t("Put back the original files"))}>{t("Put back original files")}</Button>
   );
 

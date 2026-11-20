@@ -137,7 +137,7 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
       )}
       <MenuKeyFields game={game} menu={menu} />
       {drawn && <Checkbox checked={menu.fastSave} onChange={(fastSave) => set({ fastSave })} label={t("Show skins picked in the game right away")}
-        title={t("The game saves its values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in the game's menu shows here at once. Starts after the game reloads its mods")} />}
+        title={t("The game saves the values every second instead of every minute (settings_auto_save_interval in d3dx.ini), so a skin picked in the game's menu shows here at once. Starts after the game reloads mods")} />}
       <p className="hint">{MENU_HINT[menu.style](menu.key, drawn)} {blocked ? t("Press {key} in the game after a change here.", { key: reloadKeyOf(game) }) : t("The game reloads once after a change here.")}</p>
       {!drawn && (
         <p className="hint row"><span>{t("For exclusive fullscreen, tester options add the menu the game draws.")}</span>
@@ -145,7 +145,7 @@ function MenuOptions({ game, name, menu, blocked, drawn, checked }:
             title={t("Turns on tester options. It asks first and says what they risk")}>{t("Tester options")}</Button></p>
       )}
       <p className="hint live-keys">{t("The menu's Keys tab lists the toggle keys of the mods showing now. Click a key there to rebind it.")}
-        <Button size="sm" variant="ghost" icon="keyboard" onClick={() => go({ view: "tools", section: "keylist" })} title={t("Opens Key list in game: its key, where it shows and which mods it lists")}>{t("Key list settings")}</Button></p>
+        <Button size="sm" variant="ghost" icon="keyboard" onClick={() => go({ view: "tools", section: "keylist" })} title={t("Opens Key list in game: the key, where it shows and which mods it lists")}>{t("Key list settings")}</Button></p>
     </div>
   );
 }
@@ -156,8 +156,8 @@ function LiveRow({ game, g, busy, run }: { game: GameId; g: LiveGroup; busy: str
     <div className="live-row">
       <div className="live-row-h">
         <CharLink game={game} name={g.character} portrait />
-        {g.waiting && <span className="hint" title={t("gachamod couldn't send the pick to the game, so the game shows it at its next reload")}>
-          {t("Shows after the game reloads its mods ({key})", { key: reloadKeyOf(game) })}</span>}
+        {g.waiting && <span className="hint" title={t("gachamod couldn't send the pick to the game, so the game shows it at the next reload")}>
+          {t("Shows after the game reloads mods ({key})", { key: reloadKeyOf(game) })}</span>}
         <span className="grow" />
         <IconButton size="sm" icon="x" label={t("Stop switching {name} in game. The skin showing stays on, the others turn off", { name: g.character })}
           disabled={!!busy} onClick={() => void run(`stop-${g.group}`, () => stopLive(game, g.mods.map((m) => m.modId), g.character))} />

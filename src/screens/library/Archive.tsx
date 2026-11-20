@@ -111,9 +111,9 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
     else setAskAll(true);
   };
   const deleteTip = (e: ArchiveEntry) =>
-    !unsourced(e) || mode === "delete" ? t("Deletes its files from your PC and forgets its settings")
-      : mode === "recycle" ? t("Moves its files to the Recycle Bin and forgets its settings")
-      : t("Forgets it and its settings. You choose whether its files go to the Recycle Bin or are deleted for good");
+    !unsourced(e) || mode === "delete" ? t("Deletes the files from your PC and forgets the settings")
+      : mode === "recycle" ? t("Moves the files to the Recycle Bin and forgets the settings")
+      : t("Forgets it and the settings. You choose whether the files go to the Recycle Bin or are deleted for good");
 
   const reinstall = async (e: ArchiveEntry) => {
     setBusy(e.key);
@@ -137,7 +137,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
         void load();
       } else if (e.source) {
         const item = await queueLatest(game, e.source.modId);
-        if (item) toast(t("Downloading the mod. Its settings come back when it installs"), false, { label: t("Downloads"), run: () => go("downloads") });
+        if (item) toast(t("Downloading the mod. The settings come back when it installs"), false, { label: t("Downloads"), run: () => go("downloads") });
         else toast(t("The mod has no files left on GameBanana"), true);
       } else {
         toast(t("The mod's files are gone and it didn't come from GameBanana, so there's nothing to download"), true);
@@ -154,7 +154,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
     "-",
     e.trashId !== null
       ? { label: t("Delete"), icon: "trash", danger: true, title: deleteTip(e), onClick: () => forget(e) }
-      : { label: t("Forget"), icon: "x", danger: true, title: t("Deletes this record and its saved settings"), onClick: () => forget(e) },
+      : { label: t("Forget"), icon: "x", danger: true, title: t("Deletes this record and the saved settings"), onClick: () => forget(e) },
   ];
 
   const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -174,7 +174,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
           <span className="hint archive-hint">
             {trashDays > 0
               ? tn(trashDays, "Files of removed mods stay on your PC for {n} day, then they're deleted.", "Files of removed mods stay on your PC for {n} days, then they're deleted.")
-              : mode === "delete" ? t("Removing a mod deletes its files.") : t("Removing a mod deletes its files, or moves them to the Recycle Bin when it isn't on GameBanana.")}
+              : mode === "delete" ? t("Removing a mod deletes the files.") : t("Removing a mod deletes the files, or moves them to the Recycle Bin when it isn't on GameBanana.")}
             {" "}{t("Each mod's GameBanana link and settings stay here, so Download again gets it back as it was.")}
           </span>
           <Button size="sm" variant="ghost" icon="trash" title={t("Deletes every removed mod's files and saved settings. You're asked first")}
@@ -195,7 +195,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
             const files = e.trashId !== null;
             // what the Files on PC or Record only tag means, also on the tile so keyboard and controller users see it
             const kept = !files
-              ? t("The mod's files were deleted from your PC. Only its name, settings and GameBanana link are kept, so Download again gets it back with its settings")
+              ? t("The mod's files were deleted from your PC. Only the name, settings and GameBanana link are kept, so Download again gets it back with the settings")
               : e.filesUntil
                 ? t("The mod's files are still on your PC until {date}. Put back restores them as they were", { date: new Date(e.filesUntil * 1000).toLocaleDateString() })
                 : t("The mod's files are still on your PC. Put back restores them as they were");
@@ -220,16 +220,16 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
                   </span>
                   <span className="tile-meta">
                     <span title={new Date(e.removedAt * 1000).toLocaleString()}><Icon name="clock" />{e.reason === "replaced" ? t("Replaced {when}", { when: timeAgo(e.removedAt) }) : t("Removed {when}", { when: timeAgo(e.removedAt) })}</span>
-                    {files && e.sizeBytes > 0 && <span title={t("Space its files take on your PC")}>{formatBytes(e.sizeBytes)}</span>}
+                    {files && e.sizeBytes > 0 && <span title={t("Space the files take on your PC")}>{formatBytes(e.sizeBytes)}</span>}
                     {e.hasOptions && <span title={t("The mod's option values are saved")}><Icon name="sliders" /></span>}
                   </span>
                   <span className="archive-a">
                     <Button size="sm" variant="primary" icon={files ? "undo" : "downloads"} busy={busy === e.key} disabled={!files && !e.source}
-                      title={files ? t("Puts its files back in the Mods folder") : e.source ? t("Downloads it from GameBanana again, with its settings") : t("The files were deleted and the mod has no GameBanana link")}
+                      title={files ? t("Puts the files back in the Mods folder") : e.source ? t("Downloads it from GameBanana again, with the settings") : t("The files were deleted and the mod has no GameBanana link")}
                       onClick={() => void reinstall(e)}>{files ? t("Put back") : t("Download again")}</Button>
                     {files
                       ? <Button size="sm" variant="ghost" onClick={() => forget(e)} title={deleteTip(e)}>{t("Delete")}</Button>
-                      : <Button size="sm" variant="ghost" onClick={() => forget(e)} title={t("Deletes this record and its saved settings")}>{t("Forget")}</Button>}
+                      : <Button size="sm" variant="ghost" onClick={() => forget(e)} title={t("Deletes this record and the saved settings")}>{t("Forget")}</Button>}
                     <IconButton icon="more" size="sm" label={t("More actions (right-click or Shift+F10)")} data-pad-x-target
                       onClick={(k) => openMenu(k.currentTarget, menu(e))} />
                   </span>
@@ -248,7 +248,7 @@ export function Archive({ game, tabs }: { game: GameId; tabs: ReactNode }) {
       )}
       {ask && (
         <Confirm danger yes={t("Delete")} title={t("Delete {mod}?", { mod: ask.name })} onYes={() => drop([ask], false, false)} onClose={() => setAsk(null)}>
-          {t("The mod's files are still on your PC. This deletes them and its saved settings, and can't be undone.")}
+          {t("The mod's files are still on your PC. This deletes them and the saved settings, and can't be undone.")}
         </Confirm>
       )}
       {choose && (
@@ -284,7 +284,7 @@ function RecycleChoice({ list, all, onChoose, onClose }:
           {all
             ? <>{tn(lost, "{n} of them isn't on GameBanana, so it can't be downloaded again.", "{n} of them aren't on GameBanana, so they can't be downloaded again.")}
               {" "}{t("Move those files to the Recycle Bin, or delete them for good? The other removed mods and every saved setting are deleted either way.")}</>
-            : t("{mod} isn't on GameBanana, so it can't be downloaded again. Move its files to the Recycle Bin, or delete them for good?", { mod: list[0]?.name ?? "" })}
+            : t("{mod} isn't on GameBanana, so it can't be downloaded again. Move the files to the Recycle Bin, or delete them for good?", { mod: list[0]?.name ?? "" })}
         </p>
         <p>
           <Checkbox checked={remember} onChange={setRemember} label={t("Remember my choice")}

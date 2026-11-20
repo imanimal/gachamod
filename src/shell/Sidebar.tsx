@@ -281,7 +281,7 @@ function ProfileList({ game }: { game: GameState }) {
             <button type="button" className={`side-p${p.active ? " on" : ""}`} aria-current={p.active ? "true" : undefined}
               style={p.color ? ({ "--p-color": p.color } as CSSProperties) : undefined}
               title={busy === p.id ? t("Switching to {name}", { name: p.name })
-                : p.active ? (p.hotkey ? t("{name} is on ({key} in game). Click to see its mods", { name: p.name, key: p.hotkey }) : t("{name} is on. Click to see its mods", { name: p.name }))
+                : p.active ? (p.hotkey ? t("{name} is on ({key} in game). Click to see the mods", { name: p.name, key: p.hotkey }) : t("{name} is on. Click to see the mods", { name: p.name }))
                 : p.hotkey ? t("Switch to {name} ({key} in game)", { name: p.name, key: p.hotkey }) : t("Switch to {name}", { name: p.name })}
               onClick={() => void pick(p)} onContextMenu={ctx(p)}>
               <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={collapsed ? 34 : 28} />
@@ -293,7 +293,7 @@ function ProfileList({ game }: { game: GameState }) {
         {list !== null && (
           <div role="listitem" style={{ display: "contents" }}>
             <button type="button" className="side-p side-p-add" onClick={create} onContextMenu={createMenu}
-              title={t("New profile from the mods on now. Right-click for one with no mods, or to pick its name and icon first")}>
+              title={t("New profile from the mods on now. Right-click for one with no mods, or to pick the name and icon first")}>
               <span className="side-p-plus"><Icon name="plus" /></span>
               <span className="side-p-t">{t("New profile")}</span>
             </button>

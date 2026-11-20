@@ -1294,7 +1294,7 @@ fn shift_on_a_live_skin_shows_it_next_to_the_one_showing() {
     let (m, b) = (get(&d, "zzz", &maid).unwrap(), get(&d, "zzz", &bunny).unwrap());
     assert!(m.enabled && !m.standby && b.enabled && !b.standby, "{:?}", ch.notes);
     assert!(ch.changed.iter().any(|e| e.id == bunny && e.enabled));
-    assert_eq!(ch.notes, vec!["Bunny is on next to Maid. It doesn't switch in game any more, so the game shows it after it reloads its mods".to_string()]);
+    assert_eq!(ch.notes, vec!["Bunny is on next to Maid. It doesn't switch in game any more, so the game shows it after it reloads mods".to_string()]);
     let groups = crate::live::info(&d, "zzz").unwrap().groups;
     assert!(groups.iter().all(|g| g.mods.iter().all(|x| x.mod_id != bunny)));
     assert!(!fs::read_to_string(Path::new(&b.path).join("mod.ini")).unwrap().contains("gachamod"));

@@ -326,7 +326,7 @@ fn check_dir(idx: &Index, dir: &Path, character: Option<&str>, who: &mut Who) ->
         let who_s = if r.character.is_empty() || r.character.starts_with("all") || r.character.starts_with("see ") { String::new() } else { format!("{}'s ", r.character) };
         let why = if r.model {
             c.needs_author = true;
-            format!("The {} update changed {}model, so this mod needs an update from its author", r.version, if who_s.is_empty() { "the ".into() } else { who_s })
+            format!("The {} update changed {}model, so this mod needs an update from the author", r.version, if who_s.is_empty() { "the ".into() } else { who_s })
         } else {
             format!("Needs {} for {who_s}{} change", tool.name, r.version)
         };
@@ -381,7 +381,7 @@ fn health_of(m: &ModEntry, c: &Check, fixed: bool, tried: &HashMap<String, Tried
         return Some(ModHealth { status: "unfixable".into(), tool, ..base });
     }
     if !c.swaps.is_empty() { return Some(ModHealth { status: "broken".into(), ..base }); }
-    fixed.then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped its outdated hashes".into()], tried: None, ..base })
+    fixed.then(|| ModHealth { status: "fixed".into(), reasons: vec!["gachamod swapped the outdated hashes".into()], tried: None, ..base })
 }
 
 fn matcher(game: &str, mods: &[ModEntry]) -> Matcher {
@@ -661,7 +661,7 @@ mod tests {
         let h = health_of(&m, &c, false, &tried).unwrap();
         assert_eq!(h.status, "unfixable");
         assert!(h.needs_author);
-        assert!(h.reasons[0].contains("needs an update from its author"), "{:?}", h.reasons);
+        assert!(h.reasons[0].contains("needs an update from the author"), "{:?}", h.reasons);
         // the fixer can still be tried again, and the last try is remembered
         assert!(h.tool.is_some());
         assert_eq!(h.tried.unwrap().changed, 0);

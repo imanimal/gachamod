@@ -71,7 +71,7 @@ export const rowNote = (r: KeyRow): string | null =>
 export function rowTip(r: KeyRow, character: string | null): string | undefined {
   const how = r.kind === "hold" ? t("Works while you hold the key")
     : r.kind === "cycle" && r.options > 2 ? t("Each press steps to the next of {n} options", { n: r.options }) : null;
-  const when = r.onScreen ? t("Only while {character} is on screen", { character: character ?? t("its character") }) : null;
+  const when = r.onScreen ? t("Only while {character} is on screen", { character: character ?? t("the character") }) : null;
   return how && when ? t("{how}. {when}", { how, when }) : how ?? when ?? undefined;
 }
 

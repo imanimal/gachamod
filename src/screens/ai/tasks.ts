@@ -147,7 +147,7 @@ const FILES_NOTE = "\"draws\" lists the ini sections each mod overrides, without
 
 /** Reads each mod's files for a job when the chatbot answers in the app. */
 const contextFor = (rich: boolean | undefined, game: GameState, mods: ModEntry[]) => (rich && mods.length ? modContext(game, mods) : Promise.resolve(null));
-const FILES_SHARE = () => t("Each mod's file list and its ini and text files (copies, read only)");
+const FILES_SHARE = () => t("Each mod's file list and the ini and text files (copies, read only)");
 
 /** Read `changes` against the mods that were shared. */
 function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: GameState): { rows: PreviewRow[]; skipped: string[]; patches: Array<{ mod: ModEntry; patch: MetaPatch; why: string }> } {
@@ -379,7 +379,7 @@ const keysTask: TaskDef = {
     return {
       prompt,
       files: ctx?.files,
-      shares: [ctx ? tn(mods.length, "The ini and text files of {n} mod (copies, read only), with an outline of its override and key sections", "The ini and text files of {n} mods (copies, read only), with an outline of their override and key sections")
+      shares: [ctx ? tn(mods.length, "The ini and text files of {n} mod (copies, read only), with an outline of the override and key sections", "The ini and text files of {n} mods (copies, read only), with an outline of their override and key sections")
         : tn(mods.length, "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mod, and their key section names. No other file contents", "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mods, and their key section names. No other file contents"),
         t("Mod names and characters")],
       read: (reply) => readDraws(reply, game, items),

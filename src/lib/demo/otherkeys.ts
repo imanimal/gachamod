@@ -13,7 +13,7 @@ const OTHERS = [
 /** The mod loaders' own keys, then free keys in the order they're offered (otherkeys.rs). */
 const LOADER_KEYS = ["F6", "F10", "F12"];
 const FREE = ["F9", "F11", "F8", "Ctrl+F9", "Ctrl+F8", "Ctrl+F7", "Ctrl+Alt+F9", "Ctrl+Alt+F8", "Ctrl+Alt+F7"];
-const NEEDS = "Medal has to be closed first. Quit it from its tray icon";
+const NEEDS = "Medal has to be closed first. Quit it from the tray icon";
 const kept = new Set<string>();
 /** How often a toast asked about each clash (three times at most). */
 const asked = new Map<string, number>();

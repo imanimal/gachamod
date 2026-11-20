@@ -185,7 +185,7 @@ async fn try_download(http: &reqwest::Client, url: &str, part: &Path, strict: bo
         let full = resp.headers().get(reqwest::header::CONTENT_RANGE).and_then(|v| v.to_str().ok())
             .and_then(|v| v.rsplit('/').next()?.trim().parse::<u64>().ok()).or(size);
         if full.is_none_or(|n| n == have) { progress(have, Some(have)); return Ok(Step::Done); }
-        if strict { return Err(Error::Network("its copy is another size".into())); }
+        if strict { return Err(Error::Network("the copy is another size".into())); }
         let _ = tokio::fs::remove_file(part).await;
         return Err(Error::Network("The saved part didn't fit the file. Retry starts it again".into()));
     }
@@ -199,7 +199,7 @@ async fn try_download(http: &reqwest::Client, url: &str, part: &Path, strict: bo
     let mut received = if resumed { have } else { 0 };
     let total = resp.content_length().map(|l| l + received);
     if strict && have > 0 && !resumed { return Err(Error::Network("it can't resume".into())); }
-    if strict && size.is_some() && total != size { return Err(Error::Network("its copy is another size".into())); }
+    if strict && size.is_some() && total != size { return Err(Error::Network("the copy is another size".into())); }
     let at = resp.url().clone();
     let watch = watch.filter(|s| !(s.others)(&at).is_empty());
     let mut file = if resumed { tokio::fs::OpenOptions::new().append(true).open(part).await? } else { tokio::fs::File::create(part).await? };

@@ -236,7 +236,7 @@ export function KeyClashesPanel() {
         )}
         <Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title={t("Look for key clashes again")}>{t("Check again")}</Button>
       </>}>
-      <p className="hint tp-intro">{t("Keys that two mods that are on both use, at times when both can react. Mods for different characters only clash when one of them takes keys while its character isn't on screen.")}</p>
+      <p className="hint tp-intro">{t("Keys that two mods that are on both use, at times when both can react. Mods for different characters only clash when one of them takes keys while the character isn't on screen.")}</p>
       {!shown ? <Loading what={t("Reading mod keys")} /> : shown.length === 0 ? (
         <p className="tp-none muted">{ignored.length ? t("No two mods that are on react to the same key, apart from the clashes you ignore.") : t("No two mods that are on react to the same key.")}</p>
       ) : (
@@ -260,7 +260,7 @@ export function KeyClashesPanel() {
                     <span className="kc-acts">
                       {k.fixable && !k.onScreen && (
                         <Button size="sm" busy={busy === `os${k.modId}`} disabled={!!busy && busy !== `os${k.modId}`}
-                          title={t("Make {name}'s keys work only while {character} is on screen. Ends the clash unless the other mod is for the same character", { name: k.name, character: k.character ?? t("its character") })}
+                          title={t("Make {name}'s keys work only while {character} is on screen. Ends the clash unless the other mod is for the same character", { name: k.name, character: k.character ?? t("the character") })}
                           onClick={() => edit(`os${k.modId}`, k.modId, () => modKeys.onScreen(game!, k.modId, true), t("The toggles already work only while on screen"),
                             t("Made the mod's toggles work only while on screen"))}>{t("Only while on screen")}</Button>
                       )}
@@ -291,7 +291,7 @@ export function KeyClashesPanel() {
       )}
       <div className="kc-foot">
         <Button size="sm" icon="keyboard" busy={busy === "all-on"} disabled={!game || (!!busy && busy !== "all-on")}
-          title={t("For every mod with toggles: its toggles work only while its character is on screen. Mods that already do this are left alone")}
+          title={t("For every mod with toggles: the toggles work only while the character is on screen. Mods that already do this are left alone")}
           onClick={() => all(true)}>{t("Limit all toggles to on screen")}</Button>
         <Button size="sm" variant="ghost" busy={busy === "all-off"} disabled={!game || (!!busy && busy !== "all-off")}
           title={t("Take gachamod's on-screen check out of every mod again")}
@@ -312,12 +312,12 @@ export function KeyClashesPanel() {
                     <span className="kc-name">
                       <ModLink game={game} modId={g.modId} name={g.name} />
                       {(g.character || g.partial || !g.enabled) && (
-                        <span className="hint">{[g.character, g.partial ? t("some of its files") : null, g.enabled ? null : t("turned off")].filter(Boolean).join(", ")}</span>
+                        <span className="hint">{[g.character, g.partial ? t("some of the files") : null, g.enabled ? null : t("turned off")].filter(Boolean).join(", ")}</span>
                       )}
                     </span>
                     <span className="kc-acts">
                       <Button size="sm" variant="ghost" icon="undo" busy={busy === `out${g.modId}`} disabled={!!busy && busy !== `out${g.modId}`}
-                        title={t("Take the check out of {name}: its toggles work any time again and its ini goes back to how it was. Undo puts the check back", { name: g.name })}
+                        title={t("Take the check out of {name}: the toggles work any time again and the ini goes back to how it was. Undo puts the check back", { name: g.name })}
                         onClick={() => edit(`out${g.modId}`, g.modId, () => modKeys.onScreen(game!, g.modId, false), t("Nothing to take out"), t("Took the on-screen check out of the mod"))}>{t("Take it out")}</Button>
                     </span>
                   </li>
@@ -336,7 +336,7 @@ export function KeyClashesPanel() {
             ))}
           </ul>
           {aiShown("useful") && game && (
-            <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of these mods draws the character, then apply its answer. Takes a strong chatbot, like {model}", { model: "Claude Opus 5.5" })}
+            <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of these mods draws the character, then apply the answer. Takes a strong chatbot, like {model}", { model: "Claude Opus 5.5" })}
               onClick={() => askAi({ kind: "keys-offscreen", game, modIds: skipped.slice(0, 8).map((s) => s.modId) })}>{t("Ask the AI helper")}</Button>
           )}
         </div>

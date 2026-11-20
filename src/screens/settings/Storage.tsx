@@ -119,7 +119,7 @@ function categoryTip(c: StorageCategory): string {
     case "trash": return t("Removed mods whose files are kept for a while, so Put back works without downloading");
     case "downloads": return t("Archives kept after installing, and downloads that didn't finish");
     case "backups": return t("Copies of mod files taken before gachamod changed them, and copies of gachamod's database and settings");
-    case "loader": return t("XXMI Launcher, each game's mod loader folder, its shader cache, frame dumps and 3DMigoto log");
+    case "loader": return t("XXMI Launcher, each game's mod loader folder, the shader cache, frame dumps and 3DMigoto log");
     case "others": return t("Mods another mod manager keeps outside the Mods folder, which gachamod doesn't list");
     case "app": return t("The database, picture thumbnails, logs, extensions and fix tools");
   }
@@ -216,9 +216,9 @@ async function clearDumps(game: GameId) {
 async function purgeOverdue() {
   try {
     const n = await library.trashPurge(null);
-    if (n) toast(tn(n, "Deleted the files of {n} removed mod. Mods, Trash keeps its record", "Deleted the files of {n} removed mods. Mods, Trash keeps their records"), false,
+    if (n) toast(tn(n, "Deleted the files of {n} removed mod. Mods, Trash keeps the record", "Deleted the files of {n} removed mods. Mods, Trash keeps their records"), false,
       { label: t("View trash"), run: () => go({ view: "library", tab: "archive" }) });
-    else toast(t("Nothing in the trash was past its time"));
+    else toast(t("Nothing in the trash was older than the set days"));
     patchReport((r) => ({ ...r, trashOverdue: 0 }));
   } catch (e) { toast(errorText(e), true); }
 }

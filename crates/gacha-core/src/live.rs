@@ -452,7 +452,7 @@ fn wrap_with(text: &str, group: u32, slot: u32, raise: &HashMap<String, u32>, se
                 if t.starts_with("if ") { depth += 1; }
                 if t == "endif" { if depth == 0 { stray.insert(j); } else { depth -= 1; } }
             }
-            if depth != 0 { return Err(format!("its [{}] section has an if without an endif", lines[h.unwrap_or(0)].trim().trim_matches(['[', ']']))); }
+            if depth != 0 { return Err(format!("the [{}] section has an if without an endif", lines[h.unwrap_or(0)].trim().trim_matches(['[', ']']))); }
             let line = |j: usize| if stray.contains(&j) {
                 format!("{WAS}{}{nl}; this endif closes no if, so the loader skips it{}", body[j].trim(), if ending(body[j]).is_empty() { nl } else { ending(body[j]) })
             } else { body[j].to_string() };
@@ -576,7 +576,7 @@ fn write_edits(db: &Db, game: &str, m: &ModEntry, edits: &[Edit], why: &str) -> 
     for e in edits {
         if let Err(err) = crate::xxmi::write_atomic(&e.abs, &e.bytes) {
             let _ = backups::restore(db, &backup.id);
-            return Err(format!("couldn't save its ini: {err}"));
+            return Err(format!("couldn't save the ini: {err}"));
         }
     }
     Ok(Some(ModBackup { mod_id: m.id.clone(), name: m.name.clone(), backup }))
@@ -1284,7 +1284,7 @@ pub(crate) fn release(db: &Db, game: &str, ids: &[String]) -> Result<(Vec<String
         if g.active == 0 || g.active == slot { continue; }
         let name_of = |id: &str| crate::library::get(db, game, id).map(|m| m.name).unwrap_or_else(|_| "the skin showing".into());
         let shown = g.slots.iter().find(|s| s.slot == g.active).map(|s| name_of(&s.mod_id)).unwrap_or_default();
-        notes.push(format!("{} is on next to {shown}. It doesn't switch in game any more, so the game shows it after it reloads its mods", name_of(id)));
+        notes.push(format!("{} is on next to {shown}. It doesn't switch in game any more, so the game shows it after it reloads mods", name_of(id)));
         out.push(id.clone());
     }
     if !out.is_empty() { remove_with(db, game, &out, true)?; }
@@ -1573,8 +1573,8 @@ fn waiting_line(db: &Db, game: &str, groups: &[u32]) -> String {
     };
     let key = crate::devtools::key_name(game);
     let manual = crate::devtools::keys_blocked(game) || db.setting(&format!("{game}.autoReload")).ok().flatten().as_deref() == Some("0");
-    if manual { format!("{who} changes after the game reloads its mods. Press {key} in the game") }
-    else { format!("{who} changes when you go back to the game. gachamod presses {key} there to reload its mods") }
+    if manual { format!("{who} changes after the game reloads mods. Press {key} in the game") }
+    else { format!("{who} changes when you go back to the game. gachamod presses {key} there to reload mods") }
 }
 
 /// Picks the game didn't get: live.ini asks for them at its next load. With the game closed they go into its saved

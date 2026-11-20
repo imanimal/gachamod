@@ -153,7 +153,7 @@ function DevSection({ game }: { game: GameState }) {
           </div>
           <div className="tools-dev">
             <div className="tools-dev-row">
-              <span><b>{t("Reload mods in game")}</b><span className="hint">{t("Brings {game} to the front and presses {key}, its reload key in d3dx.ini", { game: gameShort(game), key: game.reloadKey || "F10" })}</span></span>
+              <span><b>{t("Reload mods in game")}</b><span className="hint">{t("Brings {game} to the front and presses {key}, the reload key in d3dx.ini", { game: gameShort(game), key: game.reloadKey || "F10" })}</span></span>
               <Button icon="refresh" busy={busy === "reload"} disabled={!game.running} title={game.running ? t("Press {key} in the game", { key: game.reloadKey || "F10" }) : t("{game} isn't running", { game: gameName(game) })}
                 onClick={() => void run("reload", () => dev.reload(game.id))}>{t("Reload")}</Button>
             </div>

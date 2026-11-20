@@ -314,7 +314,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
       <div className="dl-main">
         <div className="dl-name">
           {gb && !other
-            ? <button type="button" className="dl-t dl-t-link" tabIndex={-1} title={t("{file}. Open its GameBanana page", { file: i.req.fileName })} onClick={openPage}>{name}</button>
+            ? <button type="button" className="dl-t dl-t-link" tabIndex={-1} title={t("{file}. Open the GameBanana page", { file: i.req.fileName })} onClick={openPage}>{name}</button>
             : <span className="dl-t" title={i.req.fileName}>{name}</span>}
           {i.req.meta.character && (other ? <span className="dl-c">{i.req.meta.character}</span> : <CharLink game={i.req.game} name={i.req.meta.character} className="dl-c" />)}
           {other && !all && <Badge title={t("Installs into {game}. Click to switch to it", { game: short })} onClick={() => setGame(i.req.game)}>{short}</Badge>}
@@ -337,7 +337,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
           <ul className="dl-mods" aria-label={tn(p.mods.length, "{n} mod found inside", "{n} mods found inside")}>
             {p.mods.map((m, n) => (
               <li key={n} className={n < p.placed ? "is-in" : n === p.placed ? "is-now" : undefined}
-                title={n < p.placed ? t("Installed") : n === p.placed ? t("Installing now") : t("Waiting its turn")}>
+                title={n < p.placed ? t("Installed") : n === p.placed ? t("Installing now") : t("Waiting for a turn")}>
                 {n < p.placed ? <Icon name="check" /> : n === p.placed ? <Spinner size={12} /> : <span className="dl-mods-dot" />}
                 <span>{m}</span>
               </li>
@@ -368,7 +368,7 @@ const DlRow = memo(function DlRow({ i, ctx, fresh, tabStop, open, speed, quietSe
             </>
           : <Button size="sm" icon="refresh" title={t("Try this download again (Enter)")} onClick={() => act(() => queue.retry(i.id))}>{t("Retry")}</Button>)}
         {failed && file && (
-          <Button size="sm" icon="folder" title={i.req.fileName ? t("Show {file} in File Explorer, to place its files yourself", { file: i.req.fileName }) : t("Show the file in File Explorer, to place its files yourself")}
+          <Button size="sm" icon="folder" title={i.req.fileName ? t("Show {file} in File Explorer, to place the files yourself", { file: i.req.fileName }) : t("Show the file in File Explorer, to place the files yourself")}
             onClick={() => act(() => shell.revealPath(file))}>{t("Show file")}</Button>
         )}
         {i.state === "done" && file && <IconButton icon="folder" label={t("Show file")} title={i.req.fileName ? t("Show {file} in File Explorer", { file: i.req.fileName }) : t("Show the downloaded file in File Explorer")} onClick={() => act(() => shell.revealPath(file))} />}
@@ -526,7 +526,7 @@ export function Downloads() {
     <div className="page dl-page" ref={pageRef} onKeyDown={onKeyDown}>
       <PageHeader title={t("Downloads")} icon="downloads" sub={sub}
         actions={<>
-          <span title={t("A mod turns on as soon as it installs, and its character's other skin turns off. Also in Settings, Mods")}><EnableNewSwitch size="sm" label={t("Turn on new mods")} /></span>
+          <span title={t("A mod turns on as soon as it installs, and the character's other skin turns off. Also in Settings, Mods")}><EnableNewSwitch size="sm" label={t("Turn on new mods")} /></span>
           {game && <span title={t("Show the downloads of every game, grouped by game")}><Toggle size="sm" checked={all} onChange={setAll} label={t("All games")} /></span>}
           <Button icon="import" busy={busy} disabled={!game} onClick={() => void addFiles()} title={t("Install .zip, .7z or .rar files from this PC (or drop them on the window)")}>{t("Install from files")}</Button>
           {toRetry > 0 && <Button icon="refresh" onClick={() => retryAll(done)} title={t("Try every failed download on this page again")}>{t("Retry failed ({n})", { n: toRetry })}</Button>}

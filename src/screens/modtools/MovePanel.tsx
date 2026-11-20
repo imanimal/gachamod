@@ -61,7 +61,7 @@ export function MovePanel() {
   const bringIn = (m: OtherManager, mode: MigrateMode) => job(m.id, async () => {
     const r = await migrate.import(game, m.id, { mode, picked });
     const fallback = r.profiles.length
-      ? tn(r.profiles.length, "Brought in the mods from {name} and made {n} profile from its presets", "Brought in the mods from {name} and made {n} profiles from its presets", { name: m.name })
+      ? tn(r.profiles.length, "Brought in the mods from {name} and made {n} profile from the presets", "Brought in the mods from {name} and made {n} profiles from the presets", { name: m.name })
       : t("Brought in the mods from {name}", { name: m.name });
     done(r.notes, fallback, () => job(m.id, async () => {
       const left = await migrate.undo(r.undo);
@@ -89,7 +89,7 @@ export function MovePanel() {
   return (
     <Panel id="others" title={t("Mods from other managers")} icon="swap" className="tp tp-imm">
       <p className="hint tp-intro">
-        {t("Brings in each mod with its on or off state, option values, GameBanana link and picture. Presets become profiles. Nothing is deleted.")}
+        {t("Brings in each mod with the on or off state, option values, GameBanana link and picture. Presets become profiles. Nothing is deleted.")}
       </p>
       {others === null && immInfo === null
         ? <p className="hint">{t("Looking for other mod managers")}</p>
@@ -136,11 +136,11 @@ export function MovePanel() {
               ? <Button icon="refresh" onClick={again} title={t("{name} is open. Close it, then check again", { name: m.name })}>{t("Check again")}</Button>
               : <>
                 <Button icon="swap" busy={busy === m.id} onClick={() => void bringIn(m, "copy")}
-                  title={m.outside ? t("Copies its mods into Mods, so {name} keeps working. Undo is in the message after", { name: m.name }) : t("Reads its details and presets. Undo is in the message after")}>{t("Bring in")}</Button>
+                  title={m.outside ? t("Copies the mods into Mods, so {name} keeps working. Undo is in the message after", { name: m.name }) : t("Reads the details and presets. Undo is in the message after")}>{t("Bring in")}</Button>
                 {m.outside > 0 && (
                   <Button variant="ghost" size="sm" disabled={busy === m.id} onClick={() => setAsk({
                     title: t("Move the mods out of {name}?", { name: m.name }),
-                    body: t("{name}'s folder is left empty and its links in Mods are replaced by the mods themselves, which saves {size} of disk space. {name} won't list them any more.", { name: m.name, size: formatBytes(m.outsideBytes) }),
+                    body: t("{name}'s folder is left empty and the links in Mods are replaced by the mods themselves, which saves {size} of disk space. {name} won't list them any more.", { name: m.name, size: formatBytes(m.outsideBytes) }),
                     yes: t("Move them"),
                     run: () => bringIn(m, "move"),
                   })} title={t("Moves instead of copying, to save disk space")}>{t("Move instead")}</Button>

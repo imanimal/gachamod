@@ -110,7 +110,7 @@ function ModRow({ game, m, shown, busy, run }: {
     <li className="tp-problem">
       <div className="tp-problem-h row">
         <ModLink game={game} modId={m.modId} name={m.name} className="grow" />
-        {!m.enabled && <Badge tone="muted" title={t("This mod is off, so its problems don't count on Tools")}>{t("Off")}</Badge>}
+        {!m.enabled && <Badge tone="muted" title={t("This mod is off, so the problems don't count on Tools")}>{t("Off")}</Badge>}
         {download && (m.source
           ? <Button size="sm" variant={broken ? undefined : "ghost"} icon="install" busy={busy === `dl${m.modId}`} disabled={!!busy}
               title={t("Download this mod from GameBanana again, which can bring back a missing file. The mod's settings stay")}

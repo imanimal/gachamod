@@ -15,7 +15,7 @@ export interface ThemeArea { id: string; name: string; parts: ThemePart[] }
 export const THEME_ANATOMY: ThemeArea[] = [
   {
     id: "root", name: "Attributes on <html>", parts: [
-      { sel: "[data-theme]", what: "the built-in theme under yours (default, zzz, gi, hsr, ww, ef ...); its rules still apply" },
+      { sel: "[data-theme]", what: "the built-in theme under yours (default, zzz, gi, hsr, ww, ef ...); that theme's rules still apply" },
       { sel: "[data-custom]", what: "your theme's id while it is on" },
       { sel: "[data-scheme]", what: "dark or light" },
       { sel: "[data-game]", what: "the current game's id (gi, hsr, zzz, ww, ef ...)" },
@@ -33,7 +33,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
   {
     id: "window", name: "Window and text", parts: [
       { sel: ".app > .backdrop, .titlebar, .side, .view; [data-side=\"rail\"]", what: "the window grid; rail while the sidebar is folded" },
-      { sel: ".view > .page; .home, .library, .characters, .settings", what: "scrolling area, then the screen's column with its name" },
+      { sel: ".view > .page; .home, .library, .characters, .settings", what: "scrolling area, then the screen's column with the screen's name" },
       { sel: ".nogame", what: "first-load wait and crash page" },
       { sel: ".hint, .muted, .sub-h", what: "faint text, small headings" },
       { sel: "a, .qlink, .link-btn", what: "links; .qlink opens a character, creator or category" },
@@ -49,7 +49,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
   },
   {
     id: "titlebar", name: "Title bar", parts: [
-      { sel: ".titlebar > .tb-l, .tb-search, .tb-r", what: "top bar; its empty parts drag the window" },
+      { sel: ".titlebar > .tb-l, .tb-search, .tb-r", what: "top bar; the empty parts drag the window" },
       { sel: ".tb-l > .brand (.brand-mark), .tb-nav (.tb-k), .crumb, .sp", what: "logo (a background image), back and forward, breadcrumb, spare room" },
       { sel: ".tb-k; :disabled", what: "small keys; .tb-r has undo, redo, help" },
       { sel: ".crumb > .crumb-b.crumb-game, .crumb-sep, .crumb-part (.crumb-b, .crumb-sep-b); .crumb-view", what: "breadcrumb: game, page, open item (.crumb-view)" },
@@ -66,15 +66,15 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".side-nav > .nv (.i, .nv-t, .nv-b); .on, :disabled, [data-view]", what: "view buttons; .on is open; data-view is home, browse, library, characters, downloads, tools or settings" },
       { sel: ".nv-b; .t-bad, .t-warn, .t-ok, .t-run", what: "count badge; an empty .t-run is a pulsing dot" },
       { sel: ".side-prof > .side-prof-h (.side-h, .side-hk), .side-prof-list (.side-p)", what: "profiles heading and list" },
-      { sel: ".side-p > .pthumb-mini, .side-p-t, .side-p-on; .on, .side-p-add", what: "a profile, --p-color its colour; .on is active" },
-      { sel: ".side-foot > .play > .play-btn, .play-more-w (.play-more)", what: "Play (.btn-primary.btn-lg) and its options key" },
+      { sel: ".side-p > .pthumb-mini, .side-p-t, .side-p-on; .on, .side-p-add", what: "a profile, --p-color is the colour; .on is active" },
+      { sel: ".side-foot > .play > .play-btn, .play-more-w (.play-more)", what: "Play (.btn-primary.btn-lg) and the options key" },
       { sel: ".play; .running, .starting, .play-big", what: "game running or starting; .play-big on Home" },
     ],
   },
   {
     id: "header", name: "Page header", parts: [
       { sel: ".page-h > .page-h-row (.page-h-t, h1, .page-h-sub, .page-h-a), .page-h-more", what: "top of each screen: icon and title, line under it, actions, filters" },
-      { sel: ".page-h.is-stuck", what: "while scrolled, if a theme makes .page-h sticky; it keeps only its controls" },
+      { sel: ".page-h.is-stuck", what: "while scrolled, if a theme makes .page-h sticky; it keeps only the controls" },
     ],
   },
   {
@@ -99,7 +99,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".tabs > .tab (.i, .tab-n); .on", what: "tabs; .tab::after is the underline" },
       { sel: ".toggle > .toggle-track (.toggle-knob), .toggle-l (.toggle-t, .hint); .on, .off, .toggle-sm", what: "switch; .off when disabled" },
       { sel: ".check > .check-box (.i), .check-t; .on, .off", what: "checkbox" },
-      { sel: ".swatch; .on", what: "round colour button, --c its colour" },
+      { sel: ".swatch; .on", what: "round colour button, --c is the colour" },
       { sel: ".pchips .pchip (.pchip-img, .pchip-t, .pchip-n); .on", what: "row of round character pictures" },
     ],
   },
@@ -120,7 +120,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".overlay > .dialog > .dialog-h (h2, .ibtn), .dialog-b, .dialog-f; .gone", what: "dialog on a scrim, .gone while closing" },
       { sel: ".overlay-side > .drawer > .drawer-h, .drawer-b, .drawer-f", what: "panel from the right" },
       { sel: ".popover > .menu > .menu-i, hr; .danger", what: "menu from a button" },
-      { sel: ".ctx > .menu > .menu-h, .menu-i (.menu-c, .menu-img, .menu-t, .menu-k, .menu-sub); .on", what: "right-click menu, also a .popover; .on has its submenu open" },
+      { sel: ".ctx > .menu > .menu-h, .menu-i (.menu-c, .menu-img, .menu-t, .menu-k, .menu-sub); .on", what: "right-click menu, also a .popover; .on has the submenu open" },
       { sel: ".apptip", what: "hover tip" },
       { sel: ".toasts > .toast (.i, .tt, .toast-act, .toast-x, .t-life); .bad", what: "messages, bottom right; .t-life is the time bar" },
       { sel: ".palette > .palette-in, .palette-list (.palette-sec > .palette-h, .palette-i); .on", what: "command palette; .on is the highlighted result" },
@@ -141,11 +141,11 @@ export const THEME_ANATOMY: ThemeArea[] = [
     id: "library", name: "Mods screen", parts: [
       { sel: ".library-chars > .chip.char-chip, .library-chars-sep", what: "type and character chips under the header" },
       { sel: ".mod-grid; .cards, .is-list", what: "mods as cards or a list" },
-      { sel: ".mod-card.card > .mod-card-hit (.mod-card-img), .mod-card-body (.mod-card-name, .mod-card-char, .mod-card-meta), .mod-card-badges, .mod-card-foot", what: "one mod; .mod-card-hit holds the picture and its ::after covers the card to open it" },
+      { sel: ".mod-card.card > .mod-card-hit (.mod-card-img), .mod-card-body (.mod-card-name, .mod-card-char, .mod-card-meta), .mod-card-badges, .mod-card-foot", what: "one mod; .mod-card-hit holds the picture and the ::after covers the card to open it" },
       { sel: ".mod-card-badges > .mod-card-health, .mod-card-fav, .badge", what: "tags on the picture" },
       { sel: ".mod-card-foot > .toggle, .mod-card-more", what: "on/off switch, menu key shown on hover" },
       { sel: ".mod-card; .is-off, .sel, .is-row", what: "off, selected, list row" },
-      { sel: ".mod-img > img | .mod-img-none (.mod-img-ghost, .mod-img-portrait); .is-blurred", what: "mod picture; without one, the character over its faint name" },
+      { sel: ".mod-img > img | .mod-img-none (.mod-img-ghost, .mod-img-portrait); .is-blurred", what: "mod picture; without one, the character over the faint name" },
       { sel: ".floatbar.mod-bulk", what: "actions for selected mods" },
       { sel: ".mod-drawer (.mod-drawer-hero > .mod-drawer-img, .mod-drawer-picact, .mod-drawer-badges)", what: "details drawer, picture first" },
       { sel: ".mod-drawer-fields (.mod-tag), .mod-drawer-sec (.panel), .mod-drawer-facts (.kv)", what: "tags, sections (parts, options, readme), facts" },
@@ -161,7 +161,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".gb-card; .is-nsfw, .is-prio, .gb-card-skel", what: "blurred, prioritised creator, loading" },
       { sel: ".gb-drawer (.gb-mod > .gb-gallery, .gb-mod-head, .gb-mod-tags, .gb-files, .gb-desc)", what: "a mod's page: pictures, creator and stats, tags, files, text" },
       { sel: ".gb-gallery > .gb-gallery-main, .gb-gallery-thumbs (.gb-thumb); .on", what: "pictures" },
-      { sel: ".gb-file > .gb-file-main (.gb-file-name, .gb-file-meta), .gb-file-act", what: "a file and its install key" },
+      { sel: ".gb-file > .gb-file-main (.gb-file-name, .gb-file-meta), .gb-file-act", what: "a file and the install key" },
       { sel: ".gb-lightbox > .gb-lightbox-bar, .gb-lightbox-img, .gb-lightbox-prev, .gb-lightbox-next", what: "picture viewer" },
     ],
   },
@@ -185,8 +185,8 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".pg-page.pg-results > .pg-body (.pg-from, .panel, .pg-hit)", what: "search results in place of the page: where each page's panels live, the panels, matching settings lit" },
       { sel: ".pg-page > .pg-body > .panel", what: "a page's panels, kept frameless by the app; .panel-h still takes your style" },
       { sel: ".set-row", what: "a setting: label and .hint left, control right" },
-      { sel: ".set-game > .gbadge, .set-game-main (.set-game-h, .set-folder); .shown", what: "a game and its folders" },
-      { sel: ".theme-card > .theme-preview, .theme-card-t", what: "theme picker; the preview draws its theme small" },
+      { sel: ".set-game > .gbadge, .set-game-main (.set-game-h, .set-folder); .shown", what: "a game and the folders" },
+      { sel: ".theme-card > .theme-preview, .theme-card-t", what: "theme picker; the preview draws the theme small" },
     ],
   },
   {
@@ -194,7 +194,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
       { sel: ".home-quick > .home-quick-img, .home-quick-top (.home-quick-name, .play), .home-quick-bar (.home-pchip); .on", what: "game banner with Play and profile pills" },
       { sel: ".home-section > .home-section-h, .home-row (.home-tile, .home-char)", what: "rows of recent mods and characters" },
       { sel: ".home-tile > .home-tile-main (.home-tile-img, .home-tile-name, .home-tile-sub)", what: "a recent mod" },
-      { sel: ".profile-card.card > .profile-card-main (.profile-card-banner, .profile-icon, .profile-card-name), .profile-card-a; .is-active", what: "a profile on Profiles, --p-color its colour" },
+      { sel: ".profile-card.card > .profile-card-main (.profile-card-banner, .profile-icon, .profile-card-name), .profile-card-a; .is-active", what: "a profile on Profiles, --p-color is the colour" },
     ],
   },
   {
@@ -210,7 +210,7 @@ export const THEME_ANATOMY: ThemeArea[] = [
 ];
 
 /** How to read `sel`, the first line of anatomyText(). */
-const KEY = "How to read it: \"a > b, c\" puts b and c inside a (in \"a > b > c, d\", c and d sit inside b), \"(...)\" lists what sits somewhere inside the part before it, \"|\" is one or the other, and after \";\" come the states the part or its children can carry.";
+const KEY = "How to read it: \"a > b, c\" puts b and c inside a (in \"a > b > c, d\", c and d sit inside b), \"(...)\" lists what sits somewhere inside the part before it, \"|\" is one or the other, and after \";\" come the states the part or the parts inside it can carry.";
 
 /** The map as compact plain text for the prompt: how to read it, then one block per area ("Sidebar:" then one line per
     part, "sel: what"). */

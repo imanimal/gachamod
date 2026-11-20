@@ -182,7 +182,7 @@ export function App() {
         if (review) {
           void reviewUnsurePref.ready.then(() => {
             if (!reviewUnsurePref.get()) return;
-            toast(t("gachamod wasn't sure where some of this mod's files go. Check its folder against the mod's install steps"), false,
+            toast(t("gachamod wasn't sure where some of this mod's files go. Check the folder against the mod's install steps"), false,
               { label: t("Review files"), run: () => { shellApi.openPath(review).catch((e) => toast(errorText(e), true)); } },
               { label: t("Don't show again"), run: () => void reviewUnsurePref.set(false, t("Stopped asking about files gachamod can't place"), true) });
           });

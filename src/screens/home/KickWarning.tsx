@@ -42,12 +42,12 @@ function Host() {
   return (
     <Dialog title={t("Before you play {game}", { game: gi })} icon="warn" size="md" onClose={() => done("cancel")} footer={<>
       <Button variant="ghost" onClick={() => done("cancel")}>{t("Cancel")}</Button>
-      <Button onClick={() => done("done")} title={t("Start the game and stop warning, until XXMI puts its stock d3d11.dll back")}>{t("I did the fix")}</Button>
+      <Button onClick={() => done("done")} title={t("Start the game and stop warning, until XXMI puts the stock d3d11.dll back")}>{t("I did the fix")}</Button>
       <Button variant="primary" autoFocus onClick={() => done("play")} title={t("Start the game. gachamod warns again next time")}>{t("Play anyway")}</Button>
     </>}>
       {undone ? (
         <p>
-          {t("You did the fix before, but XXMI has put its stock d3d11.dll back, most likely in an update. {game}'s anti-cheat flags that one and can stop the game with \"Illegal tool detected\" (10612-4001).", { game: gi })}
+          {t("You did the fix before, but XXMI has put the stock d3d11.dll back, most likely in an update. {game}'s anti-cheat flags that one and can stop the game with \"Illegal tool detected\" (10612-4001).", { game: gi })}
         </p>
       ) : (
         <p>

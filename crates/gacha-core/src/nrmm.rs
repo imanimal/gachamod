@@ -489,7 +489,7 @@ fn move_out(mods_dir: &Path, importer_dir: Option<&Path>, slots: &HashMap<u32, u
                 if !kept.is_empty() { out.kept.push((sc.id.clone(), kept)); }
                 out.ids.push(sc.id);
             }
-            Err(e) => out.notes.push(format!("Moved {}, but couldn't write its details: {e}", p.name)),
+            Err(e) => out.notes.push(format!("Moved {}, but couldn't write the details: {e}", p.name)),
         }
     }
     // what is left is NRMM's own: its inis, group names, icons and picks
@@ -508,7 +508,7 @@ fn move_out(mods_dir: &Path, importer_dir: Option<&Path>, slots: &HashMap<u32, u
 /// sidecars with what NRMM knew (name, link, picture, favourite) and rescan. NRMM must be closed.
 pub fn takeover(db: &Shared, game: &str) -> Result<crate::pack::ImportResult> {
     if crate::launch::process_running(PROCESS) {
-        return Err(Error::Conflict("Close No Reload Mod Manager first. It would set its folders up again while the mods move".into()));
+        return Err(Error::Conflict("Close No Reload Mod Manager first. It would set the folders up again while the mods move".into()));
     }
     if crate::launch::running(game) {
         return Err(Error::Conflict("Close the game first. Mods can't move while it has them open".into()));

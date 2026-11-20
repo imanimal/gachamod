@@ -295,7 +295,7 @@ function MenuStep({ setup, answer }: { setup: CheckSetup; answer: Answer }) {
   }
   return <>
     <p>{tx("In the game, press {key}.", { key: <kbd className="kbd">{setup.menuKey}</kbd> })}</p>
-    {heard ? <Seen ok>{heard === "window" ? t("The key worked: gachamod opened its menu over the game.") : t("The key worked: gachamod opened the menu the game draws, since the game runs in exclusive fullscreen.")}</Seen>
+    {heard ? <Seen ok>{heard === "window" ? t("The key worked: gachamod opened the menu over the game.") : t("The key worked: gachamod opened the menu the game draws, since the game runs in exclusive fullscreen.")}</Seen>
       : <Seen ok={false}>{setup.menuStyle === "game" ? t("The game takes this key itself, so gachamod doesn't see it.") : t("Waiting for the key press.")}</Seen>}
     <Ask question={t("What opened?")} onAnswer={(v) => answer("menu_opened", v, { menu_heard: heard ?? "none" })} answers={[
       ["window", t("gachamod's menu over the game"), t("A window with previews and search on top of the game")],
@@ -310,7 +310,7 @@ function MenuPickStep({ game, info, answer }: { game: GameState; info: LiveInfo 
   const late = useAfter(60_000);
   const changed = info?.groups.find((g) => before.has(g.group) && before.get(g.group) !== g.active);
   useEvery(2000, () => { void reloadLive(game.id); }, !changed && !late);
-  const shows = changed ? (changed.mods.find((m) => m.slot === changed.active)?.name ?? t("none of its skins")) : "";
+  const shows = changed ? (changed.mods.find((m) => m.slot === changed.active)?.name ?? t("none of the skins")) : "";
   return <>
     <p>{t("In the menu, pick a different skin for a character, then close the menu.")}</p>
     {changed ? <Seen ok>{t("gachamod read the pick back from the game: {character} wears {mod}.", { character: changed.character, mod: shows })}</Seen>
@@ -323,7 +323,7 @@ function MenuPickStep({ game, info, answer }: { game: GameState; info: LiveInfo 
 function ReloadStep({ setup, answer, chosen }: { setup: CheckSetup; answer: Answer; chosen?: string | number | boolean }) {
   const key = setup.reloadKey?.match(/VK_(\w+)/i)?.[1]?.toUpperCase() ?? "F10";
   return <>
-    <p>{tx("In the game, press {key} to reload its mods. Wait for the game to catch up (it can stutter for a moment).", { key: <kbd className="kbd">{key}</kbd> })}</p>
+    <p>{tx("In the game, press {key} to reload mods. Wait for the game to catch up (it can stutter for a moment).", { key: <kbd className="kbd">{key}</kbd> })}</p>
     <Ask question={t("Does each character still wear the skin picked last?")} answers={YES_NO} chosen={chosen} onAnswer={(v) => answer("reload_kept", v)} />
   </>;
 }
@@ -371,7 +371,7 @@ function SendStep({ steps, setup, notes, setNotes, contact, setContact, logs, se
       <Checkbox checked={logs} onChange={setLogs} label={t("Attach the loader's log and gachamod's log")} />
     </span>
     <p className="hint">{setup
-      ? t("Along with your answers goes what gachamod read about {game}: the loader and its version, the window mode, whether the game and gachamod run as administrator, and the menu's key.", { game: gameName(setup) })
-      : t("Along with your answers goes what gachamod read about the game: the loader and its version, the window mode, whether the game and gachamod run as administrator, and the menu's key.")}</p>
+      ? t("Along with your answers goes what gachamod read about {game}: the loader and the version, the window mode, whether the game and gachamod run as administrator, and the menu's key.", { game: gameName(setup) })
+      : t("Along with your answers goes what gachamod read about the game: the loader and the version, the window mode, whether the game and gachamod run as administrator, and the menu's key.")}</p>
   </>;
 }
