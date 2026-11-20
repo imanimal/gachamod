@@ -126,7 +126,16 @@ function demoLint(game: string): ModProblems[] {
     if (list[9]) add(list[9], [{ kind: "global_trigger", severity: "warn", ini: iniOf(list[9]),
       detail: `[ShaderRegexBody] in ${iniOf(list[9])} runs CheckTextureOverride on ps-t0 for every matching shader in the game, which costs FPS everywhere, not only while this mod's model is on screen`, fix: null }]);
   }
-  if (list[4]) add(list[4], [{ kind: "no_key", detail: `[KeySwap] in ${iniOf(list[4])} has no key line, so it does nothing`, ini: iniOf(list[4]), severity: "info", fix: null }]);
+  if (list[4]) {
+    // a Genshin mod that sets textures by slot and never calls ORFix: one click adds the call (lint_fix drops it)
+    const orfix = game === "gi" && scenario().newChecks;
+    add(list[4], [
+      { kind: "no_key", detail: `[KeySwap] in ${iniOf(list[4])} has no key line, so it does nothing`, ini: iniOf(list[4]), severity: "info", fix: null },
+      ...(orfix ? [{ kind: "missing_orfix", severity: "warn", ini: iniOf(list[4]),
+        detail: `${iniOf(list[4])} sets the textures of TextureOverrideBody and TextureOverrideHead by slot, and nothing in the mod calls ORFix. Outlines and reflections can show the wrong colors in game. Adding the call fixes it`,
+        fix: { kind: "orfix", ini: iniOf(list[4]), from: null, to: null, inis: [iniOf(list[4])] } }] : []),
+    ]);
+  }
   return out;
 }
 
@@ -604,7 +613,7 @@ export function registerModtoolsDemo() {
       lintFixed.add(key);
       const bid = `lint-${demoId()}`;
       lintBackups.set(bid, key);
-      const label = f.kind === "keep" ? `Kept ${f.ini} on and turned off ${f.inis.length - 1} others` : `${f.ini} now uses ${(f.to ?? "").replace(/\\/g, "/")}`;
+      const label = f.kind === "keep" ? `Kept ${f.ini} on and turned off ${f.inis.length - 1} others` : f.kind === "orfix" ? `Added the ORFix call to ${f.ini}` : `${f.ini} now uses ${(f.to ?? "").replace(/\\/g, "/")}`;
       return { id: bid, game: String(game), modId: m.id, modDir: m.path, files: [f.ini ?? ""], created: [], label, at: demoNow() };
     },
     hash_lookup: async ({ game, hash }) => { await demoWait(200); return demoHash(String(game), String(hash)); },

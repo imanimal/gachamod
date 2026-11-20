@@ -20,7 +20,7 @@ export interface VarInfo { ini: string; var: string; persist: boolean; default: 
 }
 export interface Problem {
   kind: "missing_file" | "bad_ini" | "no_ini" | "no_key" | "missing_section" | "overlap" | "global_trigger"
-    | "duplicate_library" | "missing_library" | string;
+    | "duplicate_library" | "missing_library" | "missing_orfix" | string;
   detail: string; ini: string | null;
   /** "bad": part of the mod won't show or shows wrong. "warn": may not work, or only in a corner case (a boss, another
    *  skin). "info": harmless, or gachamod couldn't check it. */
@@ -30,8 +30,10 @@ export interface Problem {
 }
 /** "point": in `ini`, the `filename = <from>` lines change to `<to>`, the same file found elsewhere in the mod.
  *  "keep": `ini` stays on and the other `inis` are renamed DISABLED_<name>. Set `ini` to the one to keep.
- *  "off": `ini` is renamed DISABLED_<name> (a copy of a library the loader already loads). */
-export interface ProblemFix { kind: "point" | "keep" | "off" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
+ *  "off": `ini` is renamed DISABLED_<name> (a copy of a library the loader already loads).
+ *  "orfix": the missing ORFix call (`run = CommandList\global\ORFix\ORFix`, or `\NNFix` for a part with no normal map)
+ *  is added after the texture bindings of each part in `inis`, the mod's .ini files that need it. */
+export interface ProblemFix { kind: "point" | "keep" | "off" | "orfix" | string; ini: string | null; from: string | null; to: string | null; inis: string[] }
 /** `parts`: the shared parts by their section names ("ZhuYuan.Body.IB (6619364f)"), at most 40. */
 /** In a mod's details, `hashes` are the ones it shares with this mod (a group lists them once instead). */
 export interface ConflictRef { modId: string; name: string; shared: number; parts?: string[]; hashes?: string[] }

@@ -84,6 +84,11 @@ These have only run against the demo and unit tests (a stand-in .bat fixer).
   1.1 fix): the fixer downloads, runs without a window it waits on, changes the mod, and the mod stops showing as
   broken. Note any fixer that wants arguments, a different working folder, or keys pressed, and teach `launch` that.
 - Undo after a fixer run puts every changed file back, and files the fixer created are removed.
+- Add ORFix call on a real Genshin character mod that lacks the call (the Yelan Qipao mod: Head, Body, Dress and Extra
+  bind only `ps-t0` and `ps-t1`): Tools > Problems shows the warning with the button already visible, one click
+  adds `run = CommandList\global\ORFix\NNFix` after the light map binding of each part, and in game the green fur and
+  yellow hair colors are gone. Undo puts the file back exactly as it was, and a mod that already has the call (any
+  ORFix, NNFix or GIMI API call) is not flagged. Also a three-slot mod (the Varesa one) gets `ORFix`, not `NNFix`.
 - A fixer with its own window (ZZZ Mod Fixer): it opens once for every mod that needs it, gachamod carries on about
   6 seconds after the fixer stops changing files without the window being closed, "Stop waiting" works, and each
   mod gets its own result and backup.

@@ -74,7 +74,8 @@ export function ProblemsPanel() {
         </ul>
       )}
       {list && warnRows.length > 0 && (
-        <details className="tp-ignored">
+        // open from the start when gachamod can fix one of them (the ORFix call), so the button isn't hidden
+        <details className="tp-ignored" open={warnRows.some((r) => r.shown.some((p) => p.fix))}>
           <summary className="hint">{t("Warnings ({n})", { n: warnRows.reduce((s, r) => s + r.shown.length, 0) })}</summary>
           <ul className="tp-list tp-problem-list">
             {warnRows.map(({ m, shown }) => (

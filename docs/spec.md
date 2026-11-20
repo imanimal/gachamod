@@ -439,7 +439,8 @@ Rust `ini.rs`:
     `run = CommandListX` with no such section in the mod, a namespace the mod uses that nothing installed defines
     (`run = CommandList\RabbitFX\Run` with no RabbitFX in Core or Mods: "missing_library"), and a `[ShaderRegex*]`
     with no `.pattern` section that runs CheckTextureOverride itself or in a command list it runs ("global_trigger",
-    an FPS cost in every scene; XXMI Launcher asks about these on start).
+    an FPS cost in every scene; XXMI Launcher asks about these on start), and a character mod that never calls
+    ORFix ("missing_orfix", Genshin only: see below).
   - "bad" also: an ini whose `namespace` is one the loader already loads from `Core\<importer>\Libraries`
     (ORFix, RabbitFX, SlotFix): "duplicate_library", fixed by "off".
   - "info" (Note): a missing file whose `[Resource]` nothing names (3DMigoto loads a resource's file the first time
@@ -451,6 +452,27 @@ Rust `ini.rs`:
   "off" (rename `ini` DISABLED_<name>). The loader and Mods folder come from the game's paths (lint, inspect), else
   from the first folder above the mod with a d3dx.ini.
   lint_fix applies one after taking a backup (backups.rs), so it can be undone.
+  "missing_orfix" (a "warn", so it never counts on the Tools badge, and the Tools > Problems fold with the warnings
+  opens by itself when one of them has a fix): a Genshin character mod whose parts set their textures by slot while
+  nothing in the mod calls ORFix. Outlines and reflections then draw in the wrong colors (green fur, yellow hair). A
+  part is a `[TextureOverride*]` or `[CommandList*]` section that isn't a face (no "face" in the name) and binds `ps-t0`
+  and `ps-t1` as resources (`ResourceX`, with or without `ref`, never a shadow). With `ps-t2` bound too it needs
+  ORFix (normal map, diffuse, light map); with only the first two it needs NNFix (no normal map), but only when the
+  mod has a character (weapons and items are never judged by two slots). A call is a `run` line (cut at the first `;`)
+  naming a command list under `global\ORFix`, or any use of the GIMI API (`CommandList\GIMI\...`, which runs ORFix
+  itself); words in comments, file names and variable names don't count. Gates, cheapest first: the game is Genshin
+  (`LintCtx` knows it from the game id), the loader has the ORFix library in `Core\<importer>\Libraries`, the mod
+  isn't in the loader's Core folder and has no ini that is a library (`namespace = global\...`) or couldn't be read,
+  nothing in any ini of the mod calls ORFix, and at least one part needs it. Mod-wide on purpose: a face or a dress with
+  no normal map leaves the call out, so one call anywhere means the author handled it. One problem per mod naming the
+  inis and parts, and the fix is of kind "orfix" (`inis`: every ini with a part that needs it).
+  `apply_fix` reads the mod again with the same detection (`orfix_parts`, shared with lint), and puts
+  `run = CommandList\global\ORFix\ORFix` (or `\NNFix`) on a new line right after the last texture binding of each group
+  of bindings in a part (a part with `if`/`else` branches gets one per branch), indented like that binding. Line
+  endings, encoding and every other line stay as they were (a file gachamod can't write back exactly is refused),
+  each ini is written through a temporary file, and a failed write puts the earlier ones back. One backup of the
+  changed inis comes first, so Undo works like for "point" and "off". A second run finds the call there and says the
+  mod changed. "Fix all" includes it.
 - hash_lookup: which mods (on or off) mention a hash, any case, with or without 0x.
 `merged.rs`: mods made by GIMI's merge script (`genshin_merge_mods.py`): an ini (any name, `-n` renames it) whose
 first line is `; Merged Mod: <ini>, <ini>...` in swap order, or whose footer names the "mod merger script" (then the

@@ -125,6 +125,7 @@ Upstream: `api.github.com/repos/leotorrez/SR-Model-Importer-Assets/commits?path=
 425 pairs (3.0 to 5.4). Fixer that matters: Fix All Character Mods, SilentNightSound, GameBanana 16433 (4318 likes, version 7.2 posted 2026-11-06 with 5445 exe downloads so far, script by Gustav0_ for the latest). Licence CC BY-NC-ND 4.0, so none of its data is in our JSON. It is the only source for hash changes from 5.5 to 7.2. Other tools:
 
 - ORFix Applier (golanah921, now LeoMods_, GameBanana 16472, 618k views, 43155 exe downloads, version 4.2, ND): makes mods call ORFix (shipped by the GIMI package) instead of raw slots. Ini only, needs a character list. Related: Face Fix Updated (Sanddino 21052), ORFix tools 21138, 21063, 21131.
+- gachamod finds Genshin character mods that lack the ORFix or NNFix call (the Yelan Qipao mod binds only diffuse and light map and calls neither) and adds the line itself on one click, with a backup, so the Applier is not needed. The check is "missing_orfix" in `docs/spec.md`.
 - 5.7 slot shift (ZaRe4p3r, GameBanana 20070, ND, marked outdated): `ps-t0` to `ps-t6`, `ps-t1` to `ps-t0`, `ps-t2` to `ps-t1`, plus a marker line. Ini only. Taken from the page text, the script was not read.
 - 5.4: character normal maps changed, not automatable (SilentNightSound). The author has to replace them.
 - HOYO SHA hash updater (17367, 2024, stale).

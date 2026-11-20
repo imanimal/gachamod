@@ -109,6 +109,7 @@ onKeysChanged((game) => { if (snap.game === game) void loadLint(game); });
 
 /** Short button text for a fix ("Use RegularRaiden/x.buf", "Keep 1/Yelan.ini on"). */
 export function fixLabel(f: ProblemFix): string {
+  if (f.kind === "orfix") return t("Add ORFix call");
   if (f.kind === "keep") { const ini = f.ini ?? f.inis[0]; return ini ? t("Keep {ini} on", { ini }) : t("Keep one on"); }
   if (f.kind === "off") return t("Turn this copy off");
   const to = (f.to ?? "").replace(/\\/g, "/").replace(/^\.\//, "");
@@ -116,6 +117,7 @@ export function fixLabel(f: ProblemFix): string {
 }
 
 export function fixHint(f: ProblemFix): string {
+  if (f.kind === "orfix") return t("Adds the missing ORFix call to each part that needs it, which fixes wrong outline and reflection colors. A backup is kept and Undo puts it back");
   if (f.kind === "keep") return t("Turn off the others by renaming them DISABLED_. Undo puts them back");
   if (f.kind === "off") return t("Renames {ini} DISABLED_, so the loader uses the other copy. Undo puts it back", { ini: f.ini ?? "" });
   return t("The same file is at {file}. Changes {ini} to load it from there. Undo puts the old line back", { file: (f.to ?? "").replace(/\\/g, "/"), ini: f.ini ?? "" });
@@ -136,7 +138,8 @@ export async function applyFix(game: GameId, m: ModProblems, fix: ProblemFix): P
   }
 }
 
-/** Fixes "Fix all" makes: every one that needs no choice ("keep" asks which variant stays). */
+/** Fixes "Fix all" makes: every one that needs no choice ("keep" asks which variant stays). "orfix" goes in: it adds one
+ *  line to each part and keeps a backup. */
 export const autoFixes = (list: ModProblems[], ign: Ignored, game: GameId) =>
   list.flatMap((m) => shownProblems(ign, game, m).filter((p) => p.fix && p.fix.kind !== "keep").map((p) => ({ m, fix: p.fix! })));
 

@@ -78,7 +78,8 @@ pub struct VarInfo {
 #[serde(rename_all = "camelCase")]
 pub struct Problem {
     /// "missing_file", "bad_ini", "no_ini", "no_key", "missing_section", "overlap", "global_trigger",
-    /// "duplicate_library", "missing_library".
+    /// "duplicate_library", "missing_library", "missing_orfix" (a Genshin character mod that sets textures by
+    /// slot and never calls ORFix or NNFix).
     pub kind: String,
     pub detail: String,
     pub ini: Option<String>,
@@ -97,6 +98,8 @@ pub struct ProblemFix {
     /// mod (paths relative to the ini's folder, as 3DMigoto reads them).
     /// "keep": keep `ini` on and turn off the other `inis` by renaming them DISABLED_<name>.
     /// "off": turn off `ini` by renaming it DISABLED_<name> (a copy of a library the loader already has).
+    /// "orfix": add the missing call (`run = CommandList\global\ORFix\ORFix`, or `\NNFix` for a part with no normal
+    /// map) after the texture bindings of each part in `inis`, the mod's .ini files that need it.
     pub kind: String,
     pub ini: Option<String>,
     pub from: Option<String>,
@@ -805,13 +808,16 @@ pub(crate) fn move_user_prefix(importer_dir: &Path, from_ns: &str, to_ns: &str) 
 
 // ── a whole mod ──
 
-/// One parsed ini of a mod.
-struct ModIni { rel: String, abs: PathBuf, parsed: std::result::Result<Ini, String> }
+/// One parsed ini of a mod, with the text (empty when it couldn't be read).
+struct ModIni { rel: String, abs: PathBuf, parsed: std::result::Result<Ini, String>, text: String }
 
 fn read_mod(dir: &Path) -> Vec<ModIni> {
     mod_inis(dir).into_iter().map(|(abs, rel)| {
-        let parsed = read_text(&abs, FULL_MAX).map(|t| parse(&t));
-        ModIni { rel, abs, parsed }
+        let (parsed, text) = match read_text(&abs, FULL_MAX) {
+            Ok(t) => (Ok(parse(&t)), t),
+            Err(e) => (Err(e), String::new()),
+        };
+        ModIni { rel, abs, parsed, text }
     }).collect()
 }
 
@@ -1026,26 +1032,28 @@ struct LibIni { ns: String, name: String, folder: String }
 pub(crate) struct LintCtx {
     importer: Option<PathBuf>,
     mods: Option<PathBuf>,
+    /// The game is Genshin, the only one with the ORFix call to check for.
+    genshin: bool,
     libs: std::cell::OnceCell<Vec<LibIni>>,
     known: std::cell::OnceCell<HashSet<String>>,
 }
 
 impl LintCtx {
-    pub(crate) fn new(importer: Option<PathBuf>, mods: Option<PathBuf>) -> Self {
-        LintCtx { importer, mods, libs: Default::default(), known: Default::default() }
+    pub(crate) fn new(importer: Option<PathBuf>, mods: Option<PathBuf>, genshin: bool) -> Self {
+        LintCtx { importer, mods, genshin, libs: Default::default(), known: Default::default() }
     }
 
-    /// From the mod folder up: the first folder with a d3dx.ini is the loader's, with Mods next to it.
+    /// From the mod folder up: the first folder with a d3dx.ini is the loader's, with Mods next to it. Genshin.
     #[cfg(test)]
     fn near(dir: &Path) -> Self {
         let root = dir.ancestors().skip(1).find(|a| a.join("d3dx.ini").is_file()).map(Path::to_path_buf);
         let mods = root.as_ref().map(|r| r.join("Mods"));
-        Self::new(root, mods)
+        Self::new(root, mods, true)
     }
 
     /// The game's loader and Mods folder from the library's settings.
     fn of_game(db: &Db, game: &str) -> Self {
-        Self::new(crate::games::importer_dir(db, game).ok(), crate::games::mods_dir(db, game).ok())
+        Self::new(crate::games::importer_dir(db, game).ok(), crate::games::mods_dir(db, game).ok(), game == "gi")
     }
 
     /// Libraries in `Core\<importer>\Libraries` (XXMI ships RabbitFX, ORFix, SlotFix and others there).
@@ -1160,12 +1168,208 @@ fn lint_libraries(dir: &Path, inis: &[ModIni], ctx: &LintCtx, out: &mut Vec<Prob
     }
 }
 
+// ── a character mod that never calls ORFix ──
+
+/// `s` starts with `prefix`, ignoring ASCII case. No allocation.
+fn starts_with_ci(s: &str, prefix: &str) -> bool {
+    s.len() >= prefix.len() && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+}
+
+/// `s` holds `part`, ignoring ASCII case. No allocation.
+fn contains_ci(s: &str, part: &str) -> bool {
+    s.len() >= part.len() && s.as_bytes().windows(part.len()).any(|w| w.eq_ignore_ascii_case(part.as_bytes()))
+}
+
+/// A part of a character that sets textures by slot and needs an ORFix call.
+#[derive(Debug, Clone, PartialEq)]
+struct OrfixPart {
+    /// The section as written ("TextureOverrideYelanBody").
+    name: String,
+    /// Diffuse and light map only: the call is NNFix. Otherwise the part has a normal map too and the call is ORFix.
+    two_slot: bool,
+    /// Lines (0-based) the call goes after: the last texture binding of each group of bindings. A part with
+    /// bindings in several `if` branches has one group per branch.
+    after: Vec<usize>,
+}
+
+/// The call line a part needs.
+fn orfix_call(two_slot: bool) -> &'static str {
+    if two_slot { "run = CommandList\\global\\ORFix\\NNFix" } else { "run = CommandList\\global\\ORFix\\ORFix" }
+}
+
+/// Which of `ps-t0`, `ps-t1` and `ps-t2` a line binds (0, 1 or 2), and whether it binds a resource of the mod
+/// (`ResourceBodyDiffuse`, with or without `ref`) and not a shadow or a copy of another slot.
+fn slot_binding(key: &str, value: &str) -> Option<(u8, bool)> {
+    let k = key.as_bytes();
+    if k.len() != 5 || !k[..4].eq_ignore_ascii_case(b"ps-t") || !matches!(k[4], b'0'..=b'2') { return None; }
+    let mut v = value.trim();
+    if v.len() > 3 && v.as_bytes()[..3].eq_ignore_ascii_case(b"ref") && v.as_bytes()[3].is_ascii_whitespace() {
+        v = v[4..].trim_start();
+    }
+    Some((k[4] - b'0', starts_with_ci(v, "resource") && !contains_ci(v, "shadow")))
+}
+
+/// `if`, `elif`, `else` and `endif` lines end a group of bindings.
+fn is_flow_line(t: &str) -> bool {
+    let word = t.split(|c: char| !c.is_ascii_alphabetic()).next().unwrap_or("");
+    ["if", "elif", "else", "endif"].iter().any(|w| word.eq_ignore_ascii_case(w))
+}
+
+/// The section being read by `orfix_parts`.
+struct OpenPart { name: String, slots: u8, other: bool, after: Vec<usize>, last: Option<usize> }
+
+impl OpenPart {
+    fn finish(mut self, character: bool) -> Option<OrfixPart> {
+        if let Some(l) = self.last.take() { self.after.push(l); }
+        // a slot bound to something that isn't a resource is the author doing their own thing
+        if self.other { return None; }
+        let two_slot = match self.slots { 0b111 => false, 0b011 if character => true, _ => return None };
+        Some(OrfixPart { name: self.name, two_slot, after: self.after })
+    }
+}
+
+/// The parts in one ini's lines that need an ORFix call: a `[TextureOverride*]` or `[CommandList*]` section that isn't
+/// a face and binds `ps-t0`, `ps-t1` and `ps-t2` to resources (three slots: ORFix), or only `ps-t0` and `ps-t1`
+/// (two slots: NNFix, and only for a character mod, since a weapon or an item with two slots is normal). Lint and the
+/// fix both read the lines with this, so they always agree.
+fn orfix_parts<'a>(lines: impl Iterator<Item = &'a str>, character: bool) -> Vec<OrfixPart> {
+    let mut out = Vec::new();
+    let mut cur: Option<OpenPart> = None;
+    for (i, line) in lines.enumerate() {
+        if let Some(name) = crate::keys::header_name(line) {
+            out.extend(cur.take().and_then(|o| o.finish(character)));
+            if (starts_with_ci(name, "textureoverride") || starts_with_ci(name, "commandlist")) && !contains_ci(name, "face") {
+                cur = Some(OpenPart { name: name.to_string(), slots: 0, other: false, after: Vec::new(), last: None });
+            }
+            continue;
+        }
+        let Some(o) = cur.as_mut() else { continue };
+        let t = line.trim();
+        if t.is_empty() || t.starts_with(';') { continue; }
+        if is_flow_line(t) {
+            if let Some(l) = o.last.take() { o.after.push(l); }
+            continue;
+        }
+        let Some((k, v)) = t.split_once('=') else { continue };
+        match slot_binding(k.trim(), v) {
+            Some((slot, true)) => { o.slots |= 1 << slot; o.last = Some(i); }
+            Some((_, false)) => o.other = true,
+            None => {}
+        }
+    }
+    out.extend(cur.take().and_then(|o| o.finish(character)));
+    out
+}
+
+/// Whether a `run` value names a command list under the ORFix library (`CommandList\global\ORFix\NNFix`), cut at a `;`.
+fn runs_orfix(value: &str) -> bool {
+    let v = value.split(';').next().unwrap_or("");
+    if !contains_ci(v, "orfix") { return false; }
+    let v = v.trim().replace('/', "\\").to_ascii_lowercase();
+    let v = v.strip_prefix("commandlist\\").unwrap_or(&v);
+    v.starts_with("global\\orfix\\")
+}
+
+/// Whether anything in the mod calls ORFix: a `run` line to the ORFix library, or any use of the GIMI API
+/// (`run = CommandList\GIMI\SetTextures`), which runs ORFix itself.
+fn calls_orfix(inis: &[ModIni]) -> bool {
+    inis.iter().filter_map(|m| m.parsed.as_ref().ok().map(|ini| (m, ini))).any(|(m, ini)| {
+        ini.sections.iter().flat_map(|s| &s.lines).any(|l| l.lkey == "run" && l.value.as_deref().is_some_and(runs_orfix))
+            || (contains_ci(&m.text, "gimi") && namespace_refs(ini).iter().any(|(ns, _)| {
+                let n = norm_ns(ns);
+                n == "gimi" || n.starts_with("gimi\\")
+            }))
+    })
+}
+
+/// Where a Genshin character mod lacks the ORFix call: each ini (the index in `inis`) with the parts that need one.
+/// Empty when the game isn't Genshin, the loader has no ORFix library (the call would point nowhere), the mod is the
+/// loader's own or ships a library, an ini couldn't be read (it may hold the call), or anything in the mod already
+/// calls ORFix. Mod-wide on purpose: a face or a dress with no normal map leaves the call out, so one call anywhere
+/// means the author handled it. Cheapest checks first: this runs for every mod on every check.
+fn orfix_work(dir: &Path, inis: &[ModIni], ctx: &LintCtx, character: bool) -> Vec<(usize, Vec<OrfixPart>)> {
+    if !ctx.genshin { return Vec::new(); }
+    let Some(root) = &ctx.importer else { return Vec::new() };
+    if !ctx.libs().iter().any(|l| l.ns == "global\\orfix") || dir.starts_with(root.join("Core")) { return Vec::new(); }
+    if inis.iter().any(|m| m.parsed.is_err()) { return Vec::new(); }
+    let library = inis.iter().filter_map(|m| m.parsed.as_ref().ok()).filter_map(namespace_of).any(|n| norm_ns(&n).starts_with("global\\"));
+    if library || calls_orfix(inis) { return Vec::new(); }
+    inis.iter().enumerate().filter_map(|(i, m)| {
+        let parts = orfix_parts(m.text.split('\n'), character);
+        (!parts.is_empty()).then_some((i, parts))
+    }).collect()
+}
+
+/// A Genshin character mod whose parts set their textures by slot while nothing in the mod calls ORFix: outlines and
+/// reflections come out in the wrong colors in game. The fix adds the call.
+fn lint_orfix(dir: &Path, inis: &[ModIni], ctx: &LintCtx, character: bool, out: &mut Vec<Problem>) {
+    let work = orfix_work(dir, inis, ctx, character);
+    if work.is_empty() { return; }
+    let rels: Vec<String> = work.iter().map(|(i, _)| inis[*i].rel.clone()).collect();
+    let mut parts: Vec<&str> = Vec::new();
+    for name in work.iter().flat_map(|(_, p)| p.iter().map(|x| x.name.as_str())) {
+        if !parts.contains(&name) { parts.push(name); }
+    }
+    let (verb, shown) = if rels.len() == 1 { ("sets", rels[0].clone()) } else { ("set", oxford(&rels, 3)) };
+    let detail = format!(
+        "{shown} {verb} the textures of {} by slot, and nothing in the mod calls ORFix. Outlines and reflections can show the wrong colors in game. Adding the call fixes it",
+        oxford(&parts, 3));
+    let first = rels[0].clone();
+    let mut p = problem("missing_orfix", "warn", Some(&first), detail);
+    p.fix = Some(ProblemFix { kind: "orfix".into(), ini: Some(first), from: None, to: None, inis: rels });
+    out.push(p);
+}
+
+/// One ini with the ORFix calls added.
+#[derive(Debug)]
+struct OrfixEdit { rel: String, abs: PathBuf, old: Vec<u8>, new: Vec<u8> }
+
+/// The inis of `wanted` (paths inside the mod) with the missing calls added: a line right after the last texture
+/// binding of each group, indented like it. Line endings, encoding and every other line stay as they were. Empty
+/// when the mod needs nothing (the call is there now, or the files changed). Reads only, so a failure leaves every
+/// file untouched.
+fn orfix_edits(dir: &Path, inis: &[ModIni], ctx: &LintCtx, character: bool, wanted: &[String]) -> Result<Vec<OrfixEdit>> {
+    let mut out = Vec::new();
+    for (i, _) in orfix_work(dir, inis, ctx, character) {
+        let m = &inis[i];
+        if !wanted.iter().any(|w| w.replace('\\', "/").eq_ignore_ascii_case(&m.rel)) { continue; }
+        let old = std::fs::read(&m.abs).map_err(|e| Error::Invalid(format!("Couldn't read {}: {}", m.rel, crate::error::io_text(&e))))?;
+        let mut doc = crate::keys::Doc::from_bytes(&old);
+        if doc.to_bytes() != old {
+            return Err(Error::Invalid(format!("{} has text gachamod can't keep exactly, so it left the file alone", m.rel)));
+        }
+        let mut calls: Vec<(usize, bool)> = orfix_parts(doc.lines.iter().map(String::as_str), character)
+            .into_iter().flat_map(|p| p.after.into_iter().map(move |a| (a, p.two_slot))).collect();
+        if calls.is_empty() { continue; }
+        // from the bottom up, so the lines above keep their numbers
+        calls.sort_by(|a, b| b.0.cmp(&a.0));
+        for (at, two_slot) in calls {
+            let indent: String = doc.lines[at].chars().take_while(|c| c.is_whitespace()).collect();
+            doc.insert(at + 1, format!("{indent}{}", orfix_call(two_slot)));
+        }
+        out.push(OrfixEdit { rel: m.rel.clone(), abs: m.abs.clone(), old, new: doc.to_bytes() });
+    }
+    Ok(out)
+}
+
+/// Write the edits, each through a temporary file. When one fails the ones already written go back as they were.
+fn write_orfix_edits(edits: &[OrfixEdit]) -> Result<()> {
+    for (n, e) in edits.iter().enumerate() {
+        if let Err(err) = crate::xxmi::write_atomic(&e.abs, &e.new) {
+            for done in &edits[..n] { let _ = crate::xxmi::write_atomic(&done.abs, &done.old); }
+            return Err(Error::Invalid(format!("Couldn't write {}: {}", e.rel, err)));
+        }
+    }
+    Ok(())
+}
+
 /// Everything that looks wrong in one mod's files, worst first, each with a fix when gachamod found one. `dir` is
 /// the mod folder; the loader and Mods folder are found from it.
 #[cfg(test)]
-fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> { lint_mod_ctx(dir, inis, &LintCtx::near(dir)) }
+fn lint_mod(dir: &Path, inis: &[ModIni]) -> Vec<Problem> { lint_mod_ctx(dir, inis, &LintCtx::near(dir), false) }
 
-fn lint_mod_ctx(dir: &Path, inis: &[ModIni], ctx: &LintCtx) -> Vec<Problem> {
+/// `character`: the mod is for a character (not a weapon or an item), so a part with two texture slots is judged too.
+fn lint_mod_ctx(dir: &Path, inis: &[ModIni], ctx: &LintCtx, character: bool) -> Vec<Problem> {
     let mut out = Vec::new();
     if inis.is_empty() {
         // inis that are only turned off mean the mod (or each of its variants) is off, which is the user's choice
@@ -1280,6 +1484,7 @@ fn lint_mod_ctx(dir: &Path, inis: &[ModIni], ctx: &LintCtx) -> Vec<Problem> {
         out.push(problem("bad_ini", severity, Some(empty[0]), detail));
     }
     lint_libraries(dir, inis, ctx, &mut out);
+    lint_orfix(dir, inis, ctx, character, &mut out);
     for (group, plain) in overlaps(inis) {
         if !plain { continue; }
         let names: Vec<&str> = group.iter().map(|&i| inis[i].rel.as_str()).collect();
@@ -1351,6 +1556,16 @@ pub fn apply_fix(db: &Db, game: &str, id: &str, fix: &ProblemFix) -> Result<crat
             for (from, to, ..) in &moves { rename_retry(from, to)?; }
             b
         }
+        "orfix" => {
+            let edits = orfix_edits(&dir, &read_mod(&dir), &LintCtx::of_game(db, game), m.character.is_some(), &fix.inis)?;
+            // nothing to add: the call is there already (a second click, or added by hand since the check)
+            if edits.is_empty() { return Err(changed()); }
+            let files: Vec<String> = edits.iter().map(|e| e.rel.clone()).collect();
+            let label = if let [one] = files.as_slice() { format!("Added the ORFix call to {one}") } else { format!("Added the ORFix call to {} inis", files.len()) };
+            let b = crate::backups::take(db, game, &m.id, &dir, &files, &label)?;
+            write_orfix_edits(&edits)?;
+            b
+        }
         _ => return Err(Error::Invalid("gachamod doesn't know that fix. Check again".into())),
     };
     if m.loaded() { crate::devtools::mark_changed(game); }
@@ -1398,7 +1613,7 @@ fn key_bindings(rel: &str, ini: &Ini) -> Vec<KeyBinding> {
 }
 
 /// Keys, options with their current values, and problems for one mod folder. `saved` are its saved values.
-fn inspect_dir(dir: &Path, saved: &[VarValue], ctx: &LintCtx) -> ModInspect {
+fn inspect_dir(dir: &Path, saved: &[VarValue], ctx: &LintCtx, character: bool) -> ModInspect {
     let inis = read_mod(dir);
     let mut out = ModInspect { inis: inis.iter().map(|m| m.rel.clone()).collect(), ..Default::default() };
     let mut hashes = BTreeSet::new();
@@ -1442,7 +1657,7 @@ fn inspect_dir(dir: &Path, saved: &[VarValue], ctx: &LintCtx) -> ModInspect {
             v.names = mg.variants.iter().map(|x| (x.value.clone(), x.name.clone())).collect();
         }
     }
-    out.problems = lint_mod_ctx(dir, &inis, ctx);
+    out.problems = lint_mod_ctx(dir, &inis, ctx, character);
     out.readmes = readmes(dir);
     out
 }
@@ -1499,7 +1714,7 @@ pub fn inspect(db: &Db, game: &str, id: &str) -> Result<ModInspect> {
     if saved.is_empty() && m.loaded() {
         if let Ok(imp) = crate::games::importer_dir(db, game) { saved = user_vars(&imp, &m.rel_path).unwrap_or_default(); }
     }
-    let mut out = inspect_dir(&dir, &saved, &LintCtx::of_game(db, game));
+    let mut out = inspect_dir(&dir, &saved, &LintCtx::of_game(db, game), m.character.is_some());
     out.mod_id = m.id.clone();
     if m.enabled {
         let mods = mods_or_empty(db, game).unwrap_or_default();
@@ -1656,7 +1871,7 @@ pub fn lint(db: &Db, game: &str) -> Result<Vec<ModProblems>> {
     for m in &mods {
         let dir = Path::new(&m.path);
         if !dir.is_dir() { continue; }
-        let problems = lint_mod_ctx(dir, &read_mod(dir), &ctx);
+        let problems = lint_mod_ctx(dir, &read_mod(dir), &ctx, m.character.is_some());
         if !problems.is_empty() {
             out.push(ModProblems { mod_id: m.id.clone(), name: m.name.clone(), enabled: m.enabled, source: m.source.clone(), problems });
         }
@@ -1785,7 +2000,7 @@ mod tests {
         let d = temp("inspect");
         write_mod(&d);
         let saved = vec![VarValue { ini: "mod.ini".into(), var: "swapvar".into(), value: "2.0".into() }];
-        let r = inspect_dir(&d, &saved, &LintCtx::near(&d));
+        let r = inspect_dir(&d, &saved, &LintCtx::near(&d), false);
         assert_eq!(r.inis, vec!["mod.ini"]);
         assert_eq!(r.keys.len(), 2);
         let swap = &r.keys[0];
@@ -2213,6 +2428,293 @@ hash = 11111111"));
         let _ = fs::remove_dir_all(&root);
     }
 
+    /// A character part that sets textures by slot, the way a mod does before ORFix is called.
+    const THREE_SLOTS: &str = "[TextureOverrideVaresaBody]\nhash = 11112222\nib = ResourceBodyIB\nps-t0 = ResourceBodyNormal\nps-t1 = ResourceBodyDiffuse\nps-t2 = ResourceBodyLightMap\n";
+
+    /// The call a three-slot part needs, and the one a part with no normal map needs.
+    const ORFIX_LINE: &str = "run = CommandList\\global\\ORFix\\ORFix";
+    const NNFIX_LINE: &str = "run = CommandList\\global\\ORFix\\NNFix";
+
+    /// The flagged problems for a mod that isn't known to be a character's: only three-slot parts count.
+    fn orfix_problems(dir: &Path) -> Vec<Problem> { orfix_lint(dir, false) }
+
+    fn orfix_lint(dir: &Path, character: bool) -> Vec<Problem> {
+        lint_mod_ctx(dir, &read_mod(dir), &LintCtx::near(dir), character).into_iter().filter(|p| p.kind == "missing_orfix").collect()
+    }
+
+    /// A mod shaped like the Yelan Qipao one: parts that bind only diffuse and light map, one inside gachamod's live
+    /// wrapper, a face part that gets no call, and no ORFix or NNFix anywhere.
+    fn yelan() -> String {
+        [
+            "[TextureOverrideYelanHead]", "hash = 11111111", "ib = ResourceYelanHeadIB", "ps-t0 = ResourceYelanHeadDiffuse",
+            "ps-t1 = ResourceYelanHeadLightMap", "drawindexed = auto", "",
+            "[TextureOverrideYelanBody]", "hash = 22222222", "ib = ResourceYelanBodyIB", "ps-t0 = ResourceYelanBodyDiffuse",
+            "ps-t1 = ResourceYelanBodyLightMap", "drawindexed = auto", "",
+            "[TextureOverrideYelanDress]", "hash = 33333333", "; gachamod:begin", r"run = CommandList\gachamod\live\Seen1",
+            r"if $\gachamod\live\g1 == 5", "\tib = ResourceYelanDressIB", "\tps-t0 = ResourceYelanDressDiffuse",
+            "\tps-t1 = ResourceYelanDressLightMap", "\tps-t69 = Resource1", "\trun = CommandList\\TexFx\\Transparency.0", "endif",
+            "; gachamod:end", "",
+            "[TextureOverrideYelanExtra]", "hash = 44444444", "ps-t0 = ResourceYelanExtraDiffuse", "ps-t1 = ResourceYelanExtraLightMap", "",
+            "[TextureOverrideYelanFaceHeadDiffuse]", "hash = 55555555", "ps-t0 = ResourceYelanFaceDiffuse", "ps-t1 = ResourceYelanFaceLightMap",
+        ].join("\n") + "\n"
+    }
+
+    /// `yelan()` with the NNFix call right after the light map binding of the four parts, and nothing else changed.
+    fn yelan_fixed() -> String {
+        let mut s = yelan();
+        for (binding, indent) in [("YelanHead", ""), ("YelanBody", ""), ("YelanDress", "\t"), ("YelanExtra", "")] {
+            let line = format!("{indent}ps-t1 = Resource{binding}LightMap\n");
+            assert_eq!(s.matches(&line).count(), 1, "{line}");
+            s = s.replace(&line, &format!("{line}{indent}{NNFIX_LINE}\n"));
+        }
+        s
+    }
+
+    fn yelan_mod(root: &Path, text: &[u8]) -> PathBuf {
+        let m = root.join("Mods/Yelan Qipao Mod");
+        fs::create_dir_all(&m).unwrap();
+        fs::write(m.join("yelan.ini"), text).unwrap();
+        m
+    }
+
+    /// What `orfix_edits` makes of a mod's inis, as text.
+    fn orfix_texts(dir: &Path, character: bool) -> Vec<(String, String)> {
+        let wanted: Vec<String> = read_mod(dir).iter().map(|m| m.rel.clone()).collect();
+        orfix_edits(dir, &read_mod(dir), &LintCtx::near(dir), character, &wanted).unwrap()
+            .into_iter().map(|e| (e.rel, String::from_utf8(e.new).unwrap())).collect()
+    }
+
+    #[test]
+    fn flags_the_yelan_mod_and_adds_nnfix() {
+        let root = loader_with_libs("yelan");
+        let m = yelan_mod(&root, yelan().as_bytes());
+
+        // a character mod: one warning naming the ini and the parts, with the fix
+        let p = orfix_lint(&m, true);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].severity, "warn");
+        assert_eq!(p[0].ini.as_deref(), Some("yelan.ini"));
+        assert_eq!(p[0].detail, "yelan.ini sets the textures of TextureOverrideYelanHead, TextureOverrideYelanBody, and 2 more by slot, and nothing in the mod calls ORFix. Outlines and reflections can show the wrong colors in game. Adding the call fixes it");
+        assert_eq!(p[0].fix, Some(ProblemFix { kind: "orfix".into(), ini: Some("yelan.ini".into()), from: None, to: None, inis: vec!["yelan.ini".into()] }));
+
+        // two slots are normal for a weapon or an item, so a mod with no character isn't judged
+        assert!(orfix_lint(&m, false).is_empty());
+        // another game has no ORFix to call
+        let other = LintCtx::new(Some(root.clone()), Some(root.join("Mods")), false);
+        assert!(lint_mod_ctx(&m, &read_mod(&m), &other, true).iter().all(|p| p.kind != "missing_orfix"));
+
+        // the fix: the call goes right after the light map binding with the same indent, and the lines after stay
+        let texts = orfix_texts(&m, true);
+        assert_eq!(texts.len(), 1);
+        assert_eq!(texts[0].0, "yelan.ini");
+        assert_eq!(texts[0].1, yelan_fixed());
+        let dress = texts[0].1.split("[TextureOverrideYelanDress]").nth(1).unwrap();
+        let at = |needle: &str| dress.find(needle).unwrap_or_else(|| panic!("{needle}"));
+        assert!(at("\tps-t1 =") < at(&format!("\t{NNFIX_LINE}")) && at(&format!("\t{NNFIX_LINE}")) < at("\tps-t69 =") && at("\tps-t69 =") < at(r"TexFx\Transparency.0"));
+
+        // once the call is there it is a clean mod, and a second run adds nothing
+        fs::write(m.join("yelan.ini"), &texts[0].1).unwrap();
+        assert!(orfix_lint(&m, true).is_empty());
+        assert!(orfix_texts(&m, true).is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_call_keeps_line_endings() {
+        let root = loader_with_libs("orfixeol");
+        let crlf = yelan().replace('\n', "\r\n");
+        let m = yelan_mod(&root, crlf.as_bytes());
+        let texts = orfix_texts(&m, true);
+        assert_eq!(texts[0].1, yelan_fixed().replace('\n', "\r\n"));
+        assert_eq!(texts[0].1.matches('\n').count(), texts[0].1.matches("\r\n").count());
+        fs::write(m.join("yelan.ini"), yelan().as_bytes()).unwrap();
+        let texts = orfix_texts(&m, true);
+        assert_eq!(texts[0].1, yelan_fixed());
+        assert!(!texts[0].1.contains('\r'));
+        // a byte order mark stays, and a file that doesn't end in a line break still gets the call
+        let mut bom = vec![0xEF, 0xBB, 0xBF];
+        bom.extend_from_slice(THREE_SLOTS.trim_end().as_bytes());
+        fs::write(m.join("yelan.ini"), &bom).unwrap();
+        let wanted = vec!["yelan.ini".to_string()];
+        let edits = orfix_edits(&m, &read_mod(&m), &LintCtx::near(&m), false, &wanted).unwrap();
+        assert_eq!(edits[0].new, [&[0xEF, 0xBB, 0xBF][..], format!("{}\n{ORFIX_LINE}\n", THREE_SLOTS.trim_end()).as_bytes()].concat());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn three_slot_parts_get_orfix_and_two_slot_parts_nnfix_after_each_branch() {
+        let root = loader_with_libs("orfixmix");
+        let m = root.join("Mods/Varesa");
+        fs::create_dir_all(&m).unwrap();
+        let ini = "[TextureOverrideVaresaBody]\nhash = 11112222\nif $swap == 0\n    ps-t0 = ResourceBodyNormal\n    ps-t1 = ResourceBodyDiffuse\n    ps-t2 = ResourceBodyLightMap\n\
+            else\n    ps-t0 = ResourceBodyNormal2\n    ps-t1 = ResourceBodyDiffuse2\n    ps-t2 = ref ResourceBodyLightMap2\n    drawindexed = auto\nendif\n\
+            [TextureOverrideVaresaHead]\nhash = 33334444\nps-t0 = ResourceHeadDiffuse\nps-t1 = ResourceHeadLightMap\nps-t3 = ResourceHeadShadow\n\
+            [TextureOverrideVaresaSword]\nhash = 55556666\nps-t0 = ResourceSwordDiffuse\nps-t1 = ps-t0\n";
+        fs::write(m.join("varesa.ini"), ini).unwrap();
+        let expected = "[TextureOverrideVaresaBody]\nhash = 11112222\nif $swap == 0\n    ps-t0 = ResourceBodyNormal\n    ps-t1 = ResourceBodyDiffuse\n    ps-t2 = ResourceBodyLightMap\n    run = CommandList\\global\\ORFix\\ORFix\n\
+            else\n    ps-t0 = ResourceBodyNormal2\n    ps-t1 = ResourceBodyDiffuse2\n    ps-t2 = ref ResourceBodyLightMap2\n    run = CommandList\\global\\ORFix\\ORFix\n    drawindexed = auto\nendif\n\
+            [TextureOverrideVaresaHead]\nhash = 33334444\nps-t0 = ResourceHeadDiffuse\nps-t1 = ResourceHeadLightMap\nrun = CommandList\\global\\ORFix\\NNFix\nps-t3 = ResourceHeadShadow\n\
+            [TextureOverrideVaresaSword]\nhash = 55556666\nps-t0 = ResourceSwordDiffuse\nps-t1 = ps-t0\n";
+        assert_eq!(orfix_texts(&m, true)[0].1, expected);
+        // not a character: the three-slot body still gets the call, the two-slot head does not
+        let body_only = expected.replace("ps-t1 = ResourceHeadLightMap\nrun = CommandList\\global\\ORFix\\NNFix\n", "ps-t1 = ResourceHeadLightMap\n");
+        assert_eq!(orfix_texts(&m, false)[0].1, body_only);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_character_mod_that_never_calls_orfix_is_flagged() {
+        let root = loader_with_libs("orfix");
+        let case = |name: &str, files: &[(&str, &str)]| {
+            let m = root.join("Mods").join(name);
+            fs::create_dir_all(&m).unwrap();
+            for (f, text) in files { fs::write(m.join(f), text).unwrap(); }
+            m
+        };
+
+        // three slots, no call anywhere: one warning with the fix attached, character or not
+        let m = case("plain", &[("varesa.ini", THREE_SLOTS)]);
+        let p = orfix_problems(&m);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].severity, "warn");
+        assert_eq!(p[0].ini.as_deref(), Some("varesa.ini"));
+        assert_eq!(p[0].detail, "varesa.ini sets the textures of TextureOverrideVaresaBody by slot, and nothing in the mod calls ORFix. Outlines and reflections can show the wrong colors in game. Adding the call fixes it");
+        assert_eq!(p[0].fix, Some(ProblemFix { kind: "orfix".into(), ini: Some("varesa.ini".into()), from: None, to: None, inis: vec!["varesa.ini".into()] }));
+        assert!(!p[0].detail.split_whitespace().any(|w| w.eq_ignore_ascii_case("its")) && !p[0].detail.contains('\u{2014}'));
+        assert_eq!(orfix_lint(&m, true).len(), 1);
+
+        // several inis name each one
+        let m = case("two", &[("a.ini", THREE_SLOTS), ("b.ini", THREE_SLOTS)]);
+        let p = orfix_problems(&m);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0].detail.starts_with("a.ini and b.ini set the textures of TextureOverrideVaresaBody by slot"), "{}", p[0].detail);
+        assert_eq!(p[0].fix.as_ref().map(|f| f.inis.clone()), Some(vec!["a.ini".to_string(), "b.ini".to_string()]));
+
+        // bindings inside gachamod's live wrapping, and `ref` in any case followed by a space, still count
+        let wrapped = "[TextureOverrideBody]\nhash = 11112222\nif $\\gachamod\\live\\g1 == 5\nps-t0 = Ref ResourceN\nps-t1 = REF\tResourceD\nps-t2 = ref ResourceL\nendif\n";
+        assert_eq!(orfix_problems(&case("wrapped", &[("w.ini", wrapped)])).len(), 1);
+        // "ref" glued to the name is a different word, so that slot isn't a resource
+        let glued = "[TextureOverrideBody]\nhash = 11112222\nps-t0 = RefResourceN\nps-t1 = ResourceD\nps-t2 = ResourceL\n";
+        assert!(orfix_problems(&case("glued", &[("g.ini", glued)])).is_empty());
+
+        // a call to ORFix or NNFix anywhere in the mod, even in another ini, means the author handled it
+        let call = "[TextureOverrideHead]\nhash = 33334444\nps-t1 = ResourceHeadD\nrun = CommandList\\global\\ORFix\\ORFix\n";
+        assert!(orfix_problems(&case("called", &[("varesa.ini", THREE_SLOTS), ("head.ini", call)])).is_empty());
+        let nn = "[TextureOverrideHead]\nhash = 33334444\nrun = CommandList\\global\\ORFix\\NNFix\n";
+        assert!(orfix_problems(&case("nnfix", &[("varesa.ini", THREE_SLOTS), ("head.ini", nn)])).is_empty());
+        // slashes and capitals don't matter
+        let slashes = "[TextureOverrideHead]\nhash = 33334444\nrun = commandlist/Global/orfix/nnfix\n";
+        assert!(orfix_problems(&case("slashes", &[("varesa.ini", THREE_SLOTS), ("head.ini", slashes)])).is_empty());
+        // one part that calls and others that don't: the author handled it, nothing is flagged
+        let partial = format!("{THREE_SLOTS}{ORFIX_LINE}\n[TextureOverrideVaresaDress]\nhash = 99990000\nps-t0 = ResourceN\nps-t1 = ResourceD\nps-t2 = ResourceL\n");
+        assert!(orfix_problems(&case("partial", &[("varesa.ini", partial.as_str())])).is_empty());
+        // the GIMI API runs ORFix itself
+        let api = "[ResourceGIMIDiffuse]\nfilename = d.dds\n[TextureOverrideBody]\nhash = 55556666\nResource\\GIMI\\Diffuse = ref ResourceGIMIDiffuse\nrun = CommandList\\GIMI\\SetTextures\n";
+        assert!(orfix_problems(&case("api", &[("varesa.ini", THREE_SLOTS), ("api.ini", api)])).is_empty());
+
+        // a call that is only in a comment, after a `;`, in a file name or in a variable name is no call
+        let commented = format!("{THREE_SLOTS};{ORFIX_LINE}\n");
+        assert_eq!(orfix_problems(&case("commented", &[("varesa.ini", commented.as_str())])).len(), 1);
+        let after = format!("{THREE_SLOTS}run = CommandListOther ; {ORFIX_LINE}\n");
+        assert_eq!(orfix_problems(&case("after", &[("varesa.ini", after.as_str())])).len(), 1);
+        let named = format!("{THREE_SLOTS}[ResourceORFixLookalike]\nfilename = ORFix.dds\n$orfix_done = 1\n");
+        assert_eq!(orfix_problems(&case("named", &[("varesa.ini", named.as_str())])).len(), 1);
+
+        // two slots: a character needs NNFix, a weapon or an item (no character) is never judged by them
+        let two = "[TextureOverrideSword]\nhash = 11112222\nps-t0 = ResourceD\nps-t1 = ResourceL\nps-t70 = ResourceOutline\n";
+        let sword = case("two-slots", &[("sword.ini", two)]);
+        assert!(orfix_problems(&sword).is_empty());
+        assert_eq!(orfix_lint(&sword, true).len(), 1);
+        // a slot that isn't set to a resource doesn't count
+        let copy = "[TextureOverrideBody]\nhash = 11112222\nps-t0 = ResourceN\nps-t1 = ResourceD\nps-t2 = ps-t0\n";
+        assert!(orfix_lint(&case("copy", &[("c.ini", copy)]), true).is_empty());
+        // a shadow isn't a texture
+        let shadow = "[TextureOverrideBody]\nhash = 11112222\nps-t0 = ResourceN\nps-t1 = ResourceBodyShadow\nps-t2 = ResourceL\n";
+        assert!(orfix_lint(&case("shadow", &[("s.ini", shadow)]), true).is_empty());
+        // a face never gets the call
+        let face = "[TextureOverrideVaresaFace]\nhash = 11112222\nps-t0 = ResourceN\nps-t1 = ResourceD\nps-t2 = ResourceL\n";
+        assert!(orfix_lint(&case("face", &[("face.ini", face)]), true).is_empty());
+
+        // a copy of the library inside a mod: the mod is left to the duplicate library warning
+        let lib = "namespace = global\\ORFix\n[CommandListORFix]\nps-t0 = ResourceN\nps-t1 = ResourceD\nps-t2 = ResourceL\n";
+        assert!(orfix_problems(&case("libcopy", &[("ORFix.ini", lib), ("varesa.ini", THREE_SLOTS)])).is_empty());
+
+        // the loader's own folder is the library, not a mod
+        let core = root.join("Core/GIMI/Libraries/Other");
+        fs::create_dir_all(&core).unwrap();
+        fs::write(core.join("other.ini"), THREE_SLOTS).unwrap();
+        assert!(orfix_problems(&core).is_empty());
+
+        // a loader without the ORFix library (an old install, or another game) can't say what is missing
+        let bare = temp("orfix-bare");
+        fs::write(bare.join("d3dx.ini"), "[Loader]\n").unwrap();
+        fs::create_dir_all(bare.join("Mods/Varesa")).unwrap();
+        fs::write(bare.join("Mods/Varesa/varesa.ini"), THREE_SLOTS).unwrap();
+        assert!(orfix_problems(&bare.join("Mods/Varesa")).is_empty());
+        // and a mod outside any loader has no libraries to check
+        let alone = temp("orfix-alone");
+        fs::write(alone.join("varesa.ini"), THREE_SLOTS).unwrap();
+        assert!(orfix_problems(&alone).is_empty());
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&bare);
+        let _ = fs::remove_dir_all(&alone);
+    }
+
+    #[test]
+    fn the_orfix_fix_backs_up_and_undoes() {
+        let root = loader_with_libs("orfixfix");
+        let mods = root.join("Mods");
+        fs::create_dir_all(mods.join("Varesa")).unwrap();
+        let path = mods.join("Varesa/varesa.ini");
+        let original = THREE_SLOTS.replace('\n', "\r\n");
+        fs::write(&path, &original).unwrap();
+        let db = crate::db::Db::open(&root.join("gachamod.db")).unwrap();
+        crate::games::save_paths(&db, "gi", &crate::games::GamePaths { mods_dir: Some(mods.to_string_lossy().into_owned()), ..Default::default() }).unwrap();
+        let shared = Arc::new(Mutex::new(db));
+        let id = library::scan(&shared, "gi").unwrap()[0].id.clone();
+        let db = shared.lock().unwrap();
+        let flagged = lint(&db, "gi").unwrap().into_iter().flat_map(|m| m.problems).filter(|p| p.kind == "missing_orfix").collect::<Vec<_>>();
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        let fix = flagged[0].fix.clone().expect("the problem has a fix");
+
+        let b = apply_fix(&db, "gi", &id, &fix).unwrap();
+        assert_eq!(b.label, "Added the ORFix call to varesa.ini");
+        assert_eq!(b.files, vec!["varesa.ini".to_string()]);
+        let fixed = format!("{original}{ORFIX_LINE}\r\n");
+        assert_eq!(fs::read_to_string(&path).unwrap(), fixed);
+        assert!(lint(&db, "gi").unwrap().into_iter().flat_map(|m| m.problems).all(|p| p.kind != "missing_orfix"));
+
+        // a second click finds the call there and changes nothing
+        let err = apply_fix(&db, "gi", &id, &fix).unwrap_err();
+        assert!(matches!(err, Error::Invalid(_)), "{err:?}");
+        assert_eq!(fs::read_to_string(&path).unwrap(), fixed);
+
+        // Undo puts the file back byte for byte
+        crate::backups::restore(&db, &b.id).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes());
+        assert_eq!(lint(&db, "gi").unwrap().into_iter().flat_map(|m| m.problems).filter(|p| p.kind == "missing_orfix").count(), 1);
+        drop(db);
+        drop(shared);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_orfix_fix_refuses_files_it_cannot_keep_exactly() {
+        let root = loader_with_libs("orfixexact");
+        let m = root.join("Mods/Varesa");
+        fs::create_dir_all(&m).unwrap();
+        // UTF-16 text with a stray byte can't be written back as it was
+        let mut odd = vec![0xFF, 0xFE];
+        odd.extend(THREE_SLOTS.encode_utf16().flat_map(|u| u.to_le_bytes()));
+        odd.push(0x41);
+        fs::write(m.join("varesa.ini"), &odd).unwrap();
+        let wanted = vec!["varesa.ini".to_string()];
+        let err = orfix_edits(&m, &read_mod(&m), &LintCtx::near(&m), true, &wanted).unwrap_err();
+        assert!(err.to_string().contains("can't keep exactly"), "{err}");
+        assert_eq!(fs::read(m.join("varesa.ini")).unwrap(), odd);
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn merged_swap_values_get_names() {
         let d = temp("mergednames");
@@ -2222,7 +2724,7 @@ hash = 11111111"));
         }
         fs::write(d.join("merged.ini"), "; Merged Mod: .\\Raiden\\Raiden.ini, .\\Raiden Kimono\\RaidenKimono.ini\n\n[Constants]\nglobal persist $swapvar = 0\n\
             [KeySwap]\nkey = 5\ntype = cycle\n$swapvar = 0,1\n").unwrap();
-        let r = inspect_dir(&d, &[], &LintCtx::near(&d));
+        let r = inspect_dir(&d, &[], &LintCtx::near(&d), false);
         let v = r.vars.iter().find(|v| v.var == "swapvar").unwrap();
         assert_eq!(v.label, "Swap");
         assert_eq!(v.names.get("1").map(String::as_str), Some("Raiden Kimono"));
