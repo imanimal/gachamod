@@ -34,7 +34,7 @@ import { BackgroundSection, DesktopShortcutsSection } from "./DesktopShortcuts";
 import { AdminRow, FeedbackSection, LogsSection, PrivacySection } from "./Feedback";
 import { Installing, SetupError } from "./Onboarding";
 import { MovePanel } from "../modtools/MovePanel";
-import { BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel, storageShown } from "./Storage";
+import { BackupsPanel, BiggestModsPanel, DuplicatesPanel, StoragePage, StoragePanel, storageShown } from "./Storage";
 import { canInstallLoader, getReady, installLoaders, pickModsFolder, recheck, useSetup } from "../../lib/setup";
 
 export { SetRow, openXxmi, useSetting };
@@ -48,7 +48,7 @@ registerPanels("settings", {
   launch: LaunchSections, migoto: LaunchSections, "game-start": GameStartSection,
   others: MovePanel, mods: ModsSection, adult: AdultSection, "mod-folders": ModFoldersSection, installing: InstallingSection,
   automatic: AutomaticSection, "broken-mods": BrokenModsSection, storage: StorageSection,
-  disk: StoragePanel, "disk-big": BiggestModsPanel, "disk-dupes": DuplicatesPanel,
+  disk: StoragePanel, "disk-big": BiggestModsPanel, "disk-dupes": DuplicatesPanel, "disk-backups": BackupsPanel,
   creators: CreatorsSection, hotkeys: HotkeysSection, "menu-keys": MenuKeysSection, shortcuts: ShortcutsSection,
   appearance: AppearanceSection, layout: LayoutSection, themes: CustomThemesSection, graphics: GraphicsSection,
   fun: FunSection,

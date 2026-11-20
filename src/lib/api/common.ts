@@ -98,4 +98,27 @@ export interface Backup { id: string; game: string; modId: string; modDir: strin
 export const backups = {
   restore: (id: string) => call<Backup>("backup_restore", { id }),
   list: (game?: string | null, modId?: string | null) => call<Backup[]>("backup_list", { game: game ?? null, modId: modId ?? null }),
+  /** Everything in the backups folder, newest first. */
+  entries: () => call<BackupEntry[]>("backup_entries"),
+  /** Move backups (entry ids) to the Recycle Bin. Returns the bytes moved. */
+  recycle: (ids: string[]) => call<number>("backup_recycle", { ids }),
 };
+
+/** Something in the backups folder (crates/gacha-core/src/backups.rs `Entry`). */
+export interface BackupEntry {
+  /** Its file or folder name in the backups folder. */
+  id: string;
+  /** "mod": a mod's files from before a change. "database": the daily copy of gachamod's database. "settings":
+   *  settings from before an import. "reset": the old data Reset gachamod moved aside. */
+  kind: "mod" | "database" | "settings" | "reset" | "other";
+  /** For "mod": the game, the mod and what the change was ("Rebound F6 to F7"). */
+  game: string | null;
+  modId: string | null;
+  label: string | null;
+  /** When it was taken, in seconds. */
+  at: number;
+  bytes: number;
+  /** Files copied ("mod"), or files inside it. */
+  files: number;
+  path: string;
+}

@@ -1,6 +1,6 @@
 // Settings › Storage: where disk space goes. The total, a breakdown by category, game or character, the biggest mods,
-// mods installed twice, and a few cleaning suggestions that show only when they would free a fair amount and stay
-// hidden once dismissed. Mod sizes come from the library at once; the rest is measured off the UI thread
+// mods installed twice, the backups, and a few cleaning suggestions that show only when they would free a fair amount
+// and stay hidden once dismissed. Mod sizes come from the library at once; the rest is measured off the UI thread
 // (gacha-core storage.rs) and can be skipped, starting when the page first shows (or a search draws a panel), not when
 // Settings opens. The report lives for the session, and mod changes anywhere update it.
 // Owner: SYSTEM area.
@@ -8,14 +8,14 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Badge, Button, IconButton, Panel, Segmented, Select, Waiting, formatBytes, timeAgo } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Preview, useNsfwMode } from "../library/Preview";
-import { dev, errorText, library, shell, storage, type GameId, type ModEntry, type StorageCategory, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
+import { backups, dev, errorText, library, shell, storage, type BackupEntry, type GameId, type ModEntry, type StorageCategory, type StorageDuplicate, type StorageItem, type StorageMod, type StorageReport, type StorageStep } from "../../lib/api";
 import { held } from "../../lib/tauri";
-import { allGames, go, goIn, useGames } from "../../lib/store";
+import { allGames, emitApp, go, goIn, useGames } from "../../lib/store";
 import { record } from "../../lib/history";
 import { registerCommands } from "../../lib/search";
 import { onPublish, publish, removeMods } from "../library/data";
 import { gameName, gameShort } from "../../lib/games";
-import { t, tn } from "../../lib/i18n";
+import { t, tb, tn } from "../../lib/i18n";
 import "./storage.css";
 
 // ── the report, shared by the page's panels for the session ──
@@ -39,6 +39,7 @@ async function measure() {
   if (state.measuring) return;
   skipped = false;
   setState({ measuring: true, step: null });
+  void loadBackups();
   const off = held(storage.onProgress((step) => setState({ step })));
   try {
     if (!state.report) setState({ report: await storage.measure(false) });
@@ -118,7 +119,7 @@ function categoryTip(c: StorageCategory): string {
     case "off": return t("Mod folders that are turned off. The game skips them, but they stay on disk");
     case "trash": return t("Removed mods whose files are kept for a while, so Put back works without downloading");
     case "downloads": return t("Archives kept after installing, and downloads that didn't finish");
-    case "backups": return t("Copies of mod files taken before gachamod changed them, and copies of gachamod's database and settings");
+    case "backups": return t("Copies gachamod keeps so a change can be undone: mod files from before a fix, key change or in-game switch, daily copies of the database, and settings from before an import");
     case "loader": return t("XXMI Launcher, each game's mod loader folder, the shader cache, frame dumps and 3DMigoto log");
     case "others": return t("Mods another mod manager keeps outside the Mods folder, which gachamod doesn't list");
     case "app": return t("The database, picture thumbnails, logs, extensions and fix tools");
@@ -151,12 +152,14 @@ function itemLabel(i: StorageItem): string {
   }
 }
 
-function itemTip(i: StorageItem): string | undefined {
+function itemTip(i: StorageItem, game: GameId | null): string | undefined {
   switch (i.key) {
     case "trash": return t("Files of removed mods kept for the days set in Settings, Mods");
     case "archives": return t("Archives kept after installing. Settings, Downloads decides whether they stay");
     case "parts": return t("Downloads that stopped part way. Retry in Downloads picks them up");
-    case "backups": return t("Copies of files taken before a key rebind, a fix or another change, so it can be undone");
+    case "backups": return game
+      ? t("Copies of mod files from before a fix, key change or in-game switch, so the change can be undone")
+      : t("Daily copies of gachamod's database, settings from before an import, and old data a reset moved aside");
     case "shader-cache": return t("The game rebuilds it on the next start");
     case "frame-dumps": return t("FrameAnalysis folders a frame dump made while making a mod");
     case "log": return t("A high log level makes this file grow on every start");
@@ -375,6 +378,7 @@ function ItemActions({ game, item }: { game: GameId | null; item: StorageItem })
     </>;
     case "archives": return <Button size="sm" variant="ghost" onClick={() => void recycleArchives(game)} title={t("Moves the kept archives to the Recycle Bin. Downloads in progress keep theirs")}>{t("Move to Recycle Bin")}</Button>;
     case "parts": return <Button size="sm" variant="ghost" onClick={() => go("downloads")} title={t("Opens Downloads, where Retry picks them up")}>{t("Downloads")}</Button>;
+    case "backups": return <Button size="sm" variant="ghost" onClick={() => go({ view: "settings", section: "disk-backups" })} title={t("Shows each backup: what it is, when it was made and the size")}>{t("View backups")}</Button>;
     case "shader-cache": return game ? <Button size="sm" variant="ghost" disabled={running} onClick={() => void clearCache(game)} title={running ? t("Close the game first") : t("Deletes the shader cache. The game rebuilds it on the next start")}>{t("Clear")}</Button> : null;
     case "frame-dumps": return game ? <Button size="sm" variant="ghost" onClick={() => void clearDumps(game)} title={t("Moves the FrameAnalysis folders to the Recycle Bin")}>{t("Move to Recycle Bin")}</Button> : null;
     case "log": return game ? <Button size="sm" variant="ghost" onClick={() => goIn(game, { view: "settings", section: "migoto" })} title={t("Opens Settings, Mod maker switches, where the log level is")}>{t("Log settings")}</Button> : null;
@@ -391,7 +395,7 @@ function countText(i: StorageItem): string {
 }
 
 function ItemRow({ game, item, showGame }: { game: GameId | null; item: StorageItem; showGame: boolean }) {
-  const tip = itemTip(item);
+  const tip = itemTip(item, game);
   const meta = [showGame && game ? shortOf(game) : "", countText(item)].filter(Boolean).join(" · ");
   return (
     <li className="st-item">
@@ -631,12 +635,158 @@ export function DuplicatesPanel({ onPage }: { onPage?: boolean }) {
   );
 }
 
-/** The Storage page in Settings: the overview, the biggest mods and mods installed twice. */
-export function StoragePage() {
-  return <><StoragePanel onPage /><BiggestModsPanel onPage /><DuplicatesPanel onPage /></>;
+// ── backups ──
+
+interface Bk { list: BackupEntry[] | null; loading: boolean }
+let bk: Bk = { list: null, loading: false };
+const bkSubs = new Set<() => void>();
+const setBk = (p: Partial<Bk>) => { bk = { ...bk, ...p }; bkSubs.forEach((f) => f()); };
+const useBackups = () => useSyncExternalStore((f) => { bkSubs.add(f); return () => bkSubs.delete(f); }, () => bk);
+
+/** Read what's in the backups folder. It runs with each measure, and after a restore. */
+async function loadBackups() {
+  if (bk.loading) return;
+  setBk({ loading: true });
+  try { setBk({ list: await backups.entries() }); }
+  catch (e) { toast(errorText(e), true); setBk({ list: bk.list ?? [] }); }
+  finally { setBk({ loading: false }); }
 }
 
-// the page itself; its panels ("Disk space", "Biggest mods", "Mods installed twice") are listed by settingsSearch.ts
+function backupTitle(e: BackupEntry): string {
+  switch (e.kind) {
+    case "mod": return e.label ? tb(e.label) : t("Mod files");
+    case "database": return t("Daily copy of gachamod's database");
+    case "settings": return t("Settings from before an import");
+    case "reset": return t("Old data from Reset gachamod");
+    default: return e.id;
+  }
+}
+
+function backupTip(e: BackupEntry): string {
+  switch (e.kind) {
+    case "mod": return t("The mod's files from before this change. Restore puts them back");
+    case "database": return t("gachamod copies the database once a day and keeps the last five");
+    case "settings": return t("Taken before settings were brought in from a file. gachamod keeps the last ten");
+    case "reset": return t("The database, trash and settings that Reset gachamod moved aside");
+    default: return t("Something else in the backups folder");
+  }
+}
+
+/** The report's backup sizes without backups that were just moved to the Recycle Bin. */
+function dropBackups(gone: BackupEntry[]) {
+  patchReport((r) => {
+    const games = new Set<string>(r.games.map((g) => g.game));
+    const less = (items: StorageItem[], list: BackupEntry[]) => !list.length ? items : items
+      .map((i) => (i.key !== "backups" ? i : { ...i, bytes: Math.max(0, i.bytes - list.reduce((s, e) => s + e.bytes, 0)), count: Math.max(0, i.count - list.length) }))
+      .filter((i) => i.key !== "backups" || i.bytes > 0);
+    return {
+      ...r,
+      games: r.games.map((g) => ({ ...g, items: less(g.items, gone.filter((e) => e.game === g.game)) })),
+      app: less(r.app, gone.filter((e) => !e.game || !games.has(e.game))),
+    };
+  });
+}
+
+async function recycleBackups(list: BackupEntry[]) {
+  try {
+    const b = await backups.recycle(list.map((e) => e.id));
+    toast(b ? t("Moved {size} of backups to the Recycle Bin", { size: formatBytes(b) }) : t("Those backups are already gone"));
+    const gone = new Set(list.map((e) => e.id));
+    setBk({ list: (bk.list ?? []).filter((e) => !gone.has(e.id)) });
+    dropBackups(list);
+  } catch (e) { toast(errorText(e), true); void loadBackups(); }
+}
+
+/** Put a mod's files back from a backup. Undo brings the change back (the restore takes a backup of its own). */
+async function restoreBackup(e: BackupEntry) {
+  const refresh = () => { if (e.game) emitApp({ type: "library-refresh", game: e.game as GameId }); void loadBackups(); };
+  try {
+    let back = await backups.restore(e.id);
+    refresh();
+    const flip = async () => { back = await backups.restore(back.id); refresh(); };
+    record({ label: t("Restored a mod's files from a backup"), undo: flip, redo: flip });
+  } catch (err) { toast(errorText(err), true); }
+}
+
+type BkSort = "newest" | "biggest";
+type BkAge = "7" | "30" | "all";
+let lastBkSort: BkSort = "newest";
+
+export function BackupsPanel({ onPage }: { onPage?: boolean }) {
+  const { list } = useBackups();
+  const sc = useScope();
+  const [sort, setSortState] = useState<BkSort>(lastBkSort);
+  const setSort = (s: BkSort) => { lastBkSort = s; setSortState(s); setShown(15); };
+  const [shown, setShown] = useState(15);
+  const [age, setAge] = useState<BkAge>("30");
+  const [busy, setBusy] = useState<string | null>(null);
+  // a panel drawn by itself (a search result) reads the folder the first time it shows; the page's own waits for a measure
+  useEffect(() => { if (!onPage && !bk.list && !bk.loading) void loadBackups(); }, [onPage]);
+
+  const mine = useMemo(() => {
+    const l = (list ?? []).filter((e) => sc === "all" || e.game === sc);
+    return sort === "biggest" ? [...l].sort((a, b) => b.bytes - a.bytes) : l;
+  }, [list, sc, sort]);
+  const cut = age === "all" ? Infinity : Date.now() / 1000 - Number(age) * 86_400;
+  const old = mine.filter((e) => e.at < cut);
+  const oldBytes = old.reduce((s, e) => s + e.bytes, 0);
+  const folder = list?.[0]?.path.replace(/[\\/][^\\/]*$/, "");
+  const run = async (key: string, f: () => Promise<void>) => { setBusy(key); try { await f(); } finally { setBusy(null); } };
+
+  return (
+    <Panel title={t("Backups")} icon="history" id="disk-backups"
+      actions={<>
+        <Segmented size="sm" value={sort} onChange={setSort} label={t("Sort backups")} options={[
+          { value: "newest", label: t("Newest"), title: t("Newest first") },
+          { value: "biggest", label: t("Biggest"), title: t("Biggest first") },
+        ]} />
+        {folder && <IconButton size="sm" icon="folder" label={t("Open the backups folder")} onClick={() => shell.openPath(folder).catch((e) => toast(errorText(e), true))} />}
+      </>}>
+      <p className="hint st-bk-intro">{t("Before gachamod changes a mod's files (a fix, a key change, an in-game switch), it copies them here so the change can be undone. It also keeps daily copies of the database.")}</p>
+      {!list
+        ? <Waiting what={t("Reading backups")} />
+        : !mine.length
+          ? <p className="hint">{t("No backups.")}</p>
+          : <>
+            <ul className="st-bks">
+              {mine.slice(0, shown).map((e) => (
+                <li key={e.id} className="st-bk">
+                  <span className="st-bk-t" title={backupTip(e)}>
+                    <b>{backupTitle(e)}</b>
+                    <span className="hint">{[sc === "all" && e.game ? shortOf(e.game as GameId) : "", e.kind === "mod" && e.files ? tn(e.files, "{n} file", "{n} files") : "", timeAgo(e.at)].filter(Boolean).join(" · ")}</span>
+                  </span>
+                  <span className="st-size">{formatBytes(e.bytes)}</span>
+                  <span className="st-acts">
+                    {e.kind === "mod" && <Button size="sm" variant="ghost" busy={busy === `r:${e.id}`} onClick={() => void run(`r:${e.id}`, () => restoreBackup(e))}
+                      title={t("Puts the mod's files back as they were before this change. Undo brings the change back")}>{t("Restore")}</Button>}
+                    <IconButton size="sm" icon="folder" label={t("Show in Explorer")} onClick={() => reveal(e.path)} />
+                    <IconButton size="sm" icon="trash" label={t("Move to Recycle Bin")} disabled={busy === `d:${e.id}`} onClick={() => void run(`d:${e.id}`, () => recycleBackups([e]))} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {mine.length > shown && <Button size="sm" variant="ghost" className="st-more" onClick={() => setShown(shown + 30)}>{tn(Math.min(30, mine.length - shown), "Show {n} more", "Show {n} more")}</Button>}
+            <div className="st-bk-clear">
+              <Select value={age} onChange={setAge} title={t("Which backups to move to the Recycle Bin")} options={[
+                { value: "7", label: t("Older than a week") },
+                { value: "30", label: t("Older than a month") },
+                { value: "all", label: t("All backups") },
+              ]} />
+              <span className="hint">{old.length ? tn(old.length, "{n} backup, {size}", "{n} backups, {size}", { size: formatBytes(oldBytes) }) : t("None")}</span>
+              <Button size="sm" disabled={!old.length} busy={busy === "old"} onClick={() => void run("old", () => recycleBackups(old))}
+                title={t("Moves these backups to the Recycle Bin, where Windows can still put them back. Changes they belong to can't be undone in gachamod after that")}>{t("Move to Recycle Bin")}</Button>
+            </div>
+          </>}
+    </Panel>
+  );
+}
+
+/** The Storage page in Settings: the overview, the biggest mods, mods installed twice and the backups. */
+export function StoragePage() {
+  return <><StoragePanel onPage /><BiggestModsPanel onPage /><DuplicatesPanel onPage /><BackupsPanel onPage /></>;
+}
+
+// the page itself; its panels ("Disk space", "Biggest mods", "Mods installed twice", "Backups") are listed by settingsSearch.ts
 registerCommands("storage", () => [
   { id: "page:storage", title: t("Storage"), section: "Pages", icon: "box", where: t("Settings"),
     keywords: "disk space storage size cleanup clean free space duplicates big biggest", run: () => go({ view: "settings", section: "disk" }) },
