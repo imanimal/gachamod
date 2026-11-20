@@ -33,7 +33,7 @@ export function Activity() {
         title={first ? t("{what}. Click to see what could be holding it", { what: label }) : t("Everything finished")}
         onClick={() => setOpen((o) => !o)}>
         {first ? <Spinner /> : <Icon name="check" />}
-        <span className="tb-act-t">{first ? first.what : t("Done")}</span>
+        <span className="tb-act-t" title={first ? first.what : t("Done")}>{first ? first.what : t("Done")}</span>
         {first && <span className="tb-act-s">{seconds(Math.floor((now - first.started) / 1000))}</span>}
         {slow.length > 1 && <span className="tb-act-n">+{slow.length - 1}</span>}
       </button>

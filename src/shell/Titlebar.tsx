@@ -122,7 +122,7 @@ export function Titlebar() {
                 <button type="button" className={`crumb-b${last ? " crumb-view" : ""}`} aria-current={last ? "page" : undefined} title={c.title ?? (last ? c.label : t("Go to {page}", { page: c.label }))}
                   onClick={() => go(c.route)}
                   onContextMenu={c.menu ? (e) => { e.preventDefault(); e.stopPropagation(); openMenu(at(e), c.menu!()); } : undefined}>
-                  <span className="crumb-t">{c.label}</span>
+                  <span className="crumb-t" title={c.label}>{c.label}</span>
                 </button>
                 {c.menu && (
                   <button type="button" className="crumb-sep crumb-sep-b" aria-label={t("Other pages")} title={t("Other pages")}

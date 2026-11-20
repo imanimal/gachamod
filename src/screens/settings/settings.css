@@ -43,7 +43,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-row:last-child { border-bottom: 0; }
 /* a switch keeps its full width; when the row is too narrow for both, it moves under the label instead of squeezing */
 .set-row > span:first-child { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; }
-.set-row > .seg { flex: none; }
+.set-row > .seg { flex: 0 1 auto; }
 .set-inline { display: flex; align-items: center; gap: var(--s-2); flex: none; }
 .set-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--s-3); margin: var(--s-2) 0 var(--s-4); }
 .set-themes:first-child { margin-top: 0; }
@@ -188,7 +188,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .fmt-prev.is-cards { grid-template-rows: auto minmax(0, 1fr); }
 .fmt-prev.is-chars { grid-template-columns: 30% minmax(0, 1fr); }
 .fmt-prev.is-panes { grid-template-columns: 24% minmax(0, 1fr) 30%; }
-.fmt-chips { display: flex; gap: 3px; }
+.fmt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .fmt-chip { width: 16%; height: 6px; border-radius: 99px; background: var(--line-2); }
 .fmt-chip:first-child, .fmt-li:nth-child(2) { background: var(--accent); }
 .fmt-grid { min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 3px; }

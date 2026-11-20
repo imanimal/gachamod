@@ -58,6 +58,10 @@
   .home-pchip:hover { background: var(--key2-hi); color: var(--key2-fg); box-shadow: inset 0 0 0 1px var(--well-line-hi); }
   .home-pchip.on { background: var(--pick); color: var(--pick-fg); box-shadow: inset 2px 0 0 var(--p-color, var(--gold-line)), 0 3px 12px rgb(0 0 0 / .3); }
   .home-pchip .pthumb-mini { border-radius: 3px; }
+  .home-pchip-skel { border-radius: 3px; }
+  /* screen pills that can wrap to two lines: a capsule would cut the text, so they get the key corners */
+  .gb-nsfw-show, .pe-hint { border-radius: 3px; }
+  .ov-who-here, .ov-new { border-radius: 2px; }
   .home-row { gap: .5rem; }
   .home-tile { border-radius: 4px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .07), 0 2px 8px rgb(0 0 0 / .3); outline: 2px solid transparent; outline-offset: 2px; transition: outline-color var(--dur) var(--ease); }
   .home-tile:hover { outline-color: rgb(255 255 255 / .55); }

@@ -219,7 +219,7 @@ function Nav({ disabled }: { disabled: boolean }) {
         return (
           <button key={v} type="button" className={`nv${on ? " on" : ""}${ring ? " is-hint" : ""}`} aria-current={on ? "page" : undefined}
             onClick={() => go(v)} title={tip} disabled={off} data-view={v} onContextMenu={off ? undefined : navMenu(v)}>
-            <Icon name={VIEW_INFO[v].icon} /><span className="nv-t">{label}</span>
+            <Icon name={VIEW_INFO[v].icon} /><span className="nv-t" title={label}>{label}</span>
             {b && <span className={`nv-b t-${b.tone ?? "accent"}`}>{b.count ? b.count : ""}</span>}
           </button>
         );
@@ -230,7 +230,7 @@ function Nav({ disabled }: { disabled: boolean }) {
         return (
           <button key={e.id} type="button" className={`nv nv-ext${on ? " on" : ""}`} aria-current={on ? "page" : undefined} disabled={disabled}
             onClick={() => go({ view: "extensions", ext: e.id })} title={p.title === e.manifest!.name ? p.title : t("{page}, from {extension}", { page: p.title, extension: e.manifest!.name })} data-view="extensions">
-            <Icon name={extIcon(p.icon)} /><span className="nv-t">{p.title}</span>
+            <Icon name={extIcon(p.icon)} /><span className="nv-t" title={p.title}>{p.title}</span>
           </button>
         );
       })}
@@ -285,7 +285,7 @@ function ProfileList({ game }: { game: GameState }) {
                 : p.hotkey ? t("Switch to {name} ({key} in game)", { name: p.name, key: p.hotkey }) : t("Switch to {name}", { name: p.name })}
               onClick={() => void pick(p)} onContextMenu={ctx(p)}>
               <ProfileThumb game={game.id} profileId={p.id} profile={p} size="mini" px={collapsed ? 34 : 28} />
-              <span className="side-p-t">{p.name}</span>
+              <span className="side-p-t" title={p.name}>{p.name}</span>
               {busy === p.id ? <span className="spin" aria-hidden="true" /> : p.active ? <Icon name="check" className="side-p-on" /> : p.hotkey ? <kbd className="side-p-k">{p.hotkey}</kbd> : null}
             </button>
           </div>

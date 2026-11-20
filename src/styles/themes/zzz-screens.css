@@ -28,7 +28,8 @@
   .mod-card-badges { top: calc(.45rem + 5px); left: calc(.45rem + 5px); right: calc(2.4rem + 5px); }
   .mod-card-fav { background: var(--yellow); color: #0a0a0a; box-shadow: 0 0 0 2px var(--ink); transform: rotate(-8deg); }
   .mod-card-update { cursor: pointer; }
-  .mod-card.is-row { padding: 3px; border-radius: 999px; }
+  /* one row is 4.2rem x 2.6rem picture plus 3px: 24px is the full pill, and stays 24px if wrapped badges make the card taller */
+  .mod-card.is-row { padding: 3px; border-radius: 24px; }
   .mod-card.is-row .mod-card-img { border-radius: 999px; width: 4.2rem; }
   .mod-card.is-row .mod-card-body { padding: 0; }
   .mod-img-none { color: var(--text-3); }

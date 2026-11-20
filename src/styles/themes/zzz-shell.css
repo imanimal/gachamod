@@ -58,7 +58,7 @@
   .player-card:hover { background: var(--dots), var(--well-hi); }
   /* in the sidebar the player is a pill: its round end wraps the round picture with the same centre, no banner */
   .side-top { align-items: center; }
-  .side-top .player-card { padding: 6px 1rem 6px 6px; border-radius: 999px; }
+  .side-top .player-card { padding: 6px 1rem 6px 6px; border-radius: 24px; }
   .side-top .player-banner { display: none; }
   .side-top .player-card .player-av { box-shadow: 0 0 0 2px var(--rim); }
   .side-top .player-name { line-height: 1.15; }

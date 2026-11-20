@@ -165,11 +165,13 @@
   .chip.on .chip-n { background: var(--ctl-on-fg); color: var(--ctl-on-bg); }
 
   /* ── segmented: a hairline pill; the picked part is a filled pill ── */
-  .seg { gap: 2px; padding: 3px; border-radius: 999px; background: var(--well); box-shadow: inset 0 0 0 1px var(--ctl-line); }
+  .seg { --seg-r: calc(.875rem + 3px); gap: 2px; padding: 3px; border-radius: var(--seg-r); background: var(--well); box-shadow: inset 0 0 0 1px var(--ctl-line); }
   .seg-o { height: 1.75rem; padding: 0 .95rem; border-radius: 999px; color: var(--text-2); font-weight: 600; }
   .seg-o:hover { color: var(--text); background: var(--hover); }
   .seg-o.on { color: var(--ctl-on-fg); background: var(--ctl-on-bg); font-weight: 700; box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
   .seg-o.on .i { color: inherit; }
+  .seg-sm { --seg-r: calc(.75rem + 3px); }
+  .seg-lg { --seg-r: calc(1.05rem + 3px); }
   .seg-sm .seg-o { height: 1.5rem; }
   .seg-lg .seg-o { height: 2.1rem; }
 
@@ -384,7 +386,7 @@
   .note.t-warn > .i:first-child, .note.t-warn strong { color: var(--ink); }
   .note.t-bad { background: var(--red); box-shadow: none; color: #fff; font-weight: 600; }
   .note.t-bad > .i:first-child, .note.t-bad strong { color: #fff; }
-  .floatbar { border-radius: 1.4rem; background: var(--rings), var(--bar); box-shadow: 0 12px 34px rgb(0 0 0 / .55), inset 0 0 0 1px rgb(255 255 255 / .16); }
+  .floatbar { flex-wrap: wrap; justify-content: center; max-width: 100%; border-radius: 1.4rem; background: var(--rings), var(--bar); box-shadow: 0 12px 34px rgb(0 0 0 / .55), inset 0 0 0 1px rgb(255 255 255 / .16); }
   .codeblock { border-radius: var(--cut-sm); background: rgb(6 7 12 / .8); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); color: #c9ccd6; }
   .gallery-main { border-radius: var(--cut); background: #14151c; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
   .gallery-th { border-radius: 2px 8px 2px 2px; box-shadow: none; outline: 2px solid transparent; outline-offset: 1px; }

@@ -85,7 +85,7 @@ export function Checkbox({ checked, onChange, label, disabled, title }: { checke
 export function Chip({ on, onClick, onContextMenu, icon, img, count, children, title, className }:
   { on?: boolean; onClick?: () => void; onContextMenu?: (e: MouseEvent<HTMLElement>) => void; icon?: IconName; img?: string | null; count?: number; children: ReactNode; title?: string; className?: string }) {
   return (
-    <button type="button" className={cx("chip", on && "on", className)} onClick={onClick} onContextMenu={onContextMenu} title={title} aria-pressed={on}>
+    <button type="button" className={cx("chip", on && "on", className)} onClick={onClick} onContextMenu={onContextMenu} title={title ?? (typeof children === "string" ? children : undefined)} aria-pressed={on}>
       {img ? <LazyImg className="chip-img" src={img} alt="" /> : icon && <Icon name={icon} />}
       <span className="chip-t">{children}</span>
       {count !== undefined && <span className="chip-n">{count}</span>}

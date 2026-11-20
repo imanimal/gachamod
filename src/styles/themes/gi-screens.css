@@ -144,6 +144,7 @@
   /* every control in a row is the same height (a small switch's: 1.55rem plus its 3px ring), so each sits the same
      distance from the row's edge */
   .set-row .seg-o { height: 1.55rem; }
+  .set-row .seg { --seg-r: calc(.775rem + 3px); }
   .set-row .select select { height: var(--set-ctl); padding-block: 0; }
   .set-row .btn:not(.ibtn) { height: var(--set-ctl); }
   .set-row .ibtn { width: var(--set-ctl); height: var(--set-ctl); }

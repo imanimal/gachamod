@@ -17,7 +17,7 @@
 .gbb-fp-t { gap: var(--s-2); }
 .gbb-fp-row { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2); }
 .gbb-fp-row .gbb-fp-h { white-space: nowrap; }
-.gbb-fp-row .seg { flex: none; }
+.gbb-fp-row .seg { flex: 0 1 auto; }
 .gbb-fp .gbb-saved { padding: 0; }
 .gbb-fp-clear, .gbb-fp-hid { align-self: flex-start; }
 .gbb-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }

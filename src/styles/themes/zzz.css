@@ -106,7 +106,7 @@
   .chip.on .chip-n { background: #0a0a0a; color: var(--acc-text, var(--acc)); }
 
   /* ── segmented: one capsule, the picked part is a slanted lime block ── */
-  .seg { gap: 0; padding: 3px; border-radius: 999px; background: var(--dots), #0c0c0c; box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px var(--rim); }
+  .seg { gap: 2px 0; padding: 3px; border-radius: var(--seg-r); background: var(--dots), #0c0c0c; box-shadow: inset 0 0 0 2.5px var(--ring-g), 0 0 0 1.5px var(--rim); }
   .seg-o { height: 1.85rem; padding: 0 1rem; border-radius: 999px; color: #d4d4d4; font-weight: 800; font-style: italic; }
   .seg-o:hover { color: var(--acc-text, var(--acc)); }
   .seg-o.on { color: #0a0a0a; background: var(--dots-ink), linear-gradient(180deg, var(--acc-hi), var(--acc-lo)); box-shadow: none; clip-path: polygon(.55rem 0, 100% 0, calc(100% - .55rem) 100%, 0 100%); border-radius: 0; padding: 0 1.2rem; }
