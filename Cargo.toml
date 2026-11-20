@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/gacha-core", "src-tauri", "src-setup"]
 
 [workspace.package]
-version = "0.1.1-beta.16"
+version = "0.1.1-beta.17"
 edition = "2021"
 license = "CC-BY-ND-4.0"
 rust-version = "1.80"
