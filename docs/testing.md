@@ -158,6 +158,38 @@ Built with `cargo check`, `tsc` and the demo only. With an installer from `npm r
   reads well at small desktop icon sizes, and starts that game whichever game was open.
 - Uninstall takes both shortcuts, the games' own quickstarts and `quickstart.ico` away, and the folder goes.
 
+### Still to check: the AI helper answering in the app
+
+Claude Code was run with the helper's flags and streamed an answer. The rest were built from their docs.
+
+- Codex signed in with a ChatGPT plan: Tidy mod names streams an answer and the window reads it.
+- Antigravity (`agy`) signed in with a Google account: it's found in `%LOCALAPPDATA%\agy\bin`, Gemini asks it, the
+  answer streams, and the process ends after the result. Signed out, Sign in opens the browser sign-in. Check that the
+  stream-json input is read and that no update prompt or folder trust question blocks the run.
+- A free Gemini key: a wrong key is refused with Google's reason, a good one saves and Gemini answers here. Restart
+  gachamod: the key is still saved. Remove key, then the website opens again. Run past the daily limit once: the
+  message gives the reset time.
+- Stop during a run ends it (Task Manager shows no leftover `claude`, `codex`, `agy` or `node`).
+- Reference files. Claude Code reading a run folder was checked with a small job: it read both files, the window
+  named each one, and only the last message came back. Still to check in the app:
+  - Make a theme with Claude Code. It reads a few stylesheets, the wait line names them, and the theme restyles more
+    parts than one made by pasting.
+  - Gemini CLI in plan mode reads its folder without asking to trust it.
+  - Set characters for a whole library of a few hundred mods: the files are read in a few seconds and the prompt
+    stays under the CLI's limit.
+  - `<data>/ai` has no `run-` folders left after a run, a Stop or a timeout.
+- Model and thinking. Claude Code 2.1.316 took `--effort` and streamed thinking summaries with
+  `--thinking-display summarized`; its usage and context window were read from a live run. Still to check:
+  - Opus and Haiku with each thinking level. Haiku may refuse some levels; the failure should name the option.
+  - Codex with a typed model and each thinking level (`-m`, `-c model_reasoning_effort`), and whether its JSON has
+    reasoning items and `reasoning_output_tokens`.
+  - Gemini CLI with `-m pro`, `-m flash` and `-m flash-lite`, and whether its `init` and `result` lines carry the model
+    and token counts.
+  - The Gemini key with Flash-Lite and Pro, and each thinking level: `thinkingLevel` works on the current Flash, and a
+    model that refuses it falls back to a budget without an error showing.
+  - An older Claude Code that doesn't know `--thinking-display`: the run is asked again and answers.
+  - Read 5 or more files in one run: the details list some under "at once".
+
 ### Still to check: starting games and the reload key
 
 - Arknights: Endfield outside Steam, Play without mods (or Play with XXMI turned off): gachamod opens the GRYPHLINK

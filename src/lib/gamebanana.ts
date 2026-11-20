@@ -352,7 +352,7 @@ function parseCard(raw: unknown, chars: GbCategoryRef[]): GbCard | null {
     downloads: num(o._nDownloadCount),
     added,
     updated: num(o._tsDateUpdated) ?? num(o._tsDateModified) ?? added,
-    nsfw: o._bHasContentRatings === true || visibility === "warn" || visibility === "hide",
+    nsfw: o._bHasContentRatings === true || o._bIsNsfw === true || visibility === "warn" || visibility === "hide",
     version: str(o._sVersion),
     comments: num(o._nPostCount) ?? 0,
     featured: o._bWasFeatured === true,
@@ -1038,6 +1038,31 @@ export async function modThumbs(ids: number[], signal?: AbortSignal): Promise<Ma
     }
   }
   return out;
+}
+
+/** What Mod/Multi can send for a card (it refuses _bHasContentRatings, _aSubCategory, _aTags and _bWasFeatured). */
+const CARD_PROPS = "_idRow,_sName,_sProfileUrl,_aPreviewMedia,_aSubmitter,_aGame,_aCategory,_aRootCategory,_aSuperCategory,_nLikeCount,_nViewCount,_nDownloadCount,_nPostCount,_tsDateAdded,_tsDateUpdated,_tsDateModified,_bIsNsfw,_sVersion";
+
+/** Cards for mods picked by id (Mod/Multi, 50 a request), in the order asked: subscribed mods and other lists that
+ *  only have ids. Mods GameBanana withholds or removed come back nameless and are left out. */
+export async function modCards(ids: number[], signal?: AbortSignal): Promise<GbCard[]> {
+  const want = [...new Set(ids.filter((i) => i > 0))];
+  const raw: Json[] = [];
+  for (let i = 0; i < want.length; i += 50) {
+    const got = await getJson(`${GB}/Mod/Multi?_csvRowIds=${want.slice(i, i + 50).join(",")}&_csvProperties=${CARD_PROPS}`, signal);
+    for (const v of arr(got)) { const o = obj(v); if (o && str(o._sName)) raw.push(o); }
+  }
+  // characters come from each game's own list
+  const chars = new Map<number, GbCategoryRef[]>();
+  for (const gid of new Set(raw.map((o) => num(obj(o._aGame)?._idRow)).filter((g): g is number => g !== null))) {
+    chars.set(gid, await charsQuiet(charCatForGb(gid)));
+  }
+  const byId = new Map<number, GbCard>();
+  for (const o of raw) {
+    const c = parseCard(o, chars.get(num(obj(o._aGame)?._idRow) ?? -1) ?? []);
+    if (c) byId.set(c.id, c);
+  }
+  return want.map((id) => byId.get(id)).filter((c): c is GbCard => !!c);
 }
 
 /** A member's profile (Member/<id>/ProfilePage). */

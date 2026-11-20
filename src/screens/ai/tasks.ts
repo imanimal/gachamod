@@ -7,12 +7,13 @@ import {
   characters, errorText, library, modKeys, type Backup, type DrawRef, type GameState, type IniOutline, type MetaPatch,
   type ModEntry,
 } from "../../lib/api";
-import { hideFromAi, neutralName, nothingToSendNote, type AiTask } from "../../lib/ai";
+import { hideFromAi, neutralName, nothingToSendNote, type AiTask, type JobFile } from "../../lib/ai";
+import { modContext, type ModContext } from "./context";
 import { record } from "../../lib/history";
 import { allGames, currentGame, emitApp, go } from "../../lib/store";
 import { keysChanged, recordBackups } from "../../ui/KeyEditor";
 import { ReplyError } from "./reply";
-import { buildThemeTask } from "./themeTask";
+import { buildThemeTask, themeToEdit } from "./themeTask";
 import { gameName, gameShort } from "../../lib/games";
 import { sentences, t, tb, tn } from "../../lib/i18n";
 
@@ -43,14 +44,18 @@ export interface Built {
   /** How to take the answer out of the pasted reply, when it isn't one json block (parseReply). */
   parse?: (text: string) => unknown;
   read: (reply: unknown) => Preview;
+  /** Reference files, sent only when the chatbot answers in the app (context.ts). */
+  files?: JobFile[];
 }
-export interface TaskInput { goal: string; text: string }
+/** `rich`: the chatbot answers in the app, so the prompt can be long and come with files. */
+export interface TaskInput { goal: string; text: string; rich?: boolean }
 export interface TaskDef {
   title: (task: AiTask) => string;
   goals?: Goal[];
   defaultGoal?: string;
   /** A text box: required means the prompt can't be made without it. */
-  text?: { label: string; placeholder: string; required: boolean; forGoal?: string };
+  /** A text box. `examples`: one is shown at random as the placeholder, and Tab fills it in. */
+  text?: { label: string; examples: string[]; required: boolean; forGoal?: string };
   /** A line under the chatbot choice, for tasks that need more than a small model. */
   note?: string;
   build: (task: AiTask, input: TaskInput) => Promise<Built>;
@@ -115,16 +120,34 @@ const GOAL_TEXT: Record<string, string> = {
   tags: "Give each mod up to 3 short lowercase tags for what it is, like outfit, recolor, hair, weapon, swimsuit, ui. Keep tags it already has unless they're wrong.",
 };
 
+/** What to look at for each goal when the mods' files come along. */
+const RICH_GOAL_TEXT: Record<string, string> = {
+  clean: "A good name says the character and what the mod is (outfit, hair, recolor, weapon), judging by the name, folder, what it draws and its readme. \"creator\" is who uploaded it to GameBanana: keep their name out of the mod's name.",
+  characters: "Judge by the name, the folder, what it draws (section names usually start with the character) and its readme. A mod that draws several characters, or none, gets no character.",
+  tags: "Judge by what it draws (hair, body, face, weapon or UI sections), its readme and its file names.",
+  other: "Use what each mod draws, its readme and its files when they help.",
+};
+
 const CHANGE_SHAPE = `{"changes":[{"mod":1,"name":"Ellen - Maid Outfit","character":"Ellen","tags":["outfit"],"why":"few words"}]}`;
 
 // Mods that lib/ai.ts hideFromAi keeps out are left out of mod lists without a word, and nothing in a prompt says
 // whether a mod is for adults: it doesn't matter for these jobs, and chatbots refuse a whole request over it.
 const shareable = (mods: ModEntry[]) => mods.filter((m) => !hideFromAi(m));
 
-function modTable(mods: ModEntry[]): string {
-  return ["number | name | folder | character | tags", ...mods.map((m, i) =>
-    `${i + 1} | ${cell(clip(m.name, 90))} | ${cell(clip(m.folder, 70))} | ${cell(m.character)} | ${cell(m.tags.join(", "))}`)].join("\n");
+/** The mods as a numbered table. With `ctx` (the chatbot answers in the app) it also says what each mod draws and
+ *  who made it. */
+function modTable(mods: ModEntry[], ctx?: ModContext | null, creators = !!ctx): string {
+  const head = `number | name | folder | character | tags${ctx ? " | draws" : ""}${creators ? " | creator" : ""}`;
+  return [head, ...mods.map((m, i) =>
+    `${i + 1} | ${cell(clip(m.name, 90))} | ${cell(clip(m.folder, 70))} | ${cell(m.character)} | ${cell(m.tags.join(", "))}`
+    + (ctx ? ` | ${cell(ctx.draws.get(m.id))}` : "") + (creators ? ` | ${cell(m.source?.submitter)}` : ""))].join("\n");
 }
+
+const FILES_NOTE = "\"draws\" lists the ini sections each mod overrides, without the word TextureOverride. They usually name the character and the part, like EllenHair or BurniceBody. Each mod's files are in the reference files under mods/<number>/ (the number from my list): files.txt lists every file, and its ini and text files are there too. Use them when the name and folder don't settle it.";
+
+/** Reads each mod's files for a job when the chatbot answers in the app. */
+const contextFor = (rich: boolean | undefined, game: GameState, mods: ModEntry[]) => (rich && mods.length ? modContext(game, mods) : Promise.resolve(null));
+const FILES_SHARE = () => t("Each mod's file list and its ini and text files (copies, read only)");
 
 /** Read `changes` against the mods that were shared. */
 function readChanges(raw: unknown, mods: ModEntry[], names: string[], game: GameState): { rows: PreviewRow[]; skipped: string[]; patches: Array<{ mod: ModEntry; patch: MetaPatch; why: string }> } {
@@ -210,7 +233,7 @@ const modsTask: TaskDef = {
   title: (task) => (task.modIds?.length ? tn(task.modIds.length, "Edit {n} mod with your chatbot", "Edit {n} mods with your chatbot") : t("Edit your mods with your chatbot")),
   goals: MOD_GOALS,
   defaultGoal: "clean",
-  text: { label: t("What should change?"), placeholder: t("Put the outfit name first, like \"Maid Outfit (Ellen)\""), required: true, forGoal: "other" },
+  text: { label: t("What should change?"), examples: [t("Put the outfit name first, like \"Maid Outfit (Ellen)\""), t("Name recolors like \"Ellen - Red Recolor\""), t("Drop version numbers like v2 and FINAL from the names"), t("Tag every swimsuit mod with swimsuit"), t("Use the outfit's name from the game where you know it")], required: true, forGoal: "other" },
   async build(task, input) {
     const game = gameOf(task);
     const { mods: all, total } = await modsFor(task, game);
@@ -220,19 +243,24 @@ const modsTask: TaskDef = {
     const names = await roster(game);
     const sendNames = (input.goal === "characters" || input.goal === "other") && names.length > 0;
     const ask = input.goal === "other" ? input.text.trim() : GOAL_TEXT[input.goal] ?? GOAL_TEXT.clean!;
+    const ctx = await contextFor(input.rich, game, mods);
     const prompt = [
       `I manage 3DMigoto mods for ${game.name} in a mod manager. ${ask}`,
-      `My mods, one per line:\n${modTable(mods)}`,
+      ctx ? RICH_GOAL_TEXT[input.goal] ?? RICH_GOAL_TEXT.other! : "",
+      `My mods, one per line:\n${modTable(mods, ctx)}`,
+      ctx ? FILES_NOTE : "",
       sendNames ? `${game.name} characters: ${names.join(", ")}.` : "",
       `List only mods that change, and only the fields that change. "mod" is the number from my list. ${ANSWER_RULE}`,
       "```json\n" + CHANGE_SHAPE + "\n```",
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
+      files: ctx?.files,
       shares: [
         total > all.length
           ? tn(mods.length, "Names, folder names, characters and tags of {n} mod (from the first {first} of {total})", "Names, folder names, characters and tags of {n} mods (from the first {first} of {total})", { first: all.length, total })
           : tn(mods.length, "Names, folder names, characters and tags of {n} mod", "Names, folder names, characters and tags of {n} mods"),
+        ...(ctx ? [FILES_SHARE(), t("Who uploaded each mod to GameBanana")] : []),
         ...(sendNames ? [t("{game}'s character list", { game: gameName(game) })] : []),
         ...(input.goal === "other" && input.text.trim() ? [t("What you typed")] : []),
       ],
@@ -252,24 +280,32 @@ const modsTask: TaskDef = {
 
 const customTask: TaskDef = {
   title: (task) => (task.modIds?.length ? tn(task.modIds.length, "Ask about {n} mod", "Ask about {n} mods") : t("Ask your chatbot")),
-  text: { label: t("Your question or request"), placeholder: t("Which of these are duplicates? Or: rename these so the outfit comes first"), required: true },
+  text: { label: t("Your question or request"), examples: [t("Which of these are duplicates?"), t("Rename these so the outfit comes first"), t("Sort these into outfits, recolors and hair"), t("Which characters have the most mods?"), t("Which of these look like two versions of the same mod?")], required: true },
   async build(task, input) {
     const game = gameOf(task);
     const { mods: all, total } = task.modIds?.length ? await modsFor(task, game, 200) : { mods: [] as ModEntry[], total: 0 };
     const mods = shareable(all);
     if (all.length && !mods.length) throw new Error(nothingToSendNote(all.length));
     const names = mods.length ? await roster(game) : [];
+    const ctx = await contextFor(input.rich, game, mods);
+    // nothing picked but the answer comes back here: the whole library goes along, so questions about it can be answered
+    const library = !mods.length && input.rich ? shareable((await modsFor({ ...task, modIds: undefined }, game)).mods) : [];
     const prompt = [
       `I manage 3DMigoto mods for ${game.name} in a mod manager. ${input.text.trim()}`,
-      mods.length ? `The mods this is about, one per line:\n${modTable(mods)}` : "",
+      mods.length ? `The mods this is about, one per line:\n${modTable(mods, ctx)}` : "",
+      ctx ? FILES_NOTE : "",
+      library.length ? `For context, the mods I have (you can't change these):\n${modTable(library, null, true)}` : "",
       `Put your answer in "answer" (plain text, short). If I asked for changes to the mods, list them in "changes" with only the fields that change ("mod" is the number from my list). ${ANSWER_RULE}`,
       "```json\n" + `{"answer":"...","changes":[{"mod":1,"name":"New name","character":"Ellen","tags":["outfit"],"why":"few words"}]}` + "\n```",
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
+      files: ctx?.files,
       shares: [t("What you typed"), ...(mods.length ? [total > all.length
         ? tn(mods.length, "Names, folder names, characters and tags of {n} mod (from the first {first})", "Names, folder names, characters and tags of {n} mods (from the first {first})", { first: all.length })
-        : tn(mods.length, "Names, folder names, characters and tags of {n} mod", "Names, folder names, characters and tags of {n} mods")] : [])],
+        : tn(mods.length, "Names, folder names, characters and tags of {n} mod", "Names, folder names, characters and tags of {n} mods")] : []),
+      ...(ctx ? [FILES_SHARE()] : []),
+      ...(library.length ? [tn(library.length, "Names, folders, characters, tags and creators of your {n} mod", "Names, folders, characters, tags and creators of your {n} mods")] : [])],
       read(reply) {
         const r = obj(reply, t("The answer"), ["answer", "changes"]);
         const { rows, skipped, patches } = mods.length ? readChanges(r.changes, mods, names, game) : { rows: [], skipped: [], patches: [] };
@@ -310,7 +346,7 @@ const DRAW_SHAPE = `{"mods":[{"mod":1,"draw":[{"file":"Ellen.ini","section":"Tex
 const keysTask: TaskDef = {
   title: (task) => (task.modIds && task.modIds.length > 1 ? tn(task.modIds.length, "Toggles only while on screen for {n} mod", "Toggles only while on screen for {n} mods") : t("Toggles only while on screen")),
   note: t("This takes a strong chatbot, like Claude Opus 5.5. Weaker ones often pick the wrong sections. If a toggle stops working in game, Undo puts it back."),
-  async build(task) {
+  async build(task, input) {
     const game = gameOf(task);
     const { mods: picked } = await modsFor(task, game, 8);
     if (!picked.length) throw new Error(t("Pick the mod first."));
@@ -330,17 +366,21 @@ const keysTask: TaskDef = {
       ].join("\n"));
       return `Mod ${i + 1}${hideFromAi(mod) ? "" : `: ${mod.name}`}${mod.character ? ` (${mod.character})` : ""}\n${inis.join("\n")}`;
     });
+    const ctx = await contextFor(input.rich, game, todo.map((f) => f.mod));
     const prompt = [
       `These 3DMigoto mods for ${game.name} have hotkeys that also work while their character isn't on screen, so they clash with other mods using the same keys. gachamod can fix that itself once it knows which sections draw the character: it sets a flag in those sections, clears it every frame in [Present] and adds a condition on the key sections.`,
       "For each mod, pick the TextureOverride sections that run only while the character's model is drawn in the world: the body, position or blend buffer, or the main index buffer. Not a texture that can also show in menus, not a weapon on its own, not a section with override_vertex_count. The sections must be in the same file as the keys, or in a file that has a namespace. Leave out a mod if none fits.",
       blocks.join("\n\n"),
+      ctx ? "Each mod's whole ini files are in the reference files under mods/<number>/ (the mod's number above). Read them when the outline isn't enough: what a section's draw and match lines do, which resources it uses, and how [Present] and the key sections are written." : "",
       `"mod" is the mod's number above, "file" and "section" exactly as listed (section without brackets). ${ANSWER_RULE}`,
       "```json\n" + DRAW_SHAPE + "\n```",
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
     const mods = todo.map((f) => f.mod);
     return {
       prompt,
-      shares: [tn(mods.length, "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mod, and their key section names. No other file contents", "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mods, and their key section names. No other file contents"),
+      files: ctx?.files,
+      shares: [ctx ? tn(mods.length, "The ini and text files of {n} mod (copies, read only), with an outline of its override and key sections", "The ini and text files of {n} mods (copies, read only), with an outline of their override and key sections")
+        : tn(mods.length, "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mod, and their key section names. No other file contents", "Names and a few lines (hashes, buffers, draw calls) of the override sections in {n} mods, and their key section names. No other file contents"),
         t("Mod names and characters")],
       read: (reply) => readDraws(reply, game, items),
     };
@@ -414,19 +454,26 @@ const GB_MOD = /^https?:\/\/(?:www\.)?gamebanana\.com\/mods\/(\d+)/i;
 
 const recommendTask: TaskDef = {
   title: () => t("Mod ideas from your chatbot"),
-  text: { label: t("Anything in particular? (optional)"), placeholder: t("Swimsuits, or mods for characters I don't have mods for yet"), required: false },
+  text: { label: t("Anything in particular? (optional)"), examples: [t("Swimsuits"), t("Mods for characters I don't have mods for yet"), t("Small recolors that keep the original look"), t("Outfits based on other games"), t("Hair and face mods")], required: false },
   async build(task, input) {
     const game = gameOf(task);
+    // answered here: every mod goes along (with who made it), not just the summary
+    const library = input.rich ? shareable((await modsFor({ ...task, modIds: undefined }, game)).mods) : [];
+    const names = library.length ? await roster(game) : [];
     const prompt = [
       `I use 3DMigoto mods from GameBanana for ${game.name}. Suggest mods I might like.`,
       task.detail ?? "",
+      library.length ? `Every mod I have, so you can see what I like and skip what I already have:\n${modTable(library, null, true)}` : "",
+      names.length ? `${game.name} characters: ${names.join(", ")}.` : "",
       input.text.trim() ? `I'd like: ${input.text.trim()}` : "",
       `Give up to 12 ideas. Each is either a GameBanana search ("search": 1 to 4 words, like a character and an outfit type) or a GameBanana mod page you are sure exists ("url": https://gamebanana.com/mods/<number>), with "why" in a few words. ${ANSWER_RULE}`,
       "```json\n" + `{"ideas":[{"search":"Ellen swimsuit","why":"you collect Ellen mods"},{"url":"https://gamebanana.com/mods/123456","why":"few words"}]}` + "\n```",
     ].filter(Boolean).join("\n\n");
     return {
       prompt,
-      shares: [t("A summary of your mods: top characters, creators you keep and up to 40 mod names"), ...(input.text.trim() ? [t("What you typed")] : [])],
+      shares: [library.length ? tn(library.length, "Names, folders, characters, tags and creators of your {n} mod", "Names, folders, characters, tags and creators of your {n} mods") : t("A summary of your mods: top characters, creators you keep and up to 40 mod names"),
+        ...(names.length ? [t("{game}'s character list", { game: gameName(game) })] : []),
+        ...(input.text.trim() ? [t("What you typed")] : [])],
       read(reply) {
         const r = obj(reply, t("The answer"), ["ideas"]);
         const links: Preview["links"] = [], skipped: string[] = [];
@@ -445,6 +492,19 @@ const recommendTask: TaskDef = {
   },
 };
 
+const THEME_EXAMPLES = [
+  t("Navy and gold with sharp corners"), t("Soft pastel pink with rounded cards"), t("Black and neon green, like an old terminal"),
+  t("Warm paper and ink, like a notebook"), t("Frosted glass over a deep blue background"), t("Red and black, sharp and loud"),
+  t("Forest green and wood brown, cozy"), t("High contrast black and white with big text"), t("Sunset orange fading into night blue"),
+  t("Clean light grey, like a phone's settings"), t("Retro arcade: dark blue, pixel edges and bright yellow"), t("Cherry blossom pink on charcoal"),
+];
+
+const THEME_EDIT_EXAMPLES = [
+  t("Make it darker"), t("Rounder corners and more space between things"), t("Use a teal accent instead"),
+  t("Add a faint grid texture to the panels"), t("Make the text bigger and easier to read"), t("Give the buttons a sharper, flatter look"),
+  t("Make a light version of it"), t("Tone down the glow and the gradients"),
+];
+
 export const TASKS: Record<string, TaskDef> = {
   mods: modsTask,
   custom: customTask,
@@ -452,7 +512,12 @@ export const TASKS: Record<string, TaskDef> = {
   recommend: recommendTask,
   theme: {
     title: () => t("Make a theme with your chatbot"),
-    text: { label: t("Describe the look"), placeholder: t("Navy and gold with sharp corners"), required: true },
+    text: { label: t("Describe the look"), examples: THEME_EXAMPLES, required: true },
+    build: (task, input) => buildThemeTask(task, input),
+  },
+  "theme-edit": {
+    title: (task) => t("Change {theme} with your chatbot", { theme: themeToEdit(task)?.name ?? t("the theme") }),
+    text: { label: t("What should change?"), examples: THEME_EDIT_EXAMPLES, required: true },
     build: (task, input) => buildThemeTask(task, input),
   },
 };

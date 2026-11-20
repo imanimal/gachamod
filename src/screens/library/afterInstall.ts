@@ -96,16 +96,51 @@ function offerSwitch(game: GameId, who: string, skins: ModEntry[], lead: string,
   switches.set(key, { id: toast(t("{text}. Switch this character's skins while you play?", { text: lead }), false, act, open), n: 1 });
 }
 
+/** One mod, a bundle of mods, or variants of one mod (only one of them belongs on). */
+type Kind = "one" | "mods" | "variants";
+
+/** An install note that names the mod, said without the name, or null for the others. */
+function plainNote(note: string): string | null {
+  const n = note.replace(/\.$/, "");
+  if (/^.+ came back with its settings$/.test(n)) return t("The mod's settings came back");
+  const parts = /^Turned off (\d+) parts? of .+ that change the same things as another part$/.exec(n);
+  if (parts) return tn(Number(parts[1]), "Turned off {n} part that changes the same things as another part", "Turned off {n} parts that change the same things as another part");
+  if (n === "Switch parts in its details") return t("Switch parts in its details");
+  if (/^Toggles of .+ work only while its character is on screen$/.test(n)) return t("The mod's toggles work only while its character is on screen");
+  return null;
+}
+
+/** The notes after "Installed X": the ones that name the mod said without it, the rest (errors) as they are. */
+function plainNotes(tail: string): string[] {
+  const out: string[] = [];
+  let rest: string[] = [];
+  // a run of other notes goes to tb() whole, so a message of several sentences still finds its translation
+  const flush = () => { if (rest.length) out.push(tb(rest.join(". "))); rest = []; };
+  for (const piece of tail.split(". ")) {
+    const said = plainNote(piece);
+    if (said === null) { rest.push(piece); continue; }
+    flush();
+    out.push(said);
+  }
+  flush();
+  return out;
+}
+
 /** The backend's "Installed X for Y. Notes" in the user's language, without the names toasts never list: "Installed
- *  the mod. Notes", or "Installed 3 mods" for a bundle or several variants (`several`). */
-function plainText(raw: string): { text: string; several: boolean } {
+ *  the mod. Notes", or "Installed 3 mods" for a bundle or several variants. */
+function plainText(raw: string): { text: string; kind: Kind } {
   const dot = raw.indexOf(". ");
   const head = dot < 0 ? raw : raw.slice(0, dot), tail = dot < 0 ? "" : raw.slice(dot + 2);
   const m = /^Installed (\d+) (variants|mods) /.exec(head);
   const n = m ? Number(m[1]) : 1;
-  const lead = !m ? t("Installed the mod") : m[2] === "variants" ? tn(n, "Installed {n} variant", "Installed {n} variants") : tn(n, "Installed {n} mod", "Installed {n} mods");
-  return { text: tail ? stops([lead, tb(tail)]) : lead, several: !!m };
+  const kind: Kind = !m ? "one" : m[2] === "variants" ? "variants" : "mods";
+  const lead = kind === "one" ? t("Installed the mod") : kind === "variants" ? tn(n, "Installed {n} variant", "Installed {n} variants") : tn(n, "Installed {n} mod", "Installed {n} mods");
+  return { text: tail ? stops([lead, ...plainNotes(tail)]) : lead, kind };
 }
+
+/** "Installed the mod. Turn it on in Mods": them for a bundle, one for variants. */
+const turnOnText = (text: string, kind: Kind) => kind === "mods" ? t("{text}. Turn them on in Mods", { text })
+  : kind === "variants" ? t("{text}. Turn one on in Mods", { text }) : t("{text}. Turn it on in Mods", { text });
 
 /** The one way an install toast says the mod is on and what went off for it. With several installed, the first one
  *  is turned on. */
@@ -119,12 +154,13 @@ const onText = (text: string, off: ModEntry[], several = false) => several
 export async function afterInstall(rawText: string, game: GameId, modIds: string[]) {
   const open: ToastAction = { label: t("Open"), run: () => { if (currentGame()?.id !== game) setGame(game); go({ view: "library", modId: modIds[0] }); } };
   // the backend's text in the user's language, without names
-  const { text, several } = plainText(rawText);
+  const { text, kind } = plainText(rawText);
+  const several = kind !== "one";
   try {
     await enableNewPref.ready;
     const all = await library.list(game);
     const mod = all.find((m) => m.id === modIds[0]);
-    if (!enableNewPref.get() || !modIds.length) { await say(t("{text}. Turn it on in Mods", { text }), open, { on: false, prefOff: true, off: 0 }); return; }
+    if (!enableNewPref.get() || !modIds.length) { await say(turnOnText(text, kind), open, { on: false, prefOff: true, off: 0 }); return; }
     if (!mod || mod.enabled) { await say(text, open, { on: false, prefOff: false, off: 0 }); return; }
     const others = liveCharacterOf(game, mod.id) ? [] : overlapping(mod, all);
     const keepBoth = others.length > 0 && (await settings.get(`${game}.oneSkin`).catch(() => null)) === "0";
@@ -155,7 +191,7 @@ export async function afterInstall(rawText: string, game: GameId, modIds: string
     }
     await say(onText(text, off, several), open, { on: true, prefOff: false, off: off.length });
   } catch (e) {
-    if (!enableNewPref.get()) toast(t("{text}. Turn it on in Mods", { text }), false, open);
+    if (!enableNewPref.get()) toast(turnOnText(text, kind), false, open);
     else toast(t("{text}, but it couldn't be turned on: {error}", { text, error: errorText(e) }), true, open);
   }
 }

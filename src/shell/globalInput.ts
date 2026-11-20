@@ -1,11 +1,11 @@
 // App-wide mouse input: the right-click menu for anything without its own (copy and paste in fields, copy and search
-// for selected text, else Back, Forward, Search, Undo, Redo, Settings), and the mouse's side buttons for Back and
+// for selected text, else Back, Forward, Search, Undo, Redo, Settings or Tools in Settings), and the mouse's side buttons for Back and
 // Forward (WebView2 would otherwise run its own history and leave the app). Owner: SHELL area.
 import { canRedo, canUndo, redo, undo } from "../lib/history";
-import { back, forward, go, recentPages } from "../lib/store";
+import { back, currentRoute, forward, go, recentPages } from "../lib/store";
 import { openMenu, type MenuEntry } from "../ui/ContextMenu";
 import { toast } from "../ui/toast";
-import { openPalette } from "./state";
+import { openPalette, toggleHelp } from "./state";
 import { t } from "../lib/i18n";
 
 
@@ -39,16 +39,21 @@ function fieldItems(f: Field): MenuEntry[] {
   ];
 }
 
-function pageItems(): MenuEntry[] {
+/** The page menu. What's already open offers its counterpart: Tools in Settings, the shortcuts in the search. */
+function pageItems(inSearch: boolean): MenuEntry[] {
   return [
     { label: t("Back"), icon: "left", keys: "Alt+Left", disabled: !recentPages(-1, 1).length, onClick: () => back() },
     { label: t("Forward"), icon: "right", keys: "Alt+Right", disabled: !recentPages(1, 1).length, onClick: () => forward() },
     "-",
-    { label: t("Search"), icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
+    inSearch
+      ? { label: t("Keyboard shortcuts"), icon: "keyboard", keys: "?", onClick: toggleHelp }
+      : { label: t("Search"), icon: "search", keys: "Ctrl+K", onClick: () => openPalette() },
     { label: t("Undo"), icon: "undo", keys: "Ctrl+Z", disabled: !canUndo(), onClick: () => void undo() },
     { label: t("Redo"), icon: "redo", keys: "Ctrl+Y", disabled: !canRedo(), onClick: () => void redo() },
     "-",
-    { label: t("Settings"), icon: "settings", keys: "Ctrl+8", onClick: () => go("settings") },
+    currentRoute().view === "settings"
+      ? { label: t("Tools"), icon: "tools", keys: "Ctrl+7", onClick: () => go("tools") }
+      : { label: t("Settings"), icon: "settings", keys: "Ctrl+8", onClick: () => go("settings") },
   ];
 }
 
@@ -60,6 +65,7 @@ export function installGlobalInput(): () => void {
     const where = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : (e.target as Element);
     const f = fieldOf(e.target);
     if (f) { openMenu(where, fieldItems(f)); return; }
+    const inSearch = !!(e.target as Element | null)?.closest?.(".palette");
     const sel = window.getSelection()?.toString().trim() ?? "";
     if (sel) {
       const short = sel.length > 28 ? `${sel.slice(0, 26)}...` : sel;
@@ -67,11 +73,11 @@ export function installGlobalInput(): () => void {
         { label: t("Copy"), icon: "copy", keys: "Ctrl+C", onClick: () => { navigator.clipboard?.writeText(sel).catch(() => document.execCommand("copy")); } },
         { label: t("Search for \"{text}\"", { text: short }), icon: "search", onClick: () => openPalette(sel.slice(0, 80)) },
         "-",
-        ...pageItems(),
+        ...pageItems(inSearch),
       ]);
       return;
     }
-    openMenu(where, pageItems());
+    openMenu(where, pageItems(inSearch));
   };
 
   // mouse buttons 4 and 5 (button 3 and 4 in the event): stop WebView2's own navigation, then go back or forward

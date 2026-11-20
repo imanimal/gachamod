@@ -341,6 +341,7 @@ pub fn run() {
             commands::account::gb_follow,
             commands::account::gb_like,
             commands::account::gb_subscribe,
+            commands::account::gb_subscribed_mods,
             commands::account::gb_thank,
             commands::account::gb_mod_me,
             commands::account::gb_following,
@@ -484,6 +485,14 @@ pub fn run() {
             commands::app::app_update_install,
             // ── SETTINGS/AI ──
             commands::ai::ai_chatbots_installed,
+            commands::ai::ai_clis,
+            commands::ai::ai_run,
+            commands::ai::ai_cancel,
+            commands::ai::ai_cli_sign_in,
+            commands::ai::ai_key_status,
+            commands::ai::ai_key_set,
+            commands::ai::ai_key_remove,
+            commands::ai::ai_mod_files,
             // ── EXTENSIONS ──
             commands::extensions::extensions_list,
             commands::extensions::extensions_repos,

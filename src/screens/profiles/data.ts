@@ -11,7 +11,7 @@ import { briefNotes, publish, summarize } from "../library/data";
 import { sayF10 } from "../../lib/elevation";
 import { note as noteUsage } from "../../lib/telemetry";
 
-const subs =new Set<(game: GameId) => void>();
+const subs = new Set<(game: GameId) => void>();
 const lastLists = new Map<GameId, Profile[]>();
 /** Tell every profile list for this game to reload. */
 export function profilesChanged(game: GameId) { lastLists.delete(game); subs.forEach((f) => f(game)); }

@@ -161,6 +161,13 @@ html.pad .tab:focus { outline-offset: -3px; }
   font-family: var(--font-mono); font-size: var(--t-meta); font-weight: 700; line-height: 1; white-space: nowrap;
   background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line-2), inset 0 -2px 0 var(--line-2); }
 .search-k { margin-right: var(--s-1); }
+/* a text box with an example: Tab or the chip at its end fills it in */
+.field-box { position: relative; display: block; }
+.field-box.offer > :is(input, textarea) { padding-right: 3.4rem; }
+.field-suggest { position: absolute; right: var(--s-2); top: 50%; transform: translateY(-50%); display: grid; place-items: center; padding: 0; border: 0; background: none; border-radius: var(--radius-xs); cursor: pointer; }
+.field-box.multi .field-suggest { top: calc(.58rem * var(--d, 1)); transform: none; }
+.field-suggest:hover kbd { color: var(--text); box-shadow: inset 0 0 0 1px var(--text-3), inset 0 -2px 0 var(--text-3); }
+.field-suggest:focus-visible, html.kbd .field-suggest:focus { outline: 2px solid var(--ring); outline-offset: 2px; }
 .field { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
 .field-l { font-size: var(--t-small); font-weight: 650; color: var(--text-2); }
 .field input, .field textarea, .select select { width: 100%; padding: calc(.58rem * var(--d, 1)) var(--s-3); border-radius: var(--radius-sm); border: 0; color: var(--text);
@@ -225,9 +232,9 @@ html.pad .tab:focus { outline-offset: -3px; }
    and keeps the tone in its text. :where keeps it low, so a game theme's own badge style still wins */
 :where(.mod-card:not(.is-row) .mod-card-badges, .gb-card-state) .badge[class*="t-"] { background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
 :where(.mod-card:not(.is-row) .mod-card-badges, .gb-card-state) .badge.t-muted { color: var(--text-2); }
-/* a tag that opens what it names (kit Badge with onClick) */
-button.badge { cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease); }
-button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 60%, transparent); filter: brightness(1.12); }
+/* a tag that opens what it names (kit Badge with onClick, or a link drawn as a tag): it keeps its colours on hover */
+:is(button.badge, .badge.qlink) { cursor: pointer; transition: box-shadow var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease); }
+:is(button.badge, .badge.qlink):hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 60%, transparent); filter: brightness(1.12); }
 .progress { position: relative; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--text) 10%, transparent); overflow: hidden; }
 .progress-bar { display: block; height: 100%; border-radius: inherit; background-color: var(--tone, var(--accent)); transition: width 240ms var(--ease); }
 .progress.indet .progress-bar { width: 38%; animation: indet 1.15s var(--ease) infinite; }
@@ -306,7 +313,7 @@ button.badge:hover { box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor
 .menu-h:first-child { padding-top: var(--s-1); }
 /* inline links to a thing's page (ui/Links.tsx): a character, a creator, a category */
 .qlink { display: inline; padding: 0; color: inherit; font: inherit; text-align: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 30%, transparent); text-underline-offset: 2px; text-decoration-thickness: 1px; cursor: pointer; border-radius: 3px; transition: color var(--dur-fast) var(--ease), text-decoration-color var(--dur-fast) var(--ease); }
-.qlink:hover { color: var(--accent-ink); text-decoration-color: currentColor; }
+.qlink:where(:not(.badge)):hover { color: var(--accent-ink); text-decoration-color: currentColor; }
 .qlink-img { display: inline-block; width: 1.15em; height: 1.15em; margin: 0 .3em -.2em 0; border-radius: 50%; object-fit: cover; vertical-align: baseline; background: var(--img-bg); }
 /* a tag that is also a link (a character tag in a mod's details) keeps the tag's shape; its picture loses the avatar ring */
 .badge.qlink { display: inline-flex; padding: 0 var(--s-2); text-decoration: none; }

@@ -5,12 +5,11 @@
 import { useMemo, useState } from "react";
 import { fileUrl, shell, type ExtPermissions, type InstalledExt } from "../../lib/api";
 import { extName, installFromDisk, installListed, linkFolder, listedPackages, loadRepos, reloadExtensions, reloadPages, removeExtension,
-  setExtensionEnabled, sharePackage, updateFor, useExtensions, useRepos, type Listed } from "../../lib/extensions";
+  setExtensionEnabled, sharePackage, updateFor, updatePackages, useExtensions, useRepos, type Listed } from "../../lib/extensions";
 import { go, patchRoute, useGame, useGames, useRoute } from "../../lib/store";
 import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon, type IconName } from "../../ui/Icon";
 import { ICONS } from "../../ui/icons";
-import { toast } from "../../ui/toast";
 import { Badge, Button, Empty, IconButton, PageHeader, SearchField, Segmented, Skeleton, Tabs, Waiting, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { ExtensionFrame, NeedsNote } from "./ExtensionFrame";
 import { lang, stops, t, tb, tn } from "../../lib/i18n";
@@ -41,10 +40,8 @@ function Catalog() {
   const [updatingAll, setUpdatingAll] = useState(false);
   const updateAll = async () => {
     setUpdatingAll(true);
-    // one toast for the lot; each update is still its own step on the undo list
-    let n = 0;
-    try { for (const u of updates) if (await installListed(u, true)) n++; } finally { setUpdatingAll(false); }
-    if (n) toast(tn(n, "Updated {n} package", "Updated {n} packages"));
+    // one Undo step and one toast for the lot
+    try { await updatePackages(updates); } finally { setUpdatingAll(false); }
   };
 
   const match = (name: string, author: string, desc: string, k: string) =>
@@ -82,7 +79,7 @@ function Catalog() {
           <SearchField value={q} onChange={setQ} placeholder={t("Search extensions")} className="ext-search" />
           {tab === "installed" && updates.length > 1 && (
             <Button variant="primary" size="sm" icon="update" busy={updatingAll} onClick={() => void updateAll()}
-              title={t("Update {names}. Each one can be undone", { names: updates.map((u) => u.name).join(", ") })}>{t("Update all ({n})", { n: updates.length })}</Button>
+              title={t("One Undo puts them all back")}>{t("Update all ({n})", { n: updates.length })}</Button>
           )}
         </div>
       </PageHeader>

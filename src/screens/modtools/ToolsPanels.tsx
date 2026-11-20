@@ -16,7 +16,7 @@ import { KeyChip, keysChanged, onKeysChanged, recordBackups, recordEdit } from "
 import { toast } from "../../ui/toast";
 import { oxford } from "../../lib/notes";
 import { jsonPref } from "../../lib/prefs";
-import { conflictKey, dropShared, ignoreConflict, setToolsCount, turnOff } from "./toolsBadge";
+import { conflictKey, dropShared, ignoreConflict, ignoreConflicts, setToolsCount, turnOff } from "./toolsBadge";
 import { SharedParts } from "./ModInsides";
 import "./modtools.css";
 import { ModLink } from "./ModLink";
@@ -93,7 +93,14 @@ export function ConflictsPanel() {
 
   return (
     <Panel id="conflicts" title={t("Conflicts")} icon="layers" className="tp tp-conflicts" count={shown ? shown.length : undefined}
-      actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title={t("Look for conflicts again")}>{t("Check again")}</Button>}>
+      actions={<>
+        {shown && shown.length > 1 && (
+          <Button size="sm" variant="ghost" icon="hide" busy={busy === "i:all"} disabled={!!busy}
+            title={t("Stop listing every conflict here. Nothing in the mods changes, and they move to Ignored below")}
+            onClick={() => game && act("i:all", () => ignoreConflicts(game, shown.map(ids)))}>{t("Ignore all")}</Button>
+        )}
+        <Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title={t("Look for conflicts again")}>{t("Check again")}</Button>
+      </>}>
       <p className="hint tp-intro">{t("Mods that are on and change the same parts of a model. Only one of them shows in game. Keep one, take the shared parts out of one so each shows the rest, or ignore it.")}</p>
       {!shown ? <Loading what={t("Looking for mods that clash")} /> : shown.length === 0 ? (
         <p className="tp-none muted">{ignored.length ? t("No conflicts between the mods that are on, apart from the ones you ignore.") : t("No conflicts between the mods that are on.")}</p>
@@ -168,6 +175,12 @@ function ignoreClash(game: string, c: KeyClash, on: boolean) {
   // the clash moves between the list and Ignored, so the toast with Undo stays
   void ignoredClashesPref.set(all, on ? t("Ignored the {key} clash", { key: c.label }) : t("Showing the {key} clash again", { key: c.label }), true);
 }
+/** Ignore every clash listed, as one Undo step. */
+function ignoreClashes(game: string, list: KeyClash[]) {
+  const all = { ...ignoredClashesPref.get() };
+  all[game] = [...new Set([...(all[game] ?? []), ...list.map(clashKey)])];
+  void ignoredClashesPref.set(all, tn(list.length, "Ignored {n} key clash", "Ignored {n} key clashes"), true);
+}
 
 export function KeyClashesPanel() {
   const { game, list, reload } = useGameList<KeyClash>(modKeys.clashes);
@@ -215,7 +228,14 @@ export function KeyClashesPanel() {
 
   return (
     <Panel id="key-clashes" title={t("Key clashes")} icon="keyboard" className="tp tp-keys" count={shown ? shown.length : undefined}
-      actions={<Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title={t("Look for key clashes again")}>{t("Check again")}</Button>}>
+      actions={<>
+        {shown && shown.length > 1 && (
+          <Button size="sm" variant="ghost" icon="hide" disabled={!game || !!busy}
+            title={t("Stop listing every clash here. Nothing in the mods changes, and they move to Ignored below")}
+            onClick={() => game && ignoreClashes(game, shown)}>{t("Ignore all")}</Button>
+        )}
+        <Button size="sm" variant="ghost" icon="refresh" onClick={reload} disabled={!list} title={t("Look for key clashes again")}>{t("Check again")}</Button>
+      </>}>
       <p className="hint tp-intro">{t("Keys that two mods that are on both use, at times when both can react. Mods for different characters only clash when one of them takes keys while its character isn't on screen.")}</p>
       {!shown ? <Loading what={t("Reading mod keys")} /> : shown.length === 0 ? (
         <p className="tp-none muted">{ignored.length ? t("No two mods that are on react to the same key, apart from the clashes you ignore.") : t("No two mods that are on react to the same key.")}</p>

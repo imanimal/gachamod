@@ -133,6 +133,11 @@
 .mod-parts-list { display: flex; flex-direction: column; gap: var(--s-2); }
 .mod-drawer-sec { display: flex; flex-direction: column; gap: var(--stack-gap); margin-top: var(--s-5); scroll-margin-top: 1rem; }
 
+/* the Problems tab: Tools' panels in one column, as wide as a Tools page */
+.lib-problems { display: flex; flex-direction: column; gap: var(--stack-gap, var(--s-4)); width: 100%; max-width: 60rem; }
+/* the count of new problems on the tab, beside its name */
+.lib-tab-n { margin-left: var(--s-1); }
+
 /* archive */
 .archive { display: flex; flex-direction: column; gap: var(--s-4); }
 /* the two buttons sit as close as other button pairs; the hint keeps more room before them */

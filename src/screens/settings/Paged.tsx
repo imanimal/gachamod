@@ -13,7 +13,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Animati
 import { Icon, type IconName } from "../../ui/Icon";
 import { Badge, SearchField } from "../../ui/kit";
 import { consumeRoute, useRoute } from "../../lib/store";
-import { glide, scrollToElement } from "../../lib/smoothScroll";
+import { setShownPage } from "../../lib/here";
+import { glide, scrollToElement, wheelBox } from "../../lib/smoothScroll";
 import "./paged.css";
 import { t } from "../../lib/i18n";
 import type { Menu } from "./menuSearch";
@@ -97,8 +98,8 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
   const moving = useRef(false);
   const showRef = useRef(onShow);
   showRef.current = onShow;
-  useEffect(() => { showRef.current?.(current); }, [current]);
-  useEffect(() => () => showRef.current?.(null), []);
+  useEffect(() => { setShownPage(name, current); showRef.current?.(current); }, [name, current]);
+  useEffect(() => () => { setShownPage(name, null); showRef.current?.(null); }, [name]);
   const after = useRef<(() => void) | null>(null);
   /** When the page last scrolled, and when the last turn finished: a page counts as at its end once both are a moment ago. */
   const movedAt = useRef(0);
@@ -219,8 +220,9 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
       const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
       return avg(speeds.slice(-3)) >= avg(speeds.slice(0, 3)) * 0.85;
     };
-    /** One push down or up. True when it turned the page or a turn is under way, so the scroll itself stops. */
-    const push = (target: EventTarget | null, dy: number): boolean => {
+    /** One push down or up. True when it turned the page or a turn is under way, so the scroll itself stops. `box` is
+     *  where a wheel goes (lib/smoothScroll.ts wheelBox); without it, whatever under `target` can still scroll gets it. */
+    const push = (target: EventTarget | null, dy: number, box?: Element | null): boolean => {
       const now = performance.now();
       const dir: Dir = dy > 0 ? 1 : -1;
       const gap = now - last;
@@ -231,7 +233,8 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
       if (moving.current) return true;
       if (searchRef.current) return false;
       const page = els.current.get(cur.current);
-      if (!page || innerScroll(target, page, dir)) { sum = 0; startedAtEdge = false; return false; }
+      const inner = page && (box === undefined ? innerScroll(target, page, dir) : !!box && box !== page && page.contains(box));
+      if (!page || inner) { sum = 0; startedAtEdge = false; return false; }
       const resting = now - Math.max(movedAt.current, turnedAt.current);
       const edge = atEdge(page, dir);
       if (fresh) startedAtEdge = edge && resting > SETTLE;
@@ -249,7 +252,7 @@ export function Paged({ name, label, pages, fallback, onShow, children }: {
       if (e.ctrlKey || e.metaKey || e.shiftKey || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
       const h = els.current.get(cur.current)?.clientHeight ?? 600;
       const dy = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * h : e.deltaY;
-      if (push(e.target, dy)) e.preventDefault();
+      if (push(e.target, dy, wheelBox(e))) e.preventDefault();
     };
     const onPad = (e: Event) => { if (push(e.target, (e as CustomEvent<number>).detail)) e.preventDefault(); };
     const onScroll = () => { movedAt.current = performance.now(); };

@@ -2,8 +2,8 @@
 // about the mod (a game update broke it, conflicts, no .ini, problems in its files) until the user takes it back;
 // its conflicts are ignored on both sides, so the other mod stops showing Conflict too. "update" hides the game
 // update warnings until the mod's files change through an update, so a new version that is still broken warns again.
-// A held mod leaves the Problems filter, loses its red marks, moves to Ignored or Muted in Tools and stops counting on
-// the Tools badge. Owner: FIXES area.
+// A held mod loses its red marks, moves to Ignored or Muted in the problem lists (Mods > Problems and Tools) and stops
+// counting on the Tools badge. Owner: FIXES area.
 import { library, modtools, type GameId, type ModEntry } from "./api";
 import { record } from "./history";
 import { jsonPref } from "./prefs";

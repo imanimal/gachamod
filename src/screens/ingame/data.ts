@@ -168,15 +168,12 @@ export async function setAll(game: GameId, on: boolean) {
     const c = await live.setAll(game, on);
     after(game);
     skippedNote(c);
-    // the switch shows the new state; the toast is for the mods it changed, when it changed any
-    const n = c.changed.length;
     record({
       label: on ? t("Turned on switching skins in game. It starts after the game reloads once")
         : t("Turned off switching skins in game. Each character keeps the skin it showed"),
-      brief: on ? madeLive(n) : tn(n, "Stopped switching {n} mod in game. Each character keeps the skin it showed", "Stopped switching {n} mods in game. Each character keeps the skin it showed"),
       undo: async () => { await live.setAll(game, !on); after(game); },
       redo: async () => { await live.setAll(game, on); after(game); },
-    }, !n);
+    }, true);
   } catch (e) { toast(errorText(e), true); }
 }
 
@@ -268,8 +265,9 @@ export const newSkinTip = (character: string) =>
 
 const nameOf = (g: LiveGroup, slot: number) => g.mods.find((m) => m.slot === slot)?.name ?? t("that mod");
 
-/** Show a group's slot (0: none). Sent to the game when it runs. Undo picks the one before. */
-export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
+/** Show a group's slot (0: none). Sent to the game when it runs. Undo picks the one before. `say`: toast it with Undo,
+ *  for a pick made where the group's other skins aren't on screen (a mod's details); Tools shows every chip. */
+export async function pickLive(game: GameId, g: LiveGroup, slot: number, say = false) {
   const before = g.active;
   const put = async (s: number) => {
     const p = await live.pick(game, g.group, s);
@@ -283,9 +281,11 @@ export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
   try {
     // also the one the app thinks shows: the game may show another, picked in its own menu
     const p = await put(slot);
-    const f10 = sayF10Note(p.note);
+    // the backend's note names the character ("Ellen Joe's skin changes ..."); toasts say "The skin"
+    const raw = p.note?.replace(`${g.character}'s skin`, "The skin") ?? null;
+    const f10 = sayF10Note(raw);
     if (p.send && picked) markShown(game, picked.modId);
-    if (before === slot) { if (p.note && !f10) toast(p.note); return; }
+    if (before === slot) { if (raw && !f10) toast(raw); return; }
     const what = slot === 0 ? t("none of {character}'s live skins", { character: g.character }) : nameOf(g, slot);
     const label = p.reload ? t("Turned on {what}. It shows after the game reloads", { what })
       : p.send ? (fresh ? t("Switched to {what} in game. If {character} looks wrong, switch to another character and back", { what, character: g.character })
@@ -293,13 +293,16 @@ export async function pickLive(game: GameId, g: LiveGroup, slot: number) {
       : t("Picked {what} for the next start", { what });
     // the picked chip shows the pick: a toast only for what shows nowhere else, the game's note or what to expect in the
     // running game
-    const note = p.note && !f10 ? tb(p.note) : null;
+    const note = raw && !f10 ? tb(raw) : null;
     const tip = !p.send ? null : p.reload ? t("Turned on the skin. It shows after the game reloads")
       : fresh ? t("Switched the skin in game. If the character looks wrong, switch to another character and back") : null;
+    const said = say ? (!p.send ? t("Picked the skin for the next start") : t("Switched the skin in game")) : null;
+    // with a note the pick hasn't reached the game yet: the toast says what was done, then the note
+    const lead = tip ?? said ?? t("Picked the skin");
     record({
       label: note ? t("{label}. {note}", { label, note }) : label,
-      brief: note ?? tip ?? undefined,
+      brief: note ? t("{label}. {note}", { label: lead, note }) : tip ?? said ?? undefined,
       undo: async () => { await put(before); }, redo: async () => { await put(slot); },
-    }, !note && !tip);
+    }, !note && !tip && !said);
   } catch (e) { toast(errorText(e), true); }
 }

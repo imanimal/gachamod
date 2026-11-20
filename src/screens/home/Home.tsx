@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { dialogs, errorText, fileUrl, type GameState, type ModEntry, type Profile } from "../../lib/api";
 import { record } from "../../lib/history";
 import { useCreators, useNsfw, type NsfwMode } from "../../lib/prefs";
+import { useModSubs } from "../../lib/subscriptions";
 import { surpriseMe } from "../../lib/recommend";
 import { usePortraitBatch } from "../../lib/portraits";
 import { charNoun, gameName } from "../../lib/games";
@@ -50,6 +51,8 @@ function HomeFor({ game }: { game: GameState }) {
   const lib = useMods(game.id);
   const creators = useCreators();
   const following = Object.values(creators).some((c) => (c.sub || c.prio) && !c.blocked);
+  const subs = useModSubs();
+  const subscribed = Object.values(subs).some((s) => s.game === null || s.game === game.gamebananaId);
   const before = useRef<HomeLayout | null>(null);
 
   // leaving Home ends Customise; the layout so far stays, with one Undo for all of it
@@ -93,7 +96,10 @@ function HomeFor({ game }: { game: GameState }) {
         put(to);
         record({ label: t("Hid {widget} from Home", { widget: titleOf(id) }), undo: async () => homeLayoutPref.set(from), redo: async () => homeLayoutPref.set(to) });
       } },
-      { label: t("Customise Home"), icon: "layout", onClick: () => setHomeEditing(true) },
+      // customising already: the way out of it
+      editing
+        ? { label: t("Done"), icon: "check", title: t("Done (Esc)"), onClick: finish }
+        : { label: t("Customise Home"), icon: "layout", onClick: () => setHomeEditing(true) },
     ])(e);
   };
 
@@ -101,6 +107,8 @@ function HomeFor({ game }: { game: GameState }) {
     switch (id) {
       case "start": return <QuickBar game={game} mods={lib.mods} />;
       case "updates": return <Updates game={game} mods={lib.mods} editing={editing} />;
+      case "subscribed": return subscribed ? <GbStrip game={game.id} title={WIDGETS.subscribed.title} query={{ subscribed: true }} />
+        : editing ? <Nothing title={WIDGETS.subscribed.title}>{t("Click the bell on a mod's page and gachamod tells you when it updates. Those mods show here.")}</Nothing> : null;
       case "hq": return <GbStrip game={game.id} title={WIDGETS.hq.title} query={{ hq: true, sort: "new" }} />;
       case "foryou": return <GbStrip game={game.id} title={WIDGETS.foryou.title} query={{ sort: "foryou" }} />;
       case "followed": return following ? <GbStrip game={game.id} title={WIDGETS.followed.title} query={{ followed: true }} />

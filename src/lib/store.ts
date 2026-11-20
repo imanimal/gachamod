@@ -172,7 +172,7 @@ export interface Route {
   kind?: string;
   /** library and browse: start with this search text. */
   search?: string;
-  /** library: start with this filter chip on ("updates", "favourites", "problems"). */
+  /** library: start with this filter chip on ("updates", "favourites"). */
   flag?: string;
   /** settings and tools: scroll to the section with this id. */
   section?: string;
@@ -180,7 +180,7 @@ export interface Route {
   user?: number;
   /** profiles: this profile's page, with its mods. */
   profile?: number;
-  /** A tab on the page ("archive" in Mods, "online" or "ext:<extension id>" on a character's page, "all" in
+  /** A tab on the page ("problems" or "archive" in Mods, "online" or "ext:<extension id>" on a character's page, "all" in
    *  Downloads, "installed" in Extensions). */
   tab?: string;
   /** extensions: this extension's own page. */

@@ -8,7 +8,7 @@ import { errorText, settings } from "./api";
 import { forgetModPage } from "./gamebanana";
 import { record } from "./history";
 import { t, tb, tn } from "./i18n";
-import { creatorsPref, jsonPref, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type CreatorRef, type NsfwMode } from "./prefs";
+import { creatorsPref, jsonPref, nsfwPref, pref, setRemoteFollow, type CreatorFlags, type NsfwMode } from "./prefs";
 import { call, listen } from "./tauri";
 import { toast } from "../ui/toast";
 
@@ -124,13 +124,11 @@ export async function setMatchGbAdult(on: boolean) {
   if (on) await matchAdult("asked");
 }
 
-/** Mods the user liked, subscribed to or thanked, as the app last knew it (GameBanana doesn't tell guests, and this
- *  keeps the buttons right before it answers). */
+/** Mods the user liked or thanked, as the app last knew it (GameBanana doesn't tell guests, and this keeps the
+ *  buttons right before it answers). Subscriptions are gachamod's own list (lib/subscriptions.ts). */
 const likedPref = jsonPref<number[]>("gb.liked", []);
-const subscribedPref = jsonPref<number[]>("gb.subscribed", []);
 const thankedPref = jsonPref<number[]>("gb.thanked", []);
 export const useLiked = (modId: number) => likedPref.use().includes(modId);
-export const useSubscribed = (modId: number) => subscribedPref.use().includes(modId);
 export const useThanked = (modId: number) => thankedPref.use().includes(modId);
 
 async function mark(p: typeof likedPref, modId: number, on: boolean) {
@@ -156,13 +154,12 @@ export async function modMe(modId: number): Promise<ModMe | null> {
   try {
     const me = await call<ModMe>("gb_mod_me", { modId });
     if (me.liked !== null) await mark(likedPref, modId, me.liked);
-    if (me.subscribed !== null) await mark(subscribedPref, modId, me.subscribed);
     if (me.thanked !== null) await mark(thankedPref, modId, me.thanked);
     return me;
   } catch { return null; }
 }
 
-/** Like a mod on GameBanana, or take the like back. Nobody is notified. Undo sends the opposite. */
+/** Like a mod on GameBanana, or take the like back. Undo sends the opposite. */
 export async function likeMod(modId: number, name: string, on: boolean) {
   const put = async (v: boolean) => {
     await call("gb_like", { modId, on: v });
@@ -172,49 +169,11 @@ export async function likeMod(modId: number, name: string, on: boolean) {
   try {
     await put(on);
     // the Like button shows it: no toast
-    record({ label: on ? t("Liked {name} on GameBanana", { name }) : t("Took back the like on {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) }, true);
-  } catch (e) { toast(errorText(e), true); }
-}
-
-/** Subscribe to a mod on GameBanana, or stop. GameBanana then tells the member there when it updates. Undo sends
- *  the opposite. */
-export async function subscribeMod(modId: number, name: string, on: boolean) {
-  const put = async (v: boolean) => {
-    await call("gb_subscribe", { modId, on: v });
-    forgetModPage(modId);
-    await mark(subscribedPref, modId, v);
-  };
-  try {
-    await put(on);
-    record({ label: on ? t("Subscribed to {name} on GameBanana", { name }) : t("Unsubscribed from {name} on GameBanana", { name }), undo: () => put(!on), redo: () => put(on) }, true);
-  } catch (e) { toast(errorText(e), true); }
-}
-
-/** Follow a creator, here and on GameBanana, and like one of their mods (`like` false: only follow). One Undo step
- *  takes both back. */
-export async function likeAndFollow(mod: { id: number; name: string }, c: CreatorRef, like: boolean) {
-  const key = String(c.id);
-  const old = creatorsPref.get()[key];
-  const put = async (on: boolean) => {
-    if (like) {
-      await call("gb_like", { modId: mod.id, on });
-      forgetModPage(mod.id);
-      await mark(likedPref, mod.id, on);
-    }
-    const list = { ...creatorsPref.get() };
-    if (on) list[key] = { ...(list[key] ?? old ?? {}), id: c.id, name: c.name, avatar: c.avatar ?? list[key]?.avatar ?? null, sub: true, blocked: false, at: Date.now() };
-    else if (old) list[key] = old;
-    else delete list[key];
-    await creatorsPref.set(list);
-    await followRemote(c.id, on);
-  };
-  try {
-    await put(true);
     record({
-      label: like ? t("Liked {mod} and followed {creator} on GameBanana", { mod: mod.name, creator: c.name }) : t("Followed {creator} on GameBanana", { creator: c.name }),
-      brief: like ? t("Liked the mod and followed the creator on GameBanana") : t("Followed the creator on GameBanana"),
-      undo: () => put(false), redo: () => put(true),
-    });
+      label: on ? t("Liked {name} on GameBanana", { name }) : t("Took back the like on {name} on GameBanana", { name }),
+      brief: on ? t("Liked the mod on GameBanana") : t("Took back the like on GameBanana"),
+      undo: () => put(!on), redo: () => put(on),
+    }, true);
   } catch (e) { toast(errorText(e), true); }
 }
 

@@ -24,6 +24,7 @@ export function registerAccountDemo() {
     },
     gb_mod_me: () => ({ liked: null, subscribed: null, thanked: null, own: false, points: myPoints, freeThank }),
     gb_following: () => [],
+    gb_subscribed_mods: () => [],
     // the made-up member hides every adult rating on GameBanana
     gb_content_settings: () => (user ? { mode: "hide", untouched: false } : null),
   });

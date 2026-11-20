@@ -4,7 +4,7 @@
 // in game). Owner: INGAME area.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, fileUrl, modKeys, type GameId, type KeyLine, type KeyList, type KeyRow, type ModKeyList } from "../../lib/api";
-import { t, tb, tn } from "../../lib/i18n";
+import { t, tn } from "../../lib/i18n";
 import { Icon } from "../../ui/Icon";
 import { KeyChip, recordEdit } from "../../ui/KeyEditor";
 import { Button, SearchField, Waiting } from "../../ui/kit";
@@ -20,7 +20,7 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
   /** Characters in the order they were played last (the same order as My mods). */
   order: string[];
   onRetry: () => void; onMine: () => void; onSettings: () => void;
-  /** A line for the bottom of the menu ("Press F10 in game to load the change"). */
+  /** A line for the bottom of the menu, for a rebind that failed. */
   onSay: (text: string, bad?: boolean) => void;
 }) {
   const [q, setQ] = useState(query ?? "");
@@ -42,7 +42,6 @@ export function KeysTab({ game, list, error, order, query, onRetry, onMine, onSe
     try {
       const edit = await modKeys.rebind(game, m.modId, { ini: r.ini, section: r.section, field: l.field, index: l.index }, binding);
       recordEdit(game, m.modId, edit, t("That's already the key"), t("Changed the key"));
-      if (edit.backup && edit.note) onSay(t("{note}.", { note: tb(edit.note) }));
     } catch (e) { onSay(errorText(e), true); } finally { busy.current = false; }
   };
 

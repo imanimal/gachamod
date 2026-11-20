@@ -19,8 +19,10 @@ registerMenu("profile", ({ game, id }: { game: GameId; id: number }): MenuEntry[
     { header: p.name },
     { label: sw?.id === p.id ? t("Switching to {name}", { name: p.name }) : p.active ? t("On now") : t("Switch to {name}", { name: p.name }), icon: p.active ? "check" : "swap", disabled: p.active || !!sw,
       title: sw && sw.id !== p.id ? t("Switching to {name} first", { name: sw.name }) : undefined, onClick: () => void switchTo(game, p, list) },
-    { label: t("View mods"), icon: "mods", title: t("See the mods in this profile, and add or take out mods"),
-      disabled: currentRoute().profile === p.id, onClick: () => go({ view: "profiles", profile: p.id }) },
+    // on the profile's page already: the list of every profile
+    currentRoute().view === "profiles" && currentRoute().profile === p.id
+      ? { label: t("All profiles"), icon: "profiles", keys: "Ctrl+6", onClick: () => go("profiles") }
+      : { label: t("View mods"), icon: "mods", title: t("See the mods in this profile, and add or take out mods"), onClick: () => go({ view: "profiles", profile: p.id }) },
     "-",
     { label: t("Edit"), icon: "edit", title: t("Name, icon, colour, banner and hotkey"), onClick: () => requestEdit(p.id) },
     { label: t("Rename"), icon: "edit", keys: "F2", onClick: () => requestEdit(p.id, "rename") },

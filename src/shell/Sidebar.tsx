@@ -9,7 +9,8 @@ import { errorText, queue, type GameState, type Profile } from "../lib/api";
 import { charNoun, gameName, gameShort } from "../lib/games";
 import { stops, t, tn } from "../lib/i18n";
 import { extensionPages, useExtensions } from "../lib/extensions";
-import { allGames, currentGame, go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
+import { allGames, currentGame, currentRoute, go, setGame, useBadges, useDailyGames, useGame, useGames, useRoute, useShownGames, type View } from "../lib/store";
+import { showsPage } from "../lib/here";
 import { Icon } from "../ui/Icon";
 import { GameBadge, gameIconNow } from "../ui/GameBadge";
 import { menuFor, openMenu, type MenuEntry } from "../ui/ContextMenu";
@@ -86,7 +87,10 @@ function GameHeader() {
   }
   const many = daily.length > 1;
   const sw = switchEntries(game, daily, shown);
-  const menu = (): MenuEntry[] => [...sw, sw.length > 0 && "-", ...menuFor("game", { id: game.id }), "-", { label: t("Add or show a game"), icon: "plus", onClick: () => go({ view: "settings", section: "games" }) }];
+  // on Settings' Games page already (where games are added), the next game page is Launch
+  const menu = (): MenuEntry[] => [...sw, sw.length > 0 && "-", ...menuFor("game", { id: game.id }), "-", showsPage("settings", "games")
+    ? { label: t("Launch options"), icon: "sliders", onClick: () => go({ view: "settings", section: "launch" }) }
+    : { label: t("Add or show a game"), icon: "plus", onClick: () => go({ view: "settings", section: "games" }) }];
   const others = daily.filter((g) => g.id !== game.id);
 
   return (
@@ -169,7 +173,10 @@ const navMenu = (v: View) => {
     void queue.get().then((s) => {
       const failed = s.items.filter((i) => i.state === "failed" && allGames().find((g) => g.id === i.req.game)?.modsDir);
       openMenu(at, [
-        { label: t("Open Downloads"), icon: "downloads", keys: `Ctrl+${KEY_VIEWS.indexOf("downloads") + 1}`, onClick: () => go("downloads") },
+        // in Downloads already: Browse, where downloads come from
+        currentRoute().view === "downloads"
+          ? { label: t("Browse GameBanana"), icon: "browse", keys: `Ctrl+${KEY_VIEWS.indexOf("browse") + 1}`, onClick: () => go("browse") }
+          : { label: t("Open Downloads"), icon: "downloads", keys: `Ctrl+${KEY_VIEWS.indexOf("downloads") + 1}`, onClick: () => go("downloads") },
         failed.length > 0 && { label: t("Retry failed ({n})", { n: failed.length }), icon: "refresh", title: t("Try every failed download again"),
           onClick: () => void Promise.all(failed.map((i) => queue.retry(i.id))).catch((err) => toast(errorText(err), true)) },
       ]);
@@ -252,7 +259,9 @@ function ProfileList({ game }: { game: GameState }) {
     const items = withoutKeys(menuFor("profile", { game: game.id, id: p.id }));
     const fallback: MenuEntry[] = [
       { label: p.active ? t("Active") : t("Switch to {name}", { name: p.name }), icon: "swap", disabled: p.active, onClick: () => void pick(p) },
-      { label: t("Manage profiles"), icon: "profiles", onClick: () => go("profiles") },
+      currentRoute().view === "profiles" && currentRoute().profile === undefined
+        ? { label: t("View mods"), icon: "mods", title: t("See the mods in this profile, and add or take out mods"), onClick: () => go({ view: "profiles", profile: p.id }) }
+        : { label: t("Manage profiles"), icon: "profiles", onClick: () => go("profiles") },
     ];
     e.preventDefault(); e.stopPropagation();
     openMenu({ x: e.clientX, y: e.clientY }, items.length ? items : fallback);

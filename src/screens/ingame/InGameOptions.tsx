@@ -26,7 +26,7 @@ export function InGameOptions({ game, modId }: { game: GameId; modId: string }) 
         <div className="row live-opts">
           <Button size="sm" variant={showing ? "secondary" : "primary"} icon={showing ? "check" : "swap"} disabled={busy || showing} busy={busy}
             title={info.running ? t("Sends it to the game, which comes to the front for a moment") : t("Shows next time you start the game")}
-            onClick={() => void run(() => pickLive(game, g, me.slot))}>{showing ? t("Showing") : t("Show in game")}</Button>
+            onClick={() => void run(() => pickLive(game, g, me.slot, true))}>{showing ? t("Showing") : t("Show in game")}</Button>
           <Button size="sm" variant="ghost" icon="tools" onClick={() => go({ view: "tools", section: "ingame" })}
             title={t("All live characters in Tools")}>{t("View live skins")}</Button>
           <span className="grow" />

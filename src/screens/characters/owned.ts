@@ -56,19 +56,27 @@ async function change(game: GameId, names: string[], on: boolean): Promise<strin
 
 const count = (game: GameId, n: number) => charCount(game, n);
 
-/** Mark characters as owned or not, with Undo. The Owned button, menu check or tile mark shows it, so no toast. */
-export async function setOwned(game: GameId, names: string[], on: boolean) {
+/** Mark characters as owned or not, with Undo. The Owned button, menu check or tile mark shows it, so no toast unless
+ *  `say`: the caller's tile leaves the roster (it shows only owned ones). */
+export async function setOwned(game: GameId, names: string[], on: boolean, say = false) {
   try {
     const changed = await change(game, names, on);
     if (!changed.length) return;
-    const what = changed.length === 1 ? changed[0]! : count(game, changed.length);
-    record({ label: on ? t("Marked {what} as owned", { what }) : t("Marked {what} as not owned", { what }), undo: () => change(game, changed, !on), redo: () => change(game, changed, on) }, true);
+    const one = changed.length === 1;
+    const what = one ? changed[0]! : count(game, changed.length);
+    record({
+      label: on ? t("Marked {what} as owned", { what }) : t("Marked {what} as not owned", { what }),
+      // one names the character: the toast doesn't (several are counted, so the label says it)
+      brief: one ? (on ? t("Marked the character as owned") : t("Marked the character as not owned")) : undefined,
+      undo: () => change(game, changed, !on),
+      redo: () => change(game, changed, on),
+    }, !say);
   } catch (e) { toast(errorText(e), true); }
 }
 
-export async function toggleOwned(game: GameId, name: string) {
+export async function toggleOwned(game: GameId, name: string, say = false) {
   await load(game);
-  await setOwned(game, [name], !isOwned(game, name));
+  await setOwned(game, [name], !isOwned(game, name), say);
 }
 
 // ── importing ──

@@ -4,10 +4,13 @@ import type { MouseEvent } from "react";
 import { errorText, library, type GameId, type ModEntry } from "../../lib/api";
 import { t } from "../../lib/i18n";
 import { withoutKeys } from "../../lib/menuHints";
-import { go } from "../../lib/store";
+import { currentRoute, go } from "../../lib/store";
 import { menuFor, openMenu } from "../../ui/ContextMenu";
 import { toast } from "../../ui/toast";
 import { knownMod } from "../library/menus";
+
+/** On Mods' Problems tab the details open over the tab, so closing them goes back to the list. */
+const openTab = () => { const r = currentRoute(); return r.view === "library" && r.tab === "problems" ? "problems" : undefined; };
 
 export function ModLink({ game, modId, name, className }: { game: GameId | null; modId: string; name: string; className?: string }) {
   const onMenu = (e: MouseEvent<HTMLButtonElement>) => {
@@ -26,6 +29,6 @@ export function ModLink({ game, modId, name, className }: { game: GameId | null;
   };
   return (
     <button type="button" className={`tp-link${className ? ` ${className}` : ""}`} title={t("Open in Mods. Right-click for more")}
-      onClick={() => go({ view: "library", modId })} onContextMenu={onMenu}>{name}</button>
+      onClick={() => go({ view: "library", modId, tab: openTab() })} onContextMenu={onMenu}>{name}</button>
   );
 }

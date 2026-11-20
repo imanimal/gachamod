@@ -164,4 +164,7 @@
   .mi-readme-t { background: rgb(10 14 24 / .35); }
   .mi-key-row { border-bottom: 1px solid var(--line); }
   .pack-mod-img { border-radius: 3px 3px .8rem 3px; background: var(--r4); }
+
+  /* ── Settings and Tools pages: their panels have no fill, so the stars behind them are blurred ── */
+  .pg-page > .pg-body > .panel { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 }

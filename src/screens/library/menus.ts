@@ -8,11 +8,12 @@ import { charNoun } from "../../lib/games";
 import { holdMods, holdOn, holdsNow, releaseMods } from "../../lib/holds";
 import { portraitNow } from "../../lib/portraits";
 import { registerCommands, scoreCommand, type Command } from "../../lib/search";
-import { currentGame, go, onApp } from "../../lib/store";
+import { closeRoute, currentGame, currentRoute, go, onApp } from "../../lib/store";
+import { onCharacterPage } from "../../lib/here";
 import { held } from "../../lib/tauri";
 import { menuFor, registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { isOwned, toggleOwned } from "../characters/owned";
-import { characterNames, isCharHidden, setCharHidden } from "../characters/roster";
+import { characterNames, isCharHidden, rosterViewPref, setCharHidden } from "../characters/roster";
 import {
   cachedProfiles, checkForUpdates, combineMods, exportMods, fixForUpdate, getUpdate, keysOnlyOnScreen, onlyOnScreenFn, openDetails,
   openFolder, openOnGb, previewFromGb, resetPreview, setFavourite, setInProfile, setOn, setParent, trashMods, warmProfiles,
@@ -129,7 +130,10 @@ registerMenu("mod", ({ game, mod, selection }) => {
         : (many ? t("Turns them on and keeps the {n} other mods on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { n: beside.length })
           : t("Turns it on and keeps the {n} other mods on too, for mods that go together like a hair recolour and an outfit. Shift+click on a switch does the same", { n: beside.length })),
       onClick: () => void setOn(game, list, true, lastMods.get(game), undefined, true) },
-    !many && { label: t("Details"), icon: "info", keys: "Enter", onClick: () => openDetails(mod) },
+    // its details are open already: its GameBanana page in Browse, or closing them for a mod from elsewhere
+    !many && (currentRoute().modId !== mod.id ? { label: t("Details"), icon: "info", keys: "Enter", onClick: () => openDetails(mod) }
+      : mod.source ? { label: t("View in Browse"), icon: "browse", title: t("The mod's GameBanana page in Browse"), onClick: () => go({ view: "browse", modId: mod.source!.modId }) }
+      : { label: t("Close details"), icon: "x", onClick: () => closeRoute(["modId"]) }),
     !many && (mod.parts ?? 0) > 0 && { label: t("Parts"), icon: "layers", title: t("Folders inside it that turn on and off by themselves"), onClick: () => openDetails(mod, "parts") },
     !many && mod.hasKeys && { label: t("Toggles"), icon: "key", title: t("Change the mod's toggle keys or turn them off"), onClick: () => openDetails(mod, "keys") },
     !many && mod.conflicts > 0 && { label: t("Conflicts"), icon: "warn", title: t("Mods that change the same parts as this one, to pick which one wins"), onClick: () => openDetails(mod, "conflicts") },
@@ -140,8 +144,8 @@ registerMenu("mod", ({ game, mod, selection }) => {
         : t("Stops the game update warning until you install a newer version of it from its author. If that one is still broken, it warns again"),
       onClick: () => void holdMods(game, canWait, "update") },
     loud.length > 0 && { label: t("Ignore problems"), icon: "hide",
-      title: many ? t("Stops every warning about them: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back")
-        : t("Stops every warning about it: the red marks, the Problems filter and Tools. Conflicts are ignored on both sides. Show problems again brings them back"),
+      title: many ? t("Stops every warning about them: the red marks, the Problems tab and Tools. Conflicts are ignored on both sides. Show problems again brings them back")
+        : t("Stops every warning about it: the red marks, the Problems tab and Tools. Conflicts are ignored on both sides. Show problems again brings them back"),
       onClick: () => void holdMods(game, loud, "ignore") },
     heldList.length > 0 && { label: t("Show problems again"), icon: "eye",
       title: heldList.every((m) => holds[m.id]?.kind === "update") ? t("Stop waiting for an update and warn about it again now") : t("Warn about its problems again"),
@@ -178,7 +182,9 @@ registerMenu("mod", ({ game, mod, selection }) => {
 const togetherOk = new Map<GameId, boolean>();
 const readTogether = (game: GameId) => void settings.get(`${game}.oneSkin`).then((v) => togetherOk.set(game, v === "0"), () => {});
 
-registerMenu("character", ({ game, name }) => {
+/** A character's menu. `roster`: opened on its roster tile, which marking it as not owned can drop from view (the
+ *  roster shows only owned ones), so that says so with Undo. */
+export function characterMenu(game: GameId, name: string, roster = false): MenuEntry[] {
   const same = (m: ModEntry) => m.character?.toLowerCase() === name.toLowerCase();
   const mods = (lastMods.get(game) ?? []).filter(same);
   const known = lastMods.has(game);
@@ -195,29 +201,35 @@ registerMenu("character", ({ game, name }) => {
       const mod = all.find((m) => m.id === id);
       if (!mod) return;
       const offs = all.filter((m) => same(m) && !m.parent && m.enabled && m.id !== id).map((m) => m.id);
-      // the mod's switch shows it's on: the toast is for the outfits that went off
-      await changeStates(game, t("{name} wears {mod}", { name, mod: mod.name }), mod.enabled ? [] : [id], offs, all,
-        offs.length ? tn(offs.length, "Turned off {n} other mod for this character", "Turned off {n} other mods for this character") : null);
+      // the mod's switch shows it's on: the toast counts what else changed (the other outfits and their sub-mods)
+      await changeStates(game, t("{name} wears {mod}", { name, mod: mod.name }), mod.enabled ? [] : [id], offs, all, null, [id]);
     } catch (e) { toast(errorText(e), true); }
   };
   const outfits = mods.filter((m) => !m.parent).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
+  // on the character's page already: their mods in Mods, and from the Online tab, in Browse
+  const here = onCharacterPage(name);
   return [
     { header: name },
-    { label: t("Open page"), icon: "characters", onClick: () => go({ view: "characters", character: name }) },
-    { label: t("Find mods online"), icon: "browse", onClick: () => go({ view: "characters", character: name, tab: "online" }) },
+    here
+      ? { label: t("View in Mods"), icon: "mods", title: t("Opens Mods with only {name}'s mods", { name }), onClick: () => go({ view: "library", character: name }) }
+      : { label: t("Open page"), icon: "characters", onClick: () => go({ view: "characters", character: name }) },
+    here && currentRoute().tab === "online"
+      ? { label: t("View in Browse"), icon: "browse", title: t("Opens Browse with only {name}'s mods", { name }), onClick: () => go({ view: "browse", character: name }) }
+      : { label: t("Find mods online"), icon: "browse", onClick: () => go({ view: "characters", character: name, tab: "online" }) },
     "-",
     { label: t("Wear"), icon: "layers", disabled: known && !outfits.length, title: known && !outfits.length ? t("No mods for {name} yet", { name }) : t("Pick the mod {name} wears. The others turn off", { name }),
       items: outfits.slice(0, 40).map((m) => ({ label: m.name, checked: m.enabled, onClick: () => void wear(m.id) })) },
     togetherOk.get(game) && { label: t("Turn on all mods"), icon: "power", disabled: known && (!mods.length || mods.every((m) => m.enabled)), onClick: () => void forAll(true) },
     { label: t("Default outfit"), icon: "undo", disabled: known && !mods.some((m) => m.enabled), title: t("Turns off every mod for {name}", { name }), onClick: () => void forAll(false) },
     "-",
-    { label: t("Owned"), keys: "O", checked: isOwned(game, name), title: t("Owned ones show under Owned on the {page} page", { page: charNoun(game) }), onClick: () => void toggleOwned(game, name) },
+    { label: t("Owned"), keys: "O", checked: isOwned(game, name), title: t("Owned ones show under Owned on the {page} page", { page: charNoun(game) }), onClick: () => void toggleOwned(game, name, roster && !!rosterViewPref.get().owned && isOwned(game, name)) },
     { label: t("Set a picture"), icon: "image", title: t("A file, a link or one of {name}'s mod previews", { name }), onClick: () => askLib({ kind: "portrait", game, name }) },
     hidden
       ? { label: t("Show in the roster"), icon: "eye", onClick: () => setCharHidden(game, name, false) }
       : { label: t("Hide from the roster"), icon: "hide", onClick: () => setCharHidden(game, name, true) },
   ];
-});
+}
+registerMenu("character", ({ game, name }) => characterMenu(game, name));
 
 // ── global search ──
 

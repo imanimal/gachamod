@@ -148,7 +148,7 @@
   .menu-h { color: var(--text-3); font-style: italic; font-weight: 800; }
   .menu-c { color: var(--acc-ink); }
   .menu-i:hover:not(:disabled) :is(.menu-c, .menu-k, .menu-sub) { color: #0a0a0a; }
-  .qlink:hover { color: var(--acc-ink); }
+  .qlink:where(:not(.badge)):hover { color: var(--acc-ink); }
 
   /* ── the Play key: a lime capsule in a black housing ── */
   .play { gap: 4px; padding: 4px; border-radius: 999px; background: #0a0a0a; box-shadow: inset 0 0 0 2px #1e1e1e, 0 0 0 1.5px var(--rim), 0 3px 0 1px #000; }

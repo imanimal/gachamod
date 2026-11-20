@@ -182,10 +182,12 @@ fn not_set_up(id: &str, what: &str) -> Error {
 /// The game's Mods folder. Every area uses this. A missing one is made again only when its importer folder is still
 /// there with its d3dx.ini (a fresh loader install). Otherwise the folder was moved, deleted or sits on a drive that
 /// isn't plugged in, so this says so and keeps the saved path, instead of making an empty folder that reads as
-/// "no mods".
+/// "no mods". With no loader folder either, it names the loader folder like `importer_dir` does, so two calls that
+/// fail together show one toast: installing the loader gives the game its Mods folder too.
 pub fn mods_dir(db: &Db, id: &str) -> Result<PathBuf> {
     let p = paths(db, id)?;
-    let dir = p.mods_dir.as_deref().map(PathBuf::from).ok_or_else(|| not_set_up(id, "Mods folder"))?;
+    let missing = if p.importer_dir.is_none() { "model importer folder" } else { "Mods folder" };
+    let dir = p.mods_dir.as_deref().map(PathBuf::from).ok_or_else(|| not_set_up(id, missing))?;
     if dir.is_dir() { return Ok(dir); }
     if loader_there(&dir) && std::fs::create_dir(&dir).is_ok() { return Ok(dir); }
     Err(mods_gone(id, &dir))

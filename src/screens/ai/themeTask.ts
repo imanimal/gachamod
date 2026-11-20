@@ -5,17 +5,21 @@
 // base, scheme, tokens, layout) and a css block with the stylesheet; a long stylesheet can come in several css blocks
 // over several answers, pasted one after another. lib/theme.ts validateCustomTheme checks it all and scopeCss scopes
 // every rule to the theme, so the chatbot writes plain `.btn { }` rules. Anything that can't be used is listed as
-// skipped. Applying saves the theme and uses it for the current game, with Undo.
+// skipped. Applying saves the theme and uses it for the current game, with Undo. When the chatbot answers in the app,
+// it also gets gachamod's real stylesheets, the screen's HTML and the custom theme showing (context.ts themeFiles).
+// "theme-edit" changes one of the user's custom themes: the prompt carries it as it is, and Apply saves over it (a
+// package's theme goes in a copy, since the package would bring the old one back).
 // Owner: SETTINGS/AI area.
 import type { AiTask } from "../../lib/ai";
 import { currentGame } from "../../lib/store";
-import { CUSTOM_CSS_MAX, THEMES, THEME_TOKENS, themeState, validateCustomTheme } from "../../lib/theme";
+import { CUSTOM_CSS_MAX, THEMES, THEME_TOKENS, customThemesPref, themeState, validateCustomTheme, type CustomTheme } from "../../lib/theme";
 import { THEME_ANATOMY, anatomyText } from "../../lib/theme-anatomy";
 import { gameName } from "../../lib/games";
 import { english, t, tn } from "../../lib/i18n";
 import { saveTheme } from "../settings/customThemes";
 import { ReplyError } from "./reply";
 import type { Built, TaskInput } from "./tasks";
+import { themeFiles } from "./context";
 import { CUT_NOTE, parseThemeReply } from "./themeReply";
 
 const FIELDS = ["name", "base", "scheme", "tokens", "layout", "css"];
@@ -39,8 +43,22 @@ function fontList(): string {
   }).join(", ");
 }
 
-export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Built> {
+/** The custom theme a "theme-edit" task changes, if it's still saved. */
+export function themeToEdit(task: AiTask): CustomTheme | undefined {
+  const raw = task.theme ? customThemesPref.get().find((x) => x.id === task.theme) : undefined;
+  return raw ? validateCustomTheme(raw).theme ?? undefined : undefined;
+}
+
+/** A custom theme as the prompt shows it: its json without the stylesheet, then the stylesheet in a css block. */
+function themeBlocks(th: CustomTheme): string {
+  const json = JSON.stringify({ name: th.name, base: th.base, scheme: th.scheme, tokens: th.tokens, layout: th.layout }, null, 2);
+  return `\`\`\`json\n${json}\n\`\`\`` + (th.css ? `\n\`\`\`css\n${th.css}\n\`\`\`` : "");
+}
+
+export async function buildThemeTask(task: AiTask, input: TaskInput): Promise<Built> {
   const want = input.text.trim();
+  const editing = task.kind === "theme-edit" ? themeToEdit(task) : undefined;
+  if (task.kind === "theme-edit" && !editing) throw new Error(t("That theme isn't saved any more."));
   const now = themeState();
   const nowName = english(THEMES.find((x) => x.id === now.id)?.name ?? now.id);
   const game = currentGame();
@@ -54,9 +72,22 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
   }).join("\n");
   const gameAccent = value("--game-accent");
   const fonts = fontList();
+  const files = input.rich ? await themeFiles(editing) : undefined;
+  const showing = !!files?.some((f) => f.path === "app/current-theme.json");
+  const reference = files && [
+    "Reference files come with this request: gachamod's own stylesheets and the screen showing now. Read the ones you need before writing CSS, and take selectors from them instead of guessing:",
+    "- styles/base.css: the token names and text defaults. styles/themes/default.css: the Default look's token values, dark and light.",
+    "- styles/kit.css: every kit part (buttons, fields, chips, toggles, panels, dialogs, menus, toasts) as the Default look draws it. styles/shell.css: the title bar, sidebar, page header and command palette.",
+    "- screens/<screen>/<screen>.css: each screen's own layout (library is the Mods screen, browse is GameBanana, settings is Settings and Tools).",
+    "- styles/themes/<game>*.css: the built-in game themes (zzz, gi, hsr, ww, ef, each split into kit, shell and screens files). They are complete examples of the depth asked for here: read one or two before you start.",
+    "- app/screen.html: the HTML of the screen showing now, to see how the classes nest.",
+    showing ? "- app/current-theme.json: the custom theme showing now. If the description asks to change it, start from it and keep what the description doesn't mention." : "",
+  ].filter(Boolean).join("\n");
 
   const prompt = [
-    `Make a theme for gachamod, a Windows app that manages game mods, from this description: "${want}".`,
+    editing
+      ? `Change the theme "${editing.name}" for gachamod, a Windows app that manages game mods, as asked: "${want}". The theme as it is now is at the end. Keep everything the request doesn't mention, and reply with the whole theme (every field and the whole stylesheet), not only the changes.`
+      : `Make a theme for gachamod, a Windows app that manages game mods, from this description: "${want}".`,
     "How themes work here: a theme is a base theme, token values, a layout and a stylesheet. The built-in game themes are 60 to 100 KB of CSS each. They define their own materials as custom properties (surfaces, ink, rims, textures made from gradients or inline SVG) and then restyle every part with them: buttons, toggles, chips, tabs, fields, panels, cards, dialogs, menus, toasts, the title bar, the sidebar, page headers, each screen, decoration and motion. Work at that depth. When the description names a style, a material, a game or a mood, give every part in the map below a deliberate look in that style, not just new colours. A small request (\"a pink accent\") only needs tokens.",
     `"base" is the built-in theme it sits on:\n${THEMES.map((x) => `${x.id}: ${x.look}`).join("\n")}\n` +
       `Use "default" unless the description asks for one of those games' looks. The game themes keep drawing their own menus (shapes, textures) under yours, so your CSS would have to override them.`,
@@ -87,14 +118,21 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
       `- At most ${CUSTOM_CSS_MAX.toLocaleString("en-US")} characters.`,
     ].join("\n"),
     `Parts of the window:\n${anatomyText()}`,
+    reference ?? "",
+    editing ? `The theme "${editing.name}" as it is now:\n${themeBlocks(editing)}` : "",
     `Reply with a json code block, then a css code block with the whole stylesheet, and nothing after them. "scheme" is dark, light or system. "layout" may set density (compact, cozy, roomy), sidebar (left, right), nav (list, grid), buttons (both, icons, text), only what's asked. If you run out of room, end the css block after a complete rule and say so; when asked to go on, put the rest in a new css block.`,
     "```json\n" + `{"name":"Navy and gold","base":"default","scheme":"dark","tokens":{"--bg":"#0b1222","--surface":"#121b30","--accent":"#d8b25a","--on-accent":"#1a1408","--radius":"3px","--radius-sm":"2px"},"layout":{"density":"compact"}}` + "\n```",
     "```css\n:root { --gilt: color-mix(in srgb, var(--accent) 55%, transparent); }\n.panel { border: 1px solid var(--gilt); }\n```",
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 
   return {
     prompt,
-    shares: [t("What you typed"), t("The theme settings gachamod supports, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)")],
+    files,
+    shares: files
+      ? [t("What you typed"), t("The theme settings gachamod supports and the colours of the theme showing now"), t("gachamod's stylesheets, and the screen showing now as HTML with its text"),
+          ...(editing ? [t("The theme {name} as it is now", { name: editing.name })] : showing ? [t("The custom theme showing now")] : [])]
+      : [t("What you typed"), t("The theme settings gachamod supports, the colours of the theme showing now and the names of the window's parts (nothing about your mods or files)"),
+          ...(editing ? [t("The theme {name} as it is now", { name: editing.name })] : [])],
     parse: parseThemeReply,
     read(parsed) {
       const { theme: reply, cut } = parsed as ReturnType<typeof parseThemeReply>;
@@ -108,9 +146,9 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
       const lay = Object.entries(theme.layout);
       const reach = theme.css ? partsStyled(theme.css) : null;
       return {
-        summary: t("{name}, on {base}", { name: theme.name, base }),
+        summary: editing ? t("Changes to {name}, on {base}", { name: editing.name, base }) : t("{name}, on {base}", { name: theme.name, base }),
         rows: [
-          ...(Object.keys(theme.tokens).length ? [{ title: t("Colours and sizes"), lines: Object.entries(theme.tokens).map(([k, v]) => ({ label: k, after: v })) }] : []),
+          ...(Object.keys(theme.tokens).length ? [{ title: t("Colours and sizes"), lines: Object.entries(theme.tokens).map(([k, v]) => ({ label: k, before: editing ? editing.tokens[k] ?? null : undefined, after: v })) }] : []),
           ...(lay.length ? [{ title: t("Layout"), lines: lay.map(([k, v]) => ({ label: k, after: String(v) })) }] : []),
           ...(theme.css && reach ? [{
             title: t("Stylesheet"),
@@ -126,7 +164,12 @@ export async function buildThemeTask(_t: AiTask, input: TaskInput): Promise<Buil
         text: [],
         links: [],
         apply: async () => {
-          const saved = await saveTheme(theme, true, game);
+          // the user's own theme is saved over, keeping where it's picked; a package's goes in a new copy
+          if (editing && !editing.pkg) {
+            const saved = await saveTheme({ ...theme, id: editing.id }, false, game, true);
+            return [t("Saved the changes to {name}", { name: saved.name })];
+          }
+          const saved = await saveTheme(theme, true, game, true);
           return [t("Saved the theme {name}", { name: saved.name }), game ? t("Using it for {game}. Change it in Settings, Appearance", { game: gameName(game) }) : t("Pick it for a game in Settings, Custom themes")];
         },
       };

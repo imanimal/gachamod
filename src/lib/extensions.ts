@@ -4,13 +4,13 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { dialogs, errorText, extensions as api, settings, shell, type ExtInstallResult, type ExtRepo, type IndexEntry, type InstalledExt, type Packed } from "./api";
 import { DEFAULT_EXT_SOURCE } from "./api/extensions";
-import { record, undo } from "./history";
+import { linkToast, record, undo } from "./history";
 import { currentGame } from "./store";
 import { accountState } from "./account";
 import { applyCustomTheme, customThemesPref, setThemePick, themePick, validateCustomTheme, type CustomTheme } from "./theme";
 import { toast } from "../ui/toast";
 import { gameName } from "./games";
-import { t } from "./i18n";
+import { t, tn } from "./i18n";
 import { note as noteUsage } from "./telemetry";
 
 function store<T>(initial: T) {
@@ -163,17 +163,14 @@ function useThemeAction(id: string) {
 
 const isTheme = (e: Pick<InstalledExt, "kind">) => e.kind === "theme";
 
-/** Record an install or update: Undo puts back what was there before (or removes it), Redo installs it again. A theme
- *  package's toast also offers to use it. `brief` is the toast's words, without the name. `quiet` records it without a
- *  toast, for "Update all", which sums them up in one. */
-function recordInstall(r: ExtInstallResult, label: string, brief: string, quiet = false) {
+interface Step { undo: () => Promise<void>; redo: () => Promise<void> }
+
+/** An install's Undo and Redo: Undo puts back what was there before (or removes it), Redo installs it again. */
+function installStep(r: ExtInstallResult): Step {
   const id = r.extension.id;
   let back = r.replaced;
   let fwd: string | null = null;
-  const use = quiet ? undefined : useThemeAction(id);
-  const entry = record({
-    label,
-    brief,
+  return {
     undo: async () => {
       if (back) fwd = (await api.restore(back)).replaced;
       else fwd = await api.remove(id);
@@ -183,12 +180,23 @@ function recordInstall(r: ExtInstallResult, label: string, brief: string, quiet 
       if (fwd) back = (await api.restore(fwd)).replaced;
       await after(id);
     },
-  }, quiet || !!use);
-  if (use) toast(t("{label}.", { label: brief }), false, use, { label: t("Undo"), run: () => void undo(entry) });
+  };
 }
 
-/** Install or update a listed package. `quiet` leaves out the toast (each one is still on the undo list). */
-export async function installListed(p: Listed, quiet = false): Promise<boolean> {
+/** Record an install or update. A theme package's toast also offers to use it. `brief` is the toast's words, without
+ *  the name. */
+function recordInstall(r: ExtInstallResult, label: string, brief: string) {
+  const use = useThemeAction(r.extension.id);
+  const entry = record({ label, brief, ...installStep(r) }, !!use);
+  if (!use) return;
+  // the toast's Undo is the entry's: undoing from anywhere turns this toast into Redo
+  let tid = 0;
+  tid = toast(t("{label}.", { label: brief }), false, use, { label: t("Undo"), run: () => void undo(entry, tid) });
+  linkToast(entry, tid);
+}
+
+/** Install or update a listed package and say what changed. Null when it failed (the error is toasted). */
+async function installOne(p: Listed): Promise<{ r: ExtInstallResult; verb: string; brief: string } | null> {
   const had = installed.get()?.find((e) => e.id === p.id);
   try {
     const r = await api.install(p.source, p);
@@ -200,9 +208,33 @@ export async function installListed(p: Listed, quiet = false): Promise<boolean> 
         ? [t("Updated {name} to {version}", { name: p.name, version: p.version }), theme ? t("Updated the theme") : t("Updated the extension")]
         : [t("Reinstalled {name}", { name: p.name }), theme ? t("Reinstalled the theme") : t("Reinstalled the extension")])
       : [t("Installed {name}", { name: p.name }), theme ? t("Installed the theme") : t("Installed the extension")];
-    recordInstall(r, verb, brief, quiet);
-    return true;
-  } catch (e) { toast(errorText(e), true); return false; }
+    return { r, verb, brief };
+  } catch (e) { toast(errorText(e), true); return null; }
+}
+
+/** Install or update a listed package. */
+export async function installListed(p: Listed): Promise<boolean> {
+  const done = await installOne(p);
+  if (done) recordInstall(done.r, done.verb, done.brief);
+  return !!done;
+}
+
+/** "Update all": update these packages as one Undo step, with one toast that counts them. Resolves to how many
+ *  updated. */
+export async function updatePackages(list: Listed[]): Promise<number> {
+  const steps: Step[] = [];
+  for (const p of list) {
+    const done = await installOne(p);
+    if (done) steps.push(installStep(done.r));
+  }
+  if (steps.length) {
+    record({
+      label: tn(steps.length, "Updated {n} package", "Updated {n} packages"),
+      undo: async () => { for (const s of [...steps].reverse()) await s.undo(); },
+      redo: async () => { for (const s of steps) await s.redo(); },
+    });
+  }
+  return steps.length;
 }
 
 /** Install a package .zip, or a copy of a package folder (`folder`). */

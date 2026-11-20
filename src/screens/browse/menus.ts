@@ -2,7 +2,8 @@
 // Registered once, when the app loads OnlineOverlays. Owner: BROWSE area.
 import type { GbCard } from "../../lib/gamebanana";
 import { creatorOf, hideMod, hiddenModsPref, nsfwPref, setNsfw, type NsfwMode } from "../../lib/prefs";
-import { allGames, go, goIn } from "../../lib/store";
+import { allGames, currentRoute, go, goIn } from "../../lib/store";
+import { onCharacterPage } from "../../lib/here";
 import { registerMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { copyText, flagCreator, installLatest, openCreator, openExternal, wantFiles, withCreator } from "./actions";
 import { setOn } from "../library/actions";
@@ -21,7 +22,7 @@ export const nsfwTip = (v: NsfwMode) => NSFW.find((x) => x[0] === v)![2];
 /** The adult mode switch as menu items (checked on the current one). */
 export function nsfwItems(): MenuEntry[] {
   const cur = nsfwPref.get();
-  return NSFW.map(([v, label]) => ({ label, title: nsfwTip(v), checked: cur === v, onClick: () => setNsfw(v) }));
+  return NSFW.map(([v, label]) => ({ label, title: nsfwTip(v), checked: cur === v, onClick: () => setNsfw(v, true) }));
 }
 
 /** A creator's items: their page, follow, favourite, prioritize, block. The creator page's buttons use the same names.
@@ -31,8 +32,13 @@ export function nsfwItems(): MenuEntry[] {
 export function creatorItems(c: { id?: number | null; name: string; avatar?: string | null; modId?: number | null }, opts: { gone?: boolean; uber?: boolean; page?: boolean } = {}): MenuEntry[] {
   const f = creatorOf(c.id);
   const say = !opts.page;
+  const here = currentRoute();
+  // on their page already: the mods of theirs you have, in Mods
+  const onPage = opts.page || (here.view === "browse" && !!c.id && here.user === c.id);
   return [
-    { label: t("View creator"), icon: "user", title: t("Their mods in this game first, then other games"), onClick: () => void withCreator(c, (r) => openCreator(r.id)) },
+    onPage
+      ? { label: t("View in Mods"), icon: "mods", title: t("Searches your mods for {name}", { name: c.name }), onClick: () => go({ view: "library", search: c.name }) }
+      : { label: t("View creator"), icon: "user", title: t("Their mods in this game first, then other games"), onClick: () => void withCreator(c, (r) => openCreator(r.id)) },
     "-",
     opts.gone && !f?.sub ? null : { label: t("Follow"), icon: "feed", checked: !!f?.sub, title: t("Their new mods show on Home"), onClick: () => flagCreator(c, "sub", !f?.sub, say) },
     { label: t("Favourite"), icon: "star", checked: !!f?.fav, title: t("Listed first among your creators"), onClick: () => flagCreator(c, "fav", !f?.fav, say) },
@@ -73,7 +79,10 @@ export function gbModItems(game: Parameters<typeof libIndexNow>[0], card: GbCard
     foreign || inDrawer ? null : { label: t("Choose a file"), icon: "file", onClick: () => { wantFiles(); openGbMod(card.id); } },
     inDrawer ? null : { label: t("Open details"), icon: "info", onClick: () => openGbMod(card.id) },
     "-",
-    card.character ? { label: t("{name}'s page", { name: card.character }), icon: "characters", onClick: () => go({ view: "characters", character: card.character! }) }
+    // on the character's page already (its Online tab lists these): their mods in Browse
+    card.character && onCharacterPage(card.character)
+      ? { label: t("View in Browse"), icon: "browse", title: t("Opens Browse with only {name}'s mods", { name: card.character }), onClick: () => go({ view: "browse", character: card.character! }) }
+    : card.character ? { label: t("{name}'s page", { name: card.character }), icon: "characters", onClick: () => go({ view: "characters", character: card.character! }) }
       : card.category ? { label: t("Browse {name} mods", { name: card.category.name }), icon: "browse", onClick: () => { openWithFilters(game, { category: card.category!, character: null }); go({ view: "browse" }); } }
       : null,
     c ? { label: c.name, img: c.avatar, icon: "user", items: creatorItems({ ...c, modId: card.id }) } : null,

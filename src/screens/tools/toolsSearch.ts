@@ -20,6 +20,8 @@ export const TOOL_PAGES: PageInfo[] = [
     keywords: "share and move export import" },
   { id: "makers", label: t("Mod makers"), icon: "code", tip: t("Reloading mods in game, the shader cache, 3DMigoto's files, log and switches, and looking up a hash"),
     keywords: "developer dev tools modding 3dmigoto shaders hashes" },
+  { id: "ai", label: t("AI helper"), icon: "ai", tip: t("Which chatbot helps, what it may do, and whether its buttons show"),
+    keywords: "ai chatbot assistant helper bot" },
 ];
 
 /** The panels on those pages, in order. Labels are the panels' titles. */
@@ -35,6 +37,7 @@ export const TOOL_SECTIONS: SectionInfo[] = [
   { id: "dev", page: "makers", label: t("Files and logs"), icon: "bug", keywords: "shader cache clear frame dumps frameanalysis log d3dx ini d3dx_user wipe reload loader folder shaderfixes 3dmigoto saved options" },
   { id: "migoto", page: "makers", label: t("Mod maker switches"), icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers" },
   { id: "hash", page: "makers", label: t("Find a hash"), icon: "search", keywords: "hash lookup search which mod uses texture buffer ib vb" },
+  { id: "ai", page: "ai", label: t("AI helper"), icon: "ai", keywords: "ai chatbot chatgpt claude gemini copilot grok gpt llm assistant make a theme tidy mod names set characters mod ideas" },
 ];
 
 /** The page a panel is on, for a route to one that isn't shown. */

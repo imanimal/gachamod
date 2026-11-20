@@ -1,6 +1,7 @@
 // The "tools" nav badge: enabled-mod conflicts, problems and mods a game update broke, for the current game, that
 // haven't been looked at yet. The overlays and the Tools panels each report the part they loaded, as one key per
-// conflict, problem or broken mod. A Tools page marks only what it lists as seen, and so does the mod a key is about,
+// conflict, problem or broken mod. A Tools page marks only what it lists as seen (Mods' Problems tab lists all of
+// it), and so does the mod a key is about,
 // so the badge is only about what is new. A problem that can't be fixed doesn't sit there forever. The Tools page
 // list shows each page's own share of the count. Owner: MODTOOLS area.
 import { useSyncExternalStore } from "react";
@@ -68,6 +69,8 @@ export function setToolsPage(game: GameId, page: string | null) {
   toolsPage = page;
   if (page) markToolsSeen(game, page);
 }
+/** Mods' Problems tab is showing. It lists everything the badge counts, so all of it has been seen. */
+export const markProblemsSeen = (game: GameId) => markSeen(game, () => true);
 /** A mod's details are open: its problems, conflicts and game update breakage have been seen. */
 export const markModSeen = (game: GameId, modId: string) =>
   markSeen(game, (k) => (k.startsWith("c|") ? k.slice(2).split("+").includes(modId) : k.split("|")[1] === modId));
@@ -82,6 +85,7 @@ export function setToolsCount(game: GameId, part: Part, keys: string[]) {
     const r = currentRoute();
     // looking at it right now
     if (r.view === "tools") markToolsSeen(game);
+    else if (r.view === "library" && r.tab === "problems") markProblemsSeen(game);
     else if ("modId" in r && typeof r.modId === "string") markModSeen(game, r.modId);
     show();
   });
@@ -104,6 +108,21 @@ export async function ignoreConflict(game: GameId, ids: string[], names: string[
     label: on ? t("Ignored the conflict between {names}", { names: oxford(names) }) : t("Stopped ignoring {names}", { names: oxford(names) }),
     brief: on ? t("Ignored the conflict") : t("Showing the conflict again"),
     undo: () => set(!on), redo: () => set(on),
+  });
+}
+
+/** Ignore several conflicts at once (each is the ids of its mods), as one Undo step. */
+export async function ignoreConflicts(game: GameId, groups: string[][]) {
+  if (!groups.length) return;
+  const set = async (v: boolean) => {
+    for (const ids of groups) await modtools.ignoreConflict(game, ids, v);
+    emitApp({ type: "library-refresh", game });
+  };
+  await set(true);
+  record({
+    label: tn(groups.length, "Ignored {n} conflict", "Ignored {n} conflicts"),
+    brief: t("Ignored the conflicts"),
+    undo: () => set(false), redo: () => set(true),
   });
 }
 

@@ -3,9 +3,10 @@
 // Owner: BROWSE area.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, type GameId } from "../../lib/api";
-import { filterHq, isAbort, listByCreators, listMods, useCharacterListOrNull, type GbCard, type GbSort } from "../../lib/gamebanana";
+import { filterHq, isAbort, listByCreators, listMods, modCards, useCharacterListOrNull, type GbCard, type GbSort } from "../../lib/gamebanana";
 import { useCreators, useHiddenMods, useNsfw } from "../../lib/prefs";
 import { recommend } from "../../lib/recommend";
+import { isNew, useModSubs } from "../../lib/subscriptions";
 import { go, useGames } from "../../lib/store";
 import { Button, IconButton, Waiting } from "../../ui/kit";
 import { CardSkeleton, ModCard } from "./ModCard";
@@ -23,6 +24,8 @@ export interface GbStripQuery {
   hq?: boolean;
   /** Only creators the user follows. */
   followed?: boolean;
+  /** The mods the user subscribed to, the ones with an update first (lib/subscriptions.ts). */
+  subscribed?: boolean;
   character?: string;
 }
 
@@ -46,6 +49,10 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
   const subIds = useMemo(() => Object.values(creators).filter((c) => (c.sub || c.prio) && !c.blocked).map((c) => c.id).sort((a, b) => a - b), [creators]);
   const prio = useMemo(() => new Set(Object.values(creators).filter((c) => c.prio).map((c) => c.id)), [creators]);
   const subKey = query.followed ? subIds.join(",") : "";
+  const modSubs = useModSubs();
+  const mine = useMemo(() => Object.values(modSubs).filter((s) => s.game === null || s.game === gs?.gamebananaId)
+    .sort((a, b) => Number(isNew(b)) - Number(isNew(a)) || b.updated - a.updated), [modSubs, gs?.gamebananaId]);
+  const modKey = query.subscribed ? mine.map((s) => s.id).join(",") : "";
 
   useEffect(() => {
     if (!gs || waitChars) return;
@@ -55,7 +62,9 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
     (async () => {
       const base = { gbGameId: gs.gamebananaId, sort: sort === "foryou" ? "newest" as const : sort, categoryId: charId, search: query.character && !charId ? query.character : undefined, signal };
       let out: GbCard[] = [];
-      if (sort === "foryou") {
+      if (query.subscribed) {
+        out = (await modCards(mine.map((s) => s.id), signal)).filter((m) => !m.game || m.game.id === gs.gamebananaId);
+      } else if (sort === "foryou") {
         out = await recommend(game, { limit: COUNT * 2, signal });
         if (query.character) out = out.filter((m) => m.character?.toLowerCase() === query.character!.toLowerCase());
         if (query.followed) out = out.filter((m) => m.submitter && subIds.includes(m.submitter.id));
@@ -75,7 +84,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
     })().catch((e) => { if (!signal.aborted && !isAbort(e)) setError(errorText(e)); });
     return () => c.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gs?.gamebananaId, sort, charId, query.character, query.followed, query.hq, subKey, waitChars, attempt]);
+  }, [gs?.gamebananaId, sort, charId, query.character, query.followed, query.hq, query.subscribed, subKey, modKey, waitChars, attempt]);
 
   const shown = (items ?? []).filter((m) => !(m.submitter && creators[String(m.submitter.id)]?.blocked) && !hidden.includes(m.id) && !(nsfw === "hide" && m.nsfw)).slice(0, COUNT);
   const row = useRef<HTMLDivElement>(null);
@@ -98,7 +107,7 @@ export function GbStrip({ game, title, query, more }: { game: GameId; title: str
           <IconButton size="sm" icon="right" label={t("Scroll right")} disabled={!right} onClick={() => page(1)} />
         </>}
         <ShowAll open={all} onToggle={toggleAll} fits={!items || (!left && !right)} label={t("Show all {n} here", { n: shown.length })} />
-        <Button size="sm" variant="ghost" iconRight="chevron" onClick={seeAll} title={t("Open these in Browse")}>{t("See all")}</Button>
+        {!query.subscribed && <Button size="sm" variant="ghost" iconRight="chevron" onClick={seeAll} title={t("Open these in Browse")}>{t("See all")}</Button>}
       </header>
       {error ? (
         <div className="gb-strip-msg hint">{tx("Couldn't load GameBanana. {retry}", { retry: <button type="button" className="link-btn" onClick={() => setAttempt((a) => a + 1)}>{t("Try again")}</button> })}</div>

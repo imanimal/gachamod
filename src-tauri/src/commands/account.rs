@@ -280,6 +280,15 @@ pub async fn gb_content_settings(app: AppHandle, st: State<'_, AppState>) -> Res
     check(&app, &st, r)
 }
 
+/// The mods the signed-in member subscribes to on GameBanana. Read only.
+#[tauri::command]
+pub async fn gb_subscribed_mods(app: AppHandle, st: State<'_, AppState>) -> Result<Vec<acc::SubscribedMod>> {
+    let c = cookie(&st)?;
+    let Some(me) = state_of(&st).user else { return Err(Error::Invalid(acc::SIGNED_OUT.into())) };
+    let r = acc::subscribed_mods(&st.http, &c, me.id).await;
+    check(&app, &st, r)
+}
+
 /// The creators the signed-in member follows on GameBanana.
 #[tauri::command]
 pub async fn gb_following(app: AppHandle, st: State<'_, AppState>) -> Result<Vec<GbUser>> {

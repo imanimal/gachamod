@@ -20,6 +20,9 @@ http://localhost:1420) so screens can be built without Tauri.
   item vanishes, other mods turn off, files move, something changes on GameBanana. Toast text never lists names
   ("Hid the mod from Browse"); a record's `brief` holds those words and its `label` keeps the names for the undo list.
 - Anything unclear gets a hover tip (`title`). Icon-only buttons always have one (`IconButton` takes `label`).
+- A right-click menu never offers the page that's already showing. That entry becomes its counterpart: Settings and
+  Tools, Mods and Browse, a character's page and their mods in Mods, a profile's page and All profiles, Downloads and
+  Browse, open details and the mod's page in Browse. `lib/here.ts` says what's showing.
 - Every action works with mouse and keyboard. Lists and grids are reachable with Tab and arrow keys; the gamepad
   helper moves focus between focusable elements, so use real `<button>`s.
 - Consistency: every screen starts with `PageHeader`, uses kit components and kit classes, and only theme tokens for
@@ -85,7 +88,7 @@ Cargo.toml dependencies: add a crate to `crates/gacha-core/Cargo.toml` with Edit
 - Nav badges: `setBadge(view, { count, tone })`. LIBRARY sets "library" to the number of mods with updates. ONLINE
   sets "downloads" (running: tone "run"; finished with failures: tone "bad"). MODTOOLS sets "tools" to the number of
   enabled-mod conflicts plus broken problems in mods that are on (tone "bad"). Warnings, notes, mods that are off and
-  problems the user ignored don't count.
+  problems the user ignored don't count. Mods' Problems tab shows the same count.
 - Current game: `useGame()`; switching games re-mounts the view (App keys `main.view` by game and view).
 - Settings: small strings via `settings.get/set` (UI) or `Db::setting` (Rust). Key names are dotted and per game when
   per game: `"<game>.oneSkin"`, `"ui.nsfw"`, `"player"` (JSON, from older versions; only extensions read it now), `"xxmi.root"`, `"<game>.launch"` (JSON).
@@ -252,7 +255,7 @@ Rust: `library.rs` and `profiles.rs` as stubbed. Notes:
 
 UI:
 - `screens/library/Library.tsx` (view "library", label "Mods"): header with search, filter chips (All, On, Off,
-  Updates, Favourites, Problems), a chip row that scrolls sideways (wheel, arrow buttons, arrow keys): types for mods
+  Updates, Favourites), a chip row that scrolls sideways (wheel, arrow buttons, arrow keys): types for mods
   without a character (UI, Tools and fixes, Weapons, Other, from `libKind` in library/kinds.ts: group folder and tags
   first, then the name, with RabbitFX, ORFix and similar libraries always tools; route `kind`), then characters with
   portraits (from characters.list), sort (Recently added, Name,
@@ -261,7 +264,7 @@ UI:
   through history.record), badges (Update, Conflict, Keys), a "..." menu (Open folder, Move to character, Export as
   .gachamod: `emitApp({type:"export-mods"})`, Open on GameBanana, Remove). Multi-select with Ctrl/Shift click and a
   bulk bar (Turn on, Turn off, Export, Remove). A mod's menu and its details set its problems aside (`lib/holds.ts`,
-  setting "problems.held"): "Ignore problems" hides every warning (red marks, the Problems filter, Tools, the nav badge)
+  setting "problems.held"): "Ignore problems" hides every warning (red marks, the Problems tab, Tools, the nav badge)
   and ignores its conflicts on both sides until "Show problems again"; "Wait for an update" hides the game update
   warning until the mod's file, version or install time changes, and its card says "Waiting for update". Tools >
   Fixes lists both under Muted, and its "Turn off and mute" waits for an update. "Rescan" button and an automatic scan when the screen opens if the
@@ -269,8 +272,14 @@ UI:
 - Mod drawer (`Drawer` from the kit) on card click: big preview, name (editable inline), character picker (combobox
   over characters), tags, notes, source link, version, size, folder path with Open, then `<ModInsides mod={mod} />`
   from `screens/modtools/ModInsides.tsx` (MODTOOLS fills it), then Remove. Opens directly for `route.modId`.
-- Installed and Trash (`route.tab` "archive"): a two-option switch, first in the header's action row, which always
-  has its own line under the title, so the switch stays in the same place on both pages. `screens/library/Archive.tsx` lists removed mods from `library.archive`. A
+- Installed, Problems and Trash (`route.tab` "problems", "archive"): a three-option switch, first in the header's
+  action row, which always has its own line under the title, so the switch stays in the same place on every page.
+- Problems (`screens/library/Problems.tsx`; the search finds it as "Problems", Mods › Problems): what's wrong with
+  the game's mods on one page. It shows the panels Tools has on its Problems and Conflicts pages (ProblemsPanel, FixesPanel,
+  ConflictsPanel), so both places share one state and each problem keeps its fix, Ignore and Keep this one buttons.
+  A mod's name opens its details over the tab (ModLink keeps the tab), so closing them goes back to the list.
+  Looking at the tab marks everything on the Tools badge as seen (`markProblemsSeen` in modtools/toolsBadge.ts), and
+  the tab shows that badge's count in red: new broken things only, never warnings. `screens/library/Archive.tsx` lists removed mods from `library.archive`. A
   mod whose files are still on the PC says "Files on PC" with Put back and Delete; once "trash.days" passes it says
   "Record only" (name, settings, GameBanana link, no files) with Download again and Forget. The page says plainly
   that the files are what goes after the set days, and the record stays.
@@ -991,11 +1000,13 @@ UI:
   `src-tauri/icons/quickstart.ico`), which runs `gachamod.exe gachamod://play`. The UI takes that link
   (`screens/home/quickstart.ts`): once the games are read it plays the game gachamod last had open, as Play does
   (`gachamod://play/zzz` plays that game) without showing gachamod's window (see Running in the background below).
-  Its icon is the last game's icon with quickstart's in the bottom right corner (`<data>/icons/quickstart-<game>-<time>.ico`,
-  made from `games::icon`; the plain `quickstart.ico` until a game's icon is known): the UI calls `shortcuts_follow`
-  on every game switch, which keeps the game in setting `quickstart.game` and writes the shortcut again only when the
-  icon or the file changed (`quickstart.iconStamp`). Each shown game can also have a quickstart of its own ("Zenless
-  Zone Zero quickstart.lnk", `gachamod://play/zzz`, the same badged icon). Settings, General, Desktop shortcuts has
+  Its icon is the last game's icon cut to gachamod's rounded tile, with a round quickstart badge (purple, play mark,
+  speed lines from 48 px) in a notch in the bottom right corner, drawn per size by `shortcuts/icon.rs` into
+  `<data>/icons/quickstart-<game>-<drawing>-<time>.ico` from `games::icon` (the plain `quickstart.ico` until a game's
+  icon is known). The UI calls `shortcuts_follow` on every game switch: it keeps the game in setting
+  `quickstart.game` and writes a quickstart shortcut again only when its icon or file changed (`quickstart.iconStamp`,
+  `quickstart.iconStamp.<game>`), so a new drawing reaches shortcuts made before. Each shown game can also have a
+  quickstart of its own ("Zenless Zone Zero quickstart.lnk", `gachamod://play/zzz`, the same icon). Settings, General, Desktop shortcuts has
   Open gachamod with quickstart (`quickstart.open`, off) to show the window too, and After playing (Stay in the tray
   or Quit gachamod), a second place for `app.background`. Setup asks for both and `hooks.nsh` makes quickstart's
   (`quickstartShortcut`); Settings, General has Desktop shortcuts with Add to desktop, Recreate and Remove, which write
@@ -1248,9 +1259,11 @@ Files: `screens/settings/*` (not AccountSection.tsx), `screens/tools/*` (not Fix
 
 `Tools.tsx` (view "tools"): pages like Settings (`settings/Paged.tsx`), a short list with no groups: "problems"
 (Problems: problems, "fixes" from FIXES), "conflicts" (conflicts, "key-clashes"), "ingame" (In-game menu, from
-INGAME: ingame, "keylist"), "packs" (Share and import: packs, "imm") and
-"makers" (Mod makers: "dev", "hash"). The pages and
-panels with their search words are in `toolsSearch.ts`. The panel ids still work as routes. A panel that renders
+INGAME: ingame, "keylist"), "packs" (Share and import: packs, "imm"),
+"makers" (Mod makers: "dev", "hash") and "ai" (AI helper: the same panel as Settings › AI helper, left out while AI
+is off). The pages and
+panels with their search words are in `toolsSearch.ts`. Mods › Problems shows the problems, fixes and conflicts
+panels too (see Library). The panel ids still work as routes. A panel that renders
 nothing (IMM when it isn't installed) is left out. Tools has no settings pages: launch options and 3DMigoto's
 switches are in Settings › Launch (see Settings), and the search above the page list finds them from Tools too.
 
@@ -1329,6 +1342,59 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
 (`chatgpt.com/?q=`), Claude (`claude.ai/new?q=`) and Grok (`grok.com/?q=`) get the prompt in the link when it fits
 (7000 characters); the rest open the site and the user pastes. The user pastes the answer back.
 
+A chat CLI on this PC skips the copying. Each one belongs to a chatbot on the same plan: Claude Code to Claude, Codex to
+ChatGPT, Antigravity (`agy`) and then Gemini CLI to Gemini (`ai_clis`, found on PATH and in the usual install folders,
+including `%LOCALAPPDATA%\agy\bin`). gachamod never installs one. Picking that chatbot asks its CLI whenever it's
+found; "Ask Claude Code on this PC" in Settings (`aiCliPref`, on by default, shown only when the CLI is found) turns
+that off to use the website. Chatbots whose CLI is found are listed first and picked by default when nothing else was
+chosen. The helper runs it headless in an empty folder (`%APPDATA%\app.gachamod.desktop\ai`) with the prompt on stdin,
+and the answer streams into the window (`ai-chunk` events), then reads like a pasted one. It answers on the plan the
+user signed in with: API-key variables are removed from its environment, so nothing is billed per use and nothing goes
+through a server. Claude Code runs Sonnet (or the model picked) with no tools, settings, hooks, MCP servers, slash commands or session, and
+the helper's rules as its whole system prompt. Antigravity has no system prompt flag, so the rules head the message,
+sent as one stream-json line with auto-update turned off. Stop (or closing the window) ends the run and its process
+tree; a run gives up after 10 minutes. A CLI that isn't signed in gets a Sign in button that opens it in a console
+window (`codex login` for Codex, plain `agy` for Antigravity, which opens Google's sign-in in the browser). Code:
+`crates/gacha-core/src/chat_cli.rs`, `src-tauri/src/commands/ai.rs`.
+
+Without a CLI, Gemini can still answer in the app with a free key from Google AI Studio ("Free Gemini key" in Settings
+and under the helper's chatbot picker, one state). The key is checked with Google before it's saved, stored encrypted
+for the Windows user (DPAPI, `<data>/ai/gemini.key`) and never sent back to the UI. With a key saved, Gemini is picked
+by default when no CLI is found and answers through `streamGenerateContent` on `gemini-flash-latest` (another Flash
+model from the model list if that one is gone), streaming like a CLI. Google's errors become the same problems: a
+rejected key, the free daily limit with its reset time, a refused prompt, busy servers. Free keys have a daily limit
+and Google may use what's sent to improve its models; the field says so. A CLI on this PC still wins over the key.
+Code: `crates/gacha-core/src/gemini_api.rs`, `crates/gacha-core/src/dpapi.rs`, `src/screens/ai/GeminiKey.tsx`.
+
+An answer that comes back in the app gets a longer prompt and reference files (`screens/ai/context.ts`, `TaskInput.rich`);
+a pasted one stays short. A theme gets every stylesheet in the app (loaded only then, as text, through
+`import.meta.glob`), the screen showing now as HTML cut down to its structure (no images, links or icon shapes, long
+lists cut, explicit words swapped while hiding is on) and the custom theme showing, if any. Mod jobs get a "draws"
+column (each mod's TextureOverride section names) and the GameBanana uploader, plus each mod's file list and its ini
+and text files (`ai_mod_files`, at most 6 MB of text for the whole job, less per mod when there are many). The keys job
+gets the whole inis next to its outline; a question with no mods picked, and mod ideas, get the whole library. Each run
+has its own folder under `<data>/ai`, deleted afterwards. Claude Code (`--tools Read,Glob,Grep`) and Gemini CLI (plan
+mode) read the files there with read-only tools; Codex, Antigravity and the Gemini key get as much as fits pasted after
+the request (300, 200 and 400 thousand characters), the rest named as left out. Only the CLI's last message is the
+answer, and the window says which file it's reading meanwhile (`ai-status`). Mod files are copies, so no chatbot ever
+works inside the Mods folder. Code: `crates/gacha-core/src/ai_files.rs`.
+
+Each tool that answers in the app has its own model and thinking level ("Model and thinking" under the helper's chatbot
+picker and in Settings > AI helper, one state in the `ai.run` setting, `screens/ai/RunOptions.tsx`). Claude Code takes
+`--model` (Sonnet by default, Opus, Haiku, Fable or a typed name) and `--effort` (low to max); Codex `-m` and
+`model_reasoning_effort`; Gemini CLI `-m` (auto, pro, flash, flash-lite or a name); the Gemini key a model name and a
+thinking level, sent as `thinkingLevel` (Gemini 3), then `thinkingBudget` (2.5), then without either when Google
+refuses one. Antigravity has neither option. A typed model name goes on the command line only when it looks like one.
+An older Claude Code that refuses `--effort` or `--thinking-display` is asked again without them.
+
+Under the answer, a closed line sums up the run ("Read 9 files, some at the same time, 41K tokens, 38s") and opens to
+the model, the most it held at once against its context window, tokens read (and how many came from the cache) and
+written (and how many were thinking), rounds and time, every step by round, and the thinking as it streams. Tool calls
+the model asked for together share a round (`ai-status` carries `round`). Thinking comes as `ai-think` events: Claude
+Code's summaries (`--thinking-display summarized`, since printed runs leave thinking out), Codex's reasoning items and
+Gemini's thought summaries (`includeThoughts`). Each tool reports different things, so a line shows only when its tool
+gave it. The window remembers for the session whether the details were open.
+
 - Every prompt asks for one ```json block in a fixed shape. `screens/ai/tasks.ts` reads it strictly: a reply that
   isn't that shape is refused with a plain reason; single entries that don't fit (an unknown mod number, a character
   the game doesn't have) are left out and listed. The window shows every change (before and after) before Apply.
@@ -1374,6 +1440,11 @@ Claude, Gemini, Copilot, Grok or another one with an optional web address), copi
   uses. `scopeCss` reads the CSS with the browser's parser and puts every rule under `:root[data-custom]`, so plain
   `.btn { }` rules apply only while that theme is on and win over its base. `lib/theme-anatomy.ts` is the map of
   parts a theme can style, used by the chatbot prompt and the editor; its test checks every class in it still exists.
+- Custom theme cards, in Theme and colours and in Custom themes, delete with their bin button, the Delete key or the
+  menu's last entry, with Undo. Games that used the theme go back to Match the game. A package's theme removes the
+  package. The editor's Edit as text box holds the settings as indented JSON and leaves the stylesheet to its own box;
+  it also reads one-line JSON with `css` inside, or settings followed by plain CSS (`settings/themeSource.ts`), and
+  keeps text that doesn't read, with the line to check, until it's fixed or reset.
 
 ## Extensions (EXTENSIONS)
 
@@ -1424,5 +1495,11 @@ so push that copy to the public repo when the docs change.
   starts more than a screen ahead.
 - Game switcher in the sidebar: the shown games' icons on one row; when they don't fit, the last slot is "+N",
   which opens the switch menu.
-- Wheel scrolling (`lib/smoothScroll.ts`): each notch of a mouse wheel glides over about 250 ms instead of jumping.
-  Touchpads and anything that handles the wheel itself are left alone; off when Smooth scrolling is off.
+- Wheel scrolling (`lib/smoothScroll.ts`), the same in every scrolling box of every screen: a wheel gesture stays
+  with the box it started on. Scrolling a page past a list or a row of cards keeps scrolling the page, also a notch
+  at a time with pauses under 1.5 s. The box under the pointer takes over once the pointer moves, after a longer
+  pause, on a click or key press, or when a drawer or window covers the box. A box that runs out of room keeps the
+  rest of a fast spin; after a 450 ms pause the wheel goes on to the box around it (not past
+  `overscroll-behavior: contain`). Rows marked `data-side-scroll` take an up-and-down wheel as left and right. Each
+  notch glides over about 250 ms instead of jumping (off when Smooth scrolling is off). Touchpads keep their own
+  scrolling except over sideways rows, and anything that handles the wheel itself is left alone.

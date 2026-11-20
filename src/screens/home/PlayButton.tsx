@@ -10,6 +10,7 @@ import { canInstallLoader, installLoaders, useSetup } from "../../lib/setup";
 import { toast } from "../../ui/toast";
 import { app as appApi, errorText, games, settings, xxmi, type GameState } from "../../lib/api";
 import { allGames, go, useGame } from "../../lib/store";
+import { showsPage } from "../../lib/here";
 import { HOLD, STUCK_MS } from "../../lib/activity";
 import { shuffleBeforePlay } from "../library/shuffle";
 import { setKickFixDone } from "../../lib/kickFix";
@@ -164,7 +165,10 @@ export function PlayButton({ big = false }: { big?: boolean }) {
     ...(game.xxmi ? [{ label: t("Open XXMI Launcher"), icon: "external" as const, onClick: () => {
       close(); xxmi.open().catch((e) => toast(errorText(e), true));
     } }] : []),
-    { label: t("Launch options"), icon: "sliders" as const, onClick: () => { close(); go({ view: "settings", section: "launch" }); } },
+    // on Settings' Launch page already: its counterpart, Tools
+    showsPage("settings", "launch")
+      ? { label: t("Tools"), icon: "tools" as const, hint: t("Problems, conflicts and the in-game menu"), onClick: () => { close(); go("tools"); } }
+      : { label: t("Launch options"), icon: "sliders" as const, onClick: () => { close(); go({ view: "settings", section: "launch" }); } },
   ];
 
   return (

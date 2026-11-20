@@ -218,17 +218,35 @@ function Menu({ game, state, opened, openTab }: { game: GameId; state: GameState
   };
   // Who is on screen each time the menu opens: first what is known, then the game's answer that comes in a moment
   // later, and the answers after it (the game saves who is on screen about a second after a swap) until the player
-  // moves in the menu. After that it stays, so characters don't move in the list under the player.
+  // moves in the menu. After that it stays, so characters don't move in the list under the player, with one
+  // exception: the player swapped characters in the game, so one character the game wasn't on before is alone on
+  // screen. Then the menu goes to them, unless a pick is on its way, a mod's details are open or a search is typed.
   const [seenNow, setSeenNow] = useState<Seen>({ here: [], lead: [] });
   const hereAt = useRef<{ opened: number; info: LiveInfo | null }>({ opened: -1, info: null });
+  /** The character the game was last sure of: alone on screen, or seen last with nobody on screen as the menu opened. */
+  const sure = useRef<string | null>(null);
   useEffect(() => {
     const h = hereAt.current;
-    const take = () => {
-      const next = onScreenNames(info);
-      setSeenNow((was) => (was.here.join("\n") === next.here.join("\n") && was.lead.join("\n") === next.lead.join("\n") ? was : next));
-    };
-    if (h.opened !== opened) { hereAt.current = { opened, info }; autoFocus.current = null; take(); return; }
-    if (info && info !== h.info && untouched()) { h.info = info; take(); }
+    const next = onScreenNames(info);
+    const take = () => setSeenNow((was) => (was.here.join("\n") === next.here.join("\n") && was.lead.join("\n") === next.lead.join("\n") ? was : next));
+    const alone = next.here.length === 1 ? next.here[0]! : null;
+    if (h.opened !== opened) {
+      hereAt.current = { opened, info };
+      autoFocus.current = null;
+      sure.current = alone ?? (next.here.length ? null : next.lead[0] ?? null);
+      take();
+      return;
+    }
+    if (!info || info === h.info) return;
+    const swapped = alone !== null && sure.current !== null && alone !== sure.current;
+    if (alone) sure.current = alone;
+    if (untouched()) { h.info = info; take(); return; }
+    if (!swapped || busy || detail || q.trim()) return;
+    h.info = info;
+    take();
+    setSel(null);
+    // the focus goes along, onto the new character's skin that shows
+    window.setTimeout(() => putFocus(root.current?.querySelector<HTMLElement>(".ov-pane .ov-tile.on, .ov-pane .ov-tile")), 80);
   }, [opened, info]); // eslint-disable-line react-hooks/exhaustive-deps
   const { here, lead } = seenNow;
   const hereKey = `${here.join("\n")}|${lead.join("\n")}`;

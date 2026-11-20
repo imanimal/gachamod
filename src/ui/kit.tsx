@@ -1,6 +1,6 @@
 // The UI kit: every screen builds from these, so the app looks and behaves the same everywhere and a theme only has
 // to style this list of classes (docs/spec.md, "UI kit"). Props are the contract; markup may gain decoration spans.
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type KeyboardEvent as KeyEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 import { leave } from "./motion";
@@ -138,18 +138,36 @@ export function SearchField({ value, onChange, placeholder = t("Search"), onEnte
 }
 
 /** A labelled text field. `multiline` makes a textarea. */
-export function TextField({ label, value, onChange, placeholder, hint, multiline, type = "text", mono, onBlur, autoFocus, disabled, rows = 3 }:
-  { label?: ReactNode; value: string; onChange: (v: string) => void; placeholder?: string; hint?: ReactNode; multiline?: boolean; type?: string; mono?: boolean; onBlur?: () => void; autoFocus?: boolean; disabled?: boolean; rows?: number }) {
+/** A text box. `suggest`: an example shown as the placeholder; while the box is empty, Tab or the Tab chip at its end
+ *  fills it in. */
+export function TextField({ label, value, onChange, placeholder, hint, multiline, type = "text", mono, onBlur, autoFocus, disabled, rows = 3, suggest }:
+  { label?: ReactNode; value: string; onChange: (v: string) => void; placeholder?: string; hint?: ReactNode; multiline?: boolean; type?: string; mono?: boolean; onBlur?: () => void; autoFocus?: boolean; disabled?: boolean; rows?: number; suggest?: string }) {
   // the hint sits outside the label, so it is read as the field's description and not as part of its name
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
-  const common = { id, value, placeholder, onBlur, autoFocus, disabled, spellCheck: !mono, "aria-describedby": hintId };
+  const box = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+  const offer = !!suggest && !value && !disabled;
+  const fill = () => {
+    onChange(suggest!);
+    // the caret goes after the example, ready to change it
+    requestAnimationFrame(() => { const el = box.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } });
+  };
+  const onKeyDown = (e: KeyEvent) => {
+    if (offer && e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.nativeEvent.isComposing) { e.preventDefault(); fill(); }
+  };
+  const common = { id, value, placeholder: suggest ?? placeholder, onBlur, autoFocus, disabled, spellCheck: !mono, "aria-describedby": hintId, ref: box, onKeyDown };
+  const field = multiline
+    ? <textarea {...common} rows={rows} onChange={(e) => onChange(e.target.value)} />
+    : <input {...common} type={type} onChange={(e) => onChange(e.target.value)} />;
   return (
     <div className={cx("field", mono && "mono")}>
       {label && <label className="field-l" htmlFor={id}>{label}</label>}
-      {multiline
-        ? <textarea {...common} rows={rows} onChange={(e) => onChange(e.target.value)} />
-        : <input {...common} type={type} onChange={(e) => onChange(e.target.value)} />}
+      {suggest ? (
+        <span className={cx("field-box", multiline && "multi", offer && "offer")}>
+          {field}
+          {offer && <button type="button" className="field-suggest" onClick={fill} title={t("Use this example (Tab)")} aria-label={t("Use the example: {text}", { text: suggest })}><kbd>Tab</kbd></button>}
+        </span>
+      ) : field}
       {hint && <span className="hint" id={hintId}>{hint}</span>}
     </div>
   );

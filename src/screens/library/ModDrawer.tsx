@@ -14,6 +14,7 @@ import { trashDaysPref } from "../settings/automatic";
 import { sentences, stops, t, tn, tx } from "../../lib/i18n";
 import { closeRoute, go, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
+import { jumpToElement } from "../../lib/smoothScroll";
 import { Button, Drawer, IconButton, Row, Segmented, Spinner, TextField, Toggle, formatBytes, timeAgo } from "../../ui/kit";
 import { nsfwTip } from "../browse/menus";
 import { addDropTarget } from "../../ui/DropZone";
@@ -127,22 +128,28 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
   useEffect(() => { setChar(mod.character ?? ""); }, [mod.character]);
   useEffect(() => { setNotes(mod.notes ?? ""); }, [mod.notes]);
   useEffect(() => { void characterNames(game).then((l) => setNames(l.map((c) => c.name))); }, [game]);
-  // a tag on the card (Toggles, Conflict, No ini) opens the drawer at what it names; the conflicts panel loads a
-  // moment later, so look for it for a few seconds
+  // a tag on the card (Toggles, Conflict, No ini) opens the drawer at what it names. Some panels load a moment
+  // later, so it jumps the moment the panel shows up, and gives up after a few seconds
   useEffect(() => {
     const sec = drawerSectionFor(mod.id);
     if (!sec) return;
     if (sec === "model") { setModel(true); clearDrawerSection(); return; }
     const sel = { parts: ".mod-parts", keys: "#mod-keys", conflicts: ".mi-conflicts", files: ".mod-drawer-facts", ingame: ".mi-ingame" }[sec];
-    let tries = 0;
-    const find = () => {
-      const el = document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
-      if (el || ++tries >= 16) clearDrawerSection();
-      if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
-      else if (tries < 16) timer = window.setTimeout(find, 200);
-    };
-    let timer = window.setTimeout(find, 250);
-    return () => window.clearTimeout(timer);
+    const find = () => document.querySelector<HTMLElement>(`.mod-drawer ${sel}`);
+    const now = find();
+    if (now) { clearDrawerSection(); jumpToElement(now); return; }
+    let timer = 0;
+    const watch = new MutationObserver(() => {
+      const el = find();
+      if (!el) return;
+      stop();
+      clearDrawerSection();
+      jumpToElement(el);
+    });
+    const stop = () => { watch.disconnect(); window.clearTimeout(timer); };
+    timer = window.setTimeout(() => { stop(); clearDrawerSection(); }, 4000);
+    watch.observe(document.querySelector(".mod-drawer") ?? document.body, { childList: true, subtree: true });
+    return stop;
   }, [mod.id]);
 
   const saveChar = () => {
@@ -287,7 +294,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
               <Button size="sm" variant="ghost" icon="bell-off" onClick={() => void holdMods(game, [mod], "update")}
                 title={t("Stops this warning until you install a newer version from its author. If that one is still broken, it warns again")}>{t("Wait for an update")}</Button>
               <Button size="sm" variant="ghost" icon="hide" onClick={() => void holdMods(game, [mod], "ignore")}
-                title={t("Stops every warning about this mod: the red marks, the Problems filter and Tools. Conflicts with it are ignored too")}>{t("Ignore problems")}</Button>
+                title={t("Stops every warning about this mod: the red marks, the Problems tab and Tools. Conflicts with it are ignored too")}>{t("Ignore problems")}</Button>
             </span>
           </div>
         </div>
@@ -300,7 +307,7 @@ export function ModDrawer({ game, mod, mods, onClose, docked }: { game: GameId; 
             <strong>{hold.kind === "update" ? t("Waiting for an update from its author") : t("Ignoring this mod's problems")}</strong>
             <span>{hold.kind === "update"
               ? t("The game update warning is hidden until you install a newer version. If that one is still broken, it warns again.")
-              : t("No red marks, no Problems filter and nothing in Tools for this mod.")}</span>
+              : t("No red marks and nothing in Problems or Tools for this mod.")}</span>
             <span className="mod-drawer-health-a">
               {hold.kind === "update" && mod.source && (<>
                 <Button size="sm" icon="downloads" onClick={() => void getUpdate(game, mod)}

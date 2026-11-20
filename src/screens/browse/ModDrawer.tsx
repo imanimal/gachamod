@@ -9,7 +9,9 @@ import { downloadFixer, useFixerBusy, useFixerFiles } from "../../lib/fixes";
 import { gbLinkTarget, imageAt, isAbort, isNotFound, modPage, modUpdates, newestFile, queueModFile, sanitizeHtml, toolPage, type GbFile, type GbImage, type GbMod, type GbUpdate } from "../../lib/gamebanana";
 import { detectKeybinds } from "../../lib/keybinds";
 import { likeMod, useAccount, useLiked } from "../../lib/account";
+import { markSeen } from "../../lib/subscriptions";
 import { useNsfw } from "../../lib/prefs";
+import { jumpToElement } from "../../lib/smoothScroll";
 import { go, goIn, useGames } from "../../lib/store";
 import { DescKeys } from "../../ui/DescKeys";
 import { Badge, Button, Drawer, Empty, IconButton, Menu, Progress, Toggle, Waiting, formatBytes, timeAgo } from "../../ui/kit";
@@ -98,7 +100,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
     const c = new AbortController();
     setMod(null); setError(null); setGone(false); setPosts(null); setShown(0); setReveal(false); setPostsOpen(false);
     (tool ? toolPage : modPage)(modId, c.signal)
-      .then((m) => { if (!c.signal.aborted) { if (m) setMod(m); else setError(tool ? t("GameBanana didn't send this tool's page.") : t("GameBanana didn't send this mod's page.")); } })
+      .then((m) => { if (!c.signal.aborted) { if (m) { setMod(m); if (!tool) markSeen(m.id, m.updated); } else setError(tool ? t("GameBanana didn't send this tool's page.") : t("GameBanana didn't send this mod's page.")); } })
       .catch((e) => {
         if (c.signal.aborted || isAbort(e)) return;
         setGone(isNotFound(e));
@@ -108,7 +110,7 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
   }, [modId, attempt, tool]);
 
   useEffect(() => {
-    if (mod && wantFiles) window.setTimeout(() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    if (mod && wantFiles && filesRef.current) jumpToElement(filesRef.current);
   }, [mod, wantFiles]);
 
   useEffect(() => {
@@ -166,7 +168,8 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
 
   const jumpKeys = () => {
     if (!found.anchor) return;
-    document.getElementById(found.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = document.getElementById(found.anchor);
+    if (el) jumpToElement(el);
   };
 
   const title = mod?.name ?? (gone ? tool ? t("This fixer was removed") : t("This mod was removed")
@@ -211,8 +214,8 @@ export function ModDrawer({ game: here, modId, tool = false, onClose }: { game: 
                 style={mod.submitter.style} hoverAvatar={mod.submitter.hoverAvatar} />
             )}
             <ModStats key={mod.id} mod={mod} act={!tool}
-              onFiles={() => filesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              onComments={() => commentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+              onFiles={() => { if (filesRef.current) jumpToElement(filesRef.current); }}
+              onComments={() => { if (commentsRef.current) jumpToElement(commentsRef.current); }} />
           </div>
           <div className="gb-mod-tags">
             {mod.character && target && <CharLink game={target.id} name={mod.character} className="badge t-accent gb-tag-char" portrait />}
@@ -481,7 +484,7 @@ function LikeButton({ id, name }: { id: number; name: string }) {
   const [busy, setBusy] = useState(false);
   if (!acc.available || !acc.user) return null;
   return (
-    <IconButton icon="heart" on={liked} disabled={busy} label={liked ? t("Take back your like on GameBanana") : t("Like on GameBanana. Nobody is notified")}
+    <IconButton icon="heart" on={liked} disabled={busy} label={liked ? t("Take back your like on GameBanana") : t("Like on GameBanana")}
       onClick={() => { setBusy(true); void likeMod(id, name, !liked).finally(() => setBusy(false)); }} />
   );
 }

@@ -1,12 +1,9 @@
 // A row that scrolls sideways: the mouse wheel scrolls it, its arrow buttons move it a screenful of whole items at a
 // time, and it says whether there is more to the left or right for those arrows. Owner: BROWSE area.
 //
-// A wheel gesture belongs to whatever it started over. Scrolling the page down past a row keeps scrolling the page,
-// however fast or bumpy the wheel is, because the row only slid under a pointer that stayed put, and so does going
-// on a notch at a time with short pauses (PAGE_HOLD) like on Home. The row takes the
-// wheel when a gesture starts on it, as soon as the pointer moves onto it, or with Shift. A row that runs out of
-// room mid-gesture stops there instead of throwing the rest of a fast spin at the page; a gesture that starts at its
-// end goes on to the page, and turning the wheel back brings it to the row again.
+// The wheel is handled for every scrolling box at once in lib/smoothScroll.ts: it turns an up-and-down wheel into
+// left and right on rows marked data-side-scroll (set here), and keeps a gesture on the box it started on, so
+// scrolling the page past a row never hands the wheel to the row.
 //
 // A row always rests exactly on its first or last item, never a pixel or two short of it (which cuts off the item's
 // outline): the glide lands on the edge, and a scroll heading for an end that stops just short of it goes the rest of
@@ -14,45 +11,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { glideTarget, glideTo } from "../../lib/smoothScroll";
 
-/** A gap this long between wheel events starts a new gesture. Free-spinning and "jumpy" wheels send events closer
- *  together than this while they turn. */
-const GESTURE_GAP = 450;
-/** The pointer moving this far from where a gesture started means it was aimed at something new. */
-const MOVED = 6;
-/** After the page had the wheel, a pause shorter than this with the pointer still keeps it the page's, so scrolling
- *  down one notch at a time doesn't hand the wheel to a row that came to rest under the pointer. */
-const PAGE_HOLD = 1500;
 /** Resting this close to an end counts as the end. */
 const EDGE = 2;
 /** A scroll heading for an end that stops this close to it goes the rest of the way, so the first or last item is
  *  never left partly hidden. */
 const SNAP = 24;
-
-let lastWheel = -Infinity;
-/** Where the pointer was when the current gesture started. */
-let anchor = { x: 0, y: 0 };
-/** What the current gesture scrolls: a row, "page", or null before anything claimed it. */
-let owner: HTMLElement | "page" | null = null;
-/** The row that handed the current gesture to the page because it was at its end, and which way the wheel went. */
-let passed: { row: HTMLElement; dir: number } | null = null;
-let wired = false;
-function wireGestures() {
-  if (wired) return;
-  wired = true;
-  // capture runs before any row's handler: a pause or a pointer that moved starts a new gesture nobody owns yet
-  window.addEventListener("wheel", (e) => {
-    const moved = Math.abs(e.clientX - anchor.x) + Math.abs(e.clientY - anchor.y) > MOVED;
-    const gap = e.timeStamp - lastWheel;
-    if (gap > GESTURE_GAP || moved) {
-      // the page scrolling a notch at a time with the pointer held still: a row that slid under it stays out of it
-      if (owner === "page" && !moved && gap < PAGE_HOLD) { lastWheel = e.timeStamp; return; }
-      owner = null; passed = null; anchor = { x: e.clientX, y: e.clientY };
-    }
-    lastWheel = e.timeStamp;
-  }, { capture: true, passive: true });
-  // bubbling ends after the rows: a gesture no row claimed is the page's
-  window.addEventListener("wheel", () => { if (owner === null) owner = "page"; }, { passive: true });
-}
 
 export function useSideScroll(ref: RefObject<HTMLElement | null>, deps: unknown[] = []) {
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -68,32 +31,9 @@ export function useSideScroll(ref: RefObject<HTMLElement | null>, deps: unknown[
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // a folded page header leaves rows that scroll themselves alone (kit.css)
+    // the wheel scrolls it sideways (lib/smoothScroll.ts), and a folded page header leaves it alone (kit.css)
     el.dataset.sideScroll = "";
     measure();
-    wireGestures();
-    const wheel = (e: WheelEvent) => {
-      // sideways wheels and touchpad swipes scroll it on their own (lib/smoothScroll)
-      if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-      const max = el.scrollWidth - el.clientWidth;
-      if (max < 1) return;
-      const dir = Math.sign(e.deltaY);
-      // the page (or another row) owns this gesture and the row just slid under the pointer. Shift always means
-      // sideways, and so does turning the wheel back on the row that handed the gesture on
-      const back = passed?.row === el && passed.dir !== dir;
-      if (!e.shiftKey && !back && owner !== null && owner !== el) return;
-      const at = glideTarget(el, "x");
-      if (dir < 0 ? at <= 0.5 : at >= max - 0.5) {
-        if (owner === el) { e.preventDefault(); return; }
-        owner = "page";
-        passed = { row: el, dir };
-        return;
-      }
-      owner = el;
-      passed = null;
-      e.preventDefault();
-      glideTo(el, "x", at + (e.deltaMode === 1 ? e.deltaY * 32 : e.deltaMode === 2 ? e.deltaY * el.clientWidth : e.deltaY));
-    };
     // which way it last moved, so a stop just short of an end moves onto that end and never back off it
     let prev = el.scrollLeft, heading = 0, still = 0;
     const scroll = () => {
@@ -109,14 +49,12 @@ export function useSideScroll(ref: RefObject<HTMLElement | null>, deps: unknown[
       if (heading < 0 && p > 0 && p <= SNAP) glideTo(el, "x", 0);
       else if (heading > 0 && p < max && p >= max - SNAP) glideTo(el, "x", max);
     };
-    el.addEventListener("wheel", wheel, { passive: false });
     el.addEventListener("scroll", scroll, { passive: true });
     // the row's own size, and its items' (a font or picture that loads late changes how wide they are)
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     for (const c of el.children) ro.observe(c);
     return () => {
-      el.removeEventListener("wheel", wheel);
       el.removeEventListener("scroll", scroll);
       clearTimeout(still);
       ro.disconnect();

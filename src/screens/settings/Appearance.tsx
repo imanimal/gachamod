@@ -3,7 +3,7 @@
 // Owner: SETTINGS/AI area. Applying themes is lib/theme.ts (THEMES area); saving custom ones is ./customThemes.ts.
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { currentGame, go, useGame, useGames } from "../../lib/store";
-import { extName, extensionsNow, removeExtension, shareTheme } from "../../lib/extensions";
+import { shareTheme } from "../../lib/extensions";
 import { record } from "../../lib/history";
 import { aiShown, askAi, useAiShow } from "../../lib/ai";
 import {
@@ -14,7 +14,7 @@ import {
 import { anatomyText } from "../../lib/theme-anatomy";
 import { SIZES, ZOOMS, getTextSize, getZoom, setTextSize, setZoom, stepZoom, zoomLabel } from "../../lib/zoom";
 import { Button, Card, IconButton, Panel, Segmented, Select, TextField, Toggle } from "../../ui/kit";
-import { WithMenu, openMenu, type MenuEntry } from "../../ui/ContextMenu";
+import { menuHandler, openMenu, type MenuEntry } from "../../ui/ContextMenu";
 import { Icon } from "../../ui/Icon";
 import { ColorPicker } from "../../ui/ColorPicker";
 import { toast } from "../../ui/toast";
@@ -22,7 +22,8 @@ import { SetRow } from "./parts";
 import { FormatPicker } from "./FormatPicker";
 import { RenderLogRow } from "./Feedback";
 import { hiddenThemePref } from "../../lib/fun";
-import { addThemes, copyTheme, deleteTheme, duplicateOf, readThemes, saveTheme, themeText } from "./customThemes";
+import { addThemes, copyTheme, duplicateOf, readThemes, removeEntry, removeTheme, removeTip, saveTheme } from "./customThemes";
+import { readThemeText, themeSettingsText } from "./themeSource";
 import { hintsOnPref } from "../../shell/hints";
 import { INTRO_LIST, introPick, replaySplash, setIntroPick, themeIntro } from "../../splash/splash";
 import { about, errorText } from "../../lib/api";
@@ -37,11 +38,10 @@ const SCHEME_OPTIONS: Array<{ value: SchemeChoice; label: string; icon?: "moon" 
 const LIGHT_NATIVE = THEMES.filter((th) => th.native === "light" && !th.hidden).map((th) => th.name);
 /** The light-native themes as a list in the user's language ("Wuthering Waves and Endfield"). */
 const lightNative = () => new Intl.ListFormat(lang, { type: "conjunction" }).format(LIGHT_NATIVE);
-// the Light tip teases a little, and gives up once it's picked
-const modeOptions = (mode: SchemeMode): Array<{ value: SchemeMode; label: string; icon?: "moon" | "sun" | "controller"; title?: string }> => [
+const modeOptions = (): Array<{ value: SchemeMode; label: string; icon?: "moon" | "sun" | "controller"; title?: string }> => [
   { value: "game", label: t("Match the game"), icon: "controller", title: t("Light or dark like each game's menus: {themes} light, the rest dark", { themes: lightNative() }) },
   { value: "dark", label: t("Dark"), icon: "moon", title: t("Every theme dark") },
-  { value: "light", label: t("Light"), icon: "sun", title: mode === "light" ? t("You did this to yourself...") : t("Every theme light, even the one set in space. We won't ask") },
+  { value: "light", label: t("Light"), icon: "sun", title: t("Every theme light, even the one set in space") },
   { value: "system", label: t("System"), title: t("Dark or light as Windows is set") },
 ];
 
@@ -60,6 +60,16 @@ export function AppearanceSection() {
   const themeName = themeInfo?.name ?? t("the theme");
   const [accent, setAccent] = useState(() => accentPick(theme.id));
   useEffect(() => { setAccent(accentPick(theme.id)); }, [theme.id]);
+  // the user's own themes sit with the built-in ones, so the theme in use always shows as picked here
+  const saved = customThemesPref.use();
+  const customs = saved.map((s) => validateCustomTheme(s).theme).filter((s): s is CustomTheme => !!s);
+  const aiShow = useAiShow();
+  const customMenu = (th: CustomTheme): MenuEntry[] => [
+    !!game && { label: t("Use for {game}", { game: gameName(game) }), icon: "check", disabled: pick === th.id, onClick: () => choose(th.id) },
+    aiShown("useful", aiShow) && { label: t("Edit with AI"), icon: "ai", title: th.pkg ? t("This theme comes from a package, so the changes go in a copy") : t("Describe what should change and your chatbot rewrites the theme"),
+      onClick: () => askAi({ kind: "theme-edit", game: game?.id, theme: th.id }) },
+    { label: th.pkg ? t("Edit a copy") : t("Edit"), icon: "edit", title: t("Opens it in Custom themes"), onClick: () => editTheme(th.id) },
+  ];
 
   return (
     <Panel title={t("Theme and colours")} icon="palette" id="appearance">
@@ -67,6 +77,10 @@ export function AppearanceSection() {
       <div className="set-themes">
         <ThemeCard id={defaultFor.id} name={t("Match the game")} description={t("Uses {theme}", { theme: defaultFor.name })} on={pick === "auto"} onClick={() => choose("auto")} disabled={!game} />
         {THEMES.filter((th) => !th.hidden || found || pick === th.id).map((th) => <ThemeCard key={th.id} id={th.id} name={th.name} on={pick === th.id} onClick={() => choose(th.id)} disabled={!game} />)}
+        {customs.map((th) => (
+          <CustomCard key={th.id} th={th} on={pick === th.id} disabled={!game} description={t("Your theme, on {theme}", { theme: baseName(th.base) })}
+            onClick={() => choose(th.id)} items={() => customMenu(th)} />
+        ))}
       </div>
       <div className="set-rows">
         {accents.length > 1 && !theme.custom && (
@@ -88,7 +102,7 @@ export function AppearanceSection() {
         ) : (
           <>
             <SetRow id="set-scheme" label={t("Light or dark")} hint={theme.mode === "game" ? t("Like each game's menus: {themes} are light, the rest dark", { themes: lightNative() }) : theme.mode === "system" ? t("Follows Windows, for every theme") : theme.mode === "light" ? t("Every theme is light") : t("Every theme is dark")}>
-              <Segmented<SchemeMode> value={theme.mode} onChange={(v) => setSchemeMode(v, currentGame())} label={t("Light or dark")} options={modeOptions(theme.mode)} />
+              <Segmented<SchemeMode> value={theme.mode} onChange={(v) => setSchemeMode(v, currentGame())} label={t("Light or dark")} options={modeOptions()} />
             </SetRow>
             {theme.mode === "game" && (
               <SetRow label={t("Just {theme}", { theme: themeName })} hint={themeInfo?.native === "light" ? t("The game's menus are light. A pick here counts only for {theme}", { theme: themeName }) : t("The game's menus are dark. A pick here counts only for {theme}", { theme: themeName })}>
@@ -316,6 +330,47 @@ function ThemeCard({ id, name, description, on, onClick, disabled, scheme, token
 }
 
 const schemeOf = (c: SchemeChoice): Scheme | undefined => (c === "system" ? undefined : c);
+
+/** One of the user's themes as a card. A click uses it. The bin button, Delete or the menu's last entry deletes it
+ *  (a package's theme removes the package), and right-click, R3 or the ... button opens the menu. `onRemove` runs
+ *  first, to close an editor showing it. */
+function CustomCard({ th, on, disabled, description, onClick, items, onRemove }:
+  { th: CustomTheme; on: boolean; disabled: boolean; description: string; onClick: () => void; items: () => MenuEntry[]; onRemove?: () => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  // keyboard and controller focus moves to the card beside it instead of dropping to the top of the page
+  const before = () => {
+    const el = box.current;
+    if (el?.contains(document.activeElement)) {
+      const near = el.nextElementSibling ?? el.previousElementSibling;
+      const card = near?.matches(".theme-card") ? near : near?.querySelector(".theme-card");
+      if (card instanceof HTMLElement) card.focus();
+    }
+    onRemove?.();
+  };
+  const menu = () => [...items(), "-" as const, removeEntry(th, before)];
+  const remove = () => { before(); void removeTheme(th); };
+  return (
+    <div ref={box} className="ctheme" onContextMenu={menuHandler(menu)}
+      onKeyDown={(e) => {
+        if (e.key !== "Delete" || e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+        e.preventDefault();
+        remove();
+      }}>
+      <ThemeCard id={th.base} name={th.name} scheme={schemeOf(th.scheme)} tokens={th.tokens} on={on} disabled={disabled} description={description} onClick={onClick} />
+      <span className="ctheme-acts">
+        <IconButton className="ctheme-del" icon="trash" label={removeTip(th)} size="sm" onClick={remove} />
+        <IconButton icon="more" label={t("More (or right-click)")} size="sm" onClick={(e) => openMenu(e.currentTarget, menu())} />
+      </span>
+    </div>
+  );
+}
+
+/** Opens a custom theme in the Custom themes editor, from anywhere in Settings. */
+const EDIT_THEME = "gachamod:edit-theme";
+function editTheme(id: string) {
+  go({ view: "settings", section: "themes" });
+  window.dispatchEvent(new CustomEvent(EDIT_THEME, { detail: id }));
+}
 const baseName = (id: string) => THEMES.find((th) => th.id === id)?.name ?? id;
 
 // ── custom themes ──
@@ -339,13 +394,17 @@ export function CustomThemesSection() {
     record({ label: t("Used the theme {theme} for every game", { theme: th.name }), brief: t("Used the theme for every game"), undo: async () => setThemePicks(before, currentGame()), redo: async () => setThemePicks(after, currentGame()) });
   };
   // a package's themes come back from the package each start, so editing one edits a copy and deleting removes the package
-  const pkgOf = (th: CustomTheme) => (th.pkg ? extensionsNow().find((e) => e.id === th.pkg) ?? null : null);
-  const remove = (th: CustomTheme) => {
-    if (edit?.theme.id === th.id) setEdit(null);
-    const ext = pkgOf(th);
-    void (ext ? removeExtension(ext) : deleteTheme(th));
-  };
+  const closeEditor = (th: CustomTheme) => { if (edit?.theme.id === th.id) setEdit(null); };
   const startNew = () => setEdit({ theme: { id: "custom:my-theme", name: t("My theme"), base: theme.id, scheme: theme.choice, tokens: {}, layout: {} }, isNew: true });
+  // Edit on a card in Theme and colours opens the editor here
+  useEffect(() => {
+    const open = (e: Event) => {
+      const th = list.find((x) => x.id === (e as CustomEvent<string>).detail);
+      if (th) setEdit(th.pkg ? { theme: duplicateOf(th, list), isNew: true } : { theme: th, isNew: false });
+    };
+    window.addEventListener(EDIT_THEME, open);
+    return () => window.removeEventListener(EDIT_THEME, open);
+  });
   const importText = async (text: string) => {
     const { themes, problems } = readThemes(text);
     if (!themes.length) { toast(problems[0] ?? t("That isn't a theme"), true); return; }
@@ -365,13 +424,12 @@ export function CustomThemesSection() {
     games.length > 1 && { label: t("Use for every game"), icon: "check", disabled: games.every((g) => themePick(g.id) === th.id), onClick: () => useEverywhere(th) },
     th.pkg ? { label: t("Edit a copy"), icon: "edit", title: t("This theme comes from a package and changes when the package updates, so your edits go in a copy"), onClick: () => setEdit({ theme: duplicateOf(th, list), isNew: true }) }
       : { label: t("Edit"), icon: "edit", onClick: () => setEdit({ theme: th, isNew: false }) },
+    aiShown("useful", aiShow) && { label: t("Edit with AI"), icon: "ai", title: th.pkg ? t("This theme comes from a package, so the changes go in a copy") : t("Describe what should change and your chatbot rewrites the theme"),
+      onClick: () => askAi({ kind: "theme-edit", game: game?.id, theme: th.id }) },
     !th.pkg && { label: t("Duplicate"), icon: "copy", onClick: () => setEdit({ theme: duplicateOf(th, list), isNew: true }) },
     { label: t("Copy as text"), icon: "share", title: t("To share it: whoever gets it imports it here"), onClick: () => copyTheme(th) },
     !th.pkg && { label: t("Share to the theme list"), icon: "upload", title: t("Saves it as a package and opens the page where you send it in, so anyone can install it from Extensions"), onClick: () => void shareTheme(th) },
     !!th.pkg && { label: t("View in Extensions"), icon: "puzzle", title: t("This theme came from a package"), onClick: () => go({ view: "extensions", tab: "installed" }) },
-    "-",
-    pkgOf(th) ? { label: t("Remove {name}", { name: extName(pkgOf(th)!) }), icon: "trash", danger: true, title: t("Removes the package this theme came from, with any other themes in it"), onClick: () => remove(th) }
-      : { label: t("Delete"), icon: "trash", danger: true, onClick: () => remove(th) },
   ];
   const cardText = (th: CustomTheme) => !game ? t("On {theme}.", { theme: baseName(th.base) })
     : inUse === th.id ? t("On {theme}. In use for {game}", { theme: baseName(th.base), game: gameName(game) })
@@ -382,11 +440,8 @@ export function CustomThemesSection() {
       {list.length > 0 && (
         <div className="set-themes">
           {list.map((th) => (
-            <WithMenu key={th.id} items={() => items(th)} className="ctheme">
-              <ThemeCard id={th.base} name={th.name} scheme={schemeOf(th.scheme)} tokens={th.tokens} on={inUse === th.id} disabled={!game}
-                description={cardText(th)} onClick={() => use(th)} />
-              <IconButton className="ctheme-more" icon="more" label={t("More (or right-click)")} size="sm" onClick={(e) => openMenu(e.currentTarget, items(th))} />
-            </WithMenu>
+            <CustomCard key={th.id} th={th} on={inUse === th.id} disabled={!game} description={cardText(th)}
+              onClick={() => use(th)} items={() => items(th)} onRemove={() => closeEditor(th)} />
           ))}
         </div>
       )}
@@ -446,7 +501,8 @@ function EditorColor({ value, label, onPick }: { value: string; label: string; o
 /** Text on the panels below this is hard to read (WCAG AA for normal text). */
 const READABLE = 4.5;
 
-const editable = (th: CustomTheme) => themeText(th);
+/** The theme's settings for the Edit as text box. Its stylesheet has a box of its own under it. */
+const editable = (th: CustomTheme) => themeSettingsText(th);
 
 function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNew: boolean; note?: string[]; onClose: () => void }) {
   const game = useGame();
@@ -455,17 +511,22 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
   const [problems, setProblems] = useState<string[]>([]);
   // how well the text reads on the panels with the draft applied
   const [textRead, setTextRead] = useState(21);
+  // the text box keeps what's typed until it reads as a theme, so a mistake never loses an edit
   const [text, setText] = useState(() => editable(start));
   const [textErr, setTextErr] = useState<string | null>(null);
   const textId = useId();
   const typing = useRef(false);
+  // the text read with nothing left out, so leaving the box can lay it out again
+  const tidy = useRef(true);
+  const textBox = useRef<HTMLTextAreaElement>(null);
+  const advanced = useRef<HTMLDetailsElement>(null);
 
   // the whole app shows the draft while editing; closing the editor puts the game's theme back
   useEffect(() => {
     const h = window.setTimeout(() => { setProblems(applyCustomTheme(draft)); setTextRead(contrastOf(tokenHex("--text"), tokenHex("--surface"))); }, 100);
-    if (!typing.current) setText(editable(draft));
+    if (!typing.current && !textErr) { setText(editable(draft)); tidy.current = true; }
     return () => window.clearTimeout(h);
-  }, [draft]);
+  }, [draft]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { applyCustomTheme(null); }, []);
 
   const patch = (p: Partial<CustomTheme>) => setDraft((x) => ({ ...x, ...p }));
@@ -481,14 +542,26 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
   });
   const onText = (v: string) => {
     setText(v);
-    let raw: unknown;
-    try { raw = JSON.parse(v); } catch { setTextErr(t("Not valid JSON yet")); return; }
-    const r = validateCustomTheme(raw);
-    if (!r.theme) { setTextErr(r.problems[0] ?? t("Not a theme")); return; }
+    const read = readThemeText(v);
+    if (!read.ok) { setTextErr(read.error); tidy.current = false; return; }
+    // the stylesheet goes to its own box as typed (it's checked as the theme applies, like that box); text without one
+    // keeps the stylesheet there
+    const css = "css" in read.value ? read.value.css : draft.css;
+    const r = validateCustomTheme({ ...read.value, css: undefined });
+    if (!r.theme) { setTextErr(r.problems[0] ?? t("Not a theme")); tidy.current = false; return; }
     setTextErr(null);
-    setDraft({ ...r.theme, id: draft.id });
+    tidy.current = !r.problems.length;
+    setDraft({ ...r.theme, id: draft.id, ...(typeof css === "string" && css ? { css } : {}) });
   };
+  const resetText = () => { setText(editable(draft)); setTextErr(null); tidy.current = true; };
   const save = async () => {
+    if (textErr) {
+      // saving now would drop what's in the text box
+      if (advanced.current) advanced.current.open = true;
+      textBox.current?.focus();
+      toast(t("Fix the theme text first. {problem}", { problem: textErr }), true, { label: t("Reset the text"), run: resetText });
+      return;
+    }
     const { theme } = validateCustomTheme(draft);
     if (!theme) { toast(t("Give the theme a name"), true); return; }
     // a new theme's id comes from its name ("custom:green-night"); an edited one keeps its id
@@ -537,15 +610,20 @@ function ThemeEditor({ start, isNew, note, onClose }: { start: CustomTheme; isNe
           </div>
         ))}
       </div>
-      <details className="ctheme-adv">
+      <details className="ctheme-adv" ref={advanced}>
         <summary>{t("Edit as text")}</summary>
         {/* the note under it sits outside the label, so the error is read as the field's description, not its name */}
         <div className="field mono">
           <label className="field-l" htmlFor={`${textId}-in`}>{t("Theme")}</label>
-          <textarea id={`${textId}-in`} value={text} rows={12} spellCheck={false} onChange={(e) => onText(e.target.value)}
+          <textarea ref={textBox} id={`${textId}-in`} value={text} rows={12} spellCheck={false} onChange={(e) => onText(e.target.value)}
             aria-describedby={`${textId}-note`} aria-invalid={!!textErr || undefined}
-            onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; setText(editable(draft)); setTextErr(null); }} />
-          {textErr ? <span id={`${textId}-note`} className="hint ctheme-err">{textErr}</span> : <span id={`${textId}-note`} className="hint">{t("\"tokens\" takes any name below, \"css\" holds the stylesheet")}</span>}
+            onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; if (tidy.current && !textErr) setText(editable(draft)); }} />
+          {textErr ? (
+            <span className="ctheme-err-row">
+              <span id={`${textId}-note`} className="hint ctheme-err">{textErr}</span>
+              <Button size="sm" variant="ghost" onClick={resetText} title={t("Puts back the text for the theme as it is now, without what you typed here")}>{t("Reset the text")}</Button>
+            </span>
+          ) : <span id={`${textId}-note`} className="hint">{t("\"tokens\" takes any name from Tokens you can set, below. The stylesheet has its own box")}</span>}
         </div>
         <label className="field mono">
           <span className="field-l">{t("Stylesheet")}</span>

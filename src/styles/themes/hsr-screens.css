@@ -242,6 +242,9 @@
   .gb-lightbox-cap { color: #c9ccd6; }
   .gb-comments { border-top: 0; position: relative; }
   .gb-comments::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9px; color: var(--line-2); background: var(--dot-line); }
+
+  /* ── Settings and Tools pages: their panels have no fill, so the stars and orbits behind them are blurred ── */
+  .pg-page > .pg-body > .panel { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 }
 
 [data-theme="hsr"][data-scheme="light"] {

@@ -1,8 +1,9 @@
 // Tools, one page at a time like Settings (settings/Paged.tsx): problems and fixes after a game update, conflicts and
 // key clashes, switching skins in game, sharing or moving mods, and the mod maker tools (files and logs, 3DMigoto's
-// switches, finding a hash). The switches are a copy of the panel on Settings' Launch page (settings/Launch.tsx) with
-// the same config; the rest of the launch options stay in Settings, and the search at the top of the page list finds
-// them from here too. The pages and panels with their search words
+// switches, finding a hash), and the AI helper. The switches are a copy of the panel on Settings' Launch page
+// (settings/Launch.tsx) with the same config, and the AI helper is the same panel as Settings' (settings/AiSection.tsx),
+// left out here while AI is off; the rest of the launch options stay in Settings, and the search at the top of the
+// page list finds them from here too. The pages and panels with their search words
 // are in toolsSearch.ts. Owner: SETTINGS/AI area; MODTOOLS, FIXES and INGAME own their panels. Every page and panel is
 // a route: go({ view: "tools", section: "fixes" }) or section: "dev".
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -21,6 +22,8 @@ import { MOVE_KEYWORDS, TOOL_PAGES, toolsPageOf, toolsWhere } from "./toolsSearc
 import { ConflictsPanel, HashLookupPanel, KeyClashesPanel, PacksPanel, ProblemsPanel } from "../modtools/ToolsPanels";
 import { MovePanel } from "../modtools/MovePanel";
 import { MigotoSection } from "../settings/Launch";
+import { AiSection } from "../settings/AiSection";
+import { useAiShow } from "../../lib/ai";
 import { setToolsPage, useToolsCounts } from "../modtools/toolsBadge";
 import { t, tn } from "../../lib/i18n";
 import { gameName, gameShort } from "../../lib/games";
@@ -94,10 +97,17 @@ function ToolsPages({ game }: { game: GameState }) {
           ingame: <><InGamePanel game={game.id} /><KeyListPanel game={game.id} /></>,
           packs: <><PacksPanel /><MovePanel /></>,
           makers: <><DevSection game={game} /><MigotoSection game={game} /><HashLookupPanel /></>,
+          ai: <ToolsAi />,
         }}
       </Paged>
     </div>
   );
+}
+
+/** Settings' AI helper panel. With AI off it renders nothing, so the page leaves the list (Settings keeps it, to turn
+ *  AI back on). */
+function ToolsAi() {
+  return useAiShow() === "off" ? null : <AiSection />;
 }
 
 // ── dev ──
@@ -194,4 +204,5 @@ registerPanels("tools", {
   dev: forGame((g) => <DevSection game={g} />),
   migoto: forGame((g) => <MigotoSection game={g} />),
   hash: HashLookupPanel,
+  ai: ToolsAi,
 });

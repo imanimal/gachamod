@@ -133,15 +133,22 @@ export function addTag(game: GameId, list: ModEntry[], tag: string) {
     t("Tagged {mods} \"{tag}\"", { mods: modsName(list), tag: tg }));
 }
 
+/** The tag's chip goes away and getting it back takes typing, so this toasts with Undo. */
 export function removeTag(game: GameId, list: ModEntry[], tag: string) {
   const low = tag.toLowerCase();
+  const had = list.filter((m) => m.tags.some((x) => x.toLowerCase() === low)).length;
   return patchMods(game, list, (m) => (m.tags.some((x) => x.toLowerCase() === low) ? { tags: m.tags.filter((x) => x.toLowerCase() !== low) } : null),
-    t("Removed the tag \"{tag}\" from {mods}", { tag, mods: modsName(list) }));
+    t("Removed the tag \"{tag}\" from {mods}", { tag, mods: modsName(list) }),
+    list.length === 1 ? t("Removed the tag") : tn(had, "Removed the tag from {n} mod", "Removed the tag from {n} mods"));
 }
 
-/** The star or switch shows the new state, so this is quiet unless `say` gives the toast's words (a button that goes
- *  away when used). */
+/** For one mod the star or switch shows the new state, so this is quiet unless `say` gives the toast's words (a button
+ *  that goes away when used). Several at once toast a count, since a second click doesn't put a mixed selection back. */
 export function setFavourite(game: GameId, list: ModEntry[], on: boolean, say?: string) {
+  const n = list.filter((m) => m.favorite !== on).length;
+  say ??= list.length > 1
+    ? (on ? tn(n, "Added {n} mod to favourites", "Added {n} mods to favourites") : tn(n, "Removed {n} mod from favourites", "Removed {n} mods from favourites"))
+    : undefined;
   return patchMods(game, list, (m) => (m.favorite === on ? null : { favorite: on }),
     on ? t("Added {mods} to favourites", { mods: modsName(list) }) : t("Removed {mods} from favourites", { mods: modsName(list) }), say);
 }
@@ -225,7 +232,7 @@ export async function ownPreview(game: GameId, m: ModEntry): Promise<{ bytes: Ui
 }
 
 /** Go back to the picture the mod came with (from its folder or GameBanana). Undo puts the user's own one back. The
- *  picture changes in place, so there's no toast. */
+ *  user's picture is deleted and the Reset preview button goes away, so it toasts with Undo. */
 export async function resetPreview(game: GameId, m: ModEntry) {
   if (!m.customPreview) return;
   try {
@@ -234,9 +241,10 @@ export async function resetPreview(game: GameId, m: ModEntry) {
     if (!own) return;
     record({
       label: t("Reset the preview of {mod}", { mod: m.name }),
+      brief: t("Reset the preview"),
       undo: async () => previewSaved(game, await library.setPreviewData(game, m.id, own.bytes, own.ext)),
       redo: async () => previewSaved(game, await library.clearPreview(game, m.id)),
-    }, true);
+    });
   } catch (e) { toast(t("Couldn't reset the preview. {error}", { error: errorText(e) }), true); }
 }
 

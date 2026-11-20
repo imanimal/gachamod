@@ -5,11 +5,12 @@ import { jsonPref } from "../../lib/prefs";
 import type { IconName } from "../../ui/Icon";
 import { t } from "../../lib/i18n";
 
-export type WidgetId = "start" | "updates" | "hq" | "foryou" | "followed" | "characters" | "recent" | "browser";
+export type WidgetId = "start" | "updates" | "subscribed" | "hq" | "foryou" | "followed" | "characters" | "recent" | "browser";
 
 export const WIDGETS: Record<WidgetId, { title: string; icon: IconName; tip: string }> = {
   start: { title: t("Play and profiles"), icon: "play", tip: t("Play, your profiles and quick actions") },
   updates: { title: t("Updates"), icon: "update", tip: t("Installed mods with a newer version on GameBanana") },
+  subscribed: { title: t("Subscribed mods"), icon: "bell", tip: t("Mods you subscribed to, the ones with an update first. Hidden until you subscribe to one") },
   hq: { title: t("New high-quality mods"), icon: "quality", tip: t("New mods that pass the High quality filter") },
   foryou: { title: t("For you"), icon: "sparkle", tip: t("Picks based on the mods you have and the creators you follow") },
   followed: { title: t("From creators you follow"), icon: "feed", tip: t("New mods by creators you follow. Hidden until you follow someone") },
@@ -18,7 +19,7 @@ export const WIDGETS: Record<WidgetId, { title: string; icon: IconName; tip: str
   browser: { title: "GameBanana", icon: "browse", tip: t("A small mod browser. Expand opens Browse with the same filters") },
 };
 
-export const DEFAULT_ORDER: WidgetId[] = ["start", "updates", "hq", "foryou", "characters", "followed", "recent", "browser"];
+export const DEFAULT_ORDER: WidgetId[] = ["start", "updates", "subscribed", "hq", "foryou", "characters", "followed", "recent", "browser"];
 
 export interface HomeLayout { order: WidgetId[]; hidden: WidgetId[] }
 export const DEFAULT_LAYOUT: HomeLayout = { order: DEFAULT_ORDER, hidden: [] };

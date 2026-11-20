@@ -100,8 +100,8 @@ export function FormatIntro() {
         ? t("Mods is laid out like {manager} now, since {manager} is on this PC. Every layout has the same features", { manager: now.manager })
         : t("If you used another mod manager, pick the layout you know. Every layout has the same features")}</p>
       <FormatPicker className="is-small" />
+      <p className="hint">{t("You can change this in Settings, Appearance")}</p>
       <div className="row fmt-intro-a">
-        <span className="hint grow">{t("You can change this in Settings, Appearance")}</span>
         <Button size="sm" variant="ghost" icon="settings" onClick={() => { setOffer(null); go({ view: "settings", section: "set-format" }); }}
           title={t("Opens Settings, Appearance at the Mods layout")}>{t("Appearance settings")}</Button>
         <Button size="sm" variant="primary" onClick={() => setOffer(null)} title={t("Keep this layout and close the card")}>{t("Done")}</Button>

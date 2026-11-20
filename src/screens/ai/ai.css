@@ -9,6 +9,11 @@
   background: var(--accent-soft); color: var(--accent); font-size: .8rem; font-weight: 750; flex: none; }
 .ai-goals, .ai-bots { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .ai-bot-row { display: flex; flex-direction: column; gap: var(--s-1); }
+.ai-key { display: flex; flex-direction: column; gap: var(--s-2); }
+.ai-key-row { align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+.ai-key-row > .field { flex: 1 1 14rem; min-width: 0; }
+.ai-key-offer summary { cursor: pointer; color: var(--text-2); font-size: var(--t-small); }
+.ai-key-offer[open] summary { margin-bottom: var(--s-2); }
 .ai-bot-here { margin-left: var(--s-2); font-size: var(--t-meta); color: var(--text-3); }
 .ai-shares ul { margin: var(--s-1) 0 var(--s-2); padding-left: var(--s-5); display: grid; gap: .15rem; font-size: var(--t-small); }
 .ai-prompt summary { cursor: pointer; color: var(--text-2); font-size: var(--t-small); }
@@ -40,3 +45,27 @@ div.ai-err { display: flex; flex-direction: column; align-items: flex-start; gap
 .ai-intro p { margin: 0; }
 .ai-intro ul { margin: 0; padding-left: var(--s-5); display: grid; gap: .15rem; font-size: var(--t-small); color: var(--text-2); }
 .ai-intro-a { justify-content: flex-end; }
+
+/* model and thinking (RunOptions), in the helper and in Settings */
+.ai-more summary { cursor: pointer; color: var(--text-2); font-size: var(--t-small); }
+.ai-more summary .hint { margin-left: var(--s-1); }
+.ai-more[open] summary { margin-bottom: var(--s-2); }
+.ai-opts { display: grid; gap: var(--s-3); }
+.ai-opt { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-1); min-width: 0; }
+.ai-opt .seg { max-width: 100%; flex-wrap: wrap; }
+.ai-opt .field { align-self: stretch; max-width: 24rem; }
+
+/* what a run did (RunDetails) */
+.ai-run { font-size: var(--t-small); }
+.ai-run summary { cursor: pointer; color: var(--text-2); }
+.ai-run[open] summary { margin-bottom: var(--s-2); }
+.ai-run > .field-l { display: block; margin-top: var(--s-2); }
+.ai-run-facts { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .2rem var(--s-3); }
+.ai-run-facts dt { color: var(--text-2); }
+.ai-run-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.ai-run-steps { margin: var(--s-1) 0 0; padding-left: var(--s-5); display: grid; gap: .15rem; max-height: 12rem; overflow: auto; overscroll-behavior: contain; }
+.ai-run-steps li { overflow-wrap: anywhere; }
+.ai-run-once { margin-right: var(--s-2); color: var(--text-3); }
+.ai-think { margin: var(--s-1) 0 0; max-height: 14rem; overflow: auto; overscroll-behavior: contain; padding: var(--s-3); border-radius: var(--radius-sm);
+  background: var(--bg-2); border: 1px solid var(--line); font-family: inherit; font-size: var(--t-small); color: var(--text-2);
+  white-space: pre-wrap; overflow-wrap: anywhere; }

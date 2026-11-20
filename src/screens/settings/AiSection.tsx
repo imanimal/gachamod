@@ -1,22 +1,33 @@
-// Settings > AI helper: how much AI shows (off hides every AI element in the app), which chatbot the helper opens,
-// and the jobs it does, each one click away. Owner: SETTINGS/AI area.
-import { AI_SHOW_LABEL, CHATBOTS, aiHideAdultPref, aiShowPref, askAi, chatbotPref, chatbotTip, chatbotUrlPref, installedChatbots, useAiShow, type AiShow, type ChatbotId } from "../../lib/ai";
+// Settings > AI helper: how much AI shows (off hides every AI element in the app), which chatbot the helper uses (its
+// CLI on this PC when there is one, or Gemini with a free key, answering in the app, else its website), and the jobs it
+// does, each one click away. With an answer in the app, the model and how long it thinks (the helper window shows the
+// same choice). Owner: SETTINGS/AI area.
+import { AI_SHOW_LABEL, CLI_NAME, aiCliPref, aiHideAdultPref, aiShowPref, askAi, botOrder, botTool, chatbotOf, chatbotPref, chatbotTip, chatbotUrlPref, cliPlan, foundCli, foundClis, installedChatbots, pickBot, useAiShow, useGeminiKey, type AiShow, type ChatbotId, type CliId } from "../../lib/ai";
 import { useEffect, useState } from "react";
 import { currentGame } from "../../lib/store";
 import { Button, Chip, Panel, Segmented, TextField, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
 import { toast } from "../../ui/toast";
 import { t } from "../../lib/i18n";
+import { GeminiKey } from "../ai/GeminiKey";
+import { RunOptions } from "../ai/RunOptions";
 
 export function AiSection() {
   const show = useAiShow();
-  const bot = chatbotPref.use();
+  const saved = chatbotPref.use();
   const url = chatbotUrlPref.use();
   const hideAdult = aiHideAdultPref.use();
+  const useCli = aiCliPref.use();
+  const hasKey = useGeminiKey();
   const [draft, setDraft] = useState(url);
   const [installed, setInstalled] = useState<ChatbotId[]>([]);
+  // null until the first look is done
+  const [clis, setClis] = useState<CliId[] | null>(null);
+  const [looking, setLooking] = useState(false);
   useEffect(() => { setDraft(url); }, [url]);
-  useEffect(() => { if (show !== "off") void installedChatbots().then(setInstalled); }, [show]);
+  // looked for again each time, so a CLI installed while gachamod runs shows up
+  const look = () => { setLooking(true); void foundClis(true).then(setClis).finally(() => setLooking(false)); };
+  useEffect(() => { if (show !== "off") { void installedChatbots().then(setInstalled); look(); } }, [show]);
   const game = currentGame();
   // chat.example.com is saved as https://chat.example.com; another scheme (ftp://) can't be opened, so it goes back
   const saveUrl = () => {
@@ -25,7 +36,13 @@ export function AiSection() {
     if (v === "" || /^https?:\/\//i.test(v)) { setDraft(v); void chatbotUrlPref.set(v); }
     else { setDraft(url); toast(t("A chatbot's web address starts with https://"), true); }
   };
-  const order = [...CHATBOTS].sort((a, b) => Number(installed.includes(b.id)) - Number(installed.includes(a.id)));
+  const found = clis ?? [];
+  const bot = pickBot(saved, found, installed, hasKey);
+  const info = chatbotOf(bot);
+  const tool = botTool(info, found, hasKey, useCli);
+  const order = botOrder(found, installed, hasKey);
+  // the picked chatbot's CLI is on this PC, so asking it can be turned off
+  const localCli = foundCli(info, found);
 
   return (
     <Panel title={t("AI helper")} icon="ai" id="ai">
@@ -36,10 +53,16 @@ export function AiSection() {
         </SetRow>
         {show !== "off" && (
           <div className="set-row set-row-col" id="set-ai-chatbot">
-            <span><b>{t("Your chatbot")}</b><span className="hint">{t("The helper writes the prompt and opens it. You paste the answer back. No account or key")}</span></span>
+            <span><b>{t("Your chatbot")}</b><span className="hint">{tool === "gemini-api"
+              ? t("Gemini answers in gachamod with your free key. Nothing to copy or paste")
+              : tool
+              ? t("{name} runs on this PC with {plan}, and its answer shows in gachamod. Nothing to copy or paste", { name: CLI_NAME[tool], plan: cliPlan(tool) })
+              : clis === null && info?.clis && useCli
+              ? t("Looking for {name} on this PC", { name: CLI_NAME[info.clis[0]!] })
+              : t("The helper writes the prompt and opens the website. You paste the answer back. No account or key")}</span></span>
             <div className="set-ai-bots">
               {order.map((b) => (
-                <Chip key={b.id} on={(bot || installed[0]) === b.id} onClick={() => void chatbotPref.set(b.id)} title={chatbotTip(b, installed.includes(b.id))}>{b.name}</Chip>
+                <Chip key={b.id} on={bot === b.id} onClick={() => void chatbotPref.set(b.id)} title={chatbotTip(b, installed.includes(b.id), botTool(b, found, hasKey, useCli))}>{b.name}</Chip>
               ))}
             </div>
             {bot === "other" && (
@@ -47,6 +70,35 @@ export function AiSection() {
                 onChange={setDraft} onBlur={saveUrl}
                 hint={t("Leave empty to only copy the prompt. An address without https:// gets it added")} />
             )}
+            {clis !== null && !tool && (info?.clis ? !localCli : found.length === 0) && (
+              <div className="set-ai-cli">
+                <span className="hint">{info?.clis
+                  ? t("With {name} on this PC, gachamod asks it directly and the answer shows here.", { name: CLI_NAME[info.clis[0]!] })
+                  : t("Claude, ChatGPT and Gemini can answer right here when Claude Code, Codex or Antigravity is on this PC.")}</span>
+                <div className="row">
+                  <Button size="sm" variant="ghost" icon="refresh" busy={looking} onClick={look}
+                    title={t("Looks for Claude Code, Codex, Antigravity and Gemini CLI again")}>{t("Look again")}</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {show !== "off" && localCli && info && (
+          <SetRow id="set-ai-usecli" label={t("Ask {name} on this PC", { name: CLI_NAME[localCli] })}
+            hint={useCli ? t("Turn it off to use the {name} website instead", { name: info.name }) : t("The {name} website opens instead, and you paste the answer back", { name: info.name })}>
+            <Toggle checked={useCli} onChange={(v) => void aiCliPref.set(v)} ariaLabel={t("Ask {name} on this PC", { name: CLI_NAME[localCli] })} />
+          </SetRow>
+        )}
+        {show !== "off" && tool && (
+          <div className="set-row set-row-col" id="set-ai-model">
+            <span><b>{t("Model and thinking")}</b><span className="hint">{t("For {name}. A stronger model or longer thinking gives better themes and uses your limit faster", { name: CLI_NAME[tool] })}</span></span>
+            <RunOptions key={tool} tool={tool} />
+          </div>
+        )}
+        {show !== "off" && (
+          <div className="set-row set-row-col" id="set-ai-key">
+            <span><b>{t("Free Gemini key")}</b></span>
+            <GeminiKey />
           </div>
         )}
         {show !== "off" && (

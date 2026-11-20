@@ -4,7 +4,7 @@ import { useState } from "react";
 import { importFollowing, matchGbAdultPref, setMatchGbAdult, signIn, signOut, useAccount } from "../../lib/account";
 import { Button, Panel, Toggle } from "../../ui/kit";
 import { SetRow } from "./parts";
-import { remindPref, setRemind } from "../../lib/creatorReminders";
+import { subToastPref } from "../../lib/subscriptions";
 import { t } from "../../lib/i18n";
 
 const TIP = t("You sign in on GameBanana's site in a separate window, so gachamod never sees your password. It keeps the session encrypted for your Windows account");
@@ -28,13 +28,13 @@ export function MatchGbAdultRow({ id }: { id?: string }) {
   );
 }
 
-/** Now and then, a toast naming a creator whose mods you use, to like and follow them (lib/creatorReminders.ts). */
-function RemindRow({ signedIn }: { signedIn: boolean }) {
-  const on = remindPref.use();
-  const what = t("Now and then a short message names a creator whose mods you use and don't follow yet, with a button to like and follow. At most once every few days, never while a game runs");
+/** The toast when a mod you subscribed to updates (lib/subscriptions.ts). Works signed out. */
+function SubToastRow() {
+  const on = subToastPref.use();
   return (
-    <SetRow id="set-gb-remind" label={t("Remind me to like and follow creators")} hint={signedIn ? what : t("While you're signed in. {text}", { text: what })}>
-      <Toggle checked={on} onChange={setRemind} />
+    <SetRow id="set-gb-subtoast" label={t("Tell me when subscribed mods update")}
+      hint={t("gachamod checks the mods you subscribed to (the bell on a mod's page) every hour and says when one has an update")}>
+      <Toggle checked={on} onChange={(v) => void subToastPref.set(v, v ? t("Turned on update messages for subscribed mods") : t("Turned off update messages for subscribed mods"))} />
     </SetRow>
   );
 }
@@ -56,14 +56,14 @@ export function AccountSection() {
             </span>
             <span className="row">
               <Button size="sm" icon="feed" busy={busy === "import"} disabled={!!busy} onClick={() => void run("import", importFollowing)}
-                title={t("Follows here everyone you follow on GameBanana. Nothing changes on GameBanana")}>{t("Import GameBanana follows")}</Button>
+                title={t("Follows here everyone you follow on GameBanana")}>{t("Import GameBanana follows")}</Button>
               <Button size="sm" variant="ghost" icon="power" disabled={!!busy} onClick={() => void run("out", signOut)}
                 title={t("Forgets the session on this PC. Your follows here stay")}>{t("Sign out")}</Button>
             </span>
           </div>
         )}
         {u && <MatchGbAdultRow />}
-        <RemindRow signedIn={!!u} />
+        <SubToastRow />
         {!u && (
           <SetRow id="set-gb-signin" label={t("Sign in to GameBanana")} tip={TIP}
             hint={t("Then following a creator here follows them on GameBanana too, and mods get a Like button")}>

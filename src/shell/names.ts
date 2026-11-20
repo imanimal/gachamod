@@ -51,7 +51,7 @@ const SECTIONS: Record<string, string> = {
 };
 /** "set-trash-days" (one setting in Settings) reads "Trash days". */
 const sectionLabel = (id: string) => SECTIONS[id] ?? cap(id.replace(/^set-/, "").replace(/-/g, " "));
-const TABS: Record<string, string> = { archive: t("Trash"), online: t("Online"), all: t("All games"), installed: t("Installed"), every: t("Add mods") };
+const TABS: Record<string, string> = { archive: t("Trash"), problems: t("Problems"), online: t("Online"), all: t("All games"), installed: t("Installed"), every: t("Add mods") };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 // ── names that need a lookup ──

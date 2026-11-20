@@ -308,7 +308,7 @@
   .menu-c, .menu-sub { color: #7a4f12; }
   .menu-img { box-shadow: 0 0 0 1px rgb(0 0 0 / .2); }
   .qlink { text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
-  .qlink:hover { color: var(--accent-ink); }
+  .qlink:where(:not(.badge)):hover { color: var(--accent-ink); }
 
   /* ── command palette: the pale dropdown, large ── */
   .palette { border-radius: var(--cut-lg); background: #e9eaec; box-shadow: 0 24px 70px rgb(0 0 0 / .55), 0 0 0 1px rgb(255 255 255 / .3); animation: hsrDrop 160ms var(--ease-out); }

@@ -43,14 +43,15 @@ export function recordBackups(label: string, taken: Array<{ game: string; modId:
   record({ label, brief: opts?.brief, undo: flip, redo: flip }, opts?.quiet);
 }
 
-/** Apply a KeyEdit's result: Undo with its backup. `brief` is the toast's words (the backend's label names the mod);
- *  false records it without a toast, for a switch that shows the change itself. A note from the backend (a key
- *  clash, "Press F10 in game") always shows. */
-export function recordEdit(game: GameId, modId: string, edit: KeyEdit, fallback: string, brief: string | false = t("Changed the mod's keys")) {
+/** Apply a KeyEdit's result: Undo with its backup. `brief` is the toast's words, and Undo's and Redo's (the backend's
+ *  label names the mod). `quiet` records it without an Undo toast, for a switch that shows the change itself. A note
+ *  from the backend (a key clash, "Press F10 in game") always shows, in a plain toast when quiet. */
+export function recordEdit(game: GameId, modId: string, edit: KeyEdit, fallback: string, brief: string = t("Changed the mod's keys"), quiet = false) {
   keysChanged(game, modId);
   if (!edit.backup) { toast(edit.note ?? fallback); return; }
-  const say = brief === false ? edit.note : edit.note ? `${brief}. ${edit.note}` : brief;
-  recordBackups(edit.note ? `${edit.backup.label}. ${edit.note}` : edit.backup.label, [{ game, modId, backup: edit.backup }], { brief: say ?? undefined, quiet: !say });
+  recordBackups(edit.note ? `${edit.backup.label}. ${edit.note}` : edit.backup.label, [{ game, modId, backup: edit.backup }],
+    { brief: !quiet && edit.note ? `${brief}. ${edit.note}` : brief, quiet });
+  if (quiet && edit.note) toast(edit.note);
 }
 
 // ── press-to-capture ──
@@ -316,12 +317,12 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
     return () => { live = false; off(); };
   }, [game, modId, load]);
 
-  const run = useCallback(async (what: string, job: () => Promise<KeyEdit>, fallback: string, brief: string | false) => {
+  const run = useCallback(async (what: string, job: () => Promise<KeyEdit>, fallback: string, brief: string, quiet = false) => {
     setBusy(what);
     try {
       const edit = await job();
       if (current.current === `${game}|${modId}`) setKeys(edit.keys);
-      recordEdit(game, modId, edit, fallback, brief);
+      recordEdit(game, modId, edit, fallback, brief, quiet);
     } catch (e) {
       toast(errorText(e), true);
     } finally {
@@ -354,7 +355,8 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
           : onScreen === "cant" || onScreen === "partial" ? keys.onScreenNote ?? undefined
           : onScreen === "on" ? t("Added by gachamod. Turn it off if a toggle stops working in game")
           : compact ? undefined : who ? t("Toggles do nothing while {name} isn't on screen", { name: who }) : t("Toggles do nothing while its character isn't on screen")}
-        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"), false)} />
+        onChange={(on) => run("os", () => modKeys.onScreen(game, modId, on), on ? t("The toggles already work only while on screen") : t("Nothing to take out"),
+          on ? t("Made the mod's toggles work only while on screen") : t("Made the mod's toggles work any time"), true)} />
       {showAi && (
         <Button size="sm" variant="ghost" icon="ai" title={t("Ask the AI helper which part of the mod draws the character, then apply its answer here. Works best with a strong chatbot")}
           onClick={() => askAi({ kind: "keys-offscreen", game, modIds: [modId] })}>{t("Ask the AI helper")}</Button>
@@ -389,7 +391,8 @@ export function KeyEditor({ game, modId, compact }: { game: GameId; modId: strin
               </span>
               <span className="ke-on" title={e.off ? t("Turn this toggle back on") : t("Turn this toggle off. The mod stays on, only this toggle stops working")}>
                 <Toggle size="sm" checked={!e.off} disabled={busy !== null} ariaLabel={t("{name} toggle", { name: said ?? e.name })}
-                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), t("No change"), false)} />
+                  onChange={(on) => run(`o${at}`, () => modKeys.setOff(game, modId, e.ini, e.section, !on), t("No change"),
+                    on ? t("Turned on the toggle") : t("Turned off the toggle"), true)} />
               </span>
             </li>
           );

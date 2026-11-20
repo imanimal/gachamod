@@ -1,7 +1,8 @@
 //! Desktop shortcuts: gachamod itself; quickstart, which starts the game gachamod last had open, with mods
 //! (`gachamod.exe gachamod://play`, picked up by the UI's screens/home/quickstart.ts); and a quickstart for one game
-//! (`gachamod://play/zzz`, "Zenless Zone Zero quickstart"). Quickstart icons are the game's own icon with quickstart's
-//! in the corner, and the last-game one switches to whichever game that is now (`follow`). gachamod setup asks for the
+//! (`gachamod://play/zzz`, "Zenless Zone Zero quickstart"). Quickstart icons are the game's own icon with a quickstart
+//! badge in the corner (shortcuts/icon.rs), and the last-game one switches to whichever game that is now (`follow`).
+//! gachamod setup asks for the
 //! first two and the installer makes them (src-tauri/windows/hooks.nsh); Settings makes them all again. They all open
 //! gachamod.exe, so "always as administrator" (devtools::set_always_admin) covers them without a flag of their own.
 //! Owner: SYSTEM area.
@@ -11,10 +12,12 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+mod icon;
+
 /// What the quickstart shortcut hands gachamod.exe. A game's own quickstart adds the game: gachamod://play/zzz.
 pub const PLAY_LINK: &str = "gachamod://play";
 /// The quickstart shortcut's icon. The installer puts it next to gachamod.exe; a build or a copy without it gets it
-/// written there (or into gachamod's data folder) when the shortcut is made. A game's quickstart draws it in the corner.
+/// written there (or into gachamod's data folder) when the shortcut is made.
 const QUICKSTART_ICO: &[u8] = include_bytes!("../../../src-tauri/icons/quickstart.ico");
 const QUICKSTART_ICO_NAME: &str = "quickstart.ico";
 /// The installer's own key, where it keeps the player's choices ("1" or "0") so a repair puts the desktop back the
@@ -23,8 +26,11 @@ const OWN_KEY: &str = "Software\\gachamod";
 /// Setting: the game the last-game quickstart starts now, as the UI last said (`follow`).
 const LAST_GAME: &str = "quickstart.game";
 /// Setting: the icon the last-game quickstart was given and the shortcut's time after, so it's only written again
-/// when the game changed or something else (a repair) wrote the shortcut.
+/// when the game changed or something else (a repair) wrote the shortcut. A game's own quickstart keeps its own under
+/// "quickstart.iconStamp.<game>".
 const LAST_STAMP: &str = "quickstart.iconStamp";
+/// Goes up when icon.rs draws differently, so icons made before are drawn again.
+const DRAWING: u32 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -100,9 +106,14 @@ pub fn remove(kind: Kind) -> Result<State> {
 /// Make (or make again) the quickstart for one game, with its icon.
 pub fn create_game(game: &str, db: &Db, data_dir: &Path) -> Result<State> {
     let g = games::require_def(game)?;
-    let icon = match game_icon(db, data_dir, game)? { Some(p) => p, None => plain_icon(data_dir)? };
-    put(&desk()?.join(game_file_name(g)), &format!("{PLAY_LINK}/{}", g.id), &icon, &format!("Starts {} with mods", g.name))?;
+    put_game(g, &desk()?.join(game_file_name(g)), db, data_dir)?;
     Ok(state())
+}
+
+fn put_game(g: &GameDef, lnk: &Path, db: &Db, data_dir: &Path) -> Result<()> {
+    let icon = match game_icon(db, data_dir, g.id)? { Some(p) => p, None => plain_icon(data_dir)? };
+    put(lnk, &format!("{PLAY_LINK}/{}", g.id), &icon, &format!("Starts {} with mods", g.name))?;
+    db.set_setting(&format!("{LAST_STAMP}.{}", g.id), &stamp(&icon, lnk))
 }
 
 pub fn remove_game(game: &str) -> Result<State> {
@@ -110,15 +121,30 @@ pub fn remove_game(game: &str) -> Result<State> {
     Ok(state())
 }
 
-/// The last-game quickstart now starts `game`, so its icon becomes that game's, when it's on the desktop. Quick when
-/// nothing changed, so the UI calls it on every game switch.
+/// Keep the quickstart icons on the desktop current. The last-game quickstart now starts `game`, so its icon becomes
+/// that game's; each game's own quickstart gets its icon again when the game's icon or the drawing changed. Quick
+/// when nothing changed, so the UI calls it on every game switch.
 pub fn follow(game: &str, db: &Db, data_dir: &Path) -> Result<()> {
     games::require_def(game)?;
     if db.setting(LAST_GAME)?.as_deref() != Some(game) { db.set_setting(LAST_GAME, game)?; }
-    let Some(lnk) = desktop().map(|d| d.join(Kind::Quickstart.file_name())).filter(|p| p.exists()) else { return Ok(()) };
-    let icon = last_game_icon(db, data_dir)?;
-    if db.setting(LAST_STAMP)?.as_deref() == Some(stamp(&icon, &lnk).as_str()) { return Ok(()); }
-    put_last_game(&lnk, db, data_dir)
+    let Some(desk) = desktop() else { return Ok(()) };
+    let lnk = desk.join(Kind::Quickstart.file_name());
+    if lnk.exists() {
+        let icon = last_game_icon(db, data_dir)?;
+        if db.setting(LAST_STAMP)?.as_deref() != Some(stamp(&icon, &lnk).as_str()) { put_last_game(&lnk, db, data_dir)?; }
+    }
+    for g in games::GAMES {
+        let lnk = desk.join(game_file_name(g));
+        if !lnk.exists() { continue; }
+        // one game's trouble (its folder gone) doesn't hold up the others
+        let again = || -> Result<()> {
+            let icon = match game_icon(db, data_dir, g.id)? { Some(p) => p, None => plain_icon(data_dir)? };
+            if db.setting(&format!("{LAST_STAMP}.{}", g.id))?.as_deref() == Some(stamp(&icon, &lnk).as_str()) { return Ok(()); }
+            put_game(g, &lnk, db, data_dir)
+        };
+        if let Err(e) = again() { crate::logs::warn(format!("Couldn't update the {} quickstart's icon: {e}", g.id)); }
+    }
+    Ok(())
 }
 
 fn put_last_game(lnk: &Path, db: &Db, data_dir: &Path) -> Result<()> {
@@ -164,17 +190,17 @@ fn plain_icon(data_dir: &Path) -> Result<PathBuf> {
 }
 
 /// A game's quickstart icon in `<data>/icons`, made from the game's own icon (games::icon). None when that isn't
-/// known (the game's folder isn't set). The file is named after the game icon's time, so after a game update changes
-/// it, Explorer draws the new one instead of what it cached.
+/// known (the game's folder isn't set). The file is named after the drawing and the game icon's time, so after either
+/// changes, Explorer draws the new one instead of what it cached.
 fn game_icon(db: &Db, data_dir: &Path, game: &str) -> Result<Option<PathBuf>> {
     let Some(png) = games::icon(db, data_dir, game)? else { return Ok(None) };
     let at = std::fs::metadata(&png).and_then(|m| m.modified()).ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or(0);
     let dir = data_dir.join("icons");
     let prefix = format!("quickstart-{game}-");
-    let out = dir.join(format!("{prefix}{at}.ico"));
+    let out = dir.join(format!("{prefix}{DRAWING}-{at}.ico"));
     if out.is_file() { return Ok(Some(out)); }
-    let ico = with_badge(&std::fs::read(&png)?)?;
+    let ico = drawn(&std::fs::read(&png)?)?;
     std::fs::create_dir_all(&dir)?;
     if let Ok(list) = std::fs::read_dir(&dir) {
         for e in list.flatten() {
@@ -186,22 +212,16 @@ fn game_icon(db: &Db, data_dir: &Path, game: &str) -> Result<Option<PathBuf>> {
     Ok(Some(out))
 }
 
-/// An .ico of the game icon `png` with the quickstart icon over its bottom right corner, at the sizes Windows draws
-/// desktop icons. The corner is right, since Windows puts its shortcut arrow bottom left.
-fn with_badge(png: &[u8]) -> Result<Vec<u8>> {
+/// An .ico of the game icon `png` drawn as a quickstart icon (icon.rs) at the sizes Windows draws desktop icons. The
+/// badge is bottom right, since Windows puts its shortcut arrow bottom left.
+fn drawn(png: &[u8]) -> Result<Vec<u8>> {
     use image::codecs::ico::{IcoEncoder, IcoFrame};
-    use image::imageops::{self, FilterType};
     let bad = |e: image::ImageError| Error::Invalid(format!("Couldn't draw the shortcut's icon ({e})"));
     let game = image::load_from_memory_with_format(png, image::ImageFormat::Png).map_err(bad)?.to_rgba8();
-    let badge = image::load_from_memory_with_format(QUICKSTART_ICO, image::ImageFormat::Ico).map_err(bad)?.to_rgba8();
     let mut frames = Vec::new();
-    for size in [256u32, 64, 48, 32, 24, 16] {
-        let mut icon = imageops::resize(&game, size, size, FilterType::Lanczos3);
-        // over half the icon when it's small, so it still reads at 16 px
-        let b = if size >= 48 { size / 2 } else { size * 5 / 8 };
-        let mark = imageops::resize(&badge, b, b, FilterType::Lanczos3);
-        imageops::overlay(&mut icon, &mark, i64::from(size - b), i64::from(size - b));
-        frames.push(IcoFrame::as_png(icon.as_raw(), size, size, image::ExtendedColorType::Rgba8).map_err(bad)?);
+    for size in icon::SIZES {
+        let img = icon::draw(&game, size);
+        frames.push(IcoFrame::as_png(img.as_raw(), size, size, image::ExtendedColorType::Rgba8).map_err(bad)?);
     }
     let mut out = Vec::new();
     IcoEncoder::new(&mut out).encode_images(&frames).map_err(bad)?;
@@ -289,16 +309,14 @@ mod tests {
     }
 
     #[test]
-    fn the_badge_goes_on_every_size() {
+    fn the_ico_holds_the_drawn_icon() {
         let mut png = Vec::new();
         image::RgbaImage::from_pixel(256, 256, image::Rgba([10, 200, 30, 255]))
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
-        let ico = with_badge(&png).unwrap();
+        let ico = drawn(&png).unwrap();
         let big = image::load_from_memory_with_format(&ico, image::ImageFormat::Ico).unwrap().to_rgba8();
         assert_eq!(big.dimensions(), (256, 256));
-        // the top left is the game's, the bottom right corner has the badge drawn over it
-        let game = [10, 200, 30, 255];
-        assert_eq!(big.get_pixel(8, 8).0, game);
-        assert!((128..256).any(|x| (128..256).any(|y| big.get_pixel(x, y).0 != game)));
+        assert_eq!(big.get_pixel(40, 128).0, [10, 200, 30, 255]);
+        assert_eq!(big.get_pixel(2, 2)[3], 0);
     }
 }

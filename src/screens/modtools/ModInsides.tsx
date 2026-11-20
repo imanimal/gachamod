@@ -8,7 +8,7 @@ import { Badge, Button, IconButton, Panel, Segmented, Select, Skeleton, Toggle, 
 import { t, tb, tn } from "../../lib/i18n";
 import { toast } from "../../ui/toast";
 import { saved } from "../../ui/motion";
-import { dropShared, ignoreConflict, turnOff } from "./toolsBadge";
+import { dropShared, ignoreConflict, ignoreConflicts, turnOff } from "./toolsBadge";
 import { FixButton } from "./FixButton";
 import { onKeysChanged } from "../../ui/KeyEditor";
 import "./modtools.css";
@@ -228,9 +228,16 @@ function Conflicts({ mod, data, onDone }: { mod: ModEntry; data: ModInspect; onD
   const off = (ids: string[], names: string[], tag: string) => act(tag, () => turnOff(mod.game, ids, names));
   return (
     <Panel title={t("Conflicts")} icon="layers" className="mi-panel mi-conflicts" count={data.conflicts.length}
-      actions={<Button size="sm" busy={busy === "all"} disabled={!!busy || !mod.enabled} icon="check"
-        title={t("Turn off the other mods that change the same parts")}
-        onClick={() => off(data.conflicts.map((c) => c.modId), data.conflicts.map((c) => c.name), "all")}>{t("Keep this one")}</Button>}>
+      actions={<>
+        {data.conflicts.length > 1 && (
+          <Button size="sm" variant="ghost" icon="hide" busy={busy === "i:all"} disabled={!!busy}
+            title={t("Ignore the conflicts with all these mods. Tools, Conflicts lists ignored ones")}
+            onClick={() => act("i:all", () => ignoreConflicts(mod.game, data.conflicts.map((c) => [mod.id, c.modId])))}>{t("Ignore all")}</Button>
+        )}
+        <Button size="sm" busy={busy === "all"} disabled={!!busy || !mod.enabled} icon="check"
+          title={t("Turn off the other mods that change the same parts")}
+          onClick={() => off(data.conflicts.map((c) => c.modId), data.conflicts.map((c) => c.name), "all")}>{t("Keep this one")}</Button>
+      </>}>
       <p className="hint mi-conf-hint">{t("These mods are on and change the same parts of the model, so only one of them shows.")}</p>
       <ul className="mi-conf-list">
         {data.conflicts.map((c) => (

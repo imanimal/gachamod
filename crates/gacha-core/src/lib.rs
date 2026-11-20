@@ -4,8 +4,12 @@
 pub mod aliases;
 pub mod app_update;
 pub mod archive;
+pub mod ai_files;
 pub mod backups;
+pub mod chat_cli;
 pub mod db;
+pub mod dpapi;
+pub mod gemini_api;
 pub mod devtools;
 pub mod download;
 pub mod extensions;

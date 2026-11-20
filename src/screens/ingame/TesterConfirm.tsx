@@ -33,12 +33,12 @@ function Host() {
   return (
     <Confirm title={t("Turn on tester options?")} yes={t("Turn on")} onYes={() => done(true)} onClose={() => done(false)}>
       <p>
-        {t("Tester options add the menu the game draws itself to Switch skins in game in {ww}, {ef} and the other games. {zzz}, {gi}, {hsr} and {hi3} always have it. It opens in exclusive fullscreen, where gachamod's menu over the game can't.", {
+        {t("Tester options add the skin menu the game draws itself to {ww}, {ef} and the other games. {zzz}, {gi}, {hsr} and {hi3} always have it. Unlike gachamod's menu over the game, it opens in exclusive fullscreen.", {
           ww: t("Wuthering Waves"), ef: t("Endfield"), zzz: t("Zenless Zone Zero"), gi: t("Genshin Impact"), hsr: t("Star Rail"), hi3: t("Honkai Impact 3rd"),
         })}
       </p>
       <p>{t("The menu's pictures load with the game's mods, so the game takes a little longer to load them and uses more memory.")}</p>
-      <p>{t("Check this game sends what worked and what didn't to the developer.")}</p>
+      <p>{t("The Check this game walkthrough sends the developer what worked and what didn't.")}</p>
     </Confirm>
   );
 }

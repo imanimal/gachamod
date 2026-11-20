@@ -143,6 +143,9 @@
   .tp-conflict, .tp-problem { border: 0; border-radius: 4px; background: #dadada; box-shadow: 0 2px 8px rgb(0 0 0 / .28); }
   .pack-mod-img { border-radius: 3px; background: var(--tile); }
   .onboard-game { flex-direction: row; }
+
+  /* ── Settings and Tools pages: their panels have no fill, so the stars and compass behind them are blurred ── */
+  .pg-page > .pg-body > .panel { -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 }
 
 /* ── light: settings rows and log wells turn to paper ── */

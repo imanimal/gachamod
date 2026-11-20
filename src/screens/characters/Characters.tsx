@@ -11,7 +11,7 @@ import { usePortrait, usePortraitBatch } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { emitApp, go, useGame, useRoute } from "../../lib/store";
 import { inTauri } from "../../lib/tauri";
-import { menuFor, menuHandler } from "../../ui/ContextMenu";
+import { menuHandler } from "../../ui/ContextMenu";
 import { addDropTarget } from "../../ui/DropZone";
 import { Icon } from "../../ui/Icon";
 import { Button, Chip, Empty, IconButton, PageHeader, SearchField, Select, Skeleton, TextField, Toggle, Waiting } from "../../ui/kit";
@@ -19,7 +19,7 @@ import { Popover } from "../../ui/Popover";
 import { useMods } from "../library/data";
 import { moveInGrid } from "../library/gridNav";
 import { ModDrawerHost } from "../library/ModDrawer";
-import { noteLibrary } from "../library/menus";
+import { characterMenu, noteLibrary } from "../library/menus";
 import { CharacterPage } from "./CharacterPage";
 import { byUid, dismissForeign, forgetUnrecognised, importForeign, importOwned, looksLikeExport, saveOwned, savedUid, toggleOwned, useForeign, useOwned, useUnrecognised,
   type OwnedSource } from "./owned";
@@ -169,14 +169,15 @@ function Tile({ game, c }: { game: GameId; c: RosterChar }) {
   const onKey = (e: KeyboardEvent) => {
     if (e.key.toLowerCase() !== "o" || e.ctrlKey || e.altKey || e.metaKey) return;
     e.preventDefault();
-    void toggleOwned(game, c.name);
+    // on a roster of owned ones only, the tile goes away: that toasts with Undo
+    void toggleOwned(game, c.name, !!rosterViewPref.get().owned && c.owned);
   };
   const mods = !n ? t("no mods yet") : c.on ? tn(n, "{n} mod, {on} on", "{n} mods, {on} on", { on: c.on }) : tn(n, "{n} mod, default outfit", "{n} mods, default outfit");
   return (
     <button type="button" className={`portrait roster-tile${n ? "" : " dim"}${c.hidden ? " is-hidden" : ""}${c.owned ? " is-owned" : ""}`}
       title={c.owned ? t("{name}: {mods}, owned. Press O to mark as not owned", { name: c.name, mods }) : t("{name}: {mods}. Press O to mark as owned", { name: c.name, mods })}
       data-name={c.name} onClick={() => go({ view: "characters", character: c.name })} onKeyDown={onKey}
-      onContextMenu={menuHandler(() => menuFor("character", { game, name: c.name }))}>
+      onContextMenu={menuHandler(() => characterMenu(game, c.name, true))}>
       {wearing && <span className="portrait-bg"><LazyImg src={fileUrl(wearing.preview)} alt="" decoding="async" /></span>}
       <span className={`portrait-img${p.sharp ? "" : " is-soft"}`}>
         {p.src && !broken

@@ -1,13 +1,18 @@
 // The AI helper, opened by lib/ai.ts askAi() and mounted once by the app shell. Three steps in one window: say what
-// you want (and see exactly what gets shared), copy the prompt and open your chatbot, paste its answer back and
-// apply it with Undo. Also the one-time suggestion card after setup. Hidden completely while AI is off.
-// Owner: SETTINGS/AI area.
+// you want (and see exactly what gets shared), get the answer, apply it with Undo. When the picked chatbot's CLI is on
+// this PC (Claude Code for Claude), or Gemini has a free key, the helper asks it and the answer streams in; with a
+// website it copies the prompt, opens the site and the user pastes the answer back. Also the one-time suggestion card
+// after setup. Under the answer, what the run did: the files it read (some at the same time), its thinking, the model
+// and the tokens it used. Hidden completely while AI is off. Owner: SETTINGS/AI area.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { errorText, settings, shell } from "../../lib/api";
-import { CHATBOTS, aiIntroPref, aiShowPref, chatbotLink, chatbotOf, chatbotPref, chatbotTip, installedChatbots, useAiShow, type AiTask, type ChatbotId } from "../../lib/ai";
+import { CLI_NAME, aiCliPref, aiIntroPref, aiRunPref, aiShowPref, askCli, botOrder, botTool, chatbotLink, chatbotOf, chatbotPref, chatbotTip, cliProblem, cliSignIn, foundCli, foundClis, installedChatbots, pickBot, runOpts, runOptsText, useAiShow, useGeminiKey, type AiTask, type AppTool, type ChatbotId, type CliId, type CliReply, type CliStatus, type CliUsage } from "../../lib/ai";
+import { seconds } from "../../lib/activity";
+import { RunOptions } from "./RunOptions";
 import { placeFor } from "../../lib/places";
+import { GeminiKey } from "./GeminiKey";
 import { onApp } from "../../lib/store";
-import { Badge, Button, Chip, Dialog, TextField } from "../../ui/kit";
+import { Badge, Button, Chip, Dialog, TextField, Waiting, formatCount } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { Icon } from "../../ui/Icon";
 import { CutOff, ReplyError, TASKS, parseReply, type Built, type Preview } from "./tasks";
@@ -29,7 +34,7 @@ export function AiHost() {
   );
 }
 
-// ── chatbot choice, installed apps first ──
+// ── chatbot choice: ones whose CLI is on this PC first, then ones with an app on this PC, then the rest ──
 
 function useInstalled(): ChatbotId[] {
   const [list, setList] = useState<ChatbotId[]>([]);
@@ -37,15 +42,23 @@ function useInstalled(): ChatbotId[] {
   return list;
 }
 
+function useClis(): CliId[] {
+  const [list, setList] = useState<CliId[]>([]);
+  useEffect(() => { let live = true; void foundClis().then((l) => { if (live) setList(l); }); return () => { live = false; }; }, []);
+  return list;
+}
+
 function BotPicker({ value, onPick }: { value: ChatbotId | ""; onPick: (id: ChatbotId) => void }) {
   const installed = useInstalled();
-  const order = [...CHATBOTS].sort((a, b) => Number(installed.includes(b.id)) - Number(installed.includes(a.id)));
+  const clis = useClis();
+  const useCli = aiCliPref.use();
+  const hasKey = useGeminiKey();
   return (
     <div className="ai-bots" role="radiogroup" aria-label={t("Your chatbot")}>
-      {order.map((b) => (
+      {botOrder(clis, installed, hasKey).map((b) => (
         <Chip key={b.id} on={value === b.id} onClick={() => onPick(b.id)}
-          title={chatbotTip(b, installed.includes(b.id))}>
-          {b.name}{installed.includes(b.id) && <span className="ai-bot-here">{t("on this PC")}</span>}
+          title={chatbotTip(b, installed.includes(b.id), botTool(b, clis, hasKey, useCli))}>
+          {b.name}{(installed.includes(b.id) || !!foundCli(b, clis)) && <span className="ai-bot-here">{t("on this PC")}</span>}
         </Chip>
       ))}
     </div>
@@ -59,6 +72,15 @@ function BotPicker({ value, onPick }: { value: ChatbotId | ""; onPick: (id: Chat
 type Draft = { goal: string; text: string; reply: string; sent: boolean };
 const drafts = new Map<string, Draft>();
 
+/** What a CLI is doing, for the wait line: "Claude Code is reading kit.css". */
+function statusText(s: CliStatus | "think" | null, name: string): string {
+  if (s === "think") return t("{name} is thinking", { name });
+  if (s?.kind === "read" && s.on) return t("{name} is reading {file}", { name, file: s.on });
+  if (s?.kind === "find") return t("{name} is looking through the files", { name });
+  if (s?.kind === "search" && s.on) return t("{name} is searching the files for {text}", { name, text: s.on.slice(0, 40) });
+  return t("{name} is writing the answer", { name });
+}
+
 function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   const def = TASKS[task.kind] ?? TASKS.custom!;
   const key = useMemo(() => JSON.stringify(task), [task]);
@@ -69,37 +91,107 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
   const [buildErr, setBuildErr] = useState<string | null>(null);
   const saved = chatbotPref.use();
   const installed = useInstalled();
-  // nothing picked yet: the chatbot found on this PC, saved once it's used
-  const bot: ChatbotId | "" = saved || installed[0] || "";
+  const clis = useClis();
+  const useCli = aiCliPref.use();
+  const hasKey = useGeminiKey();
+  // nothing picked yet: a chatbot that answers here or has an app on this PC, saved once it's used
+  const bot = pickBot(saved, clis, installed, hasKey);
+  const botInfo = chatbotOf(bot);
+  // what answers in the window; undefined means the website
+  const tool = botTool(botInfo, clis, hasKey, useCli);
+  const cliName = tool ? CLI_NAME[tool] : "";
   const [reply, setReply] = useState(kept?.reply ?? "");
   const [sent, setSent] = useState(kept?.sent ?? false);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string[] | null>(null);
+  // a CLI writing its answer: `stop` ends it, and closing the window does too
+  const [asking, setAsking] = useState(false);
+  const stop = useRef<(() => void) | null>(null);
+  const [failed, setFailed] = useState<CliReply | null>(null);
+  // what a CLI is doing before it writes (reading a file, thinking), cleared once words come
+  const [now, setNow] = useState<CliStatus | "think" | null>(null);
+  // what the last run did: each tool call, its thinking, what it used and how long it took
+  const [steps, setSteps] = useState<CliStatus[]>([]);
+  const [thinking, setThinking] = useState("");
+  const [usage, setUsage] = useState<CliUsage | null>(null);
+  const [took, setTook] = useState<number | null>(null);
+  const opts = runOpts(tool ?? "claude", aiRunPref.use());
+  useEffect(() => () => stop.current?.(), []);
   const replyBox = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (done) drafts.delete(key);
     else drafts.set(key, { goal, text, reply, sent });
   }, [key, goal, text, reply, sent, done]);
+  // the newest words stay in view while they come in
+  useEffect(() => {
+    const box = asking ? replyBox.current?.querySelector("textarea") : null;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [reply, asking]);
 
   const showText = !!def.text && (!def.text.forGoal || def.text.forGoal === goal);
+  // an example picked at random, and a new one each time the box is emptied again
+  const examples = def.text?.examples ?? [];
+  const pickExample = (not?: string) => { const pool = examples.filter((x) => x !== not); return pool[Math.floor(Math.random() * pool.length)] ?? not ?? ""; };
+  const [example, setExample] = useState(() => pickExample());
+  const hadText = useRef(!!text);
+  useEffect(() => {
+    if (text && !hadText.current) hadText.current = true;
+    else if (!text && hadText.current) { hadText.current = false; setExample((x) => pickExample(x)); }
+  }, [text]);
   const needText = showText && def.text!.required && !text.trim();
-  const botInfo = chatbotOf(bot);
 
-  // build the prompt as the input changes (it also tells what gets shared before anything is copied)
+  // build the prompt as the input changes (it also tells what gets shared before anything is copied). An answer that
+  // comes back here gets the longer prompt with reference files; a pasted one stays short.
+  const rich = !!tool;
   useEffect(() => {
     let live = true;
     const timer = window.setTimeout(() => {
-      def.build(task, { goal, text }).then((b) => { if (live) { setBuilt(b); setBuildErr(null); } })
+      def.build(task, { goal, text, rich }).then((b) => { if (live) { setBuilt(b); setBuildErr(null); } })
         .catch((e) => { if (live) { setBuilt(null); setBuildErr(errorText(e)); } });
     }, 250);
     return () => { live = false; window.clearTimeout(timer); };
-  }, [def, task, goal, text]);
+  }, [def, task, goal, text, rich]);
 
   const read = useMemo((): { preview?: Preview; error?: string; cut?: boolean } => {
-    if (!reply.trim() || !built) return {};
+    if (!reply.trim() || !built || asking) return {};
     try { const preview = built.read((built.parse ?? parseReply)(reply)); return { preview, cut: !!preview.cut }; }
     catch (e) { return { error: e instanceof ReplyError ? e.message : errorText(e), cut: e instanceof CutOff }; }
-  }, [reply, built]);
+  }, [reply, built, asking]);
+
+  // a CLI on this PC or Gemini's key: the answer streams into the reply box, then reads like a pasted one
+  const ask = async () => {
+    if (!built || needText || !tool || stop.current) return;
+    if (!saved && bot) void chatbotPref.set(bot);
+    setFailed(null);
+    setReply("");
+    setNow(null);
+    setSteps([]);
+    setThinking("");
+    setUsage(null);
+    setTook(null);
+    setSent(true);
+    const started = Date.now();
+    const run = askCli(tool, built.prompt, (words) => { setReply(words); if (words) setNow(null); }, {
+      files: built.files,
+      onStatus: (s) => { setNow(s); setSteps((l) => [...l, s]); },
+      onThink: (x) => { setThinking(x); setNow("think"); },
+    });
+    stop.current = run.stop;
+    setAsking(true);
+    try {
+      const r = await run.done;
+      setReply(r.text);
+      setUsage(r.usage ?? null);
+      if (r.problem && r.problem !== "stopped") setFailed(r);
+    } catch (e) {
+      setFailed({ text: "", problem: "failed", error: errorText(e), resetsAt: null });
+    } finally {
+      stop.current = null;
+      setAsking(false);
+      setNow(null);
+      setTook(Date.now() - started);
+    }
+  };
 
   const send = async (open: boolean) => {
     if (!built || needText) return;
@@ -134,13 +226,15 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     try { setDone(await p.apply()); } catch (e) { toast(errorText(e), true); } finally { setBusy(false); }
   };
 
-  // Ctrl+Enter: copy and open, or apply once an answer is in
+  // Ctrl+Enter: ask (or copy and open), or apply once an answer is in
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
       e.preventDefault();
       if (done) onClose();
+      else if (asking) return;
       else if (read.preview?.apply) void apply();
+      else if (tool) void ask();
       else void send(true);
     };
     window.addEventListener("keydown", k);
@@ -167,8 +261,14 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
     <Dialog title={def.title(task)} icon="ai" size="lg" className="ai-help" onClose={onClose}
       footer={<>
         <Button variant="ghost" onClick={onClose}>{t("Close")}</Button>
-        {p?.apply
+        {asking
+          ? <Button variant="secondary" icon="x" onClick={() => stop.current?.()} title={t("Stops {name} now", { name: cliName })}>{t("Stop")}</Button>
+          : p?.apply
           ? <Button variant="primary" icon="check" busy={busy} onClick={() => void apply()} title={t("Apply these changes (Ctrl+Enter). Undo puts them back")}>{t("Apply")}</Button>
+          : tool
+          ? <Button variant={sent ? "secondary" : "primary"} icon="ai" disabled={!built || needText} onClick={() => void ask()}
+              title={tool === "gemini-api" ? t("Sends the prompt to Gemini with your free key (Ctrl+Enter)") : t("Sends the prompt to {name} on this PC (Ctrl+Enter)", { name: cliName })}>
+              {sent ? t("Ask again") : t("Ask {name}", { name: cliName })}</Button>
           : <Button variant={sent ? "secondary" : "primary"} icon={bot && bot !== "other" ? "external" : "copy"} disabled={!built || needText}
               onClick={() => void send(true)} title={t("Copies the prompt and opens your chatbot (Ctrl+Enter)")}>{sent ? t("Copy again") : openLabel}</Button>}
       </>}>
@@ -179,15 +279,29 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
             {def.goals.map((g) => <Chip key={g.id} on={goal === g.id} onClick={() => setGoal(g.id)} title={g.title}>{g.label}</Chip>)}
           </div>
         )}
-        {showText && <TextField label={def.text!.label} value={text} onChange={setText} placeholder={def.text!.placeholder} multiline rows={2} autoFocus />}
+        {showText && <TextField label={def.text!.label} value={text} onChange={setText} suggest={example} multiline rows={2} autoFocus />}
         <div className="ai-bot-row">
           <span className="field-l">{t("Your chatbot")}</span>
           <BotPicker value={bot} onPick={(id) => void chatbotPref.set(id)} />
+          {tool && (
+            <details className="ai-more">
+              <summary title={t("Pick the model and how long it thinks. Settings, AI helper has the same choice")}>
+                {t("Model and thinking")} <span className="hint">{runOptsText(tool, opts)}</span>
+              </summary>
+              <RunOptions key={tool} tool={tool} />
+            </details>
+          )}
           {def.note && <span className="hint">{def.note}</span>}
+          {!tool && !hasKey && (
+            <details className="ai-key-offer">
+              <summary>{t("Get answers here instead of pasting")}</summary>
+              <GeminiKey />
+            </details>
+          )}
         </div>
         {buildErr ? <BuildError text={buildErr} onGo={onClose} /> : built && (
           <div className="ai-shares">
-            <span className="hint">{t("Shared when you paste the prompt:")}</span>
+            <span className="hint">{tool ? t("Sent to {name} when you ask:", { name: cliName }) : t("Shared when you paste the prompt:")}</span>
             <ul>{built.shares.map((s) => <li key={s}>{s}</li>)}</ul>
             <details className="ai-prompt">
               <summary>{t("See the prompt")}</summary>
@@ -198,19 +312,138 @@ function Helper({ task, onClose }: { task: AiTask; onClose: () => void }) {
       </section>
 
       <section className={`ai-step${sent || reply ? "" : " dim"}`} ref={replyBox}>
-        <h3 className="ai-step-h"><span className="ai-n">2</span>{t("Paste the answer")}</h3>
-        <TextField value={reply} onChange={setReply} multiline rows={4} mono placeholder={t("The chatbot's whole reply, with its code blocks")} />
-        <div className="row">
-          {read.cut
-            ? <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Adds the chatbot's next answer after this one")}>{t("Paste the rest")}</Button>
-            : <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Paste the chatbot's answer from the clipboard")}>{t("Paste")}</Button>}
-          {reply && <Button size="sm" variant="ghost" icon="x" onClick={() => setReply("")}>{t("Clear")}</Button>}
-        </div>
-        {read.error && <p className="ai-err" role="alert">{read.error}</p>}
+        <h3 className="ai-step-h"><span className="ai-n">2</span>{tool ? t("The answer") : t("Paste the answer")}</h3>
+        {asking && tool && <Waiting what={statusText(now, cliName)}
+          hold={built?.files?.length
+            ? t("Reading the files and writing a long answer, like a whole theme, can take several minutes. Stop ends it.")
+            : t("Long answers, like hundreds of mod names or a whole theme, take a minute or two. Stop ends it.")} />}
+        <TextField value={reply} onChange={setReply} multiline rows={4} mono
+          placeholder={tool ? t("The answer shows here as it's written") : t("The chatbot's whole reply, with its code blocks")} />
+        {!tool && (
+          <div className="row">
+            {read.cut
+              ? <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Adds the chatbot's next answer after this one")}>{t("Paste the rest")}</Button>
+              : <Button size="sm" icon="paste" onClick={() => void pasteReply()} title={t("Paste the chatbot's answer from the clipboard")}>{t("Paste")}</Button>}
+            {reply && <Button size="sm" variant="ghost" icon="x" onClick={() => setReply("")}>{t("Clear")}</Button>}
+          </div>
+        )}
+        {tool && (asking || steps.length > 0 || !!thinking || !!usage) && <RunDetails steps={steps} thinking={thinking} usage={usage} took={took} asking={asking} />}
+        {failed && tool && <CliFailure r={failed} name={cliName} tool={tool} onGo={onClose} />}
+        {read.error && !failed && <p className="ai-err" role="alert">{read.error}</p>}
       </section>
 
       {p && <PreviewView p={p} />}
     </Dialog>
+  );
+}
+
+/** Tool calls by round: calls in one round were made at the same time. */
+function byRound(steps: CliStatus[]): CliStatus[][] {
+  const out: CliStatus[][] = [];
+  for (const s of steps) {
+    const last = out[out.length - 1];
+    if (last && last[0]!.round === s.round && s.round > 0) last.push(s);
+    else out.push([s]);
+  }
+  return out;
+}
+
+/** One round in words: "Read kit.css, base.css; searched for --accent". */
+function roundText(r: CliStatus[]): string {
+  const of = (k: CliStatus["kind"]) => r.filter((s) => s.kind === k).map((s) => s.on).filter(Boolean);
+  const parts = [
+    of("read").length ? t("read {files}", { files: of("read").join(", ") }) : "",
+    of("find").length ? t("looked for {files}", { files: of("find").join(", ") }) : "",
+    of("search").length ? t("searched for {text}", { text: of("search").join(", ") }) : "",
+    of("work").length ? t("used {tools}", { tools: of("work").join(", ") }) : "",
+  ].filter(Boolean).join("; ");
+  return parts.charAt(0).toLocaleUpperCase() + parts.slice(1);
+}
+
+/** Whether the run details were open last time, kept for the session. */
+let detailsOpen = false;
+
+/** What a run did and used: a one-line summary that opens to the model, tokens, each step and its thinking. Each tool
+ *  reports different things, so a line shows only when its tool said it. */
+function RunDetails({ steps, thinking, usage, took, asking }: { steps: CliStatus[]; thinking: string; usage: CliUsage | null; took: number | null; asking: boolean }) {
+  const [open, setOpen] = useState(detailsOpen);
+  const think = useRef<HTMLPreElement>(null);
+  // the newest thoughts stay in view while they come in
+  useEffect(() => { if (asking && think.current) think.current.scrollTop = think.current.scrollHeight; }, [thinking, asking]);
+  const rounds = byRound(steps);
+  const reads = new Set(steps.filter((s) => s.kind === "read").map((s) => s.on)).size;
+  const looks = steps.filter((s) => s.kind === "find" || s.kind === "search").length;
+  const together = rounds.some((r) => r.length > 1);
+  const tokens = (usage?.input ?? 0) + (usage?.output ?? 0);
+  const n = (x: number) => formatCount(x);
+  const summary = [
+    reads > 0 && (together ? t("Read {n} files, some at the same time", { n: reads }) : tn(reads, "Read {n} file", "Read {n} files")),
+    looks > 0 && tn(looks, "{n} search", "{n} searches"),
+    !!thinking && t("Thought it through"),
+    tokens > 0 && t("{n} tokens", { n: n(tokens) }),
+    took !== null && seconds(Math.max(1, Math.round(took / 1000))),
+  ].filter((x): x is string => !!x);
+  const pct = usage?.context && usage.window ? Math.max(1, Math.round((usage.context / usage.window) * 100)) : null;
+  return (
+    <details className="ai-run" open={open} onToggle={(e) => { detailsOpen = e.currentTarget.open; setOpen(detailsOpen); }}>
+      <summary title={t("What the chatbot did: the files it read, its thinking and the tokens it used")}>
+        {summary.length ? summary.join(", ") : t("What it's doing")}
+      </summary>
+      {(usage || took !== null) && (
+        <dl className="ai-run-facts">
+          {usage?.model && <><dt>{t("Model")}</dt><dd className="selectable">{usage.model}</dd></>}
+          {usage?.context != null && (
+            <><dt title={t("The most the model held in mind at once: the prompt, the files it read and its answer")}>{t("Context")}</dt>
+              <dd>{usage.window ? t("{used} of {max} tokens ({pct}%)", { used: n(usage.context), max: n(usage.window), pct: pct! }) : t("{n} tokens", { n: n(usage.context) })}</dd></>
+          )}
+          {usage?.input != null && (
+            <><dt>{t("Read")}</dt>
+              <dd>{usage.cached ? t("{n} tokens, {cached} of them from the cache", { n: n(usage.input), cached: n(usage.cached) }) : t("{n} tokens", { n: n(usage.input) })}</dd></>
+          )}
+          {usage?.output != null && (
+            <><dt>{t("Wrote")}</dt>
+              <dd>{usage.thinking ? t("{n} tokens, {thinking} of them thinking", { n: n(usage.output), thinking: n(usage.thinking) }) : t("{n} tokens", { n: n(usage.output) })}</dd></>
+          )}
+          {usage?.turns != null && <><dt title={t("Each round, the model reads what came back and decides what to do next")}>{t("Rounds")}</dt><dd>{usage.turns}</dd></>}
+          {took !== null && <><dt>{t("Time")}</dt><dd>{seconds(Math.max(1, Math.round(took / 1000)))}</dd></>}
+        </dl>
+      )}
+      {rounds.length > 0 && (
+        <>
+          <span className="field-l">{t("Steps")}</span>
+          <ol className="ai-run-steps selectable">
+            {rounds.map((r, i) => (
+              <li key={i}>{r.length > 1 && <span className="ai-run-once" title={t("The model asked for these together and they ran at the same time")}>{t("{n} at once", { n: r.length })}</span>}{roundText(r)}</li>
+            ))}
+          </ol>
+        </>
+      )}
+      {thinking && (
+        <>
+          <span className="field-l">{t("Thinking")}</span>
+          <pre className="ai-think selectable" ref={think}>{thinking}</pre>
+        </>
+      )}
+    </details>
+  );
+}
+
+/** Why a CLI or Gemini didn't answer, with the button that fixes it when there is one. */
+function CliFailure({ r, name, tool, onGo }: { r: CliReply; name: string; tool: AppTool; onGo: () => void }) {
+  const { text, hint } = cliProblem(r, name, tool);
+  const place = hint ? placeFor(hint) : null;
+  return (
+    <div className="ai-err" role="alert">
+      <p>{text}</p>
+      {hint && <p className="hint">{hint}</p>}
+      {r.problem === "signin" && tool !== "gemini-api" && (
+        <Button size="sm" icon="external" onClick={() => void cliSignIn(tool as CliId).catch((e) => toast(errorText(e), true))}
+          title={t("Opens {name} in a window of its own to sign in", { name })}>{t("Sign in")}</Button>
+      )}
+      {r.problem === "node" && <Button size="sm" icon="external" onClick={() => void shell.openUrl("https://nodejs.org/")}>{t("Get Node.js")}</Button>}
+      {r.problem === "key" && <GeminiKey />}
+      {place && <Button size="sm" onClick={() => { onGo(); place.run(); }}>{place.label}</Button>}
+    </div>
   );
 }
 
@@ -269,6 +502,8 @@ function PreviewView({ p }: { p: Preview }) {
 function AiIntro() {
   const intro = aiIntroPref.use();
   const bot = chatbotPref.use();
+  const clis = useClis();
+  const hasKey = useGeminiKey();
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let live = true;
@@ -285,8 +520,10 @@ function AiIntro() {
   const pick = (id: ChatbotId) => {
     void chatbotPref.set(id);
     void aiIntroPref.set("done");
-    const name = chatbotOf(id)?.name;
-    toast(name ? t("AI buttons now open {name} with the prompt ready", { name }) : t("AI buttons now open your chatbot with the prompt ready"));
+    const b = chatbotOf(id);
+    const tool = botTool(b, clis, hasKey);
+    toast(tool ? t("AI buttons now ask {name} and show the answer here", { name: CLI_NAME[tool] })
+      : b && b.id !== "other" ? t("AI buttons now open {name} with the prompt ready", { name: b.name }) : t("AI buttons now open your chatbot with the prompt ready"));
   };
   return (
     <aside className="ai-intro" aria-label={t("Use your chatbot with gachamod")}>

@@ -83,6 +83,8 @@ function wordScore(q: string, targets: string[], joined: string): number {
   for (const w of targets) {
     if (w === q) return 10;
     if (w.startsWith(q)) best = Math.max(best, 8 - Math.min(3, (w.length - q.length) / 4));
+    // an ending the target doesn't have: "flickering" finds flicker, "skins" finds skin
+    else if (w.length >= 4 && q.startsWith(w) && q.length - w.length <= 3) best = Math.max(best, 6);
     else if ((q.length >= 3 || cjk(q)) && w.includes(q)) best = Math.max(best, 5);
     else if (q.length >= 4 && editWithin(q, w.slice(0, q.length + 1), q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
     else if (q.length >= 4 && editWithin(q, w, q.length >= 7 ? 2 : 1)) best = Math.max(best, 4);
@@ -92,13 +94,15 @@ function wordScore(q: string, targets: string[], joined: string): number {
   return best;
 }
 
-/** Words around the name of a thing rather than in it: "turn off the intro", "how do I change the language". One that
- *  matches nothing is passed over, as is the start of one still being typed ("disab"), when another word matched. */
+/** Words around the name of a thing rather than in it: "turn off the intro", "how do I change the language". Next to a
+ *  word that names something they only break ties, and one that matches nothing is passed over. A query of nothing
+ *  but these ("open", "settings") is matched like any other. */
 const FILLER = new Set(("a an the my me i im to of for in on off it its is are am be this that how do does can cant " +
-  "where what which why want wanna need please turn turning switch enable enabled disable disabled activate deactivate " +
-  "stop change changing set setting settings adjust edit toggle use using make get go find open show hide remove no " +
-  "not dont don t without way option options there").split(" "));
-const isFiller = (q: string, last: boolean) => FILLER.has(q) || (last && [...FILLER].some((f) => f.length > q.length && f.startsWith(q)));
+  "where when what which why want wanna need please turn turning switch enable enabled disable disabled activate " +
+  "deactivate stop change changing set setting settings adjust edit toggle use using make get go find open show hide " +
+  "remove no not dont don t without way option options there").split(" "));
+/** The start of a filler word still being typed ("disab"). */
+const fillerStart = (q: string) => [...FILLER].some((f) => f.length > q.length && f.startsWith(q));
 
 /** A match score for a command (0 = no match). */
 export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords" | "priority" | "where">): number {
@@ -108,21 +112,19 @@ export function scoreCommand(query: string, c: Pick<Command, "title" | "keywords
   const en = lang === "en" ? "" : `${english(c.title)} ${c.where ? english(c.where) : ""}`;
   const title = words(c.title), kw = words(`${c.keywords ?? ""} ${c.where ?? ""} ${en}`);
   const joinedTitle = title.join(" ");
-  let total = 0, skipped = false, named = false;
+  const naming = qs.filter((q) => !FILLER.has(q)).length;
+  let total = 0;
   for (const [i, q] of qs.entries()) {
     const inTitle = wordScore(q, title, joinedTitle);
     const inKw = wordScore(q, kw, "") * 0.8;
     const s = Math.max(inTitle, inKw);
+    if (naming && FILLER.has(q)) { total += s / 10; continue; }
     if (!s) {
-      if (!isFiller(q, i === qs.length - 1)) return 0;
-      skipped = true;
-      continue;
+      if (naming > 1 && i === qs.length - 1 && fillerStart(q)) continue;
+      return 0;
     }
-    if (!FILLER.has(q)) named = true;
     total += s;
   }
-  // "turn off" on its own names nothing, but "open" or "settings" typed alone still match as words
-  if (skipped && !named) return 0;
   const fq = fold(query);
   if (fold(c.title).startsWith(fq)) total += 6;
   else if (fold(c.title).includes(fq)) total += 3;

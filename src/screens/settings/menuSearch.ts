@@ -44,7 +44,7 @@ export function searchMenus(query: string, here: Menu, withTools: boolean): Foun
     for (const page of m.pages) {
       const pageScore = scoreCommand(query, { title: page.label, keywords: page.keywords, where: name });
       for (const s of m.sections) {
-        if (s.page !== page.id) continue;
+        if (s.page !== page.id || (m.menu === "tools" && s.id === "ai" && !aiShown("useful"))) continue;
         const own = Math.max(pageScore, scoreCommand(query, { title: s.label, keywords: s.keywords, where: `${name} ${page.label}` }));
         let score = own;
         const rows: string[] = [];

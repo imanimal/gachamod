@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { backups, errorText, fixers as fixersApi, fixes as fixesApi, type FixAll, type FixTried, type FixerFile, type FixerRun, type GameId, type ModBackup, type ModHealthRow, type ToolLink } from "./api";
 import { gbToolId, newestFile, toolPage, type GbFile } from "./gamebanana";
-import { record, undo } from "./history";
+import { linkToast, record, undo } from "./history";
 import { jsonPref, pref } from "./prefs";
 import { emitApp, go, onApp } from "./store";
 import { timeAgo } from "../ui/kit";
@@ -106,8 +106,8 @@ onApp((e) => {
   timers.set(e.game, window.setTimeout(() => void reloadHealth(e.game, true), 700));
 });
 
-/** Off mutes the broken-mod warnings: mod cards, a mod's details and the Problems filter in Mods stop showing them,
- *  and Tools > Fixes folds its list away. The Mute button in Tools > Fixes and Settings > Mods a game update broke share it. */
+/** Off mutes the broken-mod warnings: mod cards and a mod's details stop showing them, and the Fixes panel (Tools >
+ *  Problems and Mods > Problems) folds its list away. The Mute button in Tools > Fixes and Settings > Mods a game update broke share it. */
 export const fixWarningsPref = pref<boolean>("fixes.warn", true, (r) => (r === "1" ? true : r === "0" ? false : undefined), (v) => (v ? "1" : "0"));
 
 // ── dead ends: broken mods no fix here will help ──
@@ -166,8 +166,9 @@ export function useHealthRows(game: GameId): ModHealthRow[] | null {
   return rows;
 }
 
-/** Mods a game update broke that are on and not set aside (holds.ts), for the Tools badge. Empty while the warnings
- *  are muted, null until the first check is done. */
+/** Mods a game update broke that are on and not set aside (holds.ts), for the Tools badge: only the ones Tools > Fixes
+ *  draws as broken (they need a fixer or the author). Old hashes gachamod can swap itself show as a warning there, and
+ *  a warning never adds to a badge. Empty while the warnings are muted, null until the first check is done. */
 export function useBrokenOn(game: GameId | null | undefined): string[] | null {
   const warn = fixWarningsPref.use();
   const holds = useHolds(game);
@@ -176,7 +177,7 @@ export function useBrokenOn(game: GameId | null | undefined): string[] | null {
   return useMemo(() => {
     if (!rows) return null;
     if (!warn) return [];
-    return rows.filter((r) => r.enabled && (r.status === "broken" || r.status === "unfixable") && !holds[r.modId]).map((r) => r.modId);
+    return rows.filter((r) => r.enabled && r.status === "unfixable" && !holds[r.modId]).map((r) => r.modId);
   }, [rows, warn, holds]);
 }
 
@@ -272,8 +273,11 @@ export async function fixMods(game: GameId, ids: string[]): Promise<number> {
     lines.push(...out.errors);
   }
   if (!lines.length) { lines.push(t("Nothing there could be fixed automatically")); view = undefined; }
-  const undoRun = entry && { label: t("Undo"), run: () => { void undo(entry); } };
-  toast(changed.length ? t("{text}. Undo puts the files back", { text: stops(lines) }) : stops(lines), !fixedN && (stillN > 0 || out.errors.length > 0), view ?? undoRun ?? undefined, view && undoRun ? undoRun : undefined);
+  // the toast's Undo is the entry's: undoing from anywhere turns this toast into Redo
+  let tid = 0;
+  const undoRun = entry && { label: t("Undo"), run: () => { void undo(entry, tid); } };
+  tid = toast(changed.length ? t("{text}. Undo puts the files back", { text: stops(lines) }) : stops(lines), !fixedN && (stillN > 0 || out.errors.length > 0), view ?? undoRun ?? undefined, view && undoRun ? undoRun : undefined);
+  if (entry) linkToast(entry, tid);
   return changed.length;
 }
 
@@ -328,7 +332,7 @@ export function useFixerBusy(): ReadonlySet<string> {
   return useSyncExternalStore(subscribe, () => fixerBusy);
 }
 
-/** Download one file of a GameBanana tool into the fixers folder. Says so in a toast with Show. */
+/** Download one file of a GameBanana tool into the fixers folder, and say so in a toast. */
 export async function downloadFixer(game: GameId, tool: { id: number; name: string }, file: GbFile): Promise<FixerFile | null> {
   const key = `file:${file.id}`;
   if (fixerBusy.has(key)) return null;

@@ -3,9 +3,11 @@
 // just the picture. Reuses the old player card's classes so game themes still dress it. Owner: SHELL area.
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { importFollowing, signIn, signOut, useAccount } from "../lib/account";
-import { go, useGame } from "../lib/store";
+import { errorText, shell } from "../lib/api";
+import { currentRoute, go, useGame } from "../lib/store";
 import { Icon } from "../ui/Icon";
 import { openMenu, type MenuEntry } from "../ui/ContextMenu";
+import { toast } from "../ui/toast";
 import { t } from "../lib/i18n";
 
 const below = (el: Element) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 4 }; };
@@ -17,7 +19,11 @@ function useAccountCard() {
   const menu = (): MenuEntry[] => u
     ? [
         { header: u.name },
-        { label: t("Your GameBanana page"), icon: "user", title: t("Your mods and uploads, in Browse"), onClick: () => go({ view: "browse", user: u.id }) },
+        // on that page already: the same page on the website
+        currentRoute().view === "browse" && currentRoute().user === u.id
+          ? { label: t("Open on GameBanana"), icon: "external", title: t("Your page on the GameBanana website"),
+            onClick: () => void shell.openUrl(`https://gamebanana.com/members/${u.id}`).catch((e) => toast(errorText(e), true)) }
+          : { label: t("Your GameBanana page"), icon: "user", title: t("Your mods and uploads, in Browse"), onClick: () => go({ view: "browse", user: u.id }) },
         { label: t("Import GameBanana follows"), icon: "feed", title: t("Follows here everyone you follow on GameBanana"), onClick: () => void importFollowing() },
         "-",
         { label: t("Sign out"), icon: "power", title: t("Forgets the session on this PC. Your follows in gachamod stay"), onClick: () => void signOut() },

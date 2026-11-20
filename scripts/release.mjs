@@ -71,8 +71,7 @@ if (notes === null) {
 // the notes go out to everyone who downloads it: plain wording, checked before anything is built
 const offNotes = wordingProblems(notes);
 if (offNotes.length) fail(`The release notes read like a template. Reword them, or pass --notes:
-${offNotes.map((o) => `  ${o}`).join("
-")}`);
+${offNotes.map((o) => `  ${o}`).join("\n")}`);
 
 // ── version bump ──
 

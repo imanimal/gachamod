@@ -50,10 +50,10 @@ export function toast(text: string, tone: ToastTone = false, action?: ToastActio
   const en = english(text);
   shown.forEach((f) => f(text, en, bad, action?.label));
   action ??= helpers.find((h) => h.test(en))?.action;
-  // the same message while it still shows (a retry, a key held down): restart that one
+  // the same message while it still shows (a retry, a key held down): restart that one, with this toast's buttons
   if (!opts) {
     for (const [id, t] of texts) {
-      if (t === text && live.has(id) && retoast(id, text, action, bad)) return id;
+      if (t === text && live.has(id) && retoast(id, text, action, bad, more ?? null)) return id;
     }
   }
   const t: Toast = { id: next++, text, bad, info, action, more, ms: lifetime(action, bad), run: 0, keep: opts?.keep };
@@ -63,12 +63,12 @@ export function toast(text: string, tone: ToastTone = false, action?: ToastActio
   return t.id;
 }
 /** Change a toast in place (an Undo that became a Redo, a count going up) and restart its timer. `more` replaces
- *  the second button when given. False when it has gone. */
-export function retoast(id: number, text: string, action?: ToastAction, bad = false, more?: ToastAction): boolean {
+ *  the second button when given, null takes it away, and leaving it out keeps it. False when it has gone. */
+export function retoast(id: number, text: string, action?: ToastAction, bad = false, more?: ToastAction | null): boolean {
   if (!live.has(id)) return false;
   text = tb(text);
   texts.set(id, text);
-  updates.forEach((u) => u(id, { text, action, bad, ms: lifetime(action, bad), ...(more ? { more } : {}) }));
+  updates.forEach((u) => u(id, { text, action, bad, ms: lifetime(action, bad), ...(more !== undefined ? { more: more ?? undefined } : {}) }));
   return true;
 }
 /** Take a toast away now (its button did what it offered). */

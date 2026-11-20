@@ -17,7 +17,7 @@ import { confirmDelete } from "./confirmDelete";
 import { sayF10 } from "../../lib/elevation";
 import { note as noteUsage } from "../../lib/telemetry";
 
-const count =(n: number) => tn(n, "{n} mod", "{n} mods");
+const count = (n: number) => tn(n, "{n} mod", "{n} mods");
 
 const SCAN_AGE = 30_000;
 const lastScan = new Map<GameId, number>();
@@ -181,14 +181,25 @@ export function summarize(change: ModChange, names = true): string {
 // backend notes that name the mods a switch reached through sub-mod links: the count of other mods says it
 const FAMILY_NOTE = /^Turned (on .+ too, since .+ is its sub-mod|its sub-mod .+ back on|off its sub-mod .+ too)\.?$/;
 const OPTIONS_NOTE = /^Options for .+ come back after you close the game\.?$/;
+// live switching: a skin turned off that the game wasn't showing, and a mod left on beside the skin it shows
+const NOT_SHOWING_NOTE = /^.+ isn't showing\. .+ (wears .+|is vanilla) in the game\.?$/;
+const NEXT_TO_NOTE = /^.+ is on next to .+\. It doesn't switch in game any more, so the game shows it after it reloads its mods\.?$/;
 
 /** The backend's notes for a toast, which never lists names: the sub-mod notes go (the count of other mods says
- *  it) and the options notes are counted. Errors keep their names, since nothing else says which mod failed. */
+ *  it), and the options and live switching notes are said without names and counted. Errors keep their names, since
+ *  nothing else says which mod failed. */
 export function briefNotes(notes: string[]): string[] {
   const options = notes.filter((n) => OPTIONS_NOTE.test(n)).length;
-  const rest = notes.filter((n) => !FAMILY_NOTE.test(n) && !OPTIONS_NOTE.test(n));
-  if (!options) return rest;
-  return [tn(options, "The mod's options come back after you close the game", "Options for {n} mods come back after you close the game"), ...rest];
+  const hidden = notes.filter((n) => NOT_SHOWING_NOTE.test(n)).length;
+  const beside = notes.filter((n) => NEXT_TO_NOTE.test(n)).length;
+  const rest = notes.filter((n) => !FAMILY_NOTE.test(n) && !OPTIONS_NOTE.test(n) && !NOT_SHOWING_NOTE.test(n) && !NEXT_TO_NOTE.test(n));
+  return [
+    ...(options ? [tn(options, "The mod's options come back after you close the game", "Options for {n} mods come back after you close the game")] : []),
+    ...(hidden ? [t("That skin isn't the one showing in the game")] : []),
+    ...(beside ? [tn(beside, "The mod is on next to the skin showing. It doesn't switch in game any more, so the game shows it after it reloads its mods",
+      "{n} mods are on next to the skins showing. They don't switch in game any more, so the game shows them after it reloads its mods")] : []),
+    ...rest,
+  ];
 }
 
 /** What a switch changed besides the mods asked for, counted: "Turned off 1 other mod for this character". */
@@ -246,8 +257,10 @@ export async function toggleMods(game: GameId, ids: string[], on: boolean, prior
 
 /** Turn some mods off and others on as one action with one Undo ("Wear", "Default outfit"). `label` is for the undo
  *  list; the toast says `brief` (no names), or the label when it's left out, plus what changed besides and notes.
- *  `brief` null keeps it quiet unless something else changed. */
-export async function changeStates(game: GameId, label: string, ons: string[], offs: string[], prior: ModEntry[], brief?: string | null): Promise<ModChange> {
+ *  `brief` null keeps it quiet unless something else changed. `asked`: the mods the user picked, when that's not every
+ *  mod in `ons` and `offs` (Wear picks one; the others it turns off are counted as other mods). */
+export async function changeStates(game: GameId, label: string, ons: string[], offs: string[], prior: ModEntry[], brief?: string | null,
+  asked: string[] = [...ons, ...offs]): Promise<ModChange> {
   const merged: ModChange = { changed: [], removed: [], notes: [] };
   const add = (c: ModChange) => {
     for (const m of c.changed) { const i = merged.changed.findIndex((x) => x.id === m.id); if (i >= 0) merged.changed[i] = m; else merged.changed.push(m); }
@@ -264,7 +277,7 @@ export async function changeStates(game: GameId, label: string, ons: string[], o
     return merged;
   }
   const rest = sayF10(merged.notes);
-  const said = notesText([...(brief === undefined ? [label] : brief ? [brief] : []), ...othersText(merged, new Set([...ons, ...offs]), before, prior), ...briefNotes(rest)]);
+  const said = notesText([...(brief === undefined ? [label] : brief ? [brief] : []), ...othersText(merged, new Set(asked), before, prior), ...briefNotes(rest)]);
   record({
     label: notesText([label, ...rest]),
     brief: said || undefined,

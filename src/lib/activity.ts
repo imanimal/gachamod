@@ -151,6 +151,14 @@ const EXACT: Record<string, Desc> = {
   storage_recycle_archives: [t("Moving archives to the Recycle Bin"), t("This moves files to the Recycle Bin. A download or an antivirus scan that has the files open can hold it.")],
   profile_activate: [t("Switching profile"), HOLD.disk],
   ai_chatbots_installed: [t("Looking for AI apps"), HOLD.disk],
+  ai_clis: [t("Looking for Claude Code, Codex, Antigravity and Gemini CLI"), HOLD.disk],
+  ai_key_status: [t("Reading the saved Gemini key"), HOLD.disk],
+  ai_key_set: [t("Checking the key with Google"), HOLD.web],
+  ai_key_remove: [t("Removing the Gemini key"), HOLD.disk],
+  ai_mod_files: [t("Reading the mods' files for the chatbot"), HOLD.disk],
+  ai_run: [t("Waiting on the chatbot's answer"), t("The chatbot on this PC is still writing. Long answers, like hundreds of mod names or a whole theme, take a minute or two. It stops after 10 minutes, and Stop in the AI helper ends it now.")],
+  ai_cancel: [t("Stopping the chatbot"), HOLD.disk],
+  ai_cli_sign_in: [t("Opening the sign-in window"), HOLD.disk],
   feedback_send: [t("Sending your feedback"), HOLD.web],
   admin_set_always: [t("Changing how gachamod starts"), HOLD.disk],
   app_restart_admin: [t("Waiting for Windows to allow administrator"), HOLD.dialog],
@@ -168,6 +176,7 @@ const PREFIX: Array<[string, Desc]> = [
   ["settings_", [t("Reading settings"), HOLD.db]],
   ["gb_like", [t("Sending your like to GameBanana"), HOLD.gb]],
   ["gb_subscribe", [t("Subscribing on GameBanana"), HOLD.gb]],
+  ["gb_subscribed_mods", [t("Reading your GameBanana subscriptions"), HOLD.gb]],
   ["gb_thank", [t("Sending your thanks to GameBanana"), HOLD.gb]],
   ["gb_", [t("Waiting on GameBanana"), HOLD.gb]],
   ["queue_", [t("Updating the download list"), HOLD.db]],
@@ -207,7 +216,7 @@ const PREFIX: Array<[string, Desc]> = [
 
 /** Commands that wait on the person (a file dialog, a sign-in window), or run in the background where nobody waits on
  *  them (usage counts, log lines), and so never count as slow. */
-const WAITS_ON_PERSON = new Set(["gb_sign_in", "gb_content_settings", "gb_mod_me","telemetry_events", "log_write", "report_ui_error", "render_events", "game_check_saved", "game_check_menu", "save_look"]);
+const WAITS_ON_PERSON = new Set(["gb_sign_in", "gb_content_settings", "gb_mod_me", "gb_subscribed_mods","telemetry_events", "log_write", "report_ui_error", "render_events", "game_check_saved", "game_check_menu", "save_look"]);
 
 /** What a backend command does and what can hold it. */
 export function describeCall(cmd: string): Desc | null {

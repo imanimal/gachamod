@@ -11,8 +11,9 @@ interface Pref<T> {
   use: () => T;
   /** Set and save. `label` records an undo step for Ctrl+Z and the title bar's undo list ("Blocked Somebody"), without
    *  a toast: the control that changed it shows the new state. `say` adds a toast with Undo, for a change that reaches
-   *  past what's on screen: true shows the label, a string shows those words instead (no names in toasts). */
-  set: (v: T, label?: string, say?: true | string) => Promise<void>;
+   *  past what's on screen: true shows the label, a string shows those words instead (no names in toasts). `brief`
+   *  is the name-free words for Undo and Redo when the label names things and `say` isn't a string. */
+  set: (v: T, label?: string, say?: true | string, brief?: string) => Promise<void>;
   /** Resolves once the saved value has been read. */
   ready: Promise<void>;
 }
@@ -39,10 +40,10 @@ export function pref<T>(key: string, fallback: T, parse: (raw: string) => T | un
     get: () => { void load(); return value; },
     use: () => useSyncExternalStore(sub, () => value),
     get ready() { return load(); },
-    set: async (v, label, say) => {
+    set: async (v, label, say, brief) => {
       const before = value;
       await save(v);
-      if (label) record({ label, brief: typeof say === "string" ? say : undefined, undo: () => save(before), redo: () => save(v) }, !say);
+      if (label) record({ label, brief: typeof say === "string" ? say : brief, undo: () => save(before), redo: () => save(v) }, !say);
     },
   };
   all.set(key, p as Pref<unknown>);
@@ -58,10 +59,11 @@ const NSFW_LABEL: Record<NsfwMode, string> = { hide: t("Hidden"), blur: t("Blurr
 const NSFW_UNDO: Record<NsfwMode, string> = { hide: t("Mods for adults: hidden"), blur: t("Mods for adults: blurred"), show: t("Mods for adults: shown") };
 export const nsfwPref = pref<NsfwMode>("ui.nsfw", "blur", (r) => (r === "hide" || r === "show" || r === "blur" ? r : undefined), (v) => v);
 export const useNsfw = () => nsfwPref.use();
-/** Change how mods for adults show, everywhere at once, with Undo. */
-export function setNsfw(v: NsfwMode) {
+/** Change how mods for adults show, everywhere at once, with Undo. `say` toasts it, for a menu or command that closes
+ *  and leaves mods hidden or shown with nothing on screen that says why. */
+export function setNsfw(v: NsfwMode, say = false) {
   if (v === nsfwPref.get()) return;
-  void nsfwPref.set(v, NSFW_UNDO[v]);
+  void nsfwPref.set(v, NSFW_UNDO[v], say || undefined);
 }
 export const nsfwLabel = (v: NsfwMode) => NSFW_LABEL[v];
 
@@ -91,7 +93,7 @@ const FLAG_WORDS: Record<CreatorFlag, [(name: string) => string, (name: string) 
 };
 // the same in toasts, which never list names
 const FLAG_BRIEF: Record<CreatorFlag, [string, string]> = {
-  sub: [t("Following the creator"), t("Stopped following the creator")],
+  sub: [t("Followed the creator"), t("Stopped following the creator")],
   fav: [t("Added the creator to favourites"), t("Removed the creator from favourites")],
   prio: [t("Prioritized the creator"), t("Stopped prioritizing the creator")],
   blocked: [t("Blocked the creator and hid their mods"), t("Unblocked the creator")],
@@ -150,7 +152,7 @@ export function setCreatorFlag(c: CreatorRef, flag: CreatorFlag, on: boolean, sa
     record({ label: t("{label}, on GameBanana too", { label }), brief: gb, undo: () => put(before, subBefore), redo: () => put(list, subAfter) });
     return;
   }
-  void creatorsPref.set(list, label, blocking || say ? brief : undefined);
+  void creatorsPref.set(list, label, blocking || say ? brief : undefined, brief);
 }
 
 /** Note the newest mod time seen for followed creators (no undo). */
@@ -172,7 +174,8 @@ export function hideMod(id: number, name: string, hide = true) {
   const now = new Set(hiddenModsPref.get());
   if (hide) now.add(id); else now.delete(id);
   // hiding takes the card away, so it toasts with Undo; showing again is plain
-  void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }), hide ? t("Hid the mod from Browse") : undefined);
+  void hiddenModsPref.set([...now], hide ? t("Hid {name} from Browse", { name }) : t("Showing {name} in Browse again", { name }), hide || undefined,
+    hide ? t("Hid the mod from Browse") : t("Showing the mod in Browse again"));
 }
 
 // ── custom character portraits (a mod preview or an image the user picked), per game ──
@@ -185,5 +188,6 @@ export function setCustomPortrait(game: string, name: string, src: string | null
   const k = portraitKey(game, name);
   if (src) list[k] = src; else delete list[k];
   // the new picture shows where it was picked; going back to the default loses the custom one, so that toasts with Undo
-  void portraitPref.set(list, src ? t("New picture for {name}", { name }) : t("{name}'s picture is back to the default", { name }), src ? undefined : t("Put the default picture back"));
+  void portraitPref.set(list, src ? t("New picture for {name}", { name }) : t("{name}'s picture is back to the default", { name }), src ? undefined : true,
+    src ? t("Changed the character's picture") : t("Put the default picture back"));
 }

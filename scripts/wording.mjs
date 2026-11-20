@@ -35,6 +35,7 @@ export const WORDING = [
   [/\blook no further\b/, "\"Look no further\""],
   [/\b(hassle-free|a breeze|with ease|like never before|next level|best-in-class|world-class)\b/, "hype phrase"],
   [/\b(makes|making) a real difference\b|\breal (work|problems|difference)\b/, "filler \"real\""],
+  [/\b(we won'?t (ask|judge|tell)|no judge?ment|you did this to yourself)\b/, "jokey aside: say what it does and stop"],
 ];
 
 /** Each problem as "<the words>: <why>". */

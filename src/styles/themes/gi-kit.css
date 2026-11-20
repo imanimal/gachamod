@@ -407,6 +407,8 @@
   .chip:hover, .search:focus-within { box-shadow: inset 0 0 0 1.5px var(--ink); }
   .pchip.on .pchip-img { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--acc-ink); }
   .note { color: var(--text); }
+  /* the first-start Mods layout card is a cream sheet like the dialogs, a shade darker than the paper cards around it */
+  .fmt-intro { background: var(--weave), linear-gradient(180deg, #f2ece1, var(--parch) 6rem); }
 }
 [data-theme="gi"][data-scheme="light"] ::-webkit-scrollbar-thumb { background: rgb(141 131 114 / .45); background-clip: padding-box; border: 3px solid transparent; }
 [data-theme="gi"][data-scheme="light"] ::-webkit-scrollbar-thumb:hover { background: rgb(141 131 114 / .7); background-clip: padding-box; border: 3px solid transparent; }

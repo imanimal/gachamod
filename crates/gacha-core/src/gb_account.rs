@@ -183,7 +183,7 @@ pub async fn follow(http: &reqwest::Client, cookie: &str, member: u64, on: bool)
     subscribe(http, cookie, "Member", member, on, "GameBanana didn't say which follow to remove. Unfollow on the creator's page").await
 }
 
-/// Subscribe to a mod, or stop. GameBanana then tells the member, on GameBanana, when it updates.
+/// Subscribe to a mod on GameBanana, or stop. gachamod watches subscribed mods itself (src/lib/subscriptions.ts).
 pub async fn subscribe_mod(http: &reqwest::Client, cookie: &str, mod_id: u64, on: bool) -> Result<()> {
     subscribe(http, cookie, "Mod", mod_id, on, "GameBanana didn't say which subscription to remove. Unsubscribe on the mod's page").await
 }
@@ -204,7 +204,7 @@ async fn subscribe(http: &reqwest::Client, cookie: &str, model: &str, id: u64, o
     Ok(())
 }
 
-/// Like a mod, or take the like back. Nobody is notified.
+/// Like a mod, or take the like back.
 pub async fn like(http: &reqwest::Client, cookie: &str, mod_id: u64, on: bool) -> Result<()> {
     let method = if on { reqwest::Method::POST } else { reqwest::Method::DELETE };
     send(http, cookie, method, &format!("{API13}/Mod/{mod_id}/Like")).await.map(|_| ())
@@ -264,20 +264,60 @@ pub async fn thank(http: &reqwest::Client, cookie: &str, mod_id: u64, points: u3
     send_with(http, cookie, reqwest::Method::POST, &format!("{API13}/Mod/{mod_id}/Thank/Add"), Some(&body)).await.map(|_| ())
 }
 
+/// The member's subscriptions of one kind (`Member` for creators, `Content` for mods and other submissions), 15 a
+/// page, up to 20 pages. Read only. Each item is the record's `_aSubscription`.
+async fn subscriptions(http: &reqwest::Client, cookie: &str, member: u64, kind: &str) -> Result<Vec<Value>> {
+    let mut out: Vec<Value> = Vec::new();
+    for page in 1..=20 {
+        let url = format!("{API11}/Member/{member}/Subscriptions?_nPage={page}&_sModelName={kind}");
+        let body = send(http, cookie, reqwest::Method::GET, &url).await?;
+        let recs = body.get("_aRecords").and_then(Value::as_array).cloned().unwrap_or_default();
+        out.extend(recs.iter().filter_map(|r| r.get("_aSubscription").cloned()));
+        let done = body.get("_aMetadata").and_then(|m| m.get("_bIsComplete")).and_then(Value::as_bool).unwrap_or(recs.len() < 15);
+        if done || recs.is_empty() { break; }
+    }
+    Ok(out)
+}
+
 /// The creators the member follows (read only, for "Import who I follow").
 pub async fn following(http: &reqwest::Client, cookie: &str, member: u64) -> Result<Vec<GbUser>> {
     let mut out: Vec<GbUser> = Vec::new();
-    for page in 1..=20 {
-        let url = format!("{API11}/Member/{member}/Subscriptions?_nPage={page}&_sModelName=Member");
-        let body = send(http, cookie, reqwest::Method::GET, &url).await?;
-        let recs = body.get("_aRecords").and_then(Value::as_array).cloned().unwrap_or_default();
-        for r in &recs {
-            let Some(s) = r.get("_aSubscription") else { continue };
-            let Some(id) = s.get("_idRow").and_then(Value::as_u64) else { continue };
-            if !out.iter().any(|u| u.id == id) { out.push(user_from(id, s)); }
-        }
-        let done = body.get("_aMetadata").and_then(|m| m.get("_bIsComplete")).and_then(Value::as_bool).unwrap_or(recs.len() < 15);
-        if done || recs.is_empty() { break; }
+    for s in subscriptions(http, cookie, member, "Member").await? {
+        let Some(id) = s.get("_idRow").and_then(id_of) else { continue };
+        if !out.iter().any(|u| u.id == id) { out.push(user_from(id, &s)); }
+    }
+    Ok(out)
+}
+
+/// A mod the member subscribes to on GameBanana.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscribedMod {
+    pub id: u64,
+    pub name: String,
+    /// GameBanana's game id.
+    pub game: Option<u64>,
+    /// The mod's last update (unix s).
+    pub updated: u64,
+}
+
+fn subscribed_mod_from(s: &Value) -> Option<SubscribedMod> {
+    if s.get("_sModelName").and_then(Value::as_str) != Some("Mod") { return None; }
+    let id = s.get("_idRow").and_then(id_of)?;
+    let name = s.get("_sName").and_then(Value::as_str).filter(|v| !v.is_empty())?.to_string();
+    let ts = |k: &str| s.get(k).and_then(Value::as_u64);
+    Some(SubscribedMod {
+        id, name,
+        game: s.get("_aGame").and_then(|g| g.get("_idRow")).and_then(id_of),
+        updated: ts("_tsDateUpdated").or_else(|| ts("_tsDateModified")).or_else(|| ts("_tsDateAdded")).unwrap_or(0),
+    })
+}
+
+/// The mods the member subscribes to (read only, brought into gachamod's own list at sign-in).
+pub async fn subscribed_mods(http: &reqwest::Client, cookie: &str, member: u64) -> Result<Vec<SubscribedMod>> {
+    let mut out: Vec<SubscribedMod> = Vec::new();
+    for s in subscriptions(http, cookie, member, "Content").await? {
+        if let Some(m) = subscribed_mod_from(&s) { if !out.iter().any(|x| x.id == m.id) { out.push(m); } }
     }
     Ok(out)
 }
@@ -335,6 +375,18 @@ mod tests {
         let ui = serde_json::json!({ "_bIsLoggedIn": true, "_bHasFreeThank": true, "_aPointDetails": { "_nPoints": "1520" } });
         assert_eq!(mod_me_from(&page, &ui), ModMe { liked: Some(true), subscribed: Some(false), thanked: None, own: None, points: Some(1520), free_thank: Some(true) });
         assert_eq!(mod_me_from(&Value::Null, &Value::Null), ModMe::default());
+    }
+
+    #[test]
+    fn subscribed_mods_keep_mods_only() {
+        // as Member/{id}/Subscriptions?_sModelName=Content sends them (Nov 2026)
+        let m = serde_json::json!({ "_idRow": 332884, "_sModelName": "Mod", "_sName": "Kapi", "_tsDateModified": 1777988269,
+            "_tsDateUpdated": 1793551213, "_aGame": { "_idRow": 8694, "_sName": "Friday Night Funkin'" } });
+        assert_eq!(subscribed_mod_from(&m), Some(SubscribedMod { id: 332884, name: "Kapi".into(), game: Some(8694), updated: 1793551213 }));
+        let wip = serde_json::json!({ "_idRow": 5, "_sModelName": "Wip", "_sName": "x" });
+        assert_eq!(subscribed_mod_from(&wip), None);
+        let no_update = serde_json::json!({ "_idRow": "7", "_sModelName": "Mod", "_sName": "y", "_tsDateAdded": 10 });
+        assert_eq!(subscribed_mod_from(&no_update).map(|m| (m.id, m.game, m.updated)), Some((7, None, 10)));
     }
 
     #[test]

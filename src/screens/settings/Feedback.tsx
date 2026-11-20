@@ -183,7 +183,7 @@ function TesterRow() {
   const on = useTester();
   return (
     <SetRow id="set-tester" label={t("Tester options")}
-      hint={t("Adds the menu the game draws itself to Switch skins in game in Wuthering Waves, Endfield and the others. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd have it without this. It opens in exclusive fullscreen, where gachamod's menu over the game can't. Check this game sends what you find to the developer")}>
+      hint={t("Adds the skin menu the game draws itself to Wuthering Waves, Endfield and the other games. Zenless Zone Zero, Genshin Impact, Star Rail and Honkai Impact 3rd always have it. Unlike gachamod's menu over the game, it opens in exclusive fullscreen. Try it, then use Check this game above to tell the developer if it worked")}>
       <Toggle checked={on} onChange={(v) => void setTester(v)} />
     </SetRow>
   );

@@ -71,12 +71,12 @@ export const SECTIONS: SectionInfo[] = [
   { id: "fun", page: "fun", label: shown(t("Fun extras")), icon: "sparkle", keywords: "fun extras chill lower case lowercase pull wish warp gacha random seasonal winter snow valentine halloween lunar new year stats wrapped mod of the day easter eggs" },
   { id: "games", page: "games", label: shown(t("Games and their folders")), icon: "controller", keywords: "game folders paths add show hide detect one mode path install location directory exe" },
   { id: "xxmi", page: "games", label: shown(t("XXMI Launcher")), icon: "package", keywords: "xxmi launcher importer gimi srmi zzmi wwmi himi efmi version folder mod loader 3dmigoto update install" },
-  { id: "launch", page: "launch", label: shown(t("Launch options")), icon: "play", keywords: "launch start arguments args window mode borderless fullscreen priority commands before after exe xxmi fps limit hdr graphics reshade close when the game starts unlocker unlock 120 frame rate framerate refresh lod bias fov mesh wounded effect dynamic character resolution quality client resource textures ray tracing illegal tool detected d3d11 dll cpu windowed full screen command line path" },
+  { id: "launch", page: "launch", label: shown(t("Launch options")), icon: "play", keywords: "launch start arguments args window mode borderless fullscreen priority commands before after exe xxmi fps limit hdr graphics reshade close when the game starts unlocker unlock 120 frame rate framerate refresh lod bias fov mesh wounded effect dynamic character resolution quality client resource textures ray tracing illegal tool detected d3d11 dll cpu windowed full screen command line path force raise high precision ultra camera distance gachamod" },
   { id: "migoto", page: "launch", label: shown(t("Mod maker switches")), icon: "code", keywords: "hunting mode dump shaders hide warnings log level calls debug logging enforce rendering 3dmigoto d3dx mod makers numpad shader hashes frame analysis" },
   { id: "game-start", page: "launch", label: shown(t("Run as administrator")), icon: "shield", keywords: "admin administrator elevated uac keys run as elevation privileges permissions rights" },
   { id: "others", page: "mods", label: shown(t("Mods from other managers")), icon: "swap", keywords: `${MOVE_KEYWORDS} another bring in transfer` },
   { id: "mods", page: "mods", label: shown(t("Turning mods on and reloading the game")), icon: "mods", keywords: "new mods enable one skin shuffle reload f10 turning on activate auto rules per character keep key refresh" },
-  { id: "mod-folders", page: "mods", label: shown(t("Mods folders")), icon: "folder", keywords: "mods folder path location directory where mods live detect find change pick set mod folder" },
+  { id: "mod-folders", page: "mods", label: shown(t("Mods folders")), icon: "folder", keywords: "mods folder path location directory where live detect find change pick set mod move relocate" },
   { id: "automatic", page: "mods", label: shown(t("Mod update checks and rescans")), icon: "refresh", keywords: "auto automatic background checks turn off disable mod updates rescan scan watch update scans" },
   { id: "broken-mods", page: "mods", label: shown(t("Mods a game update broke")), icon: "wand", keywords: "fixer fixes hash broken game update patch warning mute outdated broke after new version" },
   { id: "storage", page: "mods", label: shown(t("Trash and removed mods")), icon: "archive", keywords: "trash disk space removed files storage recycle bin deleted retention restore put back" },
@@ -116,7 +116,7 @@ export const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-motion", "layout", shown(t("Interface animations")), "animations motion animation reduce reduced effects transitions page turns popovers fade slide instant fades sliding speed snappy accessibility", "sparkle"],
   ["set-motion-scroll", "layout", shown(t("Smooth scrolling")), "smooth scroll scrolling mouse wheel glide jump motion animation speed inertia momentum", "sparkle"],
   ["set-motion-bg", "layout", shown(t("Theme background motion")), "background moving animated backdrop drifting scrolling stars ambient effects zenless new eridu motion animation seasonal live wallpaper parallax particles", "sparkle"],
-  ["set-intro", "general", shown(t("Opening screen")), "intro splash startup start opening animation loading screen tips tip of the day launch launching boot booting welcome logo video cutscene skip replay match new eridu teyvat astral express solaris talos", "play"],
+  ["set-intro", "general", shown(t("Opening screen")), "intro splash startup start opening animation loading screen tips tip of the day launch launching boot booting welcome logo video cutscene skip replay match new eridu teyvat astral express solaris talos theme themed", "play"],
   ["set-hints", "general", shown(t("First-start hints")), "hints tips highlight tutorial tour guide new user first start onboarding walkthrough beginner help pointers coach marks faint selected", "info"],
   ["set-background", "background", shown(t("Keep running in the background")), "background tray system notification area minimize close quit exit keep running hidden resources memory startup icon minimise button closing the window stay open", "power"],
   ["set-quickstart-opens", "desktop-shortcuts", shown(t("Open gachamod with quickstart")), "quickstart quick start shortcut hidden quiet background window show open only the game launch desktop", "link"],
@@ -132,7 +132,7 @@ export const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-gb-adult", "adult", shown(t("Match my GameBanana settings")), "nsfw adult gamebanana account content ratings sync match same as site follow website", "eye"],
   ["set-pergame", "mods", shown(t("Another skin already on")), "one skin per character single outfit only at a time auto turn off others keep both swap replace conflict same two skins outfits", "characters"],
   ["set-pergame", "mods", shown(t("Reload in game")), "automatically f10 reload refresh in game auto press hot mods", "refresh"],
-  ["set-app-updates", "updates", shown(t("Update gachamod automatically")), "app update check new version upgrade auto install automatic tell notify only off autoupdate updater silent background download on close", "update"],
+  ["set-app-updates", "updates", shown(t("Update gachamod automatically")), "app update check new version upgrade auto install automatic tell notify only off autoupdate updater silent background download on close updates updating", "update"],
   ["set-app-check", "updates", shown(t("Check for updates")), "gachamod app update check now new version upgrade latest", "update"],
   ["set-mod-updates", "automatic", shown(t("Check mods for updates")), "mod updates outdated gamebanana auto check checker new versions updated notify", "update"],
   ["set-watch-mods", "automatic", shown(t("Watch Mods folders for changes")), "watch watcher explorer live auto refresh folder changes added renamed deleted other manager file detect", "refresh"],
@@ -145,10 +145,10 @@ export const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-onscreen", "installing", shown(t("Toggles only while on screen, for new mods")), "toggles hotkeys keybinds key conflict off screen character visible active share keys only", "key"],
   ["set-ext-sources", "extensions", shown(t("Extension lists")), "repo repository index source marketplace url add another list", "puzzle"],
   ["set-ext-make", "extensions", shown(t("Make your own")), "make an extension develop create build plugin addon package link folder share submit upload", "code"],
-  ["set-trash-days", "storage", shown(t("Keep removed mods' files")), "trash recycle bin deleted removed days storage disk space archive purge how long keep auto delete empty retention put back restore", "trash"],
+  ["set-trash-days", "storage", shown(t("Keep removed mods' files")), "trash recycle bin deleted removed days storage disk space archive purge how long keep auto delete empty retention put back restore after while", "trash"],
   ["set-trash-unsourced", "storage", shown(t("Deleting a mod that isn't on GameBanana")), "recycle bin delete for good permanently local own ask remember choice trash empty", "trash"],
   ["set-gb-signin", "account", shown(t("Sign in to GameBanana")), "login log in account follow like subscribe session signin sign out logout connect link", "user"],
-  ["set-gb-remind", "account", shown(t("Remind me to like and follow creators")), "reminder remind nudge like follow creators authors support thank gamebanana", "bell"],
+  ["set-gb-subtoast", "account", shown(t("Tell me when subscribed mods update")), "subscribe subscribed subscriptions bell mod updates notify notification alert toast message hourly check new version", "bell"],
   ["set-creator-styles", "creators", shown(t("Name styles from GameBanana")), "creator name colour color font glow upic hovatar hover avatar cubeatar cooltip signature sig subject shaper style profile look", "palette"],
   ["set-uberstyles", "creators", shown(t("Uberstyles on creator pages")), "uberstyle uber ubers creator page profile theme css background colours colors style look", "palette"],
   ["set-creators-sub", "creators", shown(t("Followed creators")), "following subscribed subscriptions authors follow followed creators list", "feed"],
@@ -167,6 +167,9 @@ export const SETTINGS: Array<[string, string, string, string, IconName]> = [
   ["set-xxmi-uninstall", "xxmi", shown(t("Uninstall XXMI Launcher")), "uninstall remove delete xxmi launcher mod loader importer gimi srmi zzmi wwmi himi efmi recycle bin", "trash"],
   ["set-reset", "repair", shown(t("Reset gachamod")), "reset start over factory defaults clear wipe fresh delete settings data restore default", "undo"],
   ["set-ai-chatbot", "ai", shown(t("Your chatbot")), "chatgpt claude gemini copilot grok chatbot pick change which provider model", "ai"],
+  ["set-ai-usecli", "ai", shown(t("Ask the chatbot on this PC")), "cli claude code codex antigravity gemini terminal answer here in app website instead", "ai"],
+  ["set-ai-model", "ai", shown(t("Model and thinking")), "model opus sonnet haiku fable pro flash lite codex thinking effort reasoning level slow fast smarter tokens", "ai"],
+  ["set-ai-key", "ai", shown(t("Free Gemini key")), "gemini api key google ai studio free answer here in app paste remove", "ai"],
   ["set-ai-adult", "ai", shown(t("Hide adult mods from the chatbot")), "nsfw adult explicit names prompt refuse refused chatbot hide", "ai"],
   ["set-ai-jobs", "ai", shown(t("Ask it now")), "ai chatbot make a theme tidy mod names set characters mod ideas jobs", "ai"],
   ["set-fix-automute", "broken-mods", shown(t("Turn off mods that need their author")), "fixer broken mute auto turn off cant fix can't fix need their author", "wand"],
@@ -204,7 +207,7 @@ registerCommands("settings", () => {
     };
   });
   for (const [section, panel, title, keywords, icon] of SETTINGS) {
-    if ((section === "set-ai-chatbot" || section === "set-ai-adult" || section === "set-ai-jobs") && !aiShown("useful")) continue;
+    if (section.startsWith("set-ai-") && section !== "set-ai-show" && !aiShown("useful")) continue;
     // the id stays English: recent picks are remembered by it
     list.push({ id: `settings:${section}:${en(title)}`, title, section: "Settings", icon, keywords: `setting ${keywords}`, where: settingsWhere(panel),
       run: () => go({ view: "settings", section }) });

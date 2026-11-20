@@ -1,6 +1,7 @@
 // Undo and redo for mod operations (turn on/off, remove, move to a group, load order, profile switch).
-// Every operation that changes the library goes through `record`, which shows a toast with Undo; using it runs the
-// inverse and turns the toast into Redo. Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (not while typing in a field,
+// Every operation that changes the library goes through `record`, which offers Undo in a toast, or records it quietly
+// for Ctrl+Z and the title bar's list when the control used still shows the change. Using Undo runs the inverse and
+// turns the toast into Redo. Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (not while typing in a field,
 // where the keys keep their usual meaning). The list lives for the session; removed mods also stay in Recently
 // removed (the trash) for days, so a removal can be put back after a restart too.
 import { useEffect, useState } from "react";
@@ -11,7 +12,8 @@ export interface Op {
   /** Past tense, sentence case: "Turned off 3 mods". The title bar's undo list shows it. */
   label: string;
   /** What the toast says when the label names things: "Hid the mod from Browse" for "Hid Beach Walk from Browse".
-   *  Toasts never list names; the undo list keeps them. */
+   *  Toasts never list names; the undo list keeps them. A label that names things needs one even when recorded
+   *  quietly, since undoing and redoing toast `brief ?? label` ("Undone: hid the mod from Browse."). */
   brief?: string;
   undo: () => Promise<unknown>;
   redo: () => Promise<unknown>;
@@ -36,7 +38,8 @@ function errText(e: unknown): string {
 /** Record a finished operation and offer Undo in a toast. `quiet` records it for Ctrl+Z and the title bar's undo list
  *  without a toast: use it when the control the user just used still shows the new state and one more click puts it
  *  back (a switch, a segmented choice, a follow button). The toast is for changes that reach past what's on screen:
- *  a mod that vanishes, other mods turned off, files moved. */
+ *  a mod that vanishes, other mods turned off, files moved. Quiet or not, Undo and Redo toast `brief ?? label`, so a
+ *  label that names things needs a `brief`. */
 export function record(op: Omit<Op, "at">, quiet = false): Entry {
   const e: Entry = { ...op, at: Date.now(), id: seq++, state: "done" };
   past.push(e);
@@ -53,10 +56,14 @@ export function record(op: Omit<Op, "at">, quiet = false): Entry {
 
 // each entry's toast, so undoing from the keyboard or the title bar turns that same toast into Redo
 const toastOf = new Map<number, number>();
+/** Tie a quietly recorded entry to the toast that offers its Undo (one with other buttons too, like a fix run's View
+ *  mod), so undoing it from anywhere turns that toast into Redo. */
+export function linkToast(e: Entry, id: number) { toastOf.set(e.id, id); }
 function show(e: Entry, text: string, label: "Undo" | "Redo", toastId?: number) {
   let id = toastId ?? toastOf.get(e.id) ?? 0;
   const action = { label: label === "Undo" ? t("Undo") : t("Redo"), run: () => void (label === "Undo" ? undo(e, id) : redo(e, id)) };
-  if (!id || !retoast(id, text, action)) id = toast(text, false, action);
+  // the toast's other buttons (View mod, a second Undo) belong to what it said before, so they go
+  if (!id || !retoast(id, text, action, false, null)) id = toast(text, false, action);
   toastOf.set(e.id, id);
 }
 function offerUndo(e: Entry, toastId?: number) { show(e, t("{label}.", { label: e.brief ?? e.label }), "Undo", toastId); }

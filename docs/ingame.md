@@ -676,7 +676,13 @@ the watcher calls `live::on_screen_moved` on every save, and when who is on scre
 sends `overlay-here` to the menu window if it shows for that game. The menu reads `live_info` again and follows the
 new answer until the player moves in it (the focus left the tile the menu focused, a character was picked, a mod's
 details opened or the search has the focus); after that the list stays put. Before 2026-11-17 the menu took the
-first answer after opening and kept it. `follow_game` doesn't look at `$o`, so these saves don't make the app's
+first answer after opening and kept it. Since 2026-11-18 one case moves it anyway: a character swap in the game. The
+menu remembers the last character the game was sure of (alone on screen, or seen last when the menu opened with
+nobody on screen). An answer with exactly one character on screen, a different one, sends the menu to that character
+and the focus onto their skin, even after the player moved in it. It doesn't while a pick is on its way, a mod's
+details are open or a search is typed. Two or more on screen (a party screen, the moment of a swap) is never sure, and
+an answer that names the same character again moves nothing, so a player who went to look at someone else stays
+there until the game really swaps. `follow_game` doesn't look at `$o`, so these saves don't make the app's
 windows reload their lists. They don't read back as picks either: such a save holds the same `$g` values the game
 already had, and the rules above (picks waiting for a load, picks still being keyed in, saves older than the app's
 last tap) apply to it like to any other save.

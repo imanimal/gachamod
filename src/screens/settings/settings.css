@@ -2,6 +2,9 @@
 .set-tip { text-decoration: underline dotted var(--text-3); text-underline-offset: 3px; cursor: help; }
 .set-row.set-row-col { flex-direction: column; align-items: stretch; gap: var(--s-2); }
 .set-ai-bots, .set-ai-jobs { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.set-ai-cli { display: flex; flex-direction: column; gap: var(--s-2); }
+/* a column row's label takes its own height: the row label's 14rem basis would otherwise be a 14rem tall gap */
+.set-row.set-row-col > span:first-child { flex: none; }
 .set-game-note { margin-top: var(--s-1); }
 .set-game-fix { align-items: center; gap: var(--s-2); margin-top: var(--s-1); }
 /* the first list's heading starts where the panel's content does; the later ones keep the headings' room */
@@ -97,11 +100,13 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .set-update:last-child { margin-bottom: 0; }
 .set-update .progress { margin-top: var(--s-2); }
 
-/* custom themes: cards with a menu button, and the editor under them */
+/* custom themes: cards with delete and menu buttons, and the editor under them */
 .ctheme { position: relative; display: flex; min-width: 0; }
 .ctheme > .card { flex: 1; min-width: 0; }
-.ctheme-more { position: absolute; top: .85rem; right: .85rem; background: var(--surface); box-shadow: var(--shadow); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
-.ctheme:hover .ctheme-more, html:is(.kbd, .pad) .ctheme:focus-within .ctheme-more { opacity: 1; }
+.ctheme-acts { position: absolute; top: .85rem; right: .85rem; display: flex; gap: var(--s-1); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.ctheme-acts > .ibtn { background: var(--surface); box-shadow: var(--shadow); }
+.ctheme-acts > .ctheme-del:hover { color: var(--bad); }
+.ctheme:hover .ctheme-acts, html:is(.kbd, .pad) .ctheme:focus-within .ctheme-acts { opacity: 1; }
 .ctheme-intro { margin: 0 0 var(--s-3); }
 .ctheme-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 .ctheme-ed { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); border-radius: var(--radius); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
@@ -126,6 +131,7 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 .ctheme-parts { margin: var(--s-2) 0 0; max-height: 20rem; overflow: auto; padding: var(--s-3); border-radius: var(--radius-sm);
   background: var(--bg-2); border: 1px solid var(--line); font-family: var(--font-mono); font-size: var(--t-meta); white-space: pre-wrap; word-break: break-word; }
 .ctheme-err { color: var(--bad); }
+.ctheme-err-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); }
 .ctheme-probs { margin: 0; padding-left: 1.1rem; font-size: var(--t-small); color: var(--warn); display: grid; gap: .15rem; }
 .ctheme-ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
 .ctheme-ed-foot .hint { margin-right: auto; }
@@ -174,36 +180,40 @@ button.set-folder-p:hover { color: var(--text); text-decoration: underline; }
 /* themes that draw rows as boxes would put the first one right on the divider */
 .set-format + .set-rows { margin-top: var(--s-3); }
 .fmt-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: var(--s-3); }
-.fmt-card { gap: 0; }
-.fmt-card-t { display: flex; flex-direction: column; gap: .1rem; padding: var(--s-2) var(--s-3) var(--s-3); }
-.fmt-prev { display: grid; gap: 4px; height: 5rem; padding: 6px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+/* the preview on top, the name under it: the preview keeps its height and never draws past its own box */
+.fmt-card { gap: 0; justify-content: flex-start; }
+.fmt-card-t { flex: none; display: flex; flex-direction: column; gap: .1rem; padding: var(--s-2) var(--s-3) var(--s-3); line-height: 1.25; }
+.fmt-prev { flex: none; display: grid; grid-template-rows: minmax(0, 1fr); gap: 4px; height: 5rem; padding: 6px; overflow: hidden;
+  background: var(--bg-2); border-bottom: 1px solid var(--line); }
 .fmt-prev.is-cards { grid-template-rows: auto minmax(0, 1fr); }
 .fmt-prev.is-chars { grid-template-columns: 30% minmax(0, 1fr); }
 .fmt-prev.is-panes { grid-template-columns: 24% minmax(0, 1fr) 30%; }
 .fmt-chips { display: flex; gap: 3px; }
 .fmt-chip { width: 16%; height: 6px; border-radius: 99px; background: var(--line-2); }
 .fmt-chip:first-child, .fmt-li:nth-child(2) { background: var(--accent); }
-.fmt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
-.is-panes .fmt-grid { grid-template-columns: repeat(2, 1fr); }
+.fmt-grid { min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 3px; }
+.is-panes .fmt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .fmt-tile { border-radius: 2px; background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--line); }
-.fmt-list { display: flex; flex-direction: column; gap: 3px; }
-.fmt-li { height: 7px; border-radius: 2px; background: var(--line-2); }
-.fmt-info { display: flex; flex-direction: column; padding: 3px; border-radius: 2px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-2); }
+/* the list and the rows thin out to fit a short preview instead of running past it */
+.fmt-list, .fmt-rows { min-height: 0; display: flex; flex-direction: column; gap: 3px; }
+.fmt-li { flex: 0 1 7px; min-height: 0; border-radius: 2px; background: var(--line-2); }
+.fmt-info { min-height: 0; display: flex; flex-direction: column; padding: 3px; border-radius: 2px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-2); }
 .fmt-info-pic { height: 40%; border-radius: 2px; background: var(--surface-3); }
-.fmt-rows { display: flex; flex-direction: column; gap: 3px; }
-.fmt-row { position: relative; height: 8px; border-radius: 2px; background: var(--surface-3); }
-.fmt-row::before { content: ""; position: absolute; left: 2px; top: 2px; width: 9px; height: 4px; border-radius: 99px; background: var(--line-2); }
+.fmt-row { position: relative; flex: 0 1 8px; min-height: 0; border-radius: 2px; background: var(--surface-3); }
+.fmt-row::before { content: ""; position: absolute; left: 2px; top: 25%; bottom: 25%; width: 9px; border-radius: 99px; background: var(--line-2); }
 .fmt-row:nth-child(3n + 1)::before { background: var(--accent); }
-.fmt-picker.is-small { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
-.fmt-picker.is-small .fmt-prev { height: 3.4rem; }
-.fmt-picker.is-small .fmt-card-t { padding: var(--s-1) var(--s-2) var(--s-2); font-size: var(--t-small); }
-/* the first-start card: bottom left of the view, since the toasts take the bottom right */
+.fmt-picker.is-small { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); }
+.fmt-picker.is-small .fmt-prev { height: 4rem; }
+.fmt-picker.is-small .fmt-card-t { padding: var(--s-2) var(--s-3); font-size: var(--t-small); }
+/* the first-start card: bottom left of the view, since the toasts take the bottom right. It scrolls rather than run
+   under the title bar in a short window */
 .fmt-intro { position: fixed; left: calc(var(--side-w, 15.75rem) + 1.2rem); bottom: 1.2rem; z-index: 40; width: min(27rem, calc(100vw - var(--side-w, 15.75rem) - 2.4rem));
-  display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-4) var(--s-4) var(--s-3); border-radius: var(--radius);
+  max-height: calc(100vh - var(--title-h, 3rem) - 2.4rem); overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-4); border-radius: var(--radius);
   background: var(--raised); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); }
 [data-sidebar="right"] .fmt-intro { left: 1.2rem; }
 .fmt-intro p { margin: 0; }
-.fmt-intro-a { align-items: center; gap: var(--s-2); }
-.fmt-intro-a .hint { flex: 1; min-width: 0; font-size: var(--t-small); }
+.fmt-intro .fmt-picker { margin: var(--s-1) 0; }
+.fmt-intro-a { justify-content: flex-end; flex-wrap: wrap; gap: var(--s-2); }
 .setup-format { display: flex; flex-direction: column; gap: var(--s-3); width: 100%; margin-top: var(--s-4); }
 .setup-format h2 { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 750; }

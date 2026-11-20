@@ -1,9 +1,11 @@
-// The numbers under a GameBanana mod's gallery. The ones that name something you can do on GameBanana do it: the
-// heart likes the mod, the bell subscribes to it, the gift thanks its creator (a small box says what it costs first),
-// downloads goes to the files and comments to the comments. Signed out, those three start signing in.
+// The numbers under a GameBanana mod's gallery. The ones that name something you can do do it: the heart likes the
+// mod, the bell subscribes (gachamod then tells you when it updates, lib/subscriptions.ts), the gift thanks its
+// creator (a small box says what it costs first), downloads goes to the files and comments to the comments. Signed
+// out, the heart and the gift start signing in; the bell works either way.
 // Owner: BROWSE area.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { likeMod, modMe, signIn, subscribeMod, thankMod, useAccount, useLiked, useSubscribed, useThanked, type ModMe } from "../../lib/account";
+import { likeMod, modMe, signIn, thankMod, useAccount, useLiked, useThanked, type ModMe } from "../../lib/account";
+import { noteGbSub, setModSub, useModSub } from "../../lib/subscriptions";
 import type { GbMod } from "../../lib/gamebanana";
 import { Button, Select, formatCount, timeAgo } from "../../ui/kit";
 import { Icon, type IconName } from "../../ui/Icon";
@@ -16,17 +18,20 @@ export function ModStats({ mod, act, nudge, onFiles, onComments }: { mod: GbMod;
   const acc = useAccount();
   const signedIn = acc.available && !!acc.user;
   const liked = useLiked(mod.id);
-  const subscribed = useSubscribed(mod.id);
+  const sub = useModSub(mod.id);
+  const subscribed = !!sub;
+  // GameBanana's count only has the subscriptions made there
+  const onGb = !!sub?.gb;
   const thanked = useThanked(mod.id);
   const [me, setMe] = useState<ModMe | null>(null);
   // GameBanana counted with whatever the member had done when the page was read; the counts move from there
-  const [base, setBase] = useState(() => ({ liked, subscribed }));
+  const [base, setBase] = useState(() => ({ liked, subscribed: onGb }));
   const [sent, setSent] = useState(0);
   const [busy, setBusy] = useState<"like" | "sub" | null>(null);
   const [thankAt, setThankAt] = useState<HTMLElement | null>(null);
   const clicked = useRef(false);
   // the remembered state loads a moment after opening: follow it until GameBanana answers or the member clicks
-  useEffect(() => { if (!clicked.current && !me) setBase({ liked, subscribed }); }, [liked, subscribed, me]);
+  useEffect(() => { if (!clicked.current && !me) setBase({ liked, subscribed: onGb }); }, [liked, onGb, me]);
 
   useEffect(() => {
     if (!act || !signedIn) return;
@@ -35,21 +40,22 @@ export function ModStats({ mod, act, nudge, onFiles, onComments }: { mod: GbMod;
       if (!live || !m) return;
       setMe(m);
       setBase((b) => ({ liked: m.liked ?? b.liked, subscribed: m.subscribed ?? b.subscribed }));
+      if (m.subscribed !== null && !clicked.current) void noteGbSub(mod, m.subscribed);
     });
     return () => { live = false; };
   }, [mod.id, act, signedIn]);
 
   const likes = Math.max(0, mod.likes + Number(liked) - Number(base.liked));
-  const subs = Math.max(0, (mod.subscribers ?? 0) + Number(subscribed) - Number(base.subscribed));
+  const subs = Math.max(0, (mod.subscribers ?? 0) + Number(onGb) - Number(base.subscribed));
   const thanks = (mod.thanks ?? 0) + sent;
   const creator = mod.submitter?.name ?? t("the creator");
   const own = me?.own ?? (!!acc.user && mod.submitter?.id === acc.user.id);
 
   const toggle = (what: "like" | "sub") => {
-    if (!signedIn) { void signIn(); return; }
+    if (!signedIn && what === "like") { void signIn(); return; }
     clicked.current = true;
     setBusy(what);
-    const job = what === "like" ? likeMod(mod.id, mod.name, !liked) : subscribeMod(mod.id, mod.name, !subscribed);
+    const job = what === "like" ? likeMod(mod.id, mod.name, !liked) : setModSub(mod, !subscribed);
     // a short pause before the same button sends again
     void job.finally(() => window.setTimeout(() => setBusy(null), 400));
   };
@@ -62,13 +68,12 @@ export function ModStats({ mod, act, nudge, onFiles, onComments }: { mod: GbMod;
             className={nudge && signedIn && !liked ? "nudge" : undefined}
             title={!signedIn ? tn(likes, "{n} like. Sign in to GameBanana to like it", "{n} likes. Sign in to GameBanana to like it")
               : liked ? tn(likes, "{n} like, yours included. Click to take back your like", "{n} likes, yours included. Click to take back your like")
-              : tn(likes, "{n} like. Click to like it on GameBanana. Nobody is notified", "{n} likes. Click to like it on GameBanana. Nobody is notified")}>
+              : tn(likes, "{n} like. Click to like it", "{n} likes. Click to like it")}>
             {formatCount(likes)}
           </Stat>
-          <Stat icon="bell" on={subscribed} pressed={signedIn ? subscribed : undefined} disabled={busy === "sub"} onClick={() => toggle("sub")}
-            title={!signedIn ? tn(subs, "{n} subscriber. Sign in to GameBanana to subscribe", "{n} subscribers. Sign in to GameBanana to subscribe")
-              : subscribed ? tn(subs, "{n} subscriber, you included. Click to unsubscribe", "{n} subscribers, you included. Click to unsubscribe")
-              : tn(subs, "{n} subscriber. Click to subscribe on GameBanana, which tells you there when it updates", "{n} subscribers. Click to subscribe on GameBanana, which tells you there when it updates")}>
+          <Stat icon="bell" on={subscribed} pressed={subscribed} disabled={busy === "sub"} onClick={() => toggle("sub")}
+            title={subscribed ? tn(subs, "{n} subscriber. You're subscribed, so gachamod tells you when it updates. Click to unsubscribe", "{n} subscribers. You're subscribed, so gachamod tells you when it updates. Click to unsubscribe")
+              : tn(subs, "{n} subscriber. Click to subscribe, and gachamod tells you when it updates", "{n} subscribers. Click to subscribe, and gachamod tells you when it updates")}>
             {formatCount(subs)}
           </Stat>
           <Stat icon="gift" on={thanked} onClick={(el) => { if (!signedIn) void signIn(); else setThankAt((a) => (a ? null : el)); }}

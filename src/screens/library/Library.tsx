@@ -1,27 +1,28 @@
-// Mods: the current game's library (Installed) and the mods removed from it (Trash). Installed has one row of search,
-// All/On/Off, sort and layout, then one scrolling row of filters: Updates, Favourites and Problems when there are any,
-// then types and characters. Then the shared mod grid with selection and its bulk bar. Only sort and layout are kept;
-// the filters reset when the page is left, so Mods always opens on every mod. The route holds the page: tab "archive", character (only that character's mods), kind (only mods without
+// Mods: the current game's library (Installed), what's wrong with it (Problems, Problems.tsx) and the mods removed from
+// it (Trash). Installed has one row of search, All/On/Off, sort and layout, then one scrolling row of filters: Updates
+// and Favourites when there are any, then types and characters. Then the shared mod grid with selection and its bulk
+// bar. Only sort and layout are kept; the filters reset when the page is left, so Mods always opens on every mod. The
+// route holds the page: tab "problems" or "archive", character (only that character's mods), kind (only mods without
 // a character of that type), modId (the details drawer). Owner: LIBRARY area (docs/spec.md, "Library").
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { errorText, library, settings, type GameState, type ModEntry } from "../../lib/api";
 import { canInstallLoader, getReady, pickModsFolder, useSetup } from "../../lib/setup";
 import { checkUpdates } from "../../lib/gamebanana";
-import { useModHealth } from "../../lib/fixes";
-import { holdOn, useHolds } from "../../lib/holds";
 import { usePortraitBatch, portraitNow, usePortraitsVersion } from "../../lib/portraits";
 import { useNsfw } from "../../lib/prefs";
 import { consumeRoute, go, patchRoute, recountMods, useGame, useRoute } from "../../lib/store";
 import { openPalette } from "../../shell/state";
 import { menuFor, menuHandler, type MenuEntry } from "../../ui/ContextMenu";
 import { withoutKeys } from "../../lib/menuHints";
-import { Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
+import { Badge, Button, Chip, Empty, IconButton, PageHeader, Segmented, Select, SearchField, formatBytes } from "../../ui/kit";
 import { toast } from "../../ui/toast";
 import { shuffleOutfits, shuffleWhenPref, type ShuffleWhen } from "./shuffle";
 import { useBackendRoster } from "../characters/roster";
 import { reveal, rowKeys, useRovingTab, useSideScroll } from "../browse/sideScroll";
 import { ShowAll, useRowOpen } from "../../ui/ShowAll";
 import { Archive } from "./Archive";
+import { Problems, problemsTip } from "./Problems";
+import { useToolsCounts } from "../modtools/toolsBadge";
 import { useMods, type ModsError } from "./data";
 import { LIB_KINDS, libKind, type LibKind } from "./kinds";
 import { ModDrawerHost } from "./ModDrawer";
@@ -35,13 +36,14 @@ import { t, tn } from "../../lib/i18n";
 import { charNoun, gameName, gameShort } from "../../lib/games";
 
 type Show = "all" | "on" | "off";
-type Flag = "updates" | "favourites" | "problems";
+type Flag = "updates" | "favourites";
 type Sort = "added" | "name" | "character" | "size";
 interface Prefs { sort: Sort; view: "grid" | "list" }
 const DEFAULT_PREFS: Prefs = { sort: "added", view: "grid" };
 const UPDATE_EVERY = 30 * 60 * 1000;
 
-// right-click on Shuffle: when it shuffles by itself, the same choice as in Settings
+// right-click on Shuffle: when it shuffles by itself, the same choice as in Settings. The menu closes and the button
+// doesn't show the choice, so it toasts with Undo
 const SHUFFLE_WHEN: Array<[ShuffleWhen, string, string]> = [
   ["off", t("Only when I click Shuffle"), t("Stopped shuffling outfits")],
   ["play", t("At each Play"), t("Shuffling outfits at each Play")],
@@ -51,7 +53,7 @@ const shuffleMenu = (): MenuEntry[] => {
   const cur = shuffleWhenPref.get();
   return [
     { header: t("Shuffle outfits") },
-    ...SHUFFLE_WHEN.map(([v, label, done]): MenuEntry => ({ label, checked: cur === v, onClick: () => void shuffleWhenPref.set(v, done) })),
+    ...SHUFFLE_WHEN.map(([v, label, done]): MenuEntry => ({ label, checked: cur === v, onClick: () => void shuffleWhenPref.set(v, done, true) })),
     "-",
     { label: t("Shuffle settings"), icon: "settings", onClick: () => go({ view: "settings", section: "set-shuffle" }) },
   ];
@@ -70,7 +72,7 @@ export function Library() {
   const gid = game.id;
   const route = useRoute();
   const { mods, setMods, loaded, error, scanning, rescan } = useMods(gid, { showsErrors: true });
-  const tab = route.tab === "archive" ? "archive" : "installed";
+  const tab: LibTab = route.tab === "archive" || route.tab === "problems" ? route.tab : "installed";
   // the Mods folder came back (found by the setup watch, picked in Settings): read it again by itself
   const found = !!game.modsDir && !game.modsMissing;
   const notSetUp = error?.kind === "not_set_up";
@@ -84,19 +86,28 @@ export function Library() {
     <div className={`page library${side ? " has-side" : ""}${docked ? " has-pane" : ""}`}>
       {tab === "installed"
         ? <Installed gid={gid} game={game} mods={mods} setMods={setMods} loaded={loaded} error={error} scanning={scanning} rescan={rescan} side={side} />
-        : <Archive game={gid} tabs={<LibTabs tab={tab} />} />}
+        : tab === "problems"
+          ? <Problems game={gid} tabs={<LibTabs tab={tab} />} />
+          : <Archive game={gid} tabs={<LibTabs tab={tab} />} />}
       <ModDrawerHost game={gid} mods={mods} loaded={loaded} docked={docked} />
     </div>
   );
 }
 
-/** Installed or Trash: a switch, always first in the header's action row (library.css gives that row its own line), so
- *  it stays in the same place on both pages. */
-function LibTabs({ tab }: { tab: "installed" | "archive" }) {
+type LibTab = "installed" | "problems" | "archive";
+
+/** Installed, Problems or Trash: a switch, always first in the header's action row (library.css gives that row its own
+ *  line), so it stays in the same place on every page. Problems shows the Tools badge's count: new broken things only,
+ *  never warnings, and gone once the tab has been looked at. */
+function LibTabs({ tab }: { tab: LibTab }) {
+  const counts = useToolsCounts();
+  const fresh = Object.values(counts).reduce((s, n) => s + n, 0);
   return (
-    <Segmented size="sm" label={t("Show")} value={tab} onChange={(v) => patchRoute({ tab: v === "archive" ? "archive" : undefined, modId: undefined, character: undefined, kind: undefined })}
+    <Segmented size="sm" label={t("Show")} value={tab} onChange={(v) => patchRoute({ tab: v === "installed" ? undefined : v, modId: undefined, character: undefined, kind: undefined })}
       options={[
         { value: "installed", label: t("Installed"), icon: "mods", title: t("Mods in the Mods folder") },
+        { value: "problems", icon: "warn", title: fresh ? t("{tip}. {n} new since you last looked", { tip: problemsTip(), n: fresh }) : problemsTip(),
+          label: <>{t("Problems")}{fresh > 0 && <Badge tone="bad" className="lib-tab-n">{fresh}</Badge>}</> },
         { value: "archive", label: t("Trash"), icon: "trash", title: t("Mods you removed, to put back or download again") },
       ]} />
   );
@@ -113,7 +124,6 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   const setup = useSetup();
   const nsfw = useNsfw();
   const format = useModsFormat();
-  const health = useModHealth(gid);
   const roster = useBackendRoster(gid);
   usePortraitsVersion();
   const [prefs, setPrefsState] = useState<Prefs>(() => loadPrefs(gid));
@@ -141,7 +151,7 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   // and a route's filter chip ("View updates" on the update check's toast)
   useEffect(() => {
     const f = route.flag;
-    if (f === "updates" || f === "favourites" || f === "problems") { setFlag(f); consumeRoute(["flag"]); }
+    if (f === "updates" || f === "favourites") { setFlag(f); consumeRoute(["flag"]); }
   }, [route.flag]);
 
   // update check: on open and every 30 minutes while open
@@ -186,16 +196,10 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
   const kinds = useMemo(() => new Map(visible.filter((m) => !m.character).map((m) => [m.id, libKind(m)])), [visible]);
   const kindRow = useMemo(() => LIB_KINDS.map((k) => ({ ...k, n: [...kinds.values()].filter((v) => v === k.value).length })).filter((k) => k.n > 0), [kinds]);
 
-  const holds = useHolds(gid);
-  // a mod whose problems were set aside leaves the filter: ignored ones for good, ones waiting for an update for
-  // their game update warnings (health leaves them out already)
-  const isProblem = useCallback((m: ModEntry) => holdOn(holds, m)?.kind !== "ignore"
-    && (m.conflicts > 0 || m.iniCount === 0 || health.get(m.id)?.status === "broken" || health.get(m.id)?.status === "unfixable"), [health, holds]);
   const counts = useMemo(() => ({
     all: visible.length, on: visible.filter((m) => m.enabled).length, off: visible.filter((m) => !m.enabled).length,
     updates: visible.filter((m) => m.updateAvailable).length, favourites: visible.filter((m) => m.favorite).length,
-    problems: visible.filter(isProblem).length,
-  }), [visible, isProblem]);
+  }), [visible]);
   const onTotal = useMemo(() => mods.filter((m) => m.enabled).length, [mods]);
 
   const shown = useMemo(() => {
@@ -208,7 +212,6 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
       switch (flag) {
         case "updates": if (!m.updateAvailable) return false; break;
         case "favourites": if (!m.favorite) return false; break;
-        case "problems": if (!isProblem(m)) return false; break;
         default: break;
       }
       if (ch && m.character?.toLowerCase() !== ch) return false;
@@ -224,7 +227,7 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
       : prefs.sort === "size" ? (a, b) => b.sizeBytes - a.sizeBytes || byName(a, b)
       : (a, b) => b.installedAt - a.installedAt || byName(a, b));
     return out;
-  }, [mods, prefs, show, flag, dSearch, nsfw, character, kind, kinds, isProblem]);
+  }, [mods, prefs, show, flag, dSearch, nsfw, character, kind, kinds]);
 
   const filtersOn = show !== "all" || !!flag || !!character || !!kind || !!search.trim();
   const size = useMemo(() => mods.reduce((n, m) => n + m.sizeBytes, 0), [mods]);
@@ -233,7 +236,6 @@ function Installed({ gid, game, mods, setMods, loaded, error, scanning, rescan, 
 
   // shown only while there is something to show (or it is the filter that is on)
   const flagChips = ([
-    { id: "problems", label: t("Problems"), icon: "warn", title: t("Mods that conflict with another mod that is on, have no .ini file, or were broken by a game update. Right-click a mod to ignore its problems") },
     { id: "updates", label: t("Updates"), icon: "update", title: t("Mods with a newer version on GameBanana") },
     { id: "favourites", label: t("Favourites"), icon: "star", title: t("Mods you starred") },
   ] as const).filter((f) => counts[f.id] > 0 || flag === f.id);

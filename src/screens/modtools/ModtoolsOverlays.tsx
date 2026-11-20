@@ -14,7 +14,7 @@ import { Badge, Button, Checkbox, Dialog, Progress, Segmented, Skeleton, TextFie
 import { Icon } from "../../ui/Icon";
 import { toast } from "../../ui/toast";
 import { notesText, oxford } from "../../lib/notes";
-import { conflictKey, fileName, fixSeenKey, markModSeen, markToolsSeen, setToolsCount } from "./toolsBadge";
+import { conflictKey, fileName, fixSeenKey, markModSeen, markProblemsSeen, markToolsSeen, setToolsCount } from "./toolsBadge";
 import { useBrokenOn } from "../../lib/fixes";
 import { badgeKeys, loadLint, useIgnored, useLint } from "./problems";
 import "./modtools.css";
@@ -40,14 +40,18 @@ export function ModtoolsOverlays() {
   const lint = useLint(game);
   const ignored = useIgnored();
   useEffect(() => { if (game && lint) setToolsCount(game, "problems", badgeKeys(lint, ignored, game)); }, [game, lint, ignored]);
-  // and mods a game update broke that are on, not set aside, while the warnings aren't muted
+  // and mods a game update broke that only a fixer or the author can repair (not the warnings gachamod fixes itself),
+  // that are on and not set aside, while the warnings aren't muted
   const broken = useBrokenOn(game);
   useEffect(() => { if (game && broken) setToolsCount(game, "fixes", broken.map(fixSeenKey)); }, [game, broken]);
-  // looking at a Tools page, or at a mod, clears what it shows from the badge
-  const seenView = route.view === "tools" ? "tools" : "modId" in route && typeof route.modId === "string" ? route.modId : null;
+  // looking at a Tools page, Mods' Problems tab or a mod clears what it shows from the badge
+  const seenView = route.view === "tools" ? "tools" : route.view === "library" && route.tab === "problems" ? "tab:problems"
+    : "modId" in route && typeof route.modId === "string" ? route.modId : null;
   useEffect(() => {
     if (!game || !seenView) return;
-    if (seenView === "tools") markToolsSeen(game); else markModSeen(game, seenView);
+    if (seenView === "tools") markToolsSeen(game);
+    else if (seenView === "tab:problems") markProblemsSeen(game);
+    else markModSeen(game, seenView);
   }, [game, seenView]);
   useEffect(() => {
     if (!game) return;

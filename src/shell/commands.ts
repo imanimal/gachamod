@@ -11,6 +11,7 @@ import { allGames, back, currentGame, emitApp, forward, go, onlyGame, setGame, s
 import { registerCommands, type Command } from "../lib/search";
 import { openKofi } from "../lib/support";
 import { registerMenu, type MenuEntry } from "../ui/ContextMenu";
+import { showsPage } from "../lib/here";
 import { retoast, toast, type ToastAction } from "../ui/toast";
 import { play } from "../screens/home/PlayButton";
 import { refreshGameIcon } from "../ui/GameBadge";
@@ -87,7 +88,10 @@ registerMenu("game", ({ id }) => {
     "-",
     { label: t("Open Mods folder"), icon: "folder", disabled: !g.modsDir, title: g.modsDir ?? undefined, onClick: () => openModsFolder(g) },
     { label: t("Rescan mods"), icon: "refresh", title: t("Reads the Mods folder again, then checks every mod for updates on GameBanana"), disabled: !g.modsDir, onClick: () => void rescan(g) },
-    { label: t("Game settings"), icon: "settings", onClick: () => { setGame(id); go({ view: "settings", section: "games" }); } },
+    // on Settings' Games page already, Tools is the place left to go for this game
+    cur && showsPage("settings", "games")
+      ? { label: t("Tools"), icon: "tools", keys: "Ctrl+7", onClick: () => go("tools") }
+      : { label: t("Game settings"), icon: "settings", onClick: () => { setGame(id); go({ view: "settings", section: "games" }); } },
     { label: t("Reload the icon"), icon: "image", title: t("After setting the game folder, the icon comes from the game itself"), onClick: () => refreshGameIcon(id) },
     "-",
     shownCount > 1 && { label: t("Only show {game}", { game: gameShort(g) }), icon: "focus", checked: onlyGame()?.id === id,
@@ -112,6 +116,7 @@ const PAGES: Array<{ route: Route; title: (g: GameId | null) => string; keywords
   { route: { view: "profiles" }, title: () => t("Profiles"), keywords: "presets loadouts sets outfits teams switch save", icon: "profiles", hint: "Ctrl+6" },
   { route: { view: "tools" }, title: () => t("Tools"), keywords: "utilities fixes conflicts share shader cache logs dev", icon: "tools", hint: "Ctrl+7" },
   { route: { view: "settings" }, title: () => t("Settings"), keywords: "options preferences config configuration setup", icon: "settings", hint: "Ctrl+8" },
+  { route: { view: "library", tab: "problems" }, title: () => t("Problems"), keywords: "problems broken conflicts conflicting missing files no ini errors not showing game update fix", icon: "warn", where: t("Mods › Problems") },
   { route: { view: "library", tab: "archive" }, title: () => t("Trash"), keywords: "removed deleted trash bin recycle restore redownload archive history", icon: "trash", where: t("Mods › Trash") },
   { route: { view: "settings", section: "games" }, title: () => t("Game folders"), keywords: "paths folders setup add game xxmi location directory", icon: "folder", where: t("Settings › Games") },
   { route: { view: "settings", section: "appearance" }, title: () => t("Appearance"), keywords: "theme dark light mode colours colors accent look skin", icon: "palette", where: t("Settings › Appearance") },
@@ -145,7 +150,7 @@ registerCommands("shell.actions", () => {
     { id: "act:activity", title: t("Show what's running"), section: "Actions", icon: "clock", keywords: "loading waiting stuck hung frozen slow busy spinner progress background tasks", run: openActivity },
     { id: "act:kofi", title: t("Tip on Ko-fi"), section: "Actions", icon: "coffee", keywords: "kofi ko-fi tip donate support coffee money thanks developer", run: openKofi },
     ...NSFW.map(([v, title, keywords]) => ({ id: `act:nsfw:${v}`, title, section: "Actions", icon: (v === "show" ? "eye" : "hide") as Command["icon"], keywords,
-      hint: nsfw === v ? t("On now") : undefined, run: () => setNsfw(v) })),
+      hint: nsfw === v ? t("On now") : undefined, run: () => setNsfw(v, true) })),
   ];
   if (g) {
     list.push(

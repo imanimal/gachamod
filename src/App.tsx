@@ -52,7 +52,7 @@ import { ModtoolsOverlays } from "./screens/modtools/ModtoolsOverlays";
 import { afterInstall } from "./screens/library/afterInstall";
 import { watchKeyClashes } from "./screens/ingame/otherKeys";
 import { installSmoothScroll } from "./lib/smoothScroll";
-import { installCreatorReminders } from "./lib/creatorReminders";
+import { installModSubWatch } from "./lib/subscriptions";
 import { followGame, isPlayLink, quickstart } from "./screens/home/quickstart";
 import { splashReady } from "./splash/splash";
 import { t } from "./lib/i18n";
@@ -116,9 +116,9 @@ export function App() {
     if (v === "downloads") doneHint("downloads");
   }), []);
 
-  // the mouse wheel glides instead of jumping (lib/smoothScroll.ts)
+  // the mouse wheel: which box a gesture scrolls, and notches that glide (lib/smoothScroll.ts)
   useEffect(() => installSmoothScroll(), []);
-  useEffect(() => installCreatorReminders(), []);
+  useEffect(() => installModSubWatch(), []);
 
   // Settings, Fun extras: chill mode, and the Konami code, which reveals a hidden theme (lib/fun.ts)
   const chill = chillPref.use();
