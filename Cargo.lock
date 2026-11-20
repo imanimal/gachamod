@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "gacha-core"
-version = "0.1.1-beta.18"
+version = "0.1.1-beta.19"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "gachamod"
-version = "0.1.1-beta.18"
+version = "0.1.1-beta.19"
 dependencies = [
  "chrono",
  "gacha-core",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "gachamod-setup"
-version = "0.1.1-beta.18"
+version = "0.1.1-beta.19"
 dependencies = [
  "base64 0.22.1",
  "minisign-verify",
