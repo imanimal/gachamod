@@ -287,6 +287,8 @@ pub fn run() {
             commands::common::open_url,
             commands::backups::backup_restore,
             commands::backups::backup_list,
+            commands::backups::backup_entries,
+            commands::backups::backup_recycle,
             // ── LIBRARY ──
             commands::library::library_scan,
             commands::library::library_list,

@@ -372,7 +372,10 @@ fn ready(shared: &crate::db::Shared, game: &str, mod_id: &str, tool: &str) -> Re
 
 /// Measure what the fixer did to a mod: the backup keeps only what changed, and the run is remembered.
 fn settle(shared: &crate::db::Shared, game: &str, r: Readied, after: &Snapshot, tool: &str, stopped: bool, output: &str) -> Result<FixerRun> {
-    let (changed, created) = diff(&r.before, after);
+    let (touched, created) = diff(&r.before, after);
+    // a fixer that saves every file again changes their times, not their bytes: keep copies of the ones it changed
+    let copies = crate::backups::folder(&*lock(shared)?, &r.backup.id);
+    let changed = crate::backups::differing(&copies, &r.dir, &touched);
     let n = changed.len() + created.len();
     let backup = crate::backups::keep_only(&*lock(shared)?, r.backup, &changed, &created)?;
     if backup.is_some() && r.m.loaded() { crate::devtools::mark_changed(game); }
