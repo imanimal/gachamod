@@ -90,4 +90,6 @@
 .tp-imm-game { flex-wrap: wrap; }
 .tp-imm-name { min-width: 12rem; }
 /* the folder picker sits the list's own gap below the last manager (or the note when none was found) */
-.tp-imm-pick { margin-top: var(--s-2); }
+.tp-imm-pick { margin-top: var(--s-2); flex-wrap: wrap; }
+/* in a narrow window the hint takes a line of its own and the two buttons wrap under it, none cut off */
+.tp-imm-pick .hint { min-width: 12rem; }
